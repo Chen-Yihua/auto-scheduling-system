@@ -16,12 +16,15 @@ The frontend communicates with a FastAPI backend and supports OAuth-based integr
 - Vitest (Unit Testing)
 - Playwright (E2E Testing)
 
+---
 
 ## Installation
 ```bash
 npm install
 npm run dev
 ```
+
+---
 
 ## Project Structure
 

@@ -8,6 +8,7 @@ Built with FastAPI (Backend) and Nuxt 3 (Frontend), following a structured and m
 ## Architecture
 
 ├── Backend/ # FastAPI + MongoDB
+
 └── Frontend/ # Nuxt 3 + TypeScript
 
 ### Backend

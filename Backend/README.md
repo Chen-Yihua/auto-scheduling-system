@@ -34,6 +34,8 @@ Backend/
 
 ```
 
+---
+
 ## Installation
 
 ### 1️. Create virtual environment

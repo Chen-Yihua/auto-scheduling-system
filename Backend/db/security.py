@@ -1,6 +1,6 @@
-# Backend/db/security.py
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Request
 from fastapi_clerk_auth import ClerkConfig, ClerkHTTPBearer, HTTPAuthorizationCredentials
+from cryptography.fernet import Fernet, InvalidToken
 import os
 
 
@@ -9,27 +9,46 @@ import os
 """
 
 
+def _get_fernet_cipher() -> Fernet:
+    encryption_key = os.getenv("ENCRYPTION_KEY")
+    if not encryption_key:
+        raise RuntimeError("Missing environment variable: ENCRYPTION_KEY")
+    return Fernet(encryption_key.encode())
 
 
-CLERK_JWKS_URL = os.getenv("CLERK_JWKS_URL")
-CLERK_ISSUER = os.getenv("CLERK_ISSUER")
-
-# 確認你有沒有設定這些環境變數
-if not CLERK_JWKS_URL or not CLERK_ISSUER:
-    raise RuntimeError("Missing environment variable")
+def encrypt_secret(secret: str) -> str:
+    """Encrypt sensitive credential values before storing them in DB."""
+    return _get_fernet_cipher().encrypt(secret.encode()).decode()
 
 
-# 建立 ClerkConfig
-clerk_config = ClerkConfig(
-    jwks_url=CLERK_JWKS_URL,
-    issuer=CLERK_ISSUER,
-    verify_iss=True,
-    auto_error=True # 自動回 403 / 401，未傳或驗證失敗時
-)
+def decrypt_secret(encrypted_secret: str) -> str:
+    """Decrypt sensitive credential values before using them."""
+    try:
+        return _get_fernet_cipher().decrypt(encrypted_secret.encode()).decode()
+    except InvalidToken:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Invalid encrypted credential",
+        )
 
-# 產生一個 HTTP Bearer 依賴性
-clerk_auth = ClerkHTTPBearer(config=clerk_config)
 
+def _get_clerk_auth() -> ClerkHTTPBearer:
+    clerk_jwks_url = os.getenv("CLERK_JWKS_URL")
+    clerk_issuer = os.getenv("CLERK_ISSUER")
+
+    if not clerk_jwks_url or not clerk_issuer:
+        raise RuntimeError("Missing environment variable")
+
+    clerk_config = ClerkConfig(
+        jwks_url=clerk_jwks_url,
+        issuer=clerk_issuer,
+        verify_iss=True,
+        auto_error=True
+    )
+    return ClerkHTTPBearer(config=clerk_config)
+
+async def _get_clerk_credentials(request: Request) -> HTTPAuthorizationCredentials:
+    return await _get_clerk_auth()(request)
 
 
 """
@@ -42,10 +61,9 @@ clerk_auth = ClerkHTTPBearer(config=clerk_config)
     }
 """
 async def get_current_clerk_user(
-    credentials: HTTPAuthorizationCredentials = Depends(clerk_auth)
+    credentials: HTTPAuthorizationCredentials = Depends(_get_clerk_credentials)
 ):
-
-    if not credentials or not credentials.decoded :
+    if not credentials or not credentials.decoded:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authentication credentials",

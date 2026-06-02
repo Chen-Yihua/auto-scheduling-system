@@ -4,14 +4,13 @@ from pymongo.errors import DuplicateKeyError
 from fastapi import HTTPException
 from datetime import datetime
 import httpx
+from db.security import encrypt_secret
 
 # 建立 Linked Account
 async def create_linked_account(clerk_id: str, account: LinkedAccountCreate) -> dict:
     doc = account.model_dump()
     doc["_id"] = f"{clerk_id}_{account.platform}"
     doc["clerk_id"] = clerk_id
-    print(account.domain)
-
     # 若是 GitHub，自動驗證 token 並抓 login + avatar
     if account.platform == "github":
         if not account.apiKey:
@@ -20,6 +19,7 @@ async def create_linked_account(clerk_id: str, account: LinkedAccountCreate) -> 
         info = await fetch_github_userinfo(account.apiKey)
         doc["username"] = info["username"]
         doc["avatar_url"] = info["avatar_url"]
+        doc["apiKey"] = encrypt_secret(account.apiKey)
         doc["status"] = "connected"
 
     # 若是 Jira，也驗證
@@ -32,13 +32,14 @@ async def create_linked_account(clerk_id: str, account: LinkedAccountCreate) -> 
         doc["username"] = info["username"]
         doc["avatar_url"] = info["avatar_url"]
         doc["domain"] = account.domain
+        doc["apiKey"] = encrypt_secret(account.apiKey)
         doc["status"] = "connected"
 
     # Moodle 不需要驗證
     elif account.platform == "moodle":
         doc["username"] = account.username
         doc["avatar_url"] = ""
-        doc["password"] = account.password
+        doc["password"] = encrypt_secret(account.password)
         doc["status"] = "connected"
 
     try:
@@ -85,12 +86,13 @@ async def update_linked_account_by_clerk_id(clerk_id: str, platform: str, data: 
         info = await fetch_jira_userinfo(filtered_data["apiKey"], filtered_data["domain"])
         filtered_data["username"] = info["username"]
         filtered_data["avatar_url"] = info["avatar_url"]
+        filtered_data["apiKey"] = encrypt_secret(filtered_data["apiKey"])
         filtered_data["status"] = "connected"
 
     # 若是 moodle，提供 username & password 做更新
     if platform == "moodle" and "password" in filtered_data and "username" in filtered_data:
         filtered_data["username"] = filtered_data["username"]
-        filtered_data["password"] = filtered_data["password"]
+        filtered_data["password"] = encrypt_secret(filtered_data["password"])
         filtered_data["status"] = "connected"
 
     # 若是 github，也支援驗證（可選）
@@ -99,6 +101,7 @@ async def update_linked_account_by_clerk_id(clerk_id: str, platform: str, data: 
         info = await fetch_github_userinfo(filtered_data["apiKey"])
         filtered_data["username"] = info["username"]
         filtered_data["avatar_url"] = info["avatar_url"]
+        filtered_data["apiKey"] = encrypt_secret(filtered_data["apiKey"])
         filtered_data["status"] = "connected"
 
     result = await db.linkedAccounts.update_one({"_id": composite_id}, {"$set": filtered_data})

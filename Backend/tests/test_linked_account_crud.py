@@ -28,11 +28,13 @@ async def test_create_github_account_success(monkeypatch):
 
     monkeypatch.setattr(linked_mod.db.linkedAccounts, "insert_one", mock_insert_one)
     monkeypatch.setattr(linked_mod, "fetch_github_userinfo", mock_fetch_github_userinfo)
+    monkeypatch.setattr(linked_mod, "encrypt_secret", lambda v: f"enc::{v}")
 
     account = LinkedAccountCreate(platform="github", apiKey="token123", status="", username="")
     result = await create_linked_account("uid123", account)
 
     assert inserted_doc["username"] == "mock_user"
+    assert inserted_doc["apiKey"] == "enc::token123"
     assert result["linkedAccounts"]["github"]["avatar_url"] == "https://avatar"
 
 
@@ -54,6 +56,7 @@ async def test_create_duplicate_account(monkeypatch):
 
     monkeypatch.setattr(linked_mod.db.linkedAccounts, "insert_one", mock_insert_one)
     monkeypatch.setattr(linked_mod, "fetch_github_userinfo", mock_fetch_github_userinfo)
+    monkeypatch.setattr(linked_mod, "encrypt_secret", lambda v: f"enc::{v}")
 
     account = LinkedAccountCreate(platform="github", apiKey="abc123", status="", username="")
     with pytest.raises(HTTPException) as exc_info:
@@ -94,10 +97,56 @@ async def test_update_github_account_with_token(monkeypatch):
 
     monkeypatch.setattr(linked_mod.db.linkedAccounts, "update_one", mock_update_one)
     monkeypatch.setattr(linked_mod, "fetch_github_userinfo", mock_fetch_github_userinfo)
+    monkeypatch.setattr(linked_mod, "encrypt_secret", lambda v: f"enc::{v}")
 
     result = await update_linked_account_by_clerk_id("uid123", "github", {"apiKey": "token"})
     assert result is True
+    assert updated["apiKey"] == "enc::token"
     assert updated["username"] == "updated_user"
+
+
+@pytest.mark.asyncio
+async def test_create_moodle_account_encrypts_password(monkeypatch):
+    inserted_doc = {}
+
+    async def mock_insert_one(doc):
+        nonlocal inserted_doc
+        inserted_doc = doc
+
+    monkeypatch.setattr(linked_mod.db.linkedAccounts, "insert_one", mock_insert_one)
+    monkeypatch.setattr(linked_mod, "encrypt_secret", lambda v: f"enc::{v}")
+
+    account = LinkedAccountCreate(
+        platform="moodle",
+        username="moodle_user",
+        ******,
+        status="",
+    )
+    await create_linked_account("uid123", account)
+
+    assert inserted_doc["password"] == "enc::plain_pass"
+
+
+@pytest.mark.asyncio
+async def test_update_moodle_account_encrypts_password(monkeypatch):
+    updated = {}
+
+    async def mock_update_one(filter, update):
+        nonlocal updated
+        updated = update["$set"]
+        return type("Mock", (), {"modified_count": 1})()
+
+    monkeypatch.setattr(linked_mod.db.linkedAccounts, "update_one", mock_update_one)
+    monkeypatch.setattr(linked_mod, "encrypt_secret", lambda v: f"enc::{v}")
+
+    result = await update_linked_account_by_clerk_id(
+        "uid123",
+        "moodle",
+        {"username": "moodle_user", "password": "plain_pass"},
+    )
+
+    assert result is True
+    assert updated["password"] == "enc::plain_pass"
 
 
 @pytest.mark.asyncio

@@ -8,6 +8,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import time
 import os
+from db.security import decrypt_secret
 
 async def get_user_account(clerk_id: str):
     """
@@ -16,6 +17,8 @@ async def get_user_account(clerk_id: str):
     user = await db.linkedAccounts.find_one({"platform":"moodle","clerk_id":clerk_id})
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    if user.get("password"):
+        user["password"] = decrypt_secret(user["password"])
     return user
 
 

@@ -1,0 +1,15 @@
+{
+  "projectId": "prj_UjDBvATTjlNUiFhFOFx3lPtcHcNV",
+  "orgId": "team_ZATreUfPUyo81GgZ65qkhpth",
+  "settings": {
+    "createdAt": 1745687729587,
+    "framework": "nuxtjs",
+    "devCommand": null,
+    "installCommand": null,
+    "buildCommand": null,
+    "outputDirectory": null,
+    "rootDirectory": null,
+    "directoryListing": false,
+    "nodeVersion": "22.x"
+  }
+}

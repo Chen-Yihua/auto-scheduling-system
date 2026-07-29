@@ -1,0 +1,25 @@
+deploy-backend-gcp:
+  stage: deploy
+  image: google/cloud-sdk:alpine
+  tags: [gcp]
+  variables:
+    DOCKER_DRIVER: overlay2
+  before_script:
+    - echo $GCP_SA_KEY | base64 -d > /tmp/gcp-key.json
+    - gcloud auth activate-service-account --key-file=/tmp/gcp-key.json
+    - gcloud config set project $GCP_PROJECT_ID
+    - gcloud config set run/region $GCP_REGION
+  script:
+    - cd Backend
+    - |
+      gcloud builds submit --tag asia-east1-docker.pkg.dev/$GCP_PROJECT_ID/autoscheduling/backend-server:$CI_COMMIT_SHORT_SHA .
+    - |
+      gcloud run deploy $GCP_CLOUD_RUN_SERVICE \
+        --image=asia-east1-docker.pkg.dev/$GCP_PROJECT_ID/autoscheduling/backend-server:$CI_COMMIT_SHORT_SHA \
+        --platform=managed \
+        --region=$GCP_REGION \
+        --allow-unauthenticated \
+        --set-env-vars="CLERK_ISSUER=$CLERK_ISSUER,CLERK_JWKS_URL=$CLERK_JWKS_URL,CLERK_SECRET_KEY=$CLERK_SECRET_KEY,MONGO_URI=$MONGO_URI,GEMINI_API_KEY=$GEMINI_API_KEY,GITLAB_TOKEN=$GITLAB_TOKEN,GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID,GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET,GOOGLE_REDIRECT_URI=$GOOGLE_REDIRECT_URI" \
+        --quiet
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push"'

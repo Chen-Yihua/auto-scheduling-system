@@ -1,0 +1,57 @@
+stages:
+  - prepare
+  - test
+  - build
+  - deploy
+  - comment
+  - cleanup
+
+# 引用子 yml
+include:
+  - local: '.gitlab-ci-fe.yml'  # 前端的 CI（Test + Build）
+  - local: '.gitlab-ci-be.yml'  # 後端的 CI（Test + Build）
+  - local: '.gitlab-cd-fe.yml'  # 前端的 CD（Deploy）
+  - local: '.gitlab-cd-be.yml'  # 後端的 CD（Deploy）
+
+post-coverage-comment:
+  image: python:3.11-slim
+  stage: comment
+  tags: [gcp]
+  before_script:
+    - apt-get update && apt-get install -y curl jq
+  dependencies:
+    - frontend-coverage-test
+    - backend-test
+  script:
+    - echo "📬 Posting combined frontend + backend coverage..."
+    - ls -al
+    - FRONTEND_PERCENT=$(grep 'All files' frontend-coverage.txt | sed -E 's/^[^|]+\|[[:space:]]*([^|]+).*/\1/' || echo "N/A")
+    - FRONTEND_DETAIL=$(awk '/^File[[:space:]]+\|/ {flag=1} flag' frontend-coverage.txt | head -n 100)
+    - BACKEND_PERCENT=$(grep '^TOTAL' backend-coverage.txt | awk '{print $(NF)}' || echo "N/A")
+    - BACKEND_DETAIL=$(tail -n 100 backend-coverage.txt)
+    - |
+      COMMENT=$(printf "💪 **Test Coverage Summary**\n\nFrontend: %s\nBackend: %s\n\n🔻 Detailed reports:\n\n------------------- Frontend -------------------\n\`\`\`\n%s\n\`\`\`\n\n------------------- Backend -------------------\n\`\`\`\n%s\n\`\`\`\n" "$FRONTEND_PERCENT" "$BACKEND_PERCENT" "$FRONTEND_DETAIL" "$BACKEND_DETAIL")
+    - |
+      curl --request POST \
+        --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
+        --header "Content-Type: application/json" \
+        --data "$(jq -nc --arg body "$COMMENT" '{ body: $body }')" \
+        "https://gitlab.com/api/v4/projects/68779749/merge_requests/$CI_MERGE_REQUEST_IID/notes"
+  rules:
+    - if: '$CI_MERGE_REQUEST_IID'
+
+cleanup-docker:
+  stage: cleanup
+  image: docker:latest
+  tags: [gcp]
+  services:
+    - docker:dind
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ""
+  script:
+    - echo "🪟 Cleaning Docker system as root..."
+    - docker system prune -af --volumes
+  when: always
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "merge_request_event"'

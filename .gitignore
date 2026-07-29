@@ -1,0 +1,10 @@
+.venv/
+.env
+__pycache__/
+Dockerfile.backend
+Dockerfile.frontend
+docker-compose.yaml
+
+htmlcov/
+.coverage
+.DS_Store

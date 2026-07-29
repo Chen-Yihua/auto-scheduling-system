@@ -14,6 +14,7 @@ from httpx import AsyncClient
 from httpx._transports.asgi import ASGITransport
 
 from db.security import get_current_clerk_user
+from db.crypto import encrypt_secret
 from routers import jira as router
 
 
@@ -30,7 +31,7 @@ def test_app():
 @pytest.mark.asyncio
 async def test_get_jira_issues_success(test_app):
     mock_linked_account = {
-        "apiKey": "fake_api_key",
+        "apiKey": encrypt_secret("fake_api_key"),
         "domain": "fake.atlassian.net"
     }
     mock_issues = [
@@ -79,7 +80,7 @@ async def test_get_jira_issues_not_linked(test_app):
 @pytest.mark.asyncio
 async def test_get_jira_issues_internal_error(test_app):
     mock_linked_account = {
-        "apiKey": "fake_api_key",
+        "apiKey": encrypt_secret("fake_api_key"),
         "domain": "fake.atlassian.net"
     }
 

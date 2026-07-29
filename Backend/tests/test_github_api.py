@@ -8,6 +8,7 @@ from typing import Optional, List
 
 from main import app
 from db.security import get_current_clerk_user
+from db.crypto import encrypt_secret
 import routers.github as github_router
 
 class MockGitHubIssue(BaseModel):
@@ -77,7 +78,7 @@ async def test_get_github_issues(monkeypatch):
     app.dependency_overrides[get_current_clerk_user] = mock_get_user
 
     async def mock_find_one(*args, **kwargs):
-        return {"apiKey": "fake_token", "clerk_id": mock_user["sub"]}
+        return {"apiKey": encrypt_secret("fake_token"), "clerk_id": mock_user["sub"]}
 
     async def mock_fetch(token):
         return [

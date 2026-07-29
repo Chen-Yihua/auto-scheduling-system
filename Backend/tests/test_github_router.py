@@ -3,6 +3,7 @@ from fastapi import HTTPException
 from datetime import datetime
 import routers.github as github_router
 from schemas.github import GitHubIssue, GitHubAuthor
+from db.crypto import encrypt_secret
 
 mock_user = {"sub": "test_user_123"}
 
@@ -47,7 +48,7 @@ async def test_get_github_issues(monkeypatch):
     # 模擬資料庫與 GitHub API 行為
     class MockLinkedAccounts:
         async def find_one(self, query):
-            return {"apiKey": "fake_token", "clerk_id": mock_user["sub"]}
+            return {"apiKey": encrypt_secret("fake_token"), "clerk_id": mock_user["sub"]}
 
     class MockGithubIssues:
         async def update_one(self, *args, **kwargs):
@@ -114,7 +115,7 @@ async def test_get_github_issues_missing_token(monkeypatch):
 async def test_get_github_issues_api_fail(monkeypatch):
     class MockLinkedAccounts:
         async def find_one(self, query):
-            return {"apiKey": "fake_token"}
+            return {"apiKey": encrypt_secret("fake_token")}
 
     async def mock_fetch(token):
         raise Exception("GitHub API down")

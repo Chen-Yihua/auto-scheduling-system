@@ -27,3 +27,8 @@ logs
 coverage/
 .vercel
 .env*
+
+# Playwright artifacts (contain real session cookies — never commit)
+storageState.json
+test-results/
+playwright-report/

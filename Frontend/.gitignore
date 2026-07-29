@@ -25,3 +25,5 @@ logs
 
 # Coverage reports
 coverage/
+.vercel
+.env*

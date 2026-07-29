@@ -7,6 +7,9 @@ from db import mongodb
 # 測試環境用固定金鑰即可，不影響 production（production 由環境變數注入）
 os.environ.setdefault("SECRET_ENCRYPTION_KEY", Fernet.generate_key().decode())
 
+# routers.webhook 在 import 時就會建立 genai.Client，沒有這個變數會直接噴錯
+os.environ.setdefault("GEMINI_API_KEY", "test-gemini-key")
+
 @pytest.fixture(scope="session", autouse=True)
 def override_mongodb():
     mock_client = mongomock.MongoClient()

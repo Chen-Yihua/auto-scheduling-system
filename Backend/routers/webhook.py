@@ -9,8 +9,10 @@ router = APIRouter()
 
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
-DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1367067918235340811/-Fap87RJ3peFhC-3I7jT9GiNNtHUtH4A3wEeCCr4qYou01Qa4waUb_AG647p25Ylakx5"
-MAIN_WEBHOOK_URL = "https://discord.com/api/webhooks/1367070901400764446/DgoC4ookwtHJTiMg7XWAWi6nGUlDTf9YEqmxyYE-647LEm1l_Pt4OI8i6gPWVaCM6e1G"
+# MR 摘要用的 webhook（貼在 open MR 的當下）、merge 到 main 通知用的 webhook，
+# 兩組都不該寫死在程式碼裡——沒設定就直接跳過發送，不影響其餘邏輯。
+DISCORD_WEBHOOK_URL = os.getenv("DISCORD_MR_WEBHOOK_URL")
+MAIN_WEBHOOK_URL = os.getenv("DISCORD_MAIN_WEBHOOK_URL")
 
 @router.post("/webhook")
 async def gitlab_webhook(request: Request):
@@ -76,7 +78,8 @@ async def gitlab_webhook(request: Request):
                 ],
                 "color": 0x1E90FF,
             }
-            requests.post(DISCORD_WEBHOOK_URL, json={"embeds": [embed]})
+            if DISCORD_WEBHOOK_URL:
+                requests.post(DISCORD_WEBHOOK_URL, json={"embeds": [embed]})
 
         except Exception as e:
             body = f"❌ Gemini 回傳失敗：{str(e)}"
@@ -113,7 +116,8 @@ async def gitlab_webhook(request: Request):
             }
 
             message = {"embeds": [embed]}
-            requests.post(MAIN_WEBHOOK_URL, json=message)
+            if MAIN_WEBHOOK_URL:
+                requests.post(MAIN_WEBHOOK_URL, json=message)
 
 
     return {"status": "ok"}

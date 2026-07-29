@@ -28,6 +28,8 @@ export const useLinkedAccount = () => {
       icon: string;
       avatar?: string;
       username?: string;
+      // true = value 來自後端遮罩過的字串，不可複製；false = 剛建立/更新，value 是這個 session 才知道的明文，可複製一次
+      isMasked: boolean;
     }>
   >([
     {
@@ -41,6 +43,7 @@ export const useLinkedAccount = () => {
       editing: false,
       showPassword: false,
       icon: 'mdi:github',
+      isMasked: false,
     },
     {
       platform: 'jira',
@@ -53,6 +56,7 @@ export const useLinkedAccount = () => {
       editing: false,
       showPassword: false,
       icon: 'mdi:jira',
+      isMasked: false,
     },
     {
       platform: 'moodle',
@@ -65,6 +69,7 @@ export const useLinkedAccount = () => {
       editing: false,
       showPassword: false,
       icon: 'custom:moodle',
+      isMasked: false,
     },
   ]);
 
@@ -86,6 +91,8 @@ export const useLinkedAccount = () => {
         if (item.platform == 'moodle') {  // 取得遮罩過的 moodle 密碼
           item.value = ac.password;
         }
+        // 從後端拿回來的一律是遮罩值，不是完整明文，不能拿去複製
+        item.isMasked = true;
       }
     });
   };
@@ -156,6 +163,8 @@ export const useLinkedAccount = () => {
       keyItem.value = keyItem.inputValue;
       keyItem.inputValue = '';
       keyItem.editing = false;
+      // 剛建立/更新，這裡的 value 是這個 session 才知道的明文，允許複製這一次
+      keyItem.isMasked = false;
 
       toast.add({
         title: `${keyItem.label} 儲存成功`,
@@ -196,6 +205,7 @@ export const useLinkedAccount = () => {
       keyItem.domain = '';
       keyItem.password = '';
       keyItem.editing = false;
+      keyItem.isMasked = false;
 
       toast.add({
         title: `${keyItem.label} 已刪除`,

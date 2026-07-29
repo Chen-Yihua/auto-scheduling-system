@@ -63,6 +63,17 @@ describe('useLinkedAccount', () => {
     expect(moo.username).toBe('bob')
   })
 
+  it('fetchKeys 從後端拿回來的一律標記為 isMasked，不可複製', async () => {
+    fetchSpy.mockResolvedValueOnce(list)
+
+    const { keys, fetchKeys } = (await load())()
+    await fetchKeys()
+
+    expect(keys.value.find((k) => k.platform === 'github')!.isMasked).toBe(true)
+    expect(keys.value.find((k) => k.platform === 'jira')!.isMasked).toBe(true)
+    expect(keys.value.find((k) => k.platform === 'moodle')!.isMasked).toBe(true)
+  })
+
   it('openEdit / cancelEdit 切換編輯狀態', async () => {
     const { keys, openEdit, cancelEdit } = (await load())()
     const git = keys.value.find((k) => k.platform === 'github')!
@@ -92,6 +103,7 @@ describe('useLinkedAccount', () => {
     )
     expect(git.value).toBe('NEWKEY')
     expect(git.editing).toBe(false)
+    expect(git.isMasked).toBe(false) // 剛建立，這個 session 內允許複製一次
     expect(toastSpy.add).toHaveBeenCalledWith(
       expect.objectContaining({ title: 'GitHub Key 儲存成功', color: 'success' }),
     )

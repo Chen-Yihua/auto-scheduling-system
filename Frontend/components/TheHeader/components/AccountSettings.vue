@@ -8,8 +8,18 @@ const { getToken } = useAuth();
 onMounted(fetchKeys);
 
 const copiedKey = ref<string | null>(null);
+const toast = useToast();
 
-const copyKey = (platform: string, key: string) => {
+const copyKey = (platform: string, key: string, isMasked?: boolean) => {
+  if (isMasked) {
+    // 防禦性檢查：遮罩過的值不是可用的明文，不該被複製
+    toast.add({
+      title: '此金鑰已隱藏，無法複製',
+      description: '請重新輸入以更新金鑰',
+      color: 'warning',
+    })
+    return
+  }
   navigator.clipboard.writeText(key).then(() => {
     copiedKey.value = platform
     setTimeout(() => (copiedKey.value = null), 2000)
@@ -94,16 +104,21 @@ onMounted(async () => {
             <div class="grid grid-cols-[1fr_auto_auto] gap-x-2 items-center">
               <div class="text-sm text-gray-400 truncate">****{{ keyItem.value.slice(-4) ?? '' }}</div>
               <UButton
+                v-if="!keyItem.isMasked"
                 size="sm"
                 :icon="copiedKey === keyItem.platform ? 'i-lucide-check' : 'i-lucide-copy'"
                 color="neutral"
-                @click="() => copyKey(keyItem.platform, keyItem.value ?? '')"
+                title="複製金鑰（僅限剛建立/更新時）"
+                @click="() => copyKey(keyItem.platform, keyItem.value ?? '', keyItem.isMasked)"
               />
-              <UButton 
-                size="sm" 
-                color="primary" 
+              <span v-else class="text-xs text-gray-400 whitespace-nowrap" title="金鑰已隱藏，如需複製請重新輸入">
+                已隱藏
+              </span>
+              <UButton
+                size="sm"
+                color="primary"
                 @click="() => openEdit(keyItem)"
-                > Edit 
+                > Edit
               </UButton>
             </div>
           </template>

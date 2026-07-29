@@ -5,6 +5,7 @@ pydantic
 python-dotenv
 email-validator
 fastapi-clerk-auth
+cryptography
 pytest
 python-jose
 PyJWT

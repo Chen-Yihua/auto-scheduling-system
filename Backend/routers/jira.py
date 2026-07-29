@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from db.mongodb import db  # 假設有 access linkedAccounts
 from db.security import get_current_clerk_user
+from db.crypto import decrypt_secret
 from crud.jira import fetch_jira_user_issues
 from schemas.jira import JiraIssue
 
@@ -17,7 +18,7 @@ async def get_jira_issues(user=Depends(get_current_clerk_user)):
     if not linked:
         raise HTTPException(status_code=400, detail="No Jira linked account")
 
-    api_key = linked["apiKey"]
+    api_key = decrypt_secret(linked["apiKey"])
     domain = linked["domain"]
 
     try:

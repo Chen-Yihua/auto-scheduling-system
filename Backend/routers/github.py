@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from db.mongodb import db
 from db.security import get_current_clerk_user
+from db.crypto import decrypt_secret
 from typing import List
 from schemas.github import GitHubIssue, GitHubAPIRawItem
 from crud.github import fetch_github_user_issues, transform_github_item
@@ -62,7 +63,8 @@ async def get_github_issues(clerk_user=Depends(get_current_clerk_user)):
         raise HTTPException(status_code=400, detail="No GitHub token linked")
 
     try:
-        raw_items = await fetch_github_user_issues(token=linked["apiKey"])
+        token = decrypt_secret(linked["apiKey"])
+        raw_items = await fetch_github_user_issues(token=token)
         issues = [transform_github_item(item) for item in raw_items]
 
         # 自動同步到 DB

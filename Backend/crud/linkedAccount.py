@@ -1,10 +1,13 @@
 from db.mongodb import db
+from db.crypto import encrypt_secret, decrypt_secret, mask_secret
 from schemas.linkedAccount import LinkedAccountCreate, LinkedAccountInDB
 from pymongo.errors import DuplicateKeyError
 from fastapi import HTTPException
 from datetime import datetime
 import httpx
-import base64
+
+# 這些欄位存進 DB 前一律加密，回傳給前端前一律遮罩，絕不明文往返
+SENSITIVE_FIELDS = ("apiKey", "password")
 
 # 建立 Linked Account
 async def create_linked_account(clerk_id: str, account: LinkedAccountCreate) -> dict:
@@ -22,6 +25,7 @@ async def create_linked_account(clerk_id: str, account: LinkedAccountCreate) -> 
         doc["username"] = info["username"]
         doc["avatar_url"] = info["avatar_url"]
         doc["status"] = "connected"
+        doc["apiKey"] = encrypt_secret(account.apiKey)  # 驗證用明文，落地前才加密
 
     # 若是 Jira，也驗證
     elif account.platform == "jira":
@@ -34,14 +38,13 @@ async def create_linked_account(clerk_id: str, account: LinkedAccountCreate) -> 
         doc["avatar_url"] = info["avatar_url"]
         doc["domain"] = account.domain
         doc["status"] = "connected"
+        doc["apiKey"] = encrypt_secret(account.apiKey)  # 驗證用明文，落地前才加密
 
     # Moodle 不需要驗證
     elif account.platform == "moodle":
         doc["username"] = account.username
         doc["avatar_url"] = ""
-        # 這裡做 base64 編碼
-        encoded_pw = base64.b64encode(account.password.encode("utf-8")).decode("utf-8")
-        doc["password"] = encoded_pw
+        doc["password"] = encrypt_secret(account.password)
         doc["status"] = "connected"
 
     try:
@@ -70,15 +73,10 @@ async def get_linked_accounts_by_clerk_id(clerk_id: str):
     cursor = db.linkedAccounts.find({"clerk_id": clerk_id})
     accounts = []
     async for account in cursor:
-        # 如果是 Moodle，就把儲存在 DB 的 base64 密碼解碼回原文
-        if account.get("platform") == "moodle" and "password" in account:
-            try:
-                account["password"] = base64.b64decode(
-                    account["password"].encode("utf-8")
-                ).decode("utf-8")
-            except Exception:
-                # 若解碼失敗，就保留原樣或清空
-                account["password"] = ""
+        # 密文只在伺服器內解密後立刻遮罩，絕不把可用的明文回傳給前端
+        for field in SENSITIVE_FIELDS:
+            if account.get(field):
+                account[field] = mask_secret(decrypt_secret(account[field]))
         account["id"] = account["_id"]
         del account["_id"]
         accounts.append(account)
@@ -96,19 +94,18 @@ async def update_linked_account_by_clerk_id(clerk_id: str, platform: str, data: 
     if not filtered_data:
         return False
 
-    # 若是 jira，並且 apiKey & domain 都提供，執行驗證
-    if platform == "jira" and "apiKey" in filtered_data and "domain" in filtered_data:
-        info = await fetch_jira_userinfo(filtered_data["apiKey"], filtered_data["domain"])
-        filtered_data["username"] = info["username"]
-        filtered_data["avatar_url"] = info["avatar_url"]
-        filtered_data["status"] = "connected"
+    # 若是 jira 且有提供 apiKey：有 domain 就順便驗證，沒有也一定要加密落地
+    if platform == "jira" and "apiKey" in filtered_data:
+        if "domain" in filtered_data:
+            info = await fetch_jira_userinfo(filtered_data["apiKey"], filtered_data["domain"])
+            filtered_data["username"] = info["username"]
+            filtered_data["avatar_url"] = info["avatar_url"]
+            filtered_data["status"] = "connected"
+        filtered_data["apiKey"] = encrypt_secret(filtered_data["apiKey"])
 
-    # 若是 moodle，提供 username & password 做更新
+    # 若是 moodle，提供 password 做更新
     if platform == "moodle" and "password" in filtered_data:
-        # 編碼
-        filtered_data["password"] = base64.b64encode(
-            filtered_data["password"].encode("utf-8")
-        ).decode("utf-8")
+        filtered_data["password"] = encrypt_secret(filtered_data["password"])
         filtered_data["status"] = "connected"
 
     # 若是 github，也支援驗證（可選）
@@ -118,6 +115,7 @@ async def update_linked_account_by_clerk_id(clerk_id: str, platform: str, data: 
         filtered_data["username"] = info["username"]
         filtered_data["avatar_url"] = info["avatar_url"]
         filtered_data["status"] = "connected"
+        filtered_data["apiKey"] = encrypt_secret(filtered_data["apiKey"])
 
     result = await db.linkedAccounts.update_one({"_id": composite_id}, {"$set": filtered_data},upsert=True )
     return result.modified_count > 0

@@ -1,4 +1,5 @@
 from db.mongodb import db
+from db.crypto import decrypt_secret
 from fastapi import HTTPException
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -8,21 +9,17 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import time
 import os
-import base64
 
 async def get_user_account(clerk_id: str):
     """
-    Get the user from the database
+    Get the user from the database.
+    密碼只在這裡（伺服器內部、準備拿去登入 Moodle 的當下）解密，
+    絕不印出來、絕不回傳給呼叫端以外的地方。
     """
     user = await db.linkedAccounts.find_one({"platform":"moodle","clerk_id":clerk_id})
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    print("-" * 40)
-    print(f"使用者：{user['username']},加密密碼：{user['password']}")
-    print("-" * 40)
-    # base64 解碼
-    decoded_pw = base64.b64decode(user["password"].encode("utf-8")).decode("utf-8")
-    user["password"] = decoded_pw
+    user["password"] = decrypt_secret(user["password"])
     return user
 
 
@@ -54,7 +51,7 @@ def fetch_assignments(username, password):
     current_url = driver.current_url
     if current_url != 'https://moodle.nccu.edu.tw/my/':
         driver.quit()
-        raise Exception(f"登入失敗,使用者：{username},密碼：{password}")
+        raise Exception(f"Moodle 登入失敗，使用者：{username}")
 
     # 找到包住所有課程的主容器
     semester_div = driver.find_element(By.ID, "SemesterItem_1")

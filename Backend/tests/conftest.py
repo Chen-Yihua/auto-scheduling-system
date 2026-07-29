@@ -1,6 +1,11 @@
+import os
 import pytest
 import mongomock
+from cryptography.fernet import Fernet
 from db import mongodb
+
+# 測試環境用固定金鑰即可，不影響 production（production 由環境變數注入）
+os.environ.setdefault("SECRET_ENCRYPTION_KEY", Fernet.generate_key().decode())
 
 @pytest.fixture(scope="session", autouse=True)
 def override_mongodb():

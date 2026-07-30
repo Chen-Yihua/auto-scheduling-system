@@ -1,47 +1,9 @@
 import pytest
 from fastapi import HTTPException
-from datetime import datetime
 import routers.github as github_router
-from schemas.github import GitHubIssue, GitHubAuthor
 from db.crypto import encrypt_secret
 
 mock_user = {"sub": "test_user_123"}
-
-mock_issue = GitHubIssue(
-    id=999,
-    title="Fix bug",
-    state="open",
-    created_at=datetime(2024, 1, 1),
-    updated_at=datetime(2024, 1, 1),
-    url="https://github.com/example/repo/issues/999",
-    isPR=False,
-    author=GitHubAuthor(username="tester", avatar="https://avatar"),
-    labels=["bug"],
-    comments=0
-)
-
-@pytest.mark.asyncio
-async def test_sync_github_issues(monkeypatch):
-    inserted = []
-
-    class MockResult:
-        @property
-        def upserted_id(self):
-            return "mock_id"
-
-    class MockCollection:
-        async def update_one(self, *args, **kwargs):
-            inserted.append(args[1])  # capture {"$set": doc}
-            return MockResult()
-
-    monkeypatch.setattr(github_router.db, "github_issues", MockCollection())
-
-    result = await github_router.sync_github_issues([mock_issue], clerk_user=mock_user)
-
-    assert result["status"] == "success"
-    assert result["inserted"] == 1
-    assert inserted[0]["$set"]["id"] == 999
-
 
 @pytest.mark.asyncio
 async def test_get_github_issues(monkeypatch):

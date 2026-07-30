@@ -12,6 +12,10 @@ jobs:
     defaults:
       run:
         working-directory: Backend
+    env:
+      CLERK_ISSUER: ${{ secrets.CLERK_ISSUER }}
+      CLERK_JWKS_URL: ${{ secrets.CLERK_JWKS_URL }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

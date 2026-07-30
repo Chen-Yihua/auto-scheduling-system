@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends
 from routers import user
 from routers import user, linkedAccount, webhook, jira, manualTask, oauth ,moodle
@@ -6,16 +7,25 @@ from dotenv import load_dotenv
 import os
 from routers import github
 from logging_config import setup_logging
+from db.mongodb import ensure_indexes
 
 
 # 載入環境變數
 load_dotenv()
 setup_logging()
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await ensure_indexes()
+    yield
+
+
 app = FastAPI(
     title="Auto Scheduling API",
     description="這是自排程系統的後端 API",
     version="0.1.0",
+    lifespan=lifespan,
 )
 
 # CORS 設定

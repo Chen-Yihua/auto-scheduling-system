@@ -1,3 +1,4 @@
+import logging
 from db.mongodb import db
 from db.crypto import decrypt_secret
 from fastapi import HTTPException
@@ -9,6 +10,8 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import time
 import os
+
+logger = logging.getLogger(__name__)
 
 async def get_user_account(clerk_id: str):
     """
@@ -63,28 +66,26 @@ def fetch_assignments(username, password):
     assignments_links = []
     # 建立存放課程資訊的清單
     courses = []
-    print(len(course_links))
+    logger.debug("Found %d course links", len(course_links))
     for link in course_links:
         try:
             name = link.text.strip()
             url = link.get_attribute("href")
             courses.append((name, url))
         except Exception as e:
-            print(f"忽略某個課程連結：{e}")
+            logger.warning("忽略某個課程連結：%s", e)
 
     for name, url in courses:
-        print(f"課程名稱：{name}")
-        print(f"課程連結：{url}")
+        logger.debug("課程名稱：%s，課程連結：%s", name, url)
         try:
             driver.get(url)
             time.sleep(2)
         except Exception as e:
-            print(f"無法打開課程連結：{url}, 錯誤：{e}")
+            logger.warning("無法打開課程連結：%s, 錯誤：%s", url, e)
             continue
         assignments = driver.find_elements(By.CSS_SELECTOR, "div.modtype_assign")
         if len(assignments)==0:
-            print("無作業")
-            print("-" * 40)
+            logger.debug("無作業")
             continue
         for assign in assignments:
             try:
@@ -92,26 +93,22 @@ def fetch_assignments(username, password):
                 title = a_tag.text.strip()
                 assignments_url = a_tag.get_attribute("href")
                 assignments_links.append((name,title,assignments_url))
-                print(f"  作業標題：{title}")
-                print(f"  作業連結：{assignments_url}")
+                logger.debug("作業標題：%s，作業連結：%s", title, assignments_url)
             except Exception as e:
-                print(f"  無法抓取作業：{e}")
-        print("-" * 40)
-    print("注意：以上log都是用來debug的，請忽略。")
-    print("-" * 40)
-    print(f"總作業數量 :{len(assignments_links)}")
+                logger.warning("無法抓取作業：%s", e)
+    logger.debug("總作業數量：%d", len(assignments_links))
     for name, title, url in assignments_links:
         if title.endswith("\n作業"):
             title = title[:-3]
-        print(f"作業名稱：{title}")
+        logger.debug("作業名稱：%s", title)
         driver.get(url)
         time.sleep(2)
         try:
             due_div = driver.find_element(By.CSS_SELECTOR, 'div.activity-dates div.description-inner > div')
             due_date = due_div.text
-            print(f"  截止日期：{due_date}")
-        except Exception as e:
-            print("截止日期：無截止日期")
+            logger.debug("截止日期：%s", due_date)
+        except Exception:
+            logger.debug("截止日期：無截止日期")
             due_date = "無截止日期"
             
         all_data.append({

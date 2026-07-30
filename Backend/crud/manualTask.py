@@ -1,6 +1,9 @@
+import logging
 from db.mongodb import db
 from schemas.manualTask import ManualTaskOut
 from fastapi import HTTPException
+
+logger = logging.getLogger(__name__)
 
 # 建立任務
 async def create_manual_task(task: ManualTaskOut) -> str:
@@ -37,7 +40,7 @@ async def get_manual_tasks_by_user_id(user_id: str):
 
 # 更新任務
 async def update_manual_task_by_id(task_id: str, data: dict):
-    print(data)
+    logger.debug("Updating manual task %s with data=%s", task_id, data)
     result = await db.manual_tasks.update_one({"id": task_id}, {"$set": data})
     if result.modified_count == 0:
         raise HTTPException(status_code=400, detail="No valid fields to update")

@@ -1,3 +1,4 @@
+import logging
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -6,9 +7,11 @@ from services.google_calendar import fetch_events_in_next_7_days, fetch_google_c
 from db.security import get_current_clerk_user
 import httpx
 import os
-import json,copy  
+import json,copy
 from zoneinfo import ZoneInfo
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/oauth", tags=["oauth"])
 
@@ -50,8 +53,8 @@ async def oauth_callback(
 
         return JSONResponse(content={"message": "Google Calendar 授權成功"})
 
-    except Exception as e:
-        print("❌ OAuth Error:", e)
+    except Exception:
+        logger.exception("Google OAuth callback failed")
         raise HTTPException(status_code=400, detail="Google OAuth callback 發生錯誤")
 
 
@@ -146,9 +149,8 @@ async def get_available_times(clerk_user: dict = Depends(get_current_clerk_user)
             "end":   dt_e.isoformat()
         })
 
-    # 把空閒時間log 出來（注意以轉成taipei時區，方便檢查）)
-    print("================ 空閒時段 ================")
-    print(json.dumps(free_local, ensure_ascii=False, indent=2))
+    # 把空閒時間log 出來（注意以轉成taipei時區，方便檢查）
+    logger.debug("空閒時段 (Asia/Taipei): %s", json.dumps(free_local, ensure_ascii=False, indent=2))
 
     # 回傳的空閒時段給前端（UTC時間）
     return JSONResponse(content={"freeSlotsUtc":  free_utc})

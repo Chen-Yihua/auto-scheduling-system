@@ -1,9 +1,12 @@
+import logging
 from fastapi import APIRouter, HTTPException, Depends, Request
 from crud import manualTask as manualTask_crud
 from schemas.manualTask import ManualTaskInput, ManualTaskOut
 from db.security import get_current_clerk_user
 from datetime import datetime, timezone
 from uuid import uuid4
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/manual_tasks", tags=["manual_tasks"])
 
@@ -25,7 +28,7 @@ async def create_manual_task(
     )
     task.user_id = clerk_user["sub"]
 
-    print(task)
+    logger.debug("Creating manual task: %s", task)
     new_task = await manualTask_crud.create_manual_task(task)
     return new_task
 

@@ -1,7 +1,10 @@
+import logging
 from db.mongodb import db
 from fastapi import HTTPException
 from datetime import datetime
 import os, httpx
+
+logger = logging.getLogger(__name__)
 
 GOOGLE_CLIENT_ID     = os.getenv("GOOGLE_CLIENT_ID")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
@@ -47,8 +50,8 @@ async def refresh_google_calendar_token(clerk_id: str) -> str:
     }
     async with httpx.AsyncClient() as client:
         res = await client.post(token_url, data=payload)
-        print("Google 回傳狀態碼", res.status_code)
-        print("Google 回傳內容", res.text)  # << 加這行！
+        logger.debug("Google token refresh response status=%s", res.status_code)
+        logger.debug("Google token refresh response body=%s", res.text)
         res.raise_for_status()
         token_data = res.json()
 
@@ -70,5 +73,5 @@ async def refresh_google_calendar_token(clerk_id: str) -> str:
             }
         }
     )
-    print("成功refresh Google Token")
+    logger.info("Refreshed Google Calendar token for clerk_id=%s", clerk_id)
     return access_token

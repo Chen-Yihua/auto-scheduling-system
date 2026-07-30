@@ -5,10 +5,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 import os
 from routers import github
+from logging_config import setup_logging
 
 
 # 載入環境變數
 load_dotenv()
+setup_logging()
 
 app = FastAPI(
     title="Auto Scheduling API",

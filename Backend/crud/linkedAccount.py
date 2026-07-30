@@ -1,3 +1,4 @@
+import logging
 from db.mongodb import db
 from db.crypto import encrypt_secret, decrypt_secret, mask_secret
 from schemas.linkedAccount import LinkedAccountCreate, LinkedAccountInDB
@@ -5,6 +6,8 @@ from pymongo.errors import DuplicateKeyError
 from fastapi import HTTPException
 from datetime import datetime
 import httpx
+
+logger = logging.getLogger(__name__)
 
 # 這些欄位存進 DB 前一律加密，回傳給前端前一律遮罩，絕不明文往返
 SENSITIVE_FIELDS = ("apiKey", "password")
@@ -14,7 +17,7 @@ async def create_linked_account(clerk_id: str, account: LinkedAccountCreate) -> 
     doc = account.model_dump()
     doc["_id"] = f"{clerk_id}_{account.platform}"
     doc["clerk_id"] = clerk_id
-    print(account.domain)
+    logger.debug("create_linked_account platform=%s domain=%s", account.platform, account.domain)
 
     # 若是 GitHub，自動驗證 token 並抓 login + avatar
     if account.platform == "github":

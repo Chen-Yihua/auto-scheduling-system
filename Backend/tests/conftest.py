@@ -20,6 +20,7 @@ def override_mongodb():
     mongodb.db.users = test_db["users"]
     mongodb.db.manual_tasks = test_db["manual_tasks"]
     mongodb.db.googleCalendarTokens = test_db["googleCalendarTokens"]
+    mongodb.db.github_issues = test_db["github_issues"]
     # 加更多 collection 如有需要...
 
     yield  # 測試期間使用 mock db

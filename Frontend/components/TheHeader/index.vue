@@ -14,7 +14,7 @@ const { getToken } = useAuth();
 
 watch(user, async (newUser) => {
   if (!newUser) return;
-  const token = await getToken.value({ template: 'jwt' });
+  const token = await getToken.value();
   try {
     // Call GET /user/me
     const response = await fetch(`${BASE_URL}/users/me`, {

@@ -5,7 +5,7 @@ const { getToken } = useAuth();
 const token = ref<string | null>(null);
 
 onMounted(async () => {
-  token.value = await getToken.value({ template: 'jwt' });
+  token.value = await getToken.value();
 });
 
 const toast = useToast();

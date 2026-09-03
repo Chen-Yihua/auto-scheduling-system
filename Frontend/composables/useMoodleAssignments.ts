@@ -13,6 +13,8 @@ export const useMoodleAssignments = () => {
   const moodleAssignments = ref<any[]>([]);
   const loading = ref(false); // 等待排蟲爬完
   const hasAccount = ref(false); // 是否有 moodle 帳號
+  const isStale = ref(false);
+  const syncedAt = ref<string | null>(null);
 
   // 檢查帳密
   const checkMoodleAccount = async (): Promise<boolean> => {
@@ -46,14 +48,16 @@ export const useMoodleAssignments = () => {
     loading.value = true;
 
     const token = await getToken.value();
-    const data = await $fetch<any[]>(
+    const res = await $fetch.raw<any[]>(
     `${BASE_URL}/moodle/assignments`,
     {
         method: 'GET',
         headers: { Authorization: `Bearer ${token}` },
     },
     );
-    moodleAssignments.value = data ?? [];
+    moodleAssignments.value = res._data ?? [];
+    isStale.value = res.headers.get('X-Data-Stale') === 'true';
+    syncedAt.value = res.headers.get('X-Synced-At');
     } catch (err) {
       console.error('Moodle 抓取失敗', err);
       toast.add({
@@ -75,6 +79,8 @@ export const useMoodleAssignments = () => {
     moodleAssignments,
     loading,
     hasAccount,
+    isStale,
+    syncedAt,
     fetchMoodleAssignments,
     openMoodleAssignments,
     checkMoodleAccount

@@ -6,6 +6,8 @@ import type { GitHubIssue } from '@/types/github';
 export const useGithub = () => {
   const toast = useToast();
   const issues = ref<GitHubIssue[]>([]);
+  const isStale = ref(false);
+  const syncedAt = ref<string | null>(null);
 
   const config = useRuntimeConfig();
   const BASE_URL = config.public.apiBaseUrl;
@@ -16,13 +18,15 @@ export const useGithub = () => {
     try {
       const token = await getToken.value();
 
-      const res = await $fetch<GitHubIssue[]>(`${BASE_URL}/github/issues`, {
+      const res = await $fetch.raw<GitHubIssue[]>(`${BASE_URL}/github/issues`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
       });
 
-      issues.value = res;
+      issues.value = res._data ?? [];
+      isStale.value = res.headers.get('X-Data-Stale') === 'true';
+      syncedAt.value = res.headers.get('X-Synced-At');
     } catch (err) {
       console.error('GitHub 抓取失敗', err);
       toast.add({
@@ -33,5 +37,5 @@ export const useGithub = () => {
     }
   };
 
-  return { issues, fetchGithubIssues };
+  return { issues, fetchGithubIssues, isStale, syncedAt };
 };

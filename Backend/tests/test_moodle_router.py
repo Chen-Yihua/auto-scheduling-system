@@ -49,9 +49,13 @@ async def test_get_assignments_success(monkeypatch):
         ]
 
     fake_collection = FakeMoodleAssignments()
+    async def instant_sleep(seconds):
+        pass
+
     monkeypatch.setattr(moodle_router, "get_user_account", mock_get_user_account)
     monkeypatch.setattr(moodle_router, "fetch_assignments", mock_fetch_assignments)
     monkeypatch.setattr(moodle_router.db, "moodle_assignments", fake_collection)
+    monkeypatch.setattr("crud.external_sync.asyncio.sleep", instant_sleep)
 
     response = Response()
     result = await moodle_router.get_assignments(response=response, clerk_user=mock_user)
@@ -78,9 +82,13 @@ async def test_get_assignments_falls_back_to_cache_when_scrape_fails(monkeypatch
         "user_id": mock_user["sub"],
     }
     fake_collection = FakeMoodleAssignments(initial=[cached_doc])
+    async def instant_sleep(seconds):
+        pass
+
     monkeypatch.setattr(moodle_router, "get_user_account", mock_get_user_account)
     monkeypatch.setattr(moodle_router, "fetch_assignments", mock_fetch_assignments)
     monkeypatch.setattr(moodle_router.db, "moodle_assignments", fake_collection)
+    monkeypatch.setattr("crud.external_sync.asyncio.sleep", instant_sleep)
 
     response = Response()
     result = await moodle_router.get_assignments(response=response, clerk_user=mock_user)
@@ -97,9 +105,13 @@ async def test_get_assignments_raises_401_when_scrape_fails_and_no_cache(monkeyp
     def mock_fetch_assignments(username, password):
         raise Exception("Moodle 登入失敗，使用者：stu001")
 
+    async def instant_sleep(seconds):
+        pass
+
     monkeypatch.setattr(moodle_router, "get_user_account", mock_get_user_account)
     monkeypatch.setattr(moodle_router, "fetch_assignments", mock_fetch_assignments)
     monkeypatch.setattr(moodle_router.db, "moodle_assignments", FakeMoodleAssignments())
+    monkeypatch.setattr("crud.external_sync.asyncio.sleep", instant_sleep)
 
     with pytest.raises(HTTPException) as exc_info:
         await moodle_router.get_assignments(response=Response(), clerk_user=mock_user)

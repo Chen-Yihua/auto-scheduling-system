@@ -78,7 +78,8 @@ async def test_sync_platform_items_falls_back_to_cache_on_failure():
         raise Exception("API down")
 
     items, stale, returned_synced_at = await sync_platform_items(
-        collection=collection, user_id="u1", id_field="id", fetch_fn=fetch
+        collection=collection, user_id="u1", id_field="id", fetch_fn=fetch,
+        retry_delay_seconds=0,
     )
 
     assert stale is True
@@ -96,7 +97,8 @@ async def test_sync_platform_items_raises_when_no_cache_available():
 
     with pytest.raises(Exception, match="API down, no cache either"):
         await sync_platform_items(
-            collection=collection, user_id="u1", id_field="id", fetch_fn=fetch
+            collection=collection, user_id="u1", id_field="id", fetch_fn=fetch,
+            retry_delay_seconds=0,
         )
 
 
@@ -111,5 +113,76 @@ async def test_sync_platform_items_only_returns_cache_for_matching_user():
 
     with pytest.raises(Exception, match="API down"):
         await sync_platform_items(
-            collection=collection, user_id="u1", id_field="id", fetch_fn=fetch
+            collection=collection, user_id="u1", id_field="id", fetch_fn=fetch,
+            retry_delay_seconds=0,
         )
+
+
+@pytest.mark.asyncio
+async def test_sync_platform_items_retries_and_recovers_on_second_attempt():
+    """第一次抓失敗、第二次就成功 -> 不需要退回快取，直接回傳重試後拿到的新資料。"""
+    collection = FakeCollection()
+    call_count = {"n": 0}
+
+    async def fetch():
+        call_count["n"] += 1
+        if call_count["n"] == 1:
+            raise Exception("暫時性失敗")
+        return [{"id": 1, "title": "recovered"}]
+
+    items, stale, synced_at = await sync_platform_items(
+        collection=collection, user_id="u1", id_field="id", fetch_fn=fetch,
+        retry_delay_seconds=0,
+    )
+
+    assert call_count["n"] == 2
+    assert stale is False
+    assert items[0]["title"] == "recovered"
+    assert len(collection._docs) == 1
+
+
+@pytest.mark.asyncio
+async def test_sync_platform_items_respects_max_attempts_before_falling_back():
+    """max_attempts=3 時應該剛好嘗試 3 次都失敗，才退回快取——不多試也不少試。"""
+    synced_at = datetime.now(timezone.utc)
+    collection = FakeCollection(initial=[
+        {"id": 1, "title": "cached", "user_id": "u1", "synced_at": synced_at}
+    ])
+    call_count = {"n": 0}
+
+    async def fetch():
+        call_count["n"] += 1
+        raise Exception("一直失敗")
+
+    items, stale, _ = await sync_platform_items(
+        collection=collection, user_id="u1", id_field="id", fetch_fn=fetch,
+        max_attempts=3, retry_delay_seconds=0,
+    )
+
+    assert call_count["n"] == 3
+    assert stale is True
+    assert items[0]["title"] == "cached"
+
+
+@pytest.mark.asyncio
+async def test_sync_platform_items_backs_off_exponentially_between_retries(monkeypatch):
+    """驗證重試間隔是指數成長（1s, 2s, 4s...），不是每次都等一樣久。"""
+    sleep_calls = []
+
+    async def fake_sleep(seconds):
+        sleep_calls.append(seconds)
+
+    monkeypatch.setattr("crud.external_sync.asyncio.sleep", fake_sleep)
+
+    collection = FakeCollection()
+
+    async def fetch():
+        raise Exception("一直失敗")
+
+    with pytest.raises(Exception):
+        await sync_platform_items(
+            collection=collection, user_id="u1", id_field="id", fetch_fn=fetch,
+            max_attempts=4, retry_delay_seconds=1.0,
+        )
+
+    assert sleep_calls == [1.0, 2.0, 4.0]

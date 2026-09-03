@@ -93,7 +93,8 @@ async def test_get_jira_issues_internal_error(test_app):
     mock_db.jira_issues.find = MagicMock(return_value=mock_cursor)
 
     with patch("routers.jira.db", mock_db), \
-         patch("routers.jira.fetch_jira_user_issues", side_effect=Exception("boom!")):
+         patch("routers.jira.fetch_jira_user_issues", side_effect=Exception("boom!")), \
+         patch("crud.external_sync.asyncio.sleep", new_callable=AsyncMock):
 
         async with AsyncClient(transport=ASGITransport(app=test_app), base_url="http://test") as ac:
             response = await ac.get("/jira/issues")

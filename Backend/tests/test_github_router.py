@@ -90,9 +90,13 @@ async def test_get_github_issues_api_fail(monkeypatch):
     async def mock_fetch(token):
         raise Exception("GitHub API down")
 
+    async def instant_sleep(seconds):
+        pass
+
     monkeypatch.setattr(github_router.db, "linkedAccounts", MockLinkedAccounts())
     monkeypatch.setattr(github_router.db, "github_issues", MockGithubIssues())
     monkeypatch.setattr(github_router, "fetch_github_user_issues", mock_fetch)
+    monkeypatch.setattr("crud.external_sync.asyncio.sleep", instant_sleep)
 
     with pytest.raises(HTTPException) as exc_info:
         await github_router.get_github_issues(clerk_user=mock_user)

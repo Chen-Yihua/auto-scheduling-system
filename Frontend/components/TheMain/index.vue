@@ -8,8 +8,8 @@ import TaskForm from './TaskForm.vue'
 import GoogleCalendarEmbed from './GoogleCalendarEmbed.vue';
 import MoodleAssignments from './MoodleAssignments.vue'
 
-const { issues: githubIssues, fetchGithubIssues } = useGithub();
-const { issues: jiraIssues, fetchJiraIssues, domain } = useJira();
+const { issues: githubIssues, fetchGithubIssues, isStale: githubStale, syncedAt: githubSyncedAt } = useGithub();
+const { issues: jiraIssues, fetchJiraIssues, domain, isStale: jiraStale, syncedAt: jiraSyncedAt } = useJira();
 const { calendarIds, primaryCalendarId, fetchGoogleCalendars, isConnected } = useGoogleCalendar();
 
 const loading = ref(true);
@@ -34,8 +34,8 @@ onMounted(async () => {
     <MoodleAssignments />
     <Leetcode />
     <News />
-    <GithubIssuesList :issues="githubIssues" :loading="loading" />
-    <JiraIssuesList :issues="jiraIssues" :loading="loading" :domain="domain" />
+    <GithubIssuesList :issues="githubIssues" :loading="loading" :is-stale="githubStale" :synced-at="githubSyncedAt" />
+    <JiraIssuesList :issues="jiraIssues" :loading="loading" :domain="domain" :is-stale="jiraStale" :synced-at="jiraSyncedAt" />
     <GoogleCalendarEmbed
       :id="primaryCalendarId"
       :calendar-ids="calendarIds"

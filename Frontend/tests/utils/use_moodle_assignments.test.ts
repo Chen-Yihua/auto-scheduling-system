@@ -25,7 +25,13 @@ vi.stubGlobal('computed', vueComputed)
 
 // 模擬 $fetch 函式
 let fetchSpy = vi.fn()
-vi.stubGlobal('$fetch', (...args: any[]) => fetchSpy(...args))
+let fetchRawSpy = vi.fn()
+vi.stubGlobal(
+  '$fetch',
+  Object.assign((...args: any[]) => fetchSpy(...args), {
+    raw: (...args: any[]) => fetchRawSpy(...args),
+  }),
+)
 
 //  模擬 API 回傳的 linked-accounts
 const linked = (ok: boolean) =>
@@ -38,6 +44,7 @@ const loadComposable = async () =>
 describe('useMoodleAssignments', () => {
   beforeEach(() => {
     fetchSpy = vi.fn()
+    fetchRawSpy = vi.fn()
     toastSpy.add.mockClear()
   })
 
@@ -50,7 +57,8 @@ describe('useMoodleAssignments', () => {
     await ctx.fetchMoodleAssignments()
 
     expect(ctx.hasAccount.value).toBe(false)
-    expect(fetchSpy).toHaveBeenCalledTimes(1) 
+    expect(fetchSpy).toHaveBeenCalledTimes(1)
+    expect(fetchRawSpy).not.toHaveBeenCalled()
     expect(toastSpy.add).toHaveBeenCalled()
   })
 
@@ -63,7 +71,11 @@ describe('useMoodleAssignments', () => {
         assignment_url: 'https://moodle/hw1',
       },
     ]
-    fetchSpy.mockResolvedValueOnce(linked(true)).mockResolvedValueOnce(list)
+    fetchSpy.mockResolvedValueOnce(linked(true))
+    fetchRawSpy.mockResolvedValueOnce({
+      _data: list,
+      headers: new Headers({ 'X-Data-Stale': 'true', 'X-Synced-At': '2026-09-03T00:00:00Z' }),
+    })
 
     const useMoodleAssignments = await loadComposable()
     const ctx = useMoodleAssignments()
@@ -71,6 +83,9 @@ describe('useMoodleAssignments', () => {
 
     expect(ctx.hasAccount.value).toBeTruthy()
     expect(ctx.moodleAssignments.value).toEqual(list)
-    expect(fetchSpy).toHaveBeenCalledTimes(2)
+    expect(fetchSpy).toHaveBeenCalledTimes(1)
+    expect(fetchRawSpy).toHaveBeenCalledTimes(1)
+    expect(ctx.isStale.value).toBe(true)
+    expect(ctx.syncedAt.value).toBe('2026-09-03T00:00:00Z')
   })
 })

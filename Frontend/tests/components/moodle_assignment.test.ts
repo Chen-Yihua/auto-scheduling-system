@@ -12,6 +12,8 @@ import { ref as vueRef } from 'vue'
 const loadingRef = vueRef(false)
 const hasAccountRef = vueRef(true)
 const assignmentsRef = vueRef<any[]>([])
+const isStaleRef = vueRef(false)
+const syncedAtRef = vueRef<string | null>(null)
 const openSpy = vi.fn()
 
 // 先 mock Composable ---------- */
@@ -20,7 +22,9 @@ vi.mock('~/composables/useMoodleAssignments', () => ({
     loading: loadingRef,
     hasAccount: hasAccountRef,
     moodleAssignments: assignmentsRef,
-    fetchMoodleAssignments: vi.fn(), 
+    isStale: isStaleRef,
+    syncedAt: syncedAtRef,
+    fetchMoodleAssignments: vi.fn(),
     openMoodleAssignments: openSpy,
   }),
 }))
@@ -51,7 +55,7 @@ const UCardStub = {
 import MoodleAssignments from '~/components/TheMain/MoodleAssignments.vue'
 
 // 將 UCardStub 註冊為全域 stub
-const uiStubs = { UCard: true, UIcon: true }
+const uiStubs = { UCard: true, UIcon: true, UAlert: true }
 // 
 const render = () =>
   mount(MoodleAssignments, {

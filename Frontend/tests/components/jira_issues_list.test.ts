@@ -8,6 +8,7 @@ const uiStubs = {
   UBadge: true,
   UAvatar: true,
   UCard: true,
+  UAlert: true,
 }
 
 describe('JiraIssuesList.vue', () => {

@@ -33,7 +33,13 @@ vi.stubGlobal('useLinkedAccount',   () => ({
 }))
 
 let fetchSpy = vi.fn()
-vi.stubGlobal('$fetch', (...args: any[]) => fetchSpy(...args))
+let fetchRawSpy = vi.fn()
+vi.stubGlobal(
+  '$fetch',
+  Object.assign((...args: any[]) => fetchSpy(...args), {
+    raw: (...args: any[]) => fetchRawSpy(...args),
+  }),
+)
 
 // ---------- 3. 被測 Composable ----------
 import { transformJiraItem } from '@/utils/jira'
@@ -42,6 +48,7 @@ import { useJira } from '~/composables/useJira'
 describe('useJira composable', () => {
   beforeEach(() => {
     fetchSpy  = vi.fn()
+    fetchRawSpy = vi.fn()
     ;(transformJiraItem as any).mockClear()
     toastSpy.add.mockClear()
     fetchKeysSpy.mockClear()
@@ -50,16 +57,19 @@ describe('useJira composable', () => {
   it('成功取得 Jira Issues 並轉換', async () => {
     // 假資料
     const raw = [{ id: 'ISSUE-1' }, { id: 'ISSUE-2' }]
-    fetchSpy.mockResolvedValueOnce(raw)
+    fetchRawSpy.mockResolvedValueOnce({
+      _data: raw,
+      headers: new Headers({ 'X-Data-Stale': 'false', 'X-Synced-At': '2026-09-03T00:00:00Z' }),
+    })
 
-    const { issues, fetchJiraIssues, domain } = useJira()
+    const { issues, fetchJiraIssues, domain, isStale, syncedAt } = useJira()
     await fetchJiraIssues()
 
     // 1) 已先抓 LinkedAccount
     expect(fetchKeysSpy).toHaveBeenCalledTimes(1)
 
     // 2) 正確呼叫 API + Bearer
-    expect(fetchSpy).toHaveBeenCalledWith(
+    expect(fetchRawSpy).toHaveBeenCalledWith(
       'http://api/jira/issues',
       expect.objectContaining({
         headers: { Authorization: 'Bearer jwt-token' },
@@ -74,10 +84,14 @@ describe('useJira composable', () => {
 
     // 5) domain 去掉 protocol
     expect(domain.value).toBe('example.atlassian.net')
+
+    // 6) stale 相關資訊也正確傳出
+    expect(isStale.value).toBe(false)
+    expect(syncedAt.value).toBe('2026-09-03T00:00:00Z')
   })
 
   it('API 失敗時 toast.add 會被呼叫', async () => {
-    fetchSpy.mockRejectedValueOnce(new Error('爆炸'))
+    fetchRawSpy.mockRejectedValueOnce(new Error('爆炸'))
 
     const { fetchJiraIssues } = useJira()
     await fetchJiraIssues()

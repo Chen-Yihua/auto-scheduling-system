@@ -1,16 +1,17 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from db.mongodb import db
 from db.security import get_current_clerk_user
 from db.crypto import decrypt_secret
 from typing import List
 from schemas.github import GitHubIssue
 from crud.github import fetch_github_user_issues, transform_github_item
+from crud.external_sync import sync_platform_items
 
 router = APIRouter(prefix="/github", tags=["github"])
 
-# 後端直接從 GitHub API 抓資料並自動寫入 MongoDB
+# 即時抓 GitHub API；失敗時退回 DB 裡最後一次成功同步的資料（見 crud/external_sync.py）
 @router.get("/issues", response_model=List[GitHubIssue])
-async def get_github_issues(clerk_user=Depends(get_current_clerk_user)):
+async def get_github_issues(response: Response = None, clerk_user=Depends(get_current_clerk_user)):
     user_id = clerk_user["sub"]
 
     linked = await db.linkedAccounts.find_one({
@@ -21,22 +22,24 @@ async def get_github_issues(clerk_user=Depends(get_current_clerk_user)):
     if not linked or not linked.get("apiKey"):
         raise HTTPException(status_code=400, detail="No GitHub token linked")
 
-    try:
-        token = decrypt_secret(linked["apiKey"])
+    token = decrypt_secret(linked["apiKey"])
+
+    async def fetch():
         raw_items = await fetch_github_user_issues(token=token)
-        issues = [transform_github_item(item) for item in raw_items]
+        return [transform_github_item(item) for item in raw_items]
 
-        # 自動同步到 DB
-        for issue in issues:
-            doc = issue
-            doc["user_id"] = user_id
-            await db.github_issues.update_one(
-                {"id": doc["id"], "user_id": user_id},
-                {"$set": doc},
-                upsert=True
-            )
-
-        return issues
-
+    try:
+        issues, stale, synced_at = await sync_platform_items(
+            collection=db.github_issues,
+            user_id=user_id,
+            id_field="id",
+            fetch_fn=fetch,
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+    if response is not None:
+        response.headers["X-Data-Stale"] = str(stale).lower()
+        if synced_at:
+            response.headers["X-Synced-At"] = synced_at.isoformat()
+    return issues

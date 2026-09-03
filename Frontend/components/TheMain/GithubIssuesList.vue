@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import type { GitHubIssue } from '~/types/github'
+import StaleDataBanner from './StaleDataBanner.vue'
 defineProps<{
   issues: GitHubIssue[]
   loading: boolean
+  isStale?: boolean
+  syncedAt?: string | null
 }>()
 
 const openIssue = (url: string) => {
@@ -13,6 +16,7 @@ const openIssue = (url: string) => {
 <template>
   <div class="space-y-4">
     <h2 class="text-xl font-bold">GitHub 參與項目</h2>
+    <StaleDataBanner :stale="isStale ?? false" :synced-at="syncedAt ?? null" />
 
     <div v-if="loading">
       <USkeleton class="h-24 mb-4" v-for="i in 3" :key="i" />

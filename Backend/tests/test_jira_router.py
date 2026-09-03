@@ -50,6 +50,7 @@ async def test_get_jira_issues_success(test_app):
 
     mock_db = MagicMock()
     mock_db.linkedAccounts.find_one = AsyncMock(return_value=mock_linked_account)
+    mock_db.jira_issues.update_one = AsyncMock()
 
     with patch("routers.jira.db", mock_db), \
          patch("routers.jira.fetch_jira_user_issues", new_callable=AsyncMock) as mock_fetch:
@@ -60,6 +61,7 @@ async def test_get_jira_issues_success(test_app):
 
         assert response.status_code == 200
         assert response.json() == mock_issues
+        assert response.headers["x-data-stale"] == "false"
 
 
 # 沒有連結的帳號，預期返回 400
@@ -86,10 +88,13 @@ async def test_get_jira_issues_internal_error(test_app):
 
     mock_db = MagicMock()
     mock_db.linkedAccounts.find_one = AsyncMock(return_value=mock_linked_account)
+    mock_cursor = MagicMock()
+    mock_cursor.to_list = AsyncMock(return_value=[])  # 沒有任何快取可退回
+    mock_db.jira_issues.find = MagicMock(return_value=mock_cursor)
 
     with patch("routers.jira.db", mock_db), \
          patch("routers.jira.fetch_jira_user_issues", side_effect=Exception("boom!")):
-        
+
         async with AsyncClient(transport=ASGITransport(app=test_app), base_url="http://test") as ac:
             response = await ac.get("/jira/issues")
 

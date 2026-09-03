@@ -12,10 +12,14 @@ async def test_ensure_indexes_creates_expected_indexes(monkeypatch):
     linked_accounts_mock = AsyncMock()
     manual_tasks_mock = AsyncMock()
     github_issues_mock = AsyncMock()
+    jira_issues_mock = AsyncMock()
+    moodle_assignments_mock = AsyncMock()
 
     monkeypatch.setattr(mongodb_mod.db.linkedAccounts, "create_index", linked_accounts_mock)
     monkeypatch.setattr(mongodb_mod.db.manual_tasks, "create_index", manual_tasks_mock)
     monkeypatch.setattr(mongodb_mod.db.github_issues, "create_index", github_issues_mock)
+    monkeypatch.setattr(mongodb_mod.db.jira_issues, "create_index", jira_issues_mock)
+    monkeypatch.setattr(mongodb_mod.db.moodle_assignments, "create_index", moodle_assignments_mock)
 
     await mongodb_mod.ensure_indexes()
 
@@ -26,10 +30,12 @@ async def test_ensure_indexes_creates_expected_indexes(monkeypatch):
     manual_tasks_mock.assert_any_call("id", unique=True)
     manual_tasks_mock.assert_any_call("user_id")
 
-    # github_issues：upsert 用的複合鍵，不強制 unique，避免舊資料造成建立索引失敗
-    github_issues_mock.assert_any_call([("user_id", 1), ("id", 1)])
-    for call in github_issues_mock.call_args_list:
-        assert call.kwargs.get("unique") is not True
+    # github_issues / jira_issues / moodle_assignments：sync_platform_items() upsert 用的
+    # 複合鍵，三個平台一致，都不強制 unique，避免舊資料造成建立索引失敗
+    for platform_mock in (github_issues_mock, jira_issues_mock, moodle_assignments_mock):
+        platform_mock.assert_any_call([("user_id", 1), ("id", 1)])
+        for call in platform_mock.call_args_list:
+            assert call.kwargs.get("unique") is not True
 
 
 def test_app_startup_calls_ensure_indexes(monkeypatch):

@@ -79,10 +79,19 @@ async def test_get_github_issues_api_fail(monkeypatch):
         async def find_one(self, query):
             return {"apiKey": encrypt_secret("fake_token")}
 
+    class MockCursor:
+        async def to_list(self, length=None):
+            return []  # 沒有任何快取可退回
+
+    class MockGithubIssues:
+        def find(self, *args, **kwargs):
+            return MockCursor()
+
     async def mock_fetch(token):
         raise Exception("GitHub API down")
 
     monkeypatch.setattr(github_router.db, "linkedAccounts", MockLinkedAccounts())
+    monkeypatch.setattr(github_router.db, "github_issues", MockGithubIssues())
     monkeypatch.setattr(github_router, "fetch_github_user_issues", mock_fetch)
 
     with pytest.raises(HTTPException) as exc_info:

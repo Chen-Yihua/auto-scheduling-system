@@ -1,6 +1,7 @@
 import logging
 from db.mongodb import db
 from db.crypto import decrypt_secret
+from crud.errors import NonRetryableError
 from fastapi import HTTPException
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -54,7 +55,7 @@ def fetch_assignments(username, password):
     current_url = driver.current_url
     if current_url != 'https://moodle.nccu.edu.tw/my/':
         driver.quit()
-        raise Exception(f"Moodle 登入失敗，使用者：{username}")
+        raise NonRetryableError(f"Moodle 登入失敗，使用者：{username}")
 
     # 找到包住所有課程的主容器
     semester_div = driver.find_element(By.ID, "SemesterItem_1")

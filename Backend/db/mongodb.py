@@ -31,6 +31,9 @@ async def ensure_indexes() -> None:
     await db.manual_tasks.create_index("id", unique=True)
     await db.manual_tasks.create_index("user_id")
 
-    # github_issues 用 (user_id, id) 當 upsert 的唯一鍵條件，這裡不設 unique=True——
-    # 避免萬一舊資料已經有重複值時，建立索引直接讓啟動失敗
+    # github_issues / jira_issues / moodle_assignments 都用 (user_id, id) 當
+    # sync_platform_items()（crud/external_sync.py）upsert 的唯一鍵條件，
+    # 這裡不設 unique=True——避免萬一舊資料已經有重複值時，建立索引直接讓啟動失敗
     await db.github_issues.create_index([("user_id", 1), ("id", 1)])
+    await db.jira_issues.create_index([("user_id", 1), ("id", 1)])
+    await db.moodle_assignments.create_index([("user_id", 1), ("id", 1)])

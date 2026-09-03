@@ -27,7 +27,12 @@ async def get_user_account(clerk_id: str):
     return user
 
 
-def fetch_assignments(username, password):
+def _login_to_moodle(username, password):
+    """
+    開一個 headless Chrome、跑完 SSO 登入流程，回傳已登入狀態的 driver。
+    帳密錯誤（登入後沒被導向 my/ 首頁）視為 NonRetryableError——重試也沒用。
+    呼叫端用完記得自己 driver.quit()。
+    """
     opts = Options()
     opts.binary_location = "/usr/bin/chromium"   # Debian 的 chromium 可執行檔
     opts.add_argument("--headless=new")
@@ -37,8 +42,8 @@ def fetch_assignments(username, password):
     service = Service("/usr/bin/chromedriver")   # arm64 driver 的真實路徑
     driver = webdriver.Chrome(service=service, options=opts)
     driver.get("https://i.nccu.edu.tw/Login.aspx?ReturnUrl=%2fsso_app%2fMoodleSSO2.aspx")
-    
-    wait = WebDriverWait(driver, 10)  
+
+    wait = WebDriverWait(driver, 10)
     # 模擬登入流程
     username_input = wait.until(EC.element_to_be_clickable((By.ID, "captcha_Login1_UserName")))
     username_input.send_keys(username)
@@ -48,7 +53,7 @@ def fetch_assignments(username, password):
 
     login_button = wait.until(EC.element_to_be_clickable((By.ID, "captcha_Login1_LoginButton")))
     login_button.click()
-    
+
     time.sleep(4)  # 等待頁面加載
 
     # 確認登錄是否成功
@@ -56,6 +61,23 @@ def fetch_assignments(username, password):
     if current_url != 'https://moodle.nccu.edu.tw/my/':
         driver.quit()
         raise NonRetryableError(f"Moodle 登入失敗，使用者：{username}")
+
+    return driver
+
+
+def verify_moodle_login(username, password) -> bool:
+    """
+    只驗證帳密能不能登入，不爬課程/作業——給連結帳號當下的驗證用，
+    比 fetch_assignments() 輕量很多（不用開課程頁一個個爬）。
+    帳密錯誤會拋 NonRetryableError，呼叫端接住轉成使用者看得懂的錯誤訊息。
+    """
+    driver = _login_to_moodle(username, password)
+    driver.quit()
+    return True
+
+
+def fetch_assignments(username, password):
+    driver = _login_to_moodle(username, password)
 
     # 找到包住所有課程的主容器
     semester_div = driver.find_element(By.ID, "SemesterItem_1")

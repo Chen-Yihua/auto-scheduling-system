@@ -2,8 +2,11 @@ import logging
 from db.mongodb import db
 from db.crypto import encrypt_secret, decrypt_secret, mask_secret
 from schemas.linkedAccount import LinkedAccountCreate, LinkedAccountInDB
+from crud.moodle import verify_moodle_login
+from crud.errors import NonRetryableError
 from pymongo.errors import DuplicateKeyError
 from fastapi import HTTPException
+from fastapi.concurrency import run_in_threadpool
 from datetime import datetime
 import httpx
 
@@ -43,8 +46,14 @@ async def create_linked_account(clerk_id: str, account: LinkedAccountCreate) -> 
         doc["status"] = "connected"
         doc["apiKey"] = encrypt_secret(account.apiKey)  # 驗證用明文，落地前才加密
 
-    # Moodle 不需要驗證
+    # 若是 Moodle，也驗證（帳密真的登入得進去才存）
     elif account.platform == "moodle":
+        if not account.username or not account.password:
+            raise HTTPException(status_code=400, detail="Moodle username and password are required")
+        try:
+            await run_in_threadpool(verify_moodle_login, account.username, account.password)
+        except NonRetryableError:
+            raise HTTPException(status_code=401, detail="Moodle 帳號或密碼錯誤")
         doc["username"] = account.username
         doc["avatar_url"] = ""
         doc["password"] = encrypt_secret(account.password)
@@ -106,8 +115,18 @@ async def update_linked_account_by_clerk_id(clerk_id: str, platform: str, data: 
             filtered_data["status"] = "connected"
         filtered_data["apiKey"] = encrypt_secret(filtered_data["apiKey"])
 
-    # 若是 moodle，提供 password 做更新
+    # 若是 moodle 且有更新 password：username 有一起帶就用新的，
+    # 沒帶就查現有帳號的 username 一起驗證（密碼常單獨更新，帳號通常不變）
     if platform == "moodle" and "password" in filtered_data:
+        username = filtered_data.get("username")
+        if not username:
+            existing = await db.linkedAccounts.find_one({"_id": composite_id})
+            username = existing.get("username") if existing else None
+        if username:
+            try:
+                await run_in_threadpool(verify_moodle_login, username, filtered_data["password"])
+            except NonRetryableError:
+                raise HTTPException(status_code=401, detail="Moodle 帳號或密碼錯誤")
         filtered_data["password"] = encrypt_secret(filtered_data["password"])
         filtered_data["status"] = "connected"
 

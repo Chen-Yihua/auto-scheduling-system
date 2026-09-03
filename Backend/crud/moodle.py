@@ -112,10 +112,11 @@ def fetch_assignments(username, password):
             due_date = "無截止日期"
             
         all_data.append({
+            "id": url,  # assignment_url 對每筆作業唯一，直接拿來當同步用的 id
             "course_name": name,
             "assignment_title": title,
             "assignment_url": url,
             "due_date": due_date
-        })    
+        })
     driver.quit()
     return all_data

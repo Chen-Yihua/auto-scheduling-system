@@ -3,6 +3,8 @@ import logging
 from datetime import datetime, timezone
 from typing import Awaitable, Callable, Optional
 
+from crud.errors import NonRetryableError
+
 logger = logging.getLogger(__name__)
 
 
@@ -17,12 +19,12 @@ async def sync_platform_items(
     """
     GitHub / Jira / Moodle 共用的「即時優先、重試、DB 當最終退路」讀取邏輯：
     - 即時抓資料成功 -> upsert 進 collection，回傳最新資料（stale=False）
-    - 即時抓資料失敗 -> 用指數退避重試最多 max_attempts 次（預設抓不到只重試 1 次，
-      總共 2 次嘗試），只處理「這次沒抓到，等一下可能就好了」的暫時性失敗
-      （網路抖動、API 短暫 5xx、Moodle 頁面還沒載完）——不特別分辨錯誤種類，
-      所以像 token 失效這種一定會再次失敗的情況，也會多花一次重試的成本，
-      這是為了不用重寫三個平台的例外處理而接受的取捨。
-    - 重試全部失敗 -> 退回 collection 裡該使用者最後一次成功的快照（stale=True）
+    - 即時抓資料失敗，且判斷為暫時性失敗（見 crud/errors.py 的 NonRetryableError）
+      -> 用指數退避重試最多 max_attempts 次（預設抓不到只重試 1 次，總共 2 次嘗試）
+    - 即時抓資料失敗，且判斷為 NonRetryableError（帳密/token 錯誤等一定會再次
+      失敗的狀況）-> 不浪費時間重試，立刻放棄
+    - 重試全部失敗，或遇到 NonRetryableError -> 退回 collection 裡該使用者
+      最後一次成功的快照（stale=True）
     - 兩者都沒有 -> 讓最後一次的例外往外拋，由呼叫端決定要回什麼錯誤
     """
     last_exc: Optional[Exception] = None
@@ -35,6 +37,15 @@ async def sync_platform_items(
         except Exception as exc:
             last_exc = exc
             is_last_attempt = attempt == max_attempts - 1
+            is_retryable = not isinstance(exc, NonRetryableError)
+
+            if not is_retryable:
+                logger.info(
+                    "Non-retryable error for user_id=%s, skipping retry: %s",
+                    user_id, exc,
+                )
+                break
+
             if not is_last_attempt:
                 delay = retry_delay_seconds * (2 ** attempt)
                 logger.warning(

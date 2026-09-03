@@ -2,6 +2,7 @@ import pytest
 from fastapi import HTTPException, Response
 
 import routers.moodle as moodle_router
+from crud.errors import NonRetryableError
 
 mock_user = {"sub": "test_user_123"}
 
@@ -70,8 +71,12 @@ async def test_get_assignments_falls_back_to_cache_when_scrape_fails(monkeypatch
     async def mock_get_user_account(clerk_id):
         return {"username": "stu001", "password": "decrypted_pw"}
 
+    call_count = {"n": 0}
+
     def mock_fetch_assignments(username, password):
-        raise Exception("Moodle 登入失敗，使用者：stu001")
+        call_count["n"] += 1
+        # 真實的 crud/moodle.py 對登入失敗會拋 NonRetryableError（帳密錯誤重試也沒用）
+        raise NonRetryableError("Moodle 登入失敗，使用者：stu001")
 
     cached_doc = {
         "id": "https://moodle.nccu.edu.tw/mod/assign/view.php?id=1",
@@ -95,6 +100,8 @@ async def test_get_assignments_falls_back_to_cache_when_scrape_fails(monkeypatch
 
     assert result[0]["assignment_title"] == "HW1（上次抓到的）"
     assert response.headers["X-Data-Stale"] == "true"
+    # 登入失敗是 NonRetryableError，不該被重試——只該爬一次
+    assert call_count["n"] == 1
 
 
 @pytest.mark.asyncio
@@ -103,7 +110,7 @@ async def test_get_assignments_raises_401_when_scrape_fails_and_no_cache(monkeyp
         return {"username": "stu001", "password": "decrypted_pw"}
 
     def mock_fetch_assignments(username, password):
-        raise Exception("Moodle 登入失敗，使用者：stu001")
+        raise NonRetryableError("Moodle 登入失敗，使用者：stu001")
 
     async def instant_sleep(seconds):
         pass

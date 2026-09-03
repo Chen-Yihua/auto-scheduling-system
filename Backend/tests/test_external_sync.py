@@ -2,6 +2,7 @@ import pytest
 from datetime import datetime, timezone
 
 from crud.external_sync import sync_platform_items
+from crud.errors import NonRetryableError
 
 
 class FakeCursor:
@@ -186,3 +187,51 @@ async def test_sync_platform_items_backs_off_exponentially_between_retries(monke
         )
 
     assert sleep_calls == [1.0, 2.0, 4.0]
+
+
+@pytest.mark.asyncio
+async def test_sync_platform_items_does_not_retry_non_retryable_error():
+    """NonRetryableError（例如帳密/token 錯誤）不該被重試，抓一次失敗就直接放棄。"""
+    synced_at = datetime.now(timezone.utc)
+    collection = FakeCollection(initial=[
+        {"id": 1, "title": "cached", "user_id": "u1", "synced_at": synced_at}
+    ])
+    call_count = {"n": 0}
+
+    async def fetch():
+        call_count["n"] += 1
+        raise NonRetryableError("401 Unauthorized")
+
+    items, stale, _ = await sync_platform_items(
+        collection=collection, user_id="u1", id_field="id", fetch_fn=fetch,
+        max_attempts=5, retry_delay_seconds=0,
+    )
+
+    # 就算 max_attempts=5，NonRetryableError 也只該打一次就放棄，不多試
+    assert call_count["n"] == 1
+    assert stale is True
+    assert items[0]["title"] == "cached"
+
+
+@pytest.mark.asyncio
+async def test_sync_platform_items_non_retryable_error_skips_sleep(monkeypatch):
+    """NonRetryableError 不該觸發任何退避等待，直接跳過重試邏輯。"""
+    sleep_calls = []
+
+    async def fake_sleep(seconds):
+        sleep_calls.append(seconds)
+
+    monkeypatch.setattr("crud.external_sync.asyncio.sleep", fake_sleep)
+
+    collection = FakeCollection()
+
+    async def fetch():
+        raise NonRetryableError("404 Not Found")
+
+    with pytest.raises(NonRetryableError):
+        await sync_platform_items(
+            collection=collection, user_id="u1", id_field="id", fetch_fn=fetch,
+            max_attempts=3, retry_delay_seconds=1.0,
+        )
+
+    assert sleep_calls == []

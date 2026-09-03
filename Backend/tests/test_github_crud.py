@@ -1,5 +1,6 @@
 import pytest
 import crud.github as github_mod
+from crud.errors import NonRetryableError
 from httpx import Response, Request
 
 @pytest.mark.asyncio
@@ -45,9 +46,28 @@ async def test_fetch_github_user_issues_api_fail(monkeypatch):
 
     monkeypatch.setattr("httpx.AsyncClient", lambda: MockClient())
 
-    with pytest.raises(Exception) as exc_info:
+    # 403（token 沒權限）屬於客戶端錯誤，重試也沒用 -> 應該是 NonRetryableError
+    with pytest.raises(NonRetryableError) as exc_info:
         await github_mod.fetch_github_user_issues("invalid_token")
 
+    assert "GitHub API failed" in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_fetch_github_user_issues_server_error_is_retryable(monkeypatch):
+    class MockClient:
+        async def __aenter__(self): return self
+        async def __aexit__(self, *args): pass
+        async def get(self, url, headers, params):
+            return Response(status_code=500, content=b"Internal Server Error", request=Request("GET", url))
+
+    monkeypatch.setattr("httpx.AsyncClient", lambda: MockClient())
+
+    # 500 是伺服器端暫時性問題，重試可能會成功 -> 不該是 NonRetryableError
+    with pytest.raises(Exception) as exc_info:
+        await github_mod.fetch_github_user_issues("token")
+
+    assert not isinstance(exc_info.value, NonRetryableError)
     assert "GitHub API failed" in str(exc_info.value)
 
 

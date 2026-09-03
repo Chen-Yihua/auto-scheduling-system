@@ -1,4 +1,5 @@
 import pytest
+from fastapi import HTTPException
 import crud.linkedAccount as linked_mod
 import crud.moodle as moodle_mod
 from crud.linkedAccount import (
@@ -25,12 +26,34 @@ def _mock_update_one(stored: dict):
 async def test_create_moodle_account_encrypts_password(monkeypatch):
     stored = {}
     monkeypatch.setattr(linked_mod.db.linkedAccounts, "update_one", _mock_update_one(stored))
+    monkeypatch.setattr(linked_mod, "verify_moodle_login", lambda username, password: True)
 
     account = LinkedAccountCreate(platform="moodle", status="", username="stu123", password="my-real-password")
     await create_linked_account("uid123", account)
 
     assert stored["password"] != "my-real-password"
     assert decrypt_secret(stored["password"]) == "my-real-password"
+
+
+@pytest.mark.asyncio
+async def test_create_moodle_account_rejects_wrong_credentials(monkeypatch):
+    from crud.errors import NonRetryableError
+
+    stored = {}
+    monkeypatch.setattr(linked_mod.db.linkedAccounts, "update_one", _mock_update_one(stored))
+
+    def fake_verify(username, password):
+        raise NonRetryableError("Moodle 登入失敗，使用者：stu123")
+
+    monkeypatch.setattr(linked_mod, "verify_moodle_login", fake_verify)
+
+    account = LinkedAccountCreate(platform="moodle", status="", username="stu123", password="wrong-password")
+
+    with pytest.raises(HTTPException) as exc_info:
+        await create_linked_account("uid123", account)
+
+    assert exc_info.value.status_code == 401
+    assert stored == {}  # 驗證失敗，完全不該寫進 DB
 
 
 @pytest.mark.asyncio
@@ -86,6 +109,12 @@ async def test_get_linked_accounts_never_returns_plaintext_or_ciphertext(monkeyp
 async def test_update_moodle_password_encrypts_before_save(monkeypatch):
     stored = {}
     monkeypatch.setattr(linked_mod.db.linkedAccounts, "update_one", _mock_update_one(stored))
+    monkeypatch.setattr(linked_mod, "verify_moodle_login", lambda username, password: True)
+
+    async def mock_find_one(query):
+        return {"username": "stu123"}  # 密碼單獨更新時，拿現有帳號一起驗證
+
+    monkeypatch.setattr(linked_mod.db.linkedAccounts, "find_one", mock_find_one)
 
     result = await update_linked_account_by_clerk_id(
         "uid123", "moodle", {"payload": {"password": "new-password"}}

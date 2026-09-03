@@ -60,6 +60,7 @@ async def test_create_linked_account_logs_debug(monkeypatch, caplog):
         return type("Mock", (), {"modified_count": 1, "upserted_id": None})()
 
     monkeypatch.setattr(linked_mod.db.linkedAccounts, "update_one", mock_update_one)
+    monkeypatch.setattr(linked_mod, "verify_moodle_login", lambda username, password: True)
 
     account = LinkedAccountCreate(
         platform="moodle", status="", username="stu123", password="pw123456"

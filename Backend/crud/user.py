@@ -27,8 +27,15 @@ async def get_user_by_clerk_id(clerk_id: str):
     return user
 
 # 更新使用者
+# 可以允許更新的欄位只有以下幾種，避免 mass assignment（例如竄改 clerk_id 或未來新增的敏感欄位）
+ALLOWED_UPDATE_FIELDS = {"name", "email"}
+
 async def update_user_by_clerk_id(clerk_id: str, data: dict):
-    result = await db.users.update_one({"_id": clerk_id}, {"$set": data})
+    filtered_data = {k: v for k, v in data.items() if k in ALLOWED_UPDATE_FIELDS}
+    if not filtered_data:
+        return False
+
+    result = await db.users.update_one({"_id": clerk_id}, {"$set": filtered_data})
     return result.modified_count > 0
 
 # 刪除使用者

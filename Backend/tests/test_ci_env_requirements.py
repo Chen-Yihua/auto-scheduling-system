@@ -54,8 +54,10 @@ def test_clerk_env_vars_present_allows_import():
 def test_missing_gemini_api_key_breaks_webhook_import():
     result = _run_import_in_clean_process("import routers.webhook", env_overrides={})
 
+    # 只斷言「import 失敗」，不比對 google-genai SDK 例外訊息的確切文字——
+    # requirements.txt 沒有鎖版本，SDK 版本更新時錯誤訊息措辭本來就可能改變，
+    # 綁死文字內容會讓這個測試在依賴升級時無端變紅（過去就真的因此壞過一次）。
     assert result.returncode != 0
-    assert "Missing key inputs argument" in result.stderr
 
 
 def test_gemini_api_key_present_allows_webhook_import():

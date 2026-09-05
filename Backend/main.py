@@ -1,7 +1,7 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends
 from routers import user
-from routers import user, linkedAccount, webhook, jira, manualTask, oauth ,moodle
+from routers import user, linkedAccount, webhook, jira, manualTask, oauth ,moodle, schedule
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 import os
@@ -52,6 +52,7 @@ app.include_router(jira.router)
 app.include_router(manualTask.router)
 app.include_router(github.router)
 app.include_router(moodle.router)
+app.include_router(schedule.router)
 
 # 健康檢查 endpoint
 @app.get("/health")

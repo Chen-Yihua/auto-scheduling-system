@@ -2,8 +2,8 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-from crud.oauth import get_google_calendar_token, save_google_calendar_token,refresh_google_calendar_token
-from services.google_calendar import fetch_events_in_next_7_days, fetch_google_calendar_list,fetch_freebusy,compute_free_times
+from crud.oauth import get_google_calendar_token, save_google_calendar_token, refresh_google_calendar_token, get_free_slots_for_user
+from services.google_calendar import fetch_events_in_next_7_days, fetch_google_calendar_list
 from db.security import get_current_clerk_user
 import httpx
 import os
@@ -113,32 +113,7 @@ async def get_available_times(clerk_user: dict = Depends(get_current_clerk_user)
     """
     取得使用者 primary calendar 未來 7 天的 FreeBusy 回應，並回傳UTC空閒時段，並在log回應taipei時區以方便檢查
     """
-    # 取出當前使用者的 Access Token
-    access_token = await get_google_calendar_token(clerk_user["sub"])
-
-    # 抓 calendar list，若 401 -> refresh -> retry
-    try:
-        calendars = await fetch_google_calendar_list(access_token)
-    except httpx.HTTPStatusError as e:
-        if e.response.status_code == 401:
-            access_token = await refresh_google_calendar_token(clerk_user["sub"])
-            calendars   = await fetch_google_calendar_list(access_token)
-        else:
-            raise HTTPException(status_code=400, detail="取得行事曆列表失敗")
-    
-    # 先取得行事曆列表，找出 primary calendar id
-    primary = next((c for c in calendars if c.get("primary")), None)
-    if not primary:
-        raise HTTPException(status_code=404, detail="找不到 primary calendar")
-
-    # 呼叫 FreeBusy API
-    fb_response = await fetch_freebusy(access_token, primary["id"])
-
-    # 計算空閒時間
-    window_start = fb_response["timeMin"]
-    window_end   = fb_response["timeMax"]
-    busy_list    = fb_response["calendars"][primary["id"]]["busy"]
-    free_utc     = compute_free_times(busy_list, window_start, window_end)
+    free_utc = await get_free_slots_for_user(clerk_user["sub"])
     tz = ZoneInfo("Asia/Taipei")
     free_local = []
     for i in free_utc:

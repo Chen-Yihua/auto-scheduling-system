@@ -3,6 +3,11 @@ from db.mongodb import db
 from fastapi import HTTPException
 from datetime import datetime
 import os, httpx
+from services.google_calendar import (
+    fetch_google_calendar_list,
+    fetch_freebusy,
+    compute_free_times,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -75,3 +80,32 @@ async def refresh_google_calendar_token(clerk_id: str) -> str:
     )
     logger.info("Refreshed Google Calendar token for clerk_id=%s", clerk_id)
     return access_token
+
+
+async def get_free_slots_for_user(clerk_id: str) -> list[dict]:
+    """
+    取得使用者 primary calendar 未來 7 天的空閒時段（UTC ISO 字串）。
+    被 /oauth/available 跟排程建議（crud/schedule.py）共用，
+    401 就自動 refresh token 重打一次，不用兩邊各寫一份。
+    """
+    access_token = await get_google_calendar_token(clerk_id)
+
+    try:
+        calendars = await fetch_google_calendar_list(access_token)
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 401:
+            access_token = await refresh_google_calendar_token(clerk_id)
+            calendars = await fetch_google_calendar_list(access_token)
+        else:
+            raise HTTPException(status_code=400, detail="取得行事曆列表失敗")
+
+    primary = next((c for c in calendars if c.get("primary")), None)
+    if not primary:
+        raise HTTPException(status_code=404, detail="找不到 primary calendar")
+
+    fb_response = await fetch_freebusy(access_token, primary["id"])
+
+    window_start = fb_response["timeMin"]
+    window_end = fb_response["timeMax"]
+    busy_list = fb_response["calendars"][primary["id"]]["busy"]
+    return compute_free_times(busy_list, window_start, window_end)

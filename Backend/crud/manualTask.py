@@ -20,6 +20,9 @@ async def create_manual_task(task: ManualTaskOut) -> str:
             "updated": doc.get("updated"),
             "status": doc.get("status"),
             "priority": doc.get("priority"),
+            "duration": doc.get("duration"),
+            "inferred_fields": doc.get("inferred_fields", []),
+            "inference_reason": doc.get("inference_reason"),
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

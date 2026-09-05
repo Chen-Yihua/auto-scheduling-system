@@ -1,6 +1,7 @@
 import logging
 from fastapi import APIRouter, HTTPException, Depends, Request
 from crud import manualTask as manualTask_crud
+from crud.task_inference import infer_missing_task_fields
 from schemas.manualTask import ManualTaskInput, ManualTaskOut
 from db.security import get_current_clerk_user
 from datetime import datetime, timezone
@@ -17,18 +18,35 @@ async def create_manual_task(
     clerk_user: dict = Depends(get_current_clerk_user)
 ):
     """
-    建立新的任務（需驗證 JWT）
+    建立新的任務（需驗證 JWT）。
+    使用者沒填 priority／duration（不確定）時，用 LLM 從 title/description 推斷。
     """
+    task_data = taskInput.model_dump()
+    inferred_fields = []
+    inference_reason = None
+
+    if taskInput.priority is None or taskInput.duration is None:
+        inference = await infer_missing_task_fields(taskInput.title, taskInput.description)
+        if taskInput.priority is None:
+            task_data["priority"] = inference["priority"]
+            inferred_fields.append("priority")
+        if taskInput.duration is None:
+            task_data["duration"] = inference["duration"]
+            inferred_fields.append("duration")
+        inference_reason = inference["reason"]
+
     now = datetime.now(timezone.utc)
     task = ManualTaskOut(
-        **taskInput.model_dump(),
+        **task_data,
         id=str(uuid4()), # 隨機產生id
         created=now,
-        updated=now
+        updated=now,
+        inferred_fields=inferred_fields,
+        inference_reason=inference_reason,
     )
     task.user_id = clerk_user["sub"]
 
-    logger.debug("Creating manual task: %s", task)
+    logger.debug("Creating manual task: %s (inferred_fields=%s)", task.title, inferred_fields)
     new_task = await manualTask_crud.create_manual_task(task)
     return new_task
 
@@ -74,7 +92,9 @@ async def update_manual_task(
         raise HTTPException(status_code=404, detail="Task not found")
     now = datetime.now(timezone.utc)
     task.update({"updated": now})
-    task.update(taskInput.model_dump())    
+    # exclude_none：priority/duration 現在允許留空，若這次更新沒帶，
+    # 保留原本的值，不要被 None 覆蓋掉
+    task.update(taskInput.model_dump(exclude_none=True))
 
     updated_task = await manualTask_crud.update_manual_task_by_id(task_id, task)
     return updated_task

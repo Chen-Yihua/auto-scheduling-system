@@ -27,7 +27,8 @@ def fake_task_input():
         description="This is a test task.",
         due_date=None,
         status="To Do",
-        priority="Low"
+        priority="Low",
+        duration=30,  # 兩個不確定欄位都填了，才不會觸發 LLM 推斷
     )
 
 @pytest.fixture
@@ -61,8 +62,9 @@ def fake_task_out_updated():
 """
 測試建立任務
 """
+@patch("routers.manualTask.infer_missing_task_fields", new_callable=AsyncMock)
 @patch("crud.manualTask.create_manual_task", new_callable=AsyncMock)
-def test_create_manual_task_success(mock_create_manual_task, fake_task_input, fake_task_out):
+def test_create_manual_task_success(mock_create_manual_task, mock_infer, fake_task_input, fake_task_out):
     mock_create_manual_task.return_value = fake_task_out
 
     response = client.post("/manual_tasks/", json=fake_task_input.model_dump())
@@ -70,10 +72,58 @@ def test_create_manual_task_success(mock_create_manual_task, fake_task_input, fa
     assert response.status_code == 200
     assert response.json()["id"] == "task_id"
     assert response.json()["created"] == "2023-10-01T00:00:00Z"
+    # priority/duration 兩個都填了，不該去問 LLM
+    mock_infer.assert_not_called()
 
 def test_create_manual_task_invalid_input():
     response = client.post("/manual_tasks/", json={})
     assert response.status_code == 422  # FastAPI 的預設驗證
+
+
+@patch("routers.manualTask.infer_missing_task_fields", new_callable=AsyncMock)
+@patch("crud.manualTask.create_manual_task", new_callable=AsyncMock)
+def test_create_manual_task_infers_missing_priority_and_duration(
+    mock_create_manual_task, mock_infer, fake_task_input, fake_task_out
+):
+    mock_infer.return_value = {"priority": "High", "duration": 120, "reason": "看起來很重要"}
+    mock_create_manual_task.return_value = fake_task_out
+
+    payload = fake_task_input.model_dump()
+    payload["priority"] = None
+    payload["duration"] = None
+
+    response = client.post("/manual_tasks/", json=payload)
+
+    assert response.status_code == 200
+    mock_infer.assert_called_once_with(fake_task_input.title, fake_task_input.description)
+
+    # 檢查真正存進去的任務資料，確認 priority/duration 有被 LLM 推斷值取代
+    saved_task = mock_create_manual_task.call_args[0][0]
+    assert saved_task.priority == "High"
+    assert saved_task.duration == 120
+    assert saved_task.inferred_fields == ["priority", "duration"]
+    assert saved_task.inference_reason == "看起來很重要"
+
+
+@patch("routers.manualTask.infer_missing_task_fields", new_callable=AsyncMock)
+@patch("crud.manualTask.create_manual_task", new_callable=AsyncMock)
+def test_create_manual_task_infers_only_missing_field(
+    mock_create_manual_task, mock_infer, fake_task_input, fake_task_out
+):
+    mock_infer.return_value = {"priority": "Medium", "duration": 45, "reason": "普通任務"}
+    mock_create_manual_task.return_value = fake_task_out
+
+    payload = fake_task_input.model_dump()
+    payload["duration"] = None  # 只有 duration 沒填，priority 使用者已經選了 "Low"
+
+    response = client.post("/manual_tasks/", json=payload)
+
+    assert response.status_code == 200
+    saved_task = mock_create_manual_task.call_args[0][0]
+    # priority 是使用者自己選的，不該被 LLM 的推斷值覆蓋
+    assert saved_task.priority == "Low"
+    assert saved_task.duration == 45
+    assert saved_task.inferred_fields == ["duration"]
 
 
 """

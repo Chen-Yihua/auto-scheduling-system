@@ -4,7 +4,7 @@
 
 ---
 
-## 📦 安裝方式
+## 安裝方式
 
 ```bash
 # 安裝依賴套件
@@ -14,7 +14,7 @@ npm install
 npm run dev
 ```
 
-## 📁 專案結構說明
+## 專案結構說明
 
 ```text
 .
@@ -34,9 +34,9 @@ npm run dev
 └── server/tsconfig.json       # Nuxt server 模組的 TypeScript 設定
 ```
 
-## 🧱 如何新增元件（Components）
+## 如何新增元件（Components）
 
-### ✅ 新增共用元件（建議放在 `/components/`）
+### 新增共用元件（建議放在 `/components/`）
 
 ```bash
 components/
@@ -57,7 +57,7 @@ components/
         └── UserAvatar.vue
 ```
 
-## 📄 如何新增頁面（Pages）
+## 如何新增頁面（Pages）
 
 Nuxt 使用 **自動路由**，只要在 `/pages` 資料夾新增 `.vue` 檔案，即可成為一個路由：
 
@@ -66,13 +66,13 @@ pages/
 └── about.vue   → http://localhost:3000/about
 ```
 
-## 🧪 如何新增 composables（自訂邏輯函式）
+## 如何新增 composables（自訂邏輯函式）
 
 Nuxt 3 支援自動引入 `composables/` 內的函式，不需要手動 import，非常適合封裝可重用邏輯（類似 Vue 的 hooks 概念）。
 
 ---
 
-### ✅ 新增一個 composable
+### 新增一個 composable
 
 ```bash
 composables/
@@ -95,7 +95,7 @@ export function useCounter() {
 
 ---
 
-### 🧠 使用方式（不需手動 import）
+### 使用方式（不需手動 import）
 
 ```vue
 <script setup lang="ts">
@@ -109,7 +109,7 @@ const { count, increment } = useCounter();
 
 ---
 
-### 📌 命名建議
+### 命名建議
 
 - 使用 `useXXX` 命名格式（例如 `useUser`、`useSchedule`、`useModal`）
 - 每個 composable 專注在一個功能，便於重用與維護

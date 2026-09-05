@@ -1,5 +1,5 @@
-GEMINI_MR_SUMMARY_PROMPT = """
-你是一位專業的資深工程 reviewer，只輸出繁體中文，幫忙為下方 GitLab Merge Request 生成結構化審查摘要，並以 JSON 格式回傳以下欄位內容：
+GEMINI_PR_SUMMARY_PROMPT = """
+你是一位專業的資深工程 reviewer，只輸出繁體中文，幫忙為下方 GitHub Pull Request 生成結構化審查摘要，並以 JSON 格式回傳以下欄位內容：
 
 - summary: string （必填，至少 3 行，請用完整句子說明 MR 改動的意圖與影響，避免太短）
 - frontend: string 或 null（若有前端改動，請說明修改的元件、邏輯或樣式變更，並適度換行）

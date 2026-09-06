@@ -1,3 +1,4 @@
+import logging
 from fastapi import APIRouter, Depends, HTTPException, Response
 from db.mongodb import db  # 假設有 access linkedAccounts
 from db.security import get_current_clerk_user
@@ -5,6 +6,8 @@ from db.crypto import decrypt_secret
 from crud.jira import fetch_jira_user_issues
 from crud.external_sync import sync_platform_items
 from schemas.jira import JiraIssue
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/jira", tags=["jira"])
 
@@ -30,8 +33,9 @@ async def get_jira_issues(response: Response = None, user=Depends(get_current_cl
             id_field="id",
             fetch_fn=lambda: fetch_jira_user_issues(api_key, domain),
         )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        logger.exception("Failed to sync Jira issues for user_id=%s", user["sub"])
+        raise HTTPException(status_code=500, detail="無法取得 Jira 資料，請稍後再試")
 
     if response is not None:
         response.headers["X-Data-Stale"] = str(stale).lower()

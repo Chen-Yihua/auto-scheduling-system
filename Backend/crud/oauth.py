@@ -56,7 +56,9 @@ async def refresh_google_calendar_token(clerk_id: str) -> str:
     async with httpx.AsyncClient() as client:
         res = await client.post(token_url, data=payload)
         logger.debug("Google token refresh response status=%s", res.status_code)
-        logger.debug("Google token refresh response body=%s", res.text)
+        if res.status_code != 200:
+            # 失敗回應是 Google 的錯誤代碼/描述，不含 token，可以安全記錄方便除錯
+            logger.warning("Google token refresh failed: %s", res.text)
         res.raise_for_status()
         token_data = res.json()
 

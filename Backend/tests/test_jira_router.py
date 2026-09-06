@@ -51,6 +51,7 @@ async def test_get_jira_issues_success(test_app):
     mock_db = MagicMock()
     mock_db.linkedAccounts.find_one = AsyncMock(return_value=mock_linked_account)
     mock_db.jira_issues.update_one = AsyncMock()
+    mock_db.jira_issues.delete_many = AsyncMock()
 
     with patch("routers.jira.db", mock_db), \
          patch("routers.jira.fetch_jira_user_issues", new_callable=AsyncMock) as mock_fetch:
@@ -100,4 +101,6 @@ async def test_get_jira_issues_internal_error(test_app):
             response = await ac.get("/jira/issues")
 
         assert response.status_code == 500
-        assert response.json()["detail"] == "boom!"
+        # detail 應該是給使用者看的固定訊息，內部例外原因（"boom!"）只會寫進 log，
+        # 不會回傳給前端（避免洩漏內部細節）
+        assert response.json()["detail"] == "無法取得 Jira 資料，請稍後再試"

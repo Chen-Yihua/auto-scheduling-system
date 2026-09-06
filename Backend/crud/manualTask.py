@@ -23,9 +23,11 @@ async def create_manual_task(task: ManualTaskOut) -> str:
             "duration": doc.get("duration"),
             "inferred_fields": doc.get("inferred_fields", []),
             "inference_reason": doc.get("inference_reason"),
+            "inference_hint": doc.get("inference_hint"),
         }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        logger.exception("Failed to create manual task for user_id=%s", doc.get("user_id"))
+        raise HTTPException(status_code=500, detail="建立任務失敗，請稍後再試")
 
 # 查詢任務
 async def get_manual_task_by_id(task_id: str, user_id: str):

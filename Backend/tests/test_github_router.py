@@ -16,6 +16,9 @@ async def test_get_github_issues(monkeypatch):
         async def update_one(self, *args, **kwargs):
             return type("MockResult", (), {"upserted_id": "mock_id"})()
 
+        async def delete_many(self, *args, **kwargs):
+            return type("MockResult", (), {"deleted_count": 0})()
+
     async def mock_fetch(token):
         return [
             {
@@ -102,4 +105,6 @@ async def test_get_github_issues_api_fail(monkeypatch):
         await github_router.get_github_issues(clerk_user=mock_user)
 
     assert exc_info.value.status_code == 500
-    assert "GitHub API down" in str(exc_info.value.detail)
+    # detail 應該是給使用者看的固定訊息，內部例外原因（"GitHub API down"）
+    # 只會寫進 log，不會回傳給前端（避免洩漏內部細節）
+    assert exc_info.value.detail == "無法取得 GitHub 資料，請稍後再試"

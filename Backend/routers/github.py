@@ -1,3 +1,4 @@
+import logging
 from fastapi import APIRouter, Depends, HTTPException, Response
 from db.mongodb import db
 from db.security import get_current_clerk_user
@@ -6,6 +7,8 @@ from typing import List
 from schemas.github import GitHubIssue
 from crud.github import fetch_github_user_issues, transform_github_item
 from crud.external_sync import sync_platform_items
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/github", tags=["github"])
 
@@ -35,8 +38,9 @@ async def get_github_issues(response: Response = None, clerk_user=Depends(get_cu
             id_field="id",
             fetch_fn=fetch,
         )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        logger.exception("Failed to sync GitHub issues for user_id=%s", user_id)
+        raise HTTPException(status_code=500, detail="無法取得 GitHub 資料，請稍後再試")
 
     if response is not None:
         response.headers["X-Data-Stale"] = str(stale).lower()

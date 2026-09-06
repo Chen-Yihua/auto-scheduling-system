@@ -1,4 +1,5 @@
 import pytest
+from unittest.mock import MagicMock
 from fastapi import HTTPException
 from routers import linkedAccount as router
 import crud.linkedAccount as crud_mod
@@ -60,7 +61,7 @@ async def test_create_linked_account(monkeypatch):
 
     monkeypatch.setattr(crud_mod, "create_linked_account", mock_create)
 
-    result = await router.create_linked_account(account_data=account, clerk_user=mock_user)
+    result = await router.create_linked_account(request=MagicMock(), account_data=account, clerk_user=mock_user)
     assert result["linkedAccounts"]["github"]["status"] == "connected"
 
 
@@ -72,6 +73,7 @@ async def test_update_linked_account(monkeypatch):
     monkeypatch.setattr(crud_mod, "update_linked_account_by_clerk_id", mock_update)
 
     result = await router.update_linked_account(
+        request=MagicMock(),
         platform="github",
         data={"status": "connected"},
         clerk_user=mock_user
@@ -88,6 +90,7 @@ async def test_update_linked_account_fail(monkeypatch):
 
     with pytest.raises(HTTPException) as exc_info:
         await router.update_linked_account(
+            request=MagicMock(),
             platform="github",
             data={"status": "connected"},
             clerk_user=mock_user

@@ -20,9 +20,10 @@ MAX_DURATION_MINUTES = 480
 VALID_PRIORITIES = {"High", "Medium", "Low"}
 
 
-async def infer_missing_task_fields(title: str, description: str) -> dict:
+async def infer_missing_task_fields(title: str, description: str, hint: str | None = None) -> dict:
     """
-    使用者建立任務時沒填 priority/duration，用 LLM 從標題/描述推斷合理值並附理由。
+    使用者建立任務時沒填 priority/duration，用 LLM 從標題/描述（加上使用者
+    自己給的提醒，例如「這比想像中難」）推斷合理值並附理由。
 
     這裡 LLM 的影響範圍鎖死在兩個純量欄位（不牽涉時段分配），
     所以驗證很單純：priority 是不是合法的三選一、duration 是不是落在合理範圍。
@@ -33,6 +34,7 @@ async def infer_missing_task_fields(title: str, description: str) -> dict:
         prompt = TASK_FIELD_INFERENCE_PROMPT.format(
             title=title,
             description=description or "（無描述）",
+            hint=hint or "（無）",
         )
         response = await run_in_threadpool(
             client.models.generate_content,

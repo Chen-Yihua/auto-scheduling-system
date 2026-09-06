@@ -6,14 +6,19 @@ from schemas.manualTask import ManualTaskInput, ManualTaskOut
 from db.security import get_current_clerk_user
 from datetime import datetime, timezone
 from uuid import uuid4
+from rate_limit import limiter
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/manual_tasks", tags=["manual_tasks"])
 
 # 建立任務
+# 沒填 priority/duration 時會呼叫 Gemini（見 crud/task_inference.py），
+# 限流避免有人（或壞掉的前端迴圈）連續狂建任務，把 LLM 額度燒光
 @router.post("/", response_model=ManualTaskOut)
+@limiter.limit("20/minute")
 async def create_manual_task(
+    request: Request,
     taskInput: ManualTaskInput,
     clerk_user: dict = Depends(get_current_clerk_user)
 ):
@@ -26,7 +31,9 @@ async def create_manual_task(
     inference_reason = None
 
     if taskInput.priority is None or taskInput.duration is None:
-        inference = await infer_missing_task_fields(taskInput.title, taskInput.description)
+        inference = await infer_missing_task_fields(
+            taskInput.title, taskInput.description, taskInput.inference_hint
+        )
         if taskInput.priority is None:
             task_data["priority"] = inference["priority"]
             inferred_fields.append("priority")

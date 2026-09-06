@@ -29,6 +29,38 @@ async def test_infer_missing_task_fields_success(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_infer_missing_task_fields_includes_hint_in_prompt(monkeypatch):
+    captured = {}
+
+    def fake_generate_content(**kwargs):
+        captured["prompt"] = kwargs["contents"]
+        return _mock_response({"priority": "High", "duration_minutes": 90, "reason": "..."})
+
+    monkeypatch.setattr(task_inference.client.models, "generate_content", fake_generate_content)
+
+    await task_inference.infer_missing_task_fields(
+        "期末報告", "整理資料並簡報", hint="這比想像中難，可能要抓長一點"
+    )
+
+    assert "這比想像中難，可能要抓長一點" in captured["prompt"]
+
+
+@pytest.mark.asyncio
+async def test_infer_missing_task_fields_uses_placeholder_when_no_hint(monkeypatch):
+    captured = {}
+
+    def fake_generate_content(**kwargs):
+        captured["prompt"] = kwargs["contents"]
+        return _mock_response({"priority": "High", "duration_minutes": 90, "reason": "..."})
+
+    monkeypatch.setattr(task_inference.client.models, "generate_content", fake_generate_content)
+
+    await task_inference.infer_missing_task_fields("期末報告", "整理資料並簡報", hint=None)
+
+    assert "使用者給的提醒：（無）" in captured["prompt"]
+
+
+@pytest.mark.asyncio
 async def test_infer_missing_task_fields_falls_back_on_invalid_priority(monkeypatch):
     monkeypatch.setattr(
         task_inference.client.models,

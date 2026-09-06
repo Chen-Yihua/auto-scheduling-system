@@ -54,6 +54,17 @@ describe('useTaskForm', () => {
     expect(ctx.showEditModal.value).toBe(true)
   })
 
+  it('startEditTask 會把既有的 duration/inference_hint 帶進表單', () => {
+    const ctx = useTaskForm()
+    const t = fakeTask()
+    t.duration = 120
+    t.inference_hint = '之前留給 AI 的提醒'
+    ctx.startEditTask(t)
+
+    expect(ctx.state.duration).toBe(120)
+    expect(ctx.state.inference_hint).toBe('之前留給 AI 的提醒')
+  })
+
   it('fetchTasks 會帶 token 呼叫正確路徑', async () => {
     const ctx = useTaskForm()
     await ctx.fetchTasks()
@@ -98,6 +109,149 @@ describe('useTaskForm', () => {
     expect(toastSpy.add).toHaveBeenCalledWith(
       expect.objectContaining({ title: '儲存成功', color: 'success' }),
     )
+    vi.useRealTimers()
+  })
+
+  it('onSubmit 沒填 duration 時，送給後端的是 null（不是空字串）', async () => {
+    const ctx = useTaskForm()
+    ctx.state.title       = '新任務'
+    ctx.state.description = '內容'
+    ctx.state.priority    = 'Medium'
+    ctx.state.duration    = ''
+    ctx.modelValue.value  = fromDate(new Date('2025-07-01T00:00:00Z'), getLocalTimeZone())
+
+    vi.useFakeTimers()
+    await ctx.onSubmit({ data: ctx.state } as any)
+
+    expect(fetchSpy).toHaveBeenNthCalledWith(
+      1,
+      'http://localhost:8000/manual_tasks/',
+      expect.objectContaining({ body: expect.objectContaining({ duration: null }) }),
+    )
+    await vi.runAllTimersAsync()
+    vi.useRealTimers()
+  })
+
+  it('onSubmit 有填 inference_hint 時，會一起送給後端', async () => {
+    const ctx = useTaskForm()
+    ctx.state.title          = '新任務'
+    ctx.state.description    = '內容'
+    ctx.state.priority       = 'Medium'
+    ctx.state.duration       = ''
+    ctx.state.inference_hint = '這比想像中難，可能要抓長一點'
+    ctx.modelValue.value     = fromDate(new Date('2025-07-01T00:00:00Z'), getLocalTimeZone())
+
+    vi.useFakeTimers()
+    await ctx.onSubmit({ data: ctx.state } as any)
+
+    expect(fetchSpy).toHaveBeenNthCalledWith(
+      1,
+      'http://localhost:8000/manual_tasks/',
+      expect.objectContaining({
+        body: expect.objectContaining({ inference_hint: '這比想像中難，可能要抓長一點' }),
+      }),
+    )
+    await vi.runAllTimersAsync()
+    vi.useRealTimers()
+  })
+
+  it('onSubmit 沒填 inference_hint 時，送給後端的是 null', async () => {
+    const ctx = useTaskForm()
+    ctx.state.title          = '新任務'
+    ctx.state.description    = '內容'
+    ctx.state.priority       = 'Medium'
+    ctx.state.duration       = ''
+    ctx.state.inference_hint = ''
+    ctx.modelValue.value     = fromDate(new Date('2025-07-01T00:00:00Z'), getLocalTimeZone())
+
+    vi.useFakeTimers()
+    await ctx.onSubmit({ data: ctx.state } as any)
+
+    expect(fetchSpy).toHaveBeenNthCalledWith(
+      1,
+      'http://localhost:8000/manual_tasks/',
+      expect.objectContaining({ body: expect.objectContaining({ inference_hint: null }) }),
+    )
+    await vi.runAllTimersAsync()
+    vi.useRealTimers()
+  })
+
+  it('onSubmit 有填 duration 時，送給後端的是數字', async () => {
+    const ctx = useTaskForm()
+    ctx.state.title       = '新任務'
+    ctx.state.description = '內容'
+    ctx.state.priority    = 'Medium'
+    ctx.state.duration    = '90'
+    ctx.modelValue.value  = fromDate(new Date('2025-07-01T00:00:00Z'), getLocalTimeZone())
+
+    vi.useFakeTimers()
+    await ctx.onSubmit({ data: ctx.state } as any)
+
+    expect(fetchSpy).toHaveBeenNthCalledWith(
+      1,
+      'http://localhost:8000/manual_tasks/',
+      expect.objectContaining({ body: expect.objectContaining({ duration: 90 }) }),
+    )
+    await vi.runAllTimersAsync()
+    vi.useRealTimers()
+  })
+
+  it('後端回傳 inferred_fields 時，顯示 AI 補值提示而不是「儲存成功」', async () => {
+    const ctx = useTaskForm()
+    ctx.state.title       = '新任務'
+    ctx.state.description = '內容'
+    ctx.state.priority    = 'Medium'
+    ctx.state.duration    = ''
+    ctx.modelValue.value  = fromDate(new Date('2025-07-01T00:00:00Z'), getLocalTimeZone())
+
+    fetchSpy.mockResolvedValueOnce({
+      id: 't1',
+      priority: 'Medium',
+      duration: 180,
+      inferred_fields: ['duration'],
+      inference_reason: '報告類任務通常需要較長時間準備',
+    })
+
+    vi.useFakeTimers()
+    await ctx.onSubmit({ data: ctx.state } as any)
+
+    expect(toastSpy.add).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: '已建立，AI 幫你補上 預估時長：180 分鐘',
+        description: '報告類任務通常需要較長時間準備',
+        color: 'info',
+      }),
+    )
+    expect(toastSpy.add).not.toHaveBeenCalledWith(
+      expect.objectContaining({ title: '儲存成功' }),
+    )
+    await vi.runAllTimersAsync()
+    vi.useRealTimers()
+  })
+
+  it('後端沒有推斷任何欄位時，維持顯示「儲存成功」', async () => {
+    const ctx = useTaskForm()
+    ctx.state.title       = '新任務'
+    ctx.state.description = '內容'
+    ctx.state.priority    = 'Medium'
+    ctx.state.duration    = '60'
+    ctx.modelValue.value  = fromDate(new Date('2025-07-01T00:00:00Z'), getLocalTimeZone())
+
+    fetchSpy.mockResolvedValueOnce({
+      id: 't1',
+      priority: 'Medium',
+      duration: 60,
+      inferred_fields: [],
+      inference_reason: null,
+    })
+
+    vi.useFakeTimers()
+    await ctx.onSubmit({ data: ctx.state } as any)
+
+    expect(toastSpy.add).toHaveBeenCalledWith(
+      expect.objectContaining({ title: '儲存成功', color: 'success' }),
+    )
+    await vi.runAllTimersAsync()
     vi.useRealTimers()
   })
 

@@ -95,7 +95,9 @@ def test_create_manual_task_infers_missing_priority_and_duration(
     response = client.post("/manual_tasks/", json=payload)
 
     assert response.status_code == 200
-    mock_infer.assert_called_once_with(fake_task_input.title, fake_task_input.description)
+    mock_infer.assert_called_once_with(
+        fake_task_input.title, fake_task_input.description, fake_task_input.inference_hint
+    )
 
     # 檢查真正存進去的任務資料，確認 priority/duration 有被 LLM 推斷值取代
     saved_task = mock_create_manual_task.call_args[0][0]

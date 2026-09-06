@@ -145,7 +145,40 @@ onMounted(async () => {
                 </UPopover>
               </UFormField>
             </div>
-            
+
+            <div class="flex flex-nowrap items-center mb-4 text-m gap-x-6">
+              <label class="w-26 whitespace-nowrap text-gray-700">預估時長</label>
+              <UFormField
+                size="lg"
+                hint="不確定可留空，AI 會幫你評估"
+                class="flex-1"
+              >
+                <UInput
+                  v-model="state.duration"
+                  type="number"
+                  min="1"
+                  placeholder="分鐘，例如 60"
+                  class="w-full"
+                />
+              </UFormField>
+            </div>
+
+            <div class="flex flex-nowrap items-start mb-4 text-m gap-x-6">
+              <label class="w-26 whitespace-nowrap text-gray-700 mt-2">給 AI 的提醒</label>
+              <UFormField
+                size="lg"
+                hint="優先權/時長留空讓 AI 評估時，這裡可以補充你知道、但標題描述看不出來的資訊，例如「這比想像中難」"
+                class="flex-1"
+              >
+                <UTextarea
+                  v-model="state.inference_hint"
+                  placeholder="選填，例如：這個作業其實蠻花時間的"
+                  :rows="2"
+                  class="w-full"
+                />
+              </UFormField>
+            </div>
+
             <div class="flex items-end space-x-3 mt-2">
               <UButton 
                 v-if="isEditMode" 

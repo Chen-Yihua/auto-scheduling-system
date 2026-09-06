@@ -37,16 +37,14 @@ watch(isSignedIn, (signedIn) => {
 </script>
 
 <template>
-
-  <div class="flex justify-end p-6">
-    <TaskForm />
-  </div>
-
   <div class="p-4">
     <Leetcode />
     <News />
 
     <SignedIn>
+      <div class="flex justify-end p-6">
+        <TaskForm />
+      </div>
       <MoodleAssignments />
       <GithubIssuesList :issues="githubIssues" :loading="loading" :is-stale="githubStale" :synced-at="githubSyncedAt" />
       <JiraIssuesList :issues="jiraIssues" :loading="loading" :domain="domain" :is-stale="jiraStale" :synced-at="jiraSyncedAt" />

@@ -102,6 +102,8 @@ describe('TheMain/index.vue', () => {
     expect(fetchGoogleCalendarsSpy).not.toHaveBeenCalled()
     expect(wrapper.text()).toContain('登入後即可查看')
     expect(wrapper.findComponent({ name: 'GithubIssuesList' }).exists()).toBe(false)
+    // TaskForm 會抓使用者自己的任務，訪客不該讓它掛載
+    expect(wrapper.findComponent({ name: 'TaskForm' }).exists()).toBe(false)
   })
 
   it('已登入（isSignedIn=true）時，才會打需要授權的 API', async () => {
@@ -114,5 +116,6 @@ describe('TheMain/index.vue', () => {
     expect(fetchJiraIssuesSpy).toHaveBeenCalledTimes(1)
     expect(fetchGoogleCalendarsSpy).toHaveBeenCalledTimes(1)
     expect(wrapper.text()).not.toContain('登入後即可查看')
+    expect(wrapper.findComponent({ name: 'TaskForm' }).exists()).toBe(true)
   })
 })

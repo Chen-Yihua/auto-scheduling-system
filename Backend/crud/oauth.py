@@ -8,8 +8,13 @@ from services.google_calendar import (
     fetch_freebusy,
     compute_free_times,
 )
+from cache import cache_get, cache_set
 
 logger = logging.getLogger(__name__)
+
+# 空檔查詢的快取時間——短到使用者改了行事曆一分鐘內就能反映，
+# 長到「打開排程頁又順手看一次可用時間」這種常見情境不用重複打兩次 Google API。
+FREE_SLOTS_CACHE_TTL_SECONDS = 60
 
 GOOGLE_CLIENT_ID     = os.getenv("GOOGLE_CLIENT_ID")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
@@ -89,7 +94,16 @@ async def get_free_slots_for_user(clerk_id: str) -> list[dict]:
     取得使用者 primary calendar 未來 7 天的空閒時段（UTC ISO 字串）。
     被 /oauth/available 跟排程建議（crud/schedule.py）共用，
     401 就自動 refresh token 重打一次，不用兩邊各寫一份。
+
+    這裡是單純的效能快取（見 cache.py），不是失敗時的退路——跟
+    crud/external_sync.py 那套「live-first + 失敗才退回 DB」是不同用途：
+    這裡只要快取沒過期就直接用，減少重複打 Google API 的次數。
     """
+    cache_key = f"free_slots:{clerk_id}"
+    cached = await cache_get(cache_key)
+    if cached is not None:
+        return cached
+
     access_token = await get_google_calendar_token(clerk_id)
 
     try:
@@ -110,4 +124,7 @@ async def get_free_slots_for_user(clerk_id: str) -> list[dict]:
     window_start = fb_response["timeMin"]
     window_end = fb_response["timeMax"]
     busy_list = fb_response["calendars"][primary["id"]]["busy"]
-    return compute_free_times(busy_list, window_start, window_end)
+    free_slots = compute_free_times(busy_list, window_start, window_end)
+
+    await cache_set(cache_key, free_slots, FREE_SLOTS_CACHE_TTL_SECONDS)
+    return free_slots

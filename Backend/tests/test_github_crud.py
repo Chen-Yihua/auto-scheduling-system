@@ -37,6 +37,69 @@ async def test_fetch_github_user_issues(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_fetch_github_user_issues_paginates_full_pages(monkeypatch):
+    """一頁抓滿（等於 per_page）代表可能還有下一頁，該繼續翻頁，不能只抓第一頁。"""
+    calls = []
+
+    class MockResponse:
+        def __init__(self, page):
+            self.status_code = 200
+            self._page = page
+
+        def json(self):
+            # 第 1 頁回滿 2 筆（等於這次測試用的 per_page=2），第 2 頁只回 1 筆代表抓到底了
+            if self._page == 1:
+                return {"items": [{"number": 1}, {"number": 2}]}
+            return {"items": [{"number": 3}]}
+
+    class MockClient:
+        async def __aenter__(self): return self
+        async def __aexit__(self, *args): pass
+        async def get(self, url, headers, params):
+            calls.append((params["q"], params["page"]))
+            return MockResponse(params["page"])
+
+    monkeypatch.setattr("httpx.AsyncClient", lambda: MockClient())
+
+    result = await github_mod.fetch_github_user_issues("fake_token", per_page=2)
+
+    # 兩個 query（issue / PR）各自都要翻到第 2 頁才停下來
+    assert calls == [
+        ("involves:@me is:issue", 1),
+        ("involves:@me is:issue", 2),
+        ("involves:@me is:pull-request", 1),
+        ("involves:@me is:pull-request", 2),
+    ]
+    assert len(result) == 6  # 每個 query 3 筆 x 2 個 query
+
+
+@pytest.mark.asyncio
+async def test_fetch_github_user_issues_stops_at_max_pages_safety_cap(monkeypatch):
+    """就算 GitHub 一直回滿頁（理論上不該發生），也要在 GITHUB_MAX_PAGES 停下來，不能無限翻頁。"""
+    call_count = {"n": 0}
+
+    class MockResponse:
+        def json(self):
+            return {"items": [{"number": 1}]}  # 每頁都回滿（per_page=1）
+
+    class MockClient:
+        async def __aenter__(self): return self
+        async def __aexit__(self, *args): pass
+        async def get(self, url, headers, params):
+            call_count["n"] += 1
+            resp = MockResponse()
+            resp.status_code = 200
+            return resp
+
+    monkeypatch.setattr("httpx.AsyncClient", lambda: MockClient())
+
+    await github_mod.fetch_github_user_issues("fake_token", per_page=1)
+
+    # 2 個 query x GITHUB_MAX_PAGES(10) 頁 = 20 次呼叫，不能超過
+    assert call_count["n"] == 2 * github_mod.GITHUB_MAX_PAGES
+
+
+@pytest.mark.asyncio
 async def test_fetch_github_user_issues_api_fail(monkeypatch):
     class MockClient:
         async def __aenter__(self): return self

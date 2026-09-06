@@ -22,6 +22,46 @@ async def test_fetch_jira_user_issues_success():
 
 
 @pytest.mark.asyncio
+async def test_fetch_jira_user_issues_paginates_across_multiple_pages():
+    from unittest.mock import AsyncMock, MagicMock
+
+    first_page = MagicMock()
+    first_page.status_code = 200
+    first_page.json.return_value = {"issues": [{"id": "1"}, {"id": "2"}], "total": 3}
+
+    second_page = MagicMock()
+    second_page.status_code = 200
+    second_page.json.return_value = {"issues": [{"id": "3"}], "total": 3}
+
+    with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
+        mock_get.side_effect = [first_page, second_page]
+
+        issues = await jira.fetch_jira_user_issues("key", "domain", max_results=2)
+
+        assert [i["id"] for i in issues] == ["1", "2", "3"]
+        assert mock_get.call_count == 2
+        # 第二次呼叫的 startAt 該是第一頁已經拿到的筆數，不能每次都從 0 開始重抓
+        assert mock_get.call_args_list[1].kwargs["params"]["startAt"] == 2
+
+
+@pytest.mark.asyncio
+async def test_fetch_jira_user_issues_stops_at_max_pages_safety_cap():
+    from unittest.mock import AsyncMock, MagicMock
+
+    page = MagicMock()
+    page.status_code = 200
+    # total 遠大於實際能拿到的，且每頁都回滿，理論上會一直翻下去
+    page.json.return_value = {"issues": [{"id": "x"}], "total": 999999}
+
+    with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
+        mock_get.return_value = page
+
+        await jira.fetch_jira_user_issues("key", "domain", max_results=1)
+
+        assert mock_get.call_count == jira.JIRA_MAX_PAGES
+
+
+@pytest.mark.asyncio
 async def test_fetch_jira_user_issues_failure():
     # 401（帳密/token 錯誤）屬於客戶端錯誤，重試也沒用 -> 應該是 NonRetryableError
     with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:

@@ -77,4 +77,14 @@ async def sync_platform_items(
             {"$set": doc},
             upsert=True,
         )
+
+    # 把這次即時抓資料裡已經不存在的舊項目清掉（例如第三方平台上的 issue 被關掉、
+    # 作業被刪除）——不然它們會一直留在 DB 裡，等哪天即時抓資料失敗、退回快取時，
+    # 使用者就會看到「其實在第三方平台上早就不存在」的幽靈資料。
+    current_ids = [item[id_field] for item in items]
+    await collection.delete_many({
+        "user_id": user_id,
+        id_field: {"$nin": current_ids},
+    })
+
     return items, False, now

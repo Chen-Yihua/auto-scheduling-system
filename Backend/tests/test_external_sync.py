@@ -32,6 +32,19 @@ class FakeCollection:
         matched = [d for d in self._docs if all(d.get(k) == v for k, v in filter.items())]
         return FakeCursor(matched)
 
+    async def delete_many(self, filter):
+        """簡化版：只支援這裡實際會用到的兩種條件——一般 key=value，和 {"$nin": [...]}。"""
+        def matches(doc):
+            for k, v in filter.items():
+                if isinstance(v, dict) and "$nin" in v:
+                    if doc.get(k) in v["$nin"]:
+                        return False
+                elif doc.get(k) != v:
+                    return False
+            return True
+
+        self._docs = [d for d in self._docs if not matches(d)]
+
 
 @pytest.mark.asyncio
 async def test_sync_platform_items_live_success_upserts_and_returns_fresh():
@@ -50,6 +63,46 @@ async def test_sync_platform_items_live_success_upserts_and_returns_fresh():
     assert len(collection._docs) == 2
     assert collection._docs[0]["user_id"] == "u1"
     assert collection._docs[0]["synced_at"] == synced_at
+
+
+@pytest.mark.asyncio
+async def test_sync_platform_items_removes_items_no_longer_returned_by_live_fetch():
+    """使用者的第 2 筆項目（例如 issue 被關閉）這次即時抓資料已經不存在 -> 應該從 DB 清掉，
+    不然之後即時抓資料失敗、退回快取時，會被當成還存在的資料顯示給使用者。"""
+    collection = FakeCollection(initial=[
+        {"id": 1, "title": "still open", "user_id": "u1"},
+        {"id": 2, "title": "already closed on github", "user_id": "u1"},
+    ])
+
+    async def fetch():
+        return [{"id": 1, "title": "still open"}]
+
+    items, stale, _ = await sync_platform_items(
+        collection=collection, user_id="u1", id_field="id", fetch_fn=fetch
+    )
+
+    assert stale is False
+    assert [d["id"] for d in collection._docs] == [1]
+
+
+@pytest.mark.asyncio
+async def test_sync_platform_items_removal_does_not_affect_other_users():
+    collection = FakeCollection(initial=[
+        {"id": 1, "title": "user u1's item", "user_id": "u1"},
+        {"id": 1, "title": "user u2's item", "user_id": "u2"},
+    ])
+
+    async def fetch():
+        return []  # u1 這次即時抓資料是空的（例如全部關閉了）
+
+    items, stale, _ = await sync_platform_items(
+        collection=collection, user_id="u1", id_field="id", fetch_fn=fetch
+    )
+
+    assert stale is False
+    assert items == []
+    remaining = [(d["user_id"], d["id"]) for d in collection._docs]
+    assert remaining == [("u2", 1)]
 
 
 @pytest.mark.asyncio

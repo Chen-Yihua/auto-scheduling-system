@@ -52,6 +52,9 @@ async def test_get_github_issues(monkeypatch):
         async def update_one(self, *args, **kwargs):
             return MockUpdateResult()
 
+        async def delete_many(self, *args, **kwargs):
+            return MockUpdateResult()
+
     monkeypatch.setattr(github_router.db, "linkedAccounts", MockCollection())
     monkeypatch.setattr(github_router.db, "github_issues", MockCollection())
     monkeypatch.setattr(github_router, "fetch_github_user_issues", mock_fetch)

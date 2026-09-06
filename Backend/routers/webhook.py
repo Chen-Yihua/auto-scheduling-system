@@ -8,6 +8,7 @@ import requests
 from google import genai
 from constants.webhook_prompt import GEMINI_PR_SUMMARY_PROMPT
 from schemas.review import ReviewSummary
+from rate_limit import limiter
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +46,10 @@ def _verify_github_signature(raw_body: bytes, signature: str | None) -> None:
         raise HTTPException(status_code=401, detail="Invalid webhook signature")
 
 
+# 簽章驗證擋掉了非 GitHub 的請求，但簽章正確的請求短時間內狂送還是會一直觸發
+# Gemini 呼叫，這裡再加一層頻率限制當第二道防線
 @router.post("/webhook")
+@limiter.limit("30/minute")
 async def github_webhook(
     request: Request,
     x_hub_signature_256: str | None = Header(default=None, alias="X-Hub-Signature-256"),

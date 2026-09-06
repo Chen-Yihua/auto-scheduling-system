@@ -3,6 +3,7 @@ import { ref } from 'vue';
 import { useAuth } from '@clerk/vue';
 import { useRuntimeConfig } from '#imports';
 import { useToast } from '#imports';
+import { getFriendlyErrorTitle } from '@/utils/errorMessages';
 
 export const useMoodleAssignments = () => {
   const config = useRuntimeConfig();
@@ -61,7 +62,7 @@ export const useMoodleAssignments = () => {
     } catch (err) {
       console.error('Moodle 抓取失敗', err);
       toast.add({
-        title: 'Moodle 資料抓取失敗',
+        title: getFriendlyErrorTitle(err, 'Moodle 資料抓取失敗'),
         color: 'error',
         icon: 'i-lucide-x',
       });

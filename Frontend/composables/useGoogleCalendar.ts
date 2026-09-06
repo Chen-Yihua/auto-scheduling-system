@@ -1,5 +1,6 @@
 import { useAuth } from '@clerk/vue';
 import type { CalendarListEntry } from '@/types/google'; // 你可以自行定義這型別
+import { getFriendlyErrorTitle } from '@/utils/errorMessages';
 
 export const useGoogleCalendar = () => {
   const toast = useToast();
@@ -38,7 +39,7 @@ export const useGoogleCalendar = () => {
       calendars.value = [];
 
       toast.add({
-        title: 'Google Calendar 抓取失敗',
+        title: getFriendlyErrorTitle(error, 'Google Calendar 抓取失敗'),
         color: 'error',
         icon: 'i-lucide-x',
       });

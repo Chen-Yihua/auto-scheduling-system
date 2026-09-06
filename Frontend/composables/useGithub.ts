@@ -1,6 +1,7 @@
 import { useAuth } from '@clerk/vue';
 import { useRuntimeConfig } from '#imports';
 import type { GitHubIssue } from '@/types/github';
+import { getFriendlyErrorTitle } from '@/utils/errorMessages';
 
 // 處理驗證、抓資料、寫入 DB
 export const useGithub = () => {
@@ -30,7 +31,7 @@ export const useGithub = () => {
     } catch (err) {
       console.error('GitHub 抓取失敗', err);
       toast.add({
-        title: 'GitHub 資料抓取失敗',
+        title: getFriendlyErrorTitle(err, 'GitHub 資料抓取失敗'),
         color: 'error',
         icon: 'i-lucide-x',
       });

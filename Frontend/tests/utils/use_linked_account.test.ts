@@ -129,4 +129,22 @@ describe('useLinkedAccount', () => {
       expect.objectContaining({ title: 'Jira Key 已刪除', color: 'success' }),
     )
   })
+
+  it('saveKey 被限流（429）時，顯示「請求太頻繁」而不是一般的儲存失敗訊息', async () => {
+    const { keys, openEdit, saveKey } = (await load())()
+    const git = keys.value.find((k) => k.platform === 'github')!
+    openEdit(git)
+    git.inputValue = 'NEWKEY'
+
+    fetchSpy.mockRejectedValueOnce({
+      data: { error_code: 'RATE_LIMITED', detail: '請求太頻繁，請稍後再試' },
+      response: { status: 429 },
+    })
+
+    await saveKey(git)
+
+    expect(toastSpy.add).toHaveBeenCalledWith(
+      expect.objectContaining({ title: '請求太頻繁，請稍後再試', color: 'error' }),
+    )
+  })
 })

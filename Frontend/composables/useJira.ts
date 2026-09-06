@@ -1,6 +1,7 @@
 import { transformJiraItem } from '@/utils/jira'
 import { useAuth } from '@clerk/vue'
 import type { JiraIssue, JiraAPIRawIssue } from '@/types/jira'
+import { getFriendlyErrorTitle } from '@/utils/errorMessages'
 
 export const useJira = () => {
   const toast = useToast()
@@ -34,7 +35,7 @@ export const useJira = () => {
     } catch (err) {
       console.error('Jira 抓取失敗', err)
       toast.add({
-        title: 'Jira 資料抓取失敗',
+        title: getFriendlyErrorTitle(err, 'Jira 資料抓取失敗'),
         color: 'error',
         icon: 'i-lucide-x',
       })

@@ -3,6 +3,7 @@ import { ref, computed } from 'vue';
 import { useRuntimeConfig } from '#imports';
 import { useUser, useAuth } from '@clerk/vue';
 import { until } from '@vueuse/core';
+import { getFriendlyErrorTitle } from '@/utils/errorMessages';
 
 export const useLinkedAccount = () => {
   const config = useRuntimeConfig();
@@ -175,7 +176,7 @@ export const useLinkedAccount = () => {
     } catch (err) {
       console.error(err);
       toast.add({
-        title: `${keyItem.label} 儲存失敗`,
+        title: getFriendlyErrorTitle(err, `${keyItem.label} 儲存失敗`),
         color: 'error',
         icon: 'i-lucide-x',
       });
@@ -215,7 +216,7 @@ export const useLinkedAccount = () => {
     } catch (err) {
       console.error(err);
       toast.add({
-        title: `${keyItem.label} 刪除失敗`,
+        title: getFriendlyErrorTitle(err, `${keyItem.label} 刪除失敗`),
         color: 'error',
         icon: 'i-lucide-x',
       });

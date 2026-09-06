@@ -92,4 +92,21 @@ describe('useGithub composable', () => {
     )
     expect(issues.value).toEqual([])
   })
+
+  it('被限流（429）時，toast 顯示「請求太頻繁」而不是一般的抓取失敗訊息', async () => {
+    fetchRawSpy.mockRejectedValueOnce({
+      data: { error_code: 'RATE_LIMITED', detail: '請求太頻繁，請稍後再試' },
+      response: { status: 429 },
+    })
+
+    const { fetchGithubIssues } = useGithub()
+    await fetchGithubIssues()
+
+    expect(toastSpy.add).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: '請求太頻繁，請稍後再試',
+        color: 'error',
+      }),
+    )
+  })
 })

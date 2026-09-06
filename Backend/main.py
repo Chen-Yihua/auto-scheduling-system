@@ -8,6 +8,8 @@ import os
 from routers import github
 from logging_config import setup_logging
 from db.mongodb import ensure_indexes
+from slowapi.errors import RateLimitExceeded
+from rate_limit import limiter, rate_limit_exceeded_handler
 
 
 # 載入環境變數
@@ -42,6 +44,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# 流量限制：記憶體或 Redis 由 rate_limit.py 依 REDIS_URL 是否設定自動切換
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
 
 # 路由註冊
 app.include_router(user.router)

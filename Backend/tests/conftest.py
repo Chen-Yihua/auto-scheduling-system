@@ -10,6 +10,11 @@ os.environ.setdefault("SECRET_ENCRYPTION_KEY", Fernet.generate_key().decode())
 # routers.webhook 在 import 時就會建立 genai.Client，沒有這個變數會直接噴錯
 os.environ.setdefault("GEMINI_API_KEY", "test-gemini-key")
 
+# 測試會在短時間內對同個 endpoint 打很多次請求，關掉全域限流避免測試互相干擾、
+# 被自己的流量限制誤傷。rate_limit.py 自己的行為由 tests/test_rate_limit.py
+# 直接用獨立的 Limiter 實例測試，不受這個影響。
+os.environ.setdefault("DISABLE_RATE_LIMIT", "true")
+
 @pytest.fixture(scope="session", autouse=True)
 def override_mongodb():
     mock_client = mongomock.MongoClient()

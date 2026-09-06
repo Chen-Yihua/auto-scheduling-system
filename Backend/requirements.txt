@@ -20,5 +20,7 @@ requests
 google-genai==2.22.0
 tzdata
 pytest-cov
-selenium 
+selenium
 webdriver-manager
+slowapi
+redis

@@ -9,6 +9,7 @@
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
     "test": "vitest run",
+    "test:e2e": "vitest run -c vitest.e2e.config.ts",
     "lint": "eslint . --ext .ts,.vue",
     "prepare": "test -d .git && husky install || echo 'Skip husky on CI'",
     "prepare:ci": "nuxt prepare",
@@ -27,6 +28,7 @@
     "vue": "^3.5.13"
   },
   "devDependencies": {
+    "@clerk/testing": "^2.2.33",
     "@nuxt/test-utils": "^3.19.0",
     "@vitejs/plugin-vue": "^5.2.4",
     "@vitest/coverage-v8": "^3.1.3",

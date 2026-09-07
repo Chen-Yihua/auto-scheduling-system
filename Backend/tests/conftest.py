@@ -1,6 +1,6 @@
 import os
 import pytest
-import mongomock
+from mongomock_motor import AsyncMongoMockClient
 from cryptography.fernet import Fernet
 from db import mongodb
 
@@ -17,7 +17,11 @@ os.environ.setdefault("DISABLE_RATE_LIMIT", "true")
 
 @pytest.fixture(scope="session", autouse=True)
 def override_mongodb():
-    mock_client = mongomock.MongoClient()
+    # mongomock 本身是同步的（模仿 pymongo，不是 motor），如果直接拿它的
+    # collection 給會 `await` 結果的程式碼用，會噴「XxxResult can't be used
+    # in await expression」。mongomock_motor 是專門包一層讓它可以配合
+    # async/await 使用的版本，真正需要對這個假資料庫做非 mock 的讀寫時要用這個。
+    mock_client = AsyncMongoMockClient()
     test_db = mock_client["auto_scheduling_db"]
 
     # 覆蓋你要用到的 collection

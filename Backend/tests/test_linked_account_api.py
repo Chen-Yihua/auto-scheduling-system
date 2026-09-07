@@ -1,4 +1,3 @@
-"""
 # FastAPI + pytest 的 API 單元測試，用來驗證系統中「使用者綁定帳號的 API」是否正確運作
 import pytest
 from fastapi import status
@@ -19,6 +18,7 @@ test_account = LinkedAccountCreate(
     apiKey="fake_token"
 )
 
+
 @pytest.mark.asyncio
 async def test_create_linked_account(monkeypatch):
     async def mock_get_user():
@@ -30,10 +30,10 @@ async def test_create_linked_account(monkeypatch):
 
     monkeypatch.setattr(linked_mod, "fetch_github_userinfo", mock_fetch)
 
-    async def mock_insert(doc):
-        return None
+    async def mock_update_one(filter, update, upsert=False):
+        return type("Mock", (), {"upserted_id": "test_user_123_github"})()
 
-    monkeypatch.setattr(linked_mod.db.linkedAccounts, "insert_one", mock_insert)
+    monkeypatch.setattr(linked_mod.db.linkedAccounts, "update_one", mock_update_one)
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
@@ -41,6 +41,7 @@ async def test_create_linked_account(monkeypatch):
 
     assert res.status_code == status.HTTP_200_OK
     app.dependency_overrides = {}
+
 
 @pytest.mark.asyncio
 async def test_get_linked_accounts(monkeypatch):
@@ -71,6 +72,7 @@ async def test_get_linked_accounts(monkeypatch):
     assert res.json()[0]["platform"] == "github"
     app.dependency_overrides = {}
 
+
 @pytest.mark.asyncio
 async def test_update_linked_account(monkeypatch):
     async def mock_get_user():
@@ -86,11 +88,12 @@ async def test_update_linked_account(monkeypatch):
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         res = await ac.put("/user/linked-accounts/", json={
             "platform": "github",
-            "data": {"status": "connected"}
+            "data": {"payload": {"status": "connected"}}
         })
 
     assert res.status_code == status.HTTP_200_OK
     app.dependency_overrides = {}
+
 
 @pytest.mark.asyncio
 async def test_delete_linked_account(monkeypatch):
@@ -109,4 +112,3 @@ async def test_delete_linked_account(monkeypatch):
 
     assert res.status_code == status.HTTP_200_OK
     app.dependency_overrides = {}
-"""

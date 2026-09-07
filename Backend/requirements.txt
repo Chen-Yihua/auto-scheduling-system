@@ -13,7 +13,8 @@ pytest-asyncio
 motor
 pymongo
 mongomock
-httpx 
+mongomock-motor
+httpx
 trio
 pytest
 requests

@@ -61,7 +61,13 @@ jobs:
           node-version: "20"
       - run: npm ci
       - run: npm run prepare:ci
-      - run: npx playwright install --with-deps chromium
+      # 用 `npx playwright`（devDependency 裡釘死的版本，跟 playwright-core 對齊）
+      # 而不是讓 npx 去抓 npm 上最新版的 playwright CLI——版本一旦對不上
+      # playwright-core 實際在用的版本，抓下來的瀏覽器 revision 資料夾會跟
+      # 執行時去找的路徑對不起來，導致 "Executable doesn't exist"。
+      # chromium-headless-shell 也要明確裝，@nuxt/test-utils 在 headless
+      # 模式下預設會找這個變體，不會因為裝了 chromium 就自動連它一起裝。
+      - run: npx playwright install --with-deps chromium chromium-headless-shell
       - run: npm run test:e2e
 
   deploy-backend:

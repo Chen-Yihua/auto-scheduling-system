@@ -1,0 +1,84 @@
+# 1. 安裝 job：下載 node_modules 並存入 artifacts + cache
+frontend-install:
+  image: node:20
+  stage: prepare
+  tags: [gcp]
+  script:
+    - cd Frontend
+    - npm ci
+  cache:
+    key: frontend-deps
+    paths:
+      - Frontend/node_modules/
+  artifacts:
+    paths:
+      - Frontend/node_modules/
+    expire_in: 1h
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "merge_request_event"'
+
+# 2. 預處理 job：產生 .nuxt（為 test 用）
+frontend-prepare:
+  image: node:20
+  stage: prepare
+  tags: [gcp]
+  dependencies:
+    - frontend-install
+  script:
+    - cd Frontend
+    - npm ci
+    - npm run prepare:ci
+  artifacts:
+    paths:
+      - Frontend/.nuxt/
+      - Frontend/tsconfig.json
+    expire_in: 1h
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "merge_request_event"'
+
+# 3. 測試 job：拿 .nuxt 和 node_modules
+frontend-test:
+  image: node:20
+  stage: test
+  tags: [gcp]
+  dependencies:
+    - frontend-install
+    - frontend-prepare
+  script:
+    - cd Frontend
+    - npm run test
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "merge_request_event"'
+
+frontend-coverage-test:
+  image: node:20
+  stage: test
+  tags: [gcp]
+  dependencies:
+    - frontend-install
+    - frontend-prepare
+  script:
+    - cd Frontend
+    - npm run coverage | tee ../frontend-coverage.txt  # ⬅️ 存到 root
+  artifacts:
+    paths:
+      - frontend-coverage.txt
+      - Frontend/coverage/
+    expire_in: 1 week
+  coverage: '/All files[^|]*\|[^|]*\s+([\d\.]+)%/'
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "merge_request_event"'
+
+
+# 4. 建置 job：只需 node_modules
+frontend-build:
+  image: node:20
+  stage: build
+  tags: [gcp]
+  dependencies:
+    - frontend-install
+  script:
+    - cd Frontend
+    - npm run build
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "merge_request_event"'

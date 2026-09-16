@@ -1,0 +1,90 @@
+import asyncio
+import logging
+from datetime import datetime, timezone
+from typing import Awaitable, Callable, Optional
+
+from crud.errors import NonRetryableError
+
+logger = logging.getLogger(__name__)
+
+
+async def sync_platform_items(
+    collection,
+    user_id: str,
+    id_field: str,
+    fetch_fn: Callable[[], Awaitable[list[dict]]],
+    max_attempts: int = 2,
+    retry_delay_seconds: float = 1.0,
+) -> tuple[list[dict], bool, Optional[datetime]]:
+    """
+    GitHub / Jira / Moodle 共用的「即時優先、重試、DB 當最終退路」讀取邏輯：
+    - 即時抓資料成功 -> upsert 進 collection，回傳最新資料（stale=False）
+    - 即時抓資料失敗，且判斷為暫時性失敗（見 crud/errors.py 的 NonRetryableError）
+      -> 用指數退避重試最多 max_attempts 次（預設抓不到只重試 1 次，總共 2 次嘗試）
+    - 即時抓資料失敗，且判斷為 NonRetryableError（帳密/token 錯誤等一定會再次
+      失敗的狀況）-> 不浪費時間重試，立刻放棄
+    - 重試全部失敗，或遇到 NonRetryableError -> 退回 collection 裡該使用者
+      最後一次成功的快照（stale=True）
+    - 兩者都沒有 -> 讓最後一次的例外往外拋，由呼叫端決定要回什麼錯誤
+    """
+    last_exc: Optional[Exception] = None
+    items: Optional[list[dict]] = None
+
+    for attempt in range(max_attempts):
+        try:
+            items = await fetch_fn()
+            break
+        except Exception as exc:
+            last_exc = exc
+            is_last_attempt = attempt == max_attempts - 1
+            is_retryable = not isinstance(exc, NonRetryableError)
+
+            if not is_retryable:
+                logger.info(
+                    "Non-retryable error for user_id=%s, skipping retry: %s",
+                    user_id, exc,
+                )
+                break
+
+            if not is_last_attempt:
+                delay = retry_delay_seconds * (2 ** attempt)
+                logger.warning(
+                    "Live fetch failed for user_id=%s (attempt %d/%d), retrying in %.1fs",
+                    user_id, attempt + 1, max_attempts, delay,
+                    exc_info=True,
+                )
+                await asyncio.sleep(delay)
+
+    if items is None:
+        logger.warning(
+            "Live fetch failed for user_id=%s after %d attempt(s), falling back to cached data",
+            user_id, max_attempts,
+            exc_info=last_exc,
+        )
+        cached = await collection.find({"user_id": user_id}).to_list(length=None)
+        if not cached:
+            raise last_exc
+        synced_at = cached[0].get("synced_at")
+        for doc in cached:
+            doc.pop("_id", None)
+        return cached, True, synced_at
+
+    now = datetime.now(timezone.utc)
+    for item in items:
+        doc = {**item, "user_id": user_id, "synced_at": now}
+        await collection.update_one(
+            {"user_id": user_id, id_field: item[id_field]},
+            {"$set": doc},
+            upsert=True,
+        )
+
+    # 把這次即時抓資料裡已經不存在的舊項目清掉（例如第三方平台上的 issue 被關掉、
+    # 作業被刪除）——不然它們會一直留在 DB 裡，等哪天即時抓資料失敗、退回快取時，
+    # 使用者就會看到「其實在第三方平台上早就不存在」的幽靈資料。
+    current_ids = [item[id_field] for item in items]
+    await collection.delete_many({
+        "user_id": user_id,
+        id_field: {"$nin": current_ids},
+    })
+
+    return items, False, now

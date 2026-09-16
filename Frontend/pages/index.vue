@@ -1,0 +1,4 @@
+<template>
+  <TheHeader />
+  <TheMain />
+</template>

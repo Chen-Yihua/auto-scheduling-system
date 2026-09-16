@@ -1,0 +1,112 @@
+name: Test and Deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  backend-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Backend
+    env:
+      CLERK_ISSUER: ${{ secrets.CLERK_ISSUER }}
+      CLERK_JWKS_URL: ${{ secrets.CLERK_JWKS_URL }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements.txt
+      - run: pytest --cov=. --cov-report=term-missing
+
+  frontend-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npm ci
+      - run: npm run prepare:ci
+      - run: npm run test
+
+  # 跟 frontend-test 分開一個 job：這裡會真的 build 一次 Nuxt app、灌一次瀏覽器、
+  # 開一個真的（headless）瀏覽器去操作頁面，比一般的 vitest 單元測試慢很多。
+  # 登入後的情境需要一組真的 Clerk 測試帳密（E2E_CLERK_TEST_EMAIL/PASSWORD）；
+  # fork 出去的 PR 拿不到 repo 的 secrets，這種情況下那個測試會自動 skip，
+  # 不影響這個 job 本身通過。
+  frontend-e2e-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Frontend
+    env:
+      NUXT_PUBLIC_API_BASE_URL: ${{ secrets.NUXT_PUBLIC_API_BASE_URL }}
+      NUXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NUXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+      NUXT_CLERK_SECRET_KEY: ${{ secrets.NUXT_CLERK_SECRET_KEY }}
+      E2E_CLERK_TEST_EMAIL: ${{ secrets.E2E_CLERK_TEST_EMAIL }}
+      E2E_CLERK_TEST_PASSWORD: ${{ secrets.E2E_CLERK_TEST_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npm ci
+      - run: npm run prepare:ci
+      # 用 `npx playwright`（devDependency 裡釘死的版本，跟 playwright-core 對齊）
+      # 而不是讓 npx 去抓 npm 上最新版的 playwright CLI——版本一旦對不上
+      # playwright-core 實際在用的版本，抓下來的瀏覽器 revision 資料夾會跟
+      # 執行時去找的路徑對不起來，導致 "Executable doesn't exist"。
+      # chromium-headless-shell 也要明確裝，@nuxt/test-utils 在 headless
+      # 模式下預設會找這個變體，不會因為裝了 chromium 就自動連它一起裝。
+      - run: npx playwright install --with-deps chromium chromium-headless-shell
+      - run: npm run test:e2e
+
+  deploy-backend:
+    needs: backend-test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY_JSON }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - name: Build and push image
+        working-directory: Backend
+        run: |
+          gcloud builds submit --tag "asia-east1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/autoscheduling/backend-server:${{ github.sha }}" .
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy auto-scheduling-backend \
+            --image="asia-east1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/autoscheduling/backend-server:${{ github.sha }}" \
+            --platform=managed \
+            --region=asia-east1 \
+            --allow-unauthenticated \
+            --max-instances=3 \
+            --quiet \
+            --set-env-vars="CLERK_ISSUER=${{ secrets.CLERK_ISSUER }},CLERK_JWKS_URL=${{ secrets.CLERK_JWKS_URL }},CLERK_SECRET_KEY=${{ secrets.CLERK_SECRET_KEY }},MONGO_URI=${{ secrets.MONGO_URI }},GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }},GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }},GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }},GOOGLE_REDIRECT_URI=${{ secrets.GOOGLE_REDIRECT_URI }},SECRET_ENCRYPTION_KEY=${{ secrets.SECRET_ENCRYPTION_KEY }},CORS_ALLOWED_ORIGINS=${{ secrets.CORS_ALLOWED_ORIGINS }},DISCORD_MR_WEBHOOK_URL=${{ secrets.DISCORD_MR_WEBHOOK_URL }},DISCORD_MAIN_WEBHOOK_URL=${{ secrets.DISCORD_MAIN_WEBHOOK_URL }},GITHUB_WEBHOOK_SECRET=${{ secrets.GH_WEBHOOK_SECRET }},GITHUB_BOT_TOKEN=${{ secrets.GH_BOT_TOKEN }},REDIS_URL=${{ secrets.REDIS_URL }}"
+
+  deploy-frontend:
+    needs: [frontend-test, frontend-e2e-test]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npm install -g vercel
+      - run: vercel pull --yes --environment=production --token "${{ secrets.VERCEL_TOKEN }}"
+      - run: vercel deploy --prod --archive=tgz --token "${{ secrets.VERCEL_TOKEN }}"

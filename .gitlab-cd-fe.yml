@@ -1,0 +1,12 @@
+deploy-frontend-vercel:
+  stage: deploy
+  image: node:20
+  tags: [gcp]
+  before_script:
+    - npm install -g vercel
+  script:
+    - cd Frontend
+    - vercel pull --yes --environment=production --token $VERCEL_TOKEN
+    - vercel deploy --prod --token $VERCEL_TOKEN
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push"'

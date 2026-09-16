@@ -1,0 +1,64 @@
+
+> coverage
+> vitest run --coverage
+
+
+ RUN  v3.1.3 /home/user/auto-scheduling-system/Frontend
+      Coverage enabled with v8
+
+stdout | tests/utils/usetaskform.test.ts > useTaskForm > fetchTasks 會帶 token 呼叫正確路徑
+token dummy-token
+
+stdout | tests/utils/usetaskform.test.ts > useTaskForm > onSubmit 會 POST 任務並刷新列表
+token dummy-token
+
+stdout | tests/utils/usetaskform.test.ts > useTaskForm > onEdit 會 PUT 任務並刷新列表
+token dummy-token
+
+stdout | tests/utils/usetaskform.test.ts > useTaskForm > onDelete 會 DELETE 任務並刷新列表
+token dummy-token
+
+ ✓ tests/placeholder.test.ts (1 test) 9ms
+ ✓ tests/api/leetcode.test.ts (1 test) 12ms
+ ✓ tests/utils/github.test.ts (1 test) 7ms
+ ✓ tests/utils/useLinkedAccount.test.ts (21 tests) 75ms
+ ✓ tests/utils/usetaskform.test.ts (6 tests) 87ms
+ ❯ tests/utils/use_linked_account.test.ts (4 tests | 4 failed) 128ms
+   × useLinkedAccount > fetchKeys 會把伺服器資料寫入對應 key 122ms
+     → useRuntimeConfig is not defined
+   × useLinkedAccount > openEdit / cancelEdit 切換編輯狀態 1ms
+     → useRuntimeConfig is not defined
+   × useLinkedAccount > saveKey (新建) 會 POST 並顯示成功 toast 1ms
+     → useRuntimeConfig is not defined
+   × useLinkedAccount > deleteKey 會 DELETE 並清空所有欄位 1ms
+     → useRuntimeConfig is not defined
+ ✓ tests/utils/use_googlecalendar.test.ts (2 tests) 27ms
+stdout | tests/utils/usejira.test.ts > useJira composable > 成功取得 Jira Issues 並轉換
+Jira Issues: [ { id: [32m'ISSUE-1'[39m, done: [33mtrue[39m }, { id: [32m'ISSUE-2'[39m, done: [33mtrue[39m } ]
+
+ ✓ tests/utils/use_moodle_assignments.test.ts (2 tests) 238ms
+stdout | tests/components/news.test.ts > News.vue (plain Vue mount) > 應只顯示前三則新聞連結
+<Suspense> is an experimental feature and its API will likely change.
+
+ ✓ tests/components/googlecalendar_embed.test.ts (2 tests) 101ms
+stdout | tests/components/taskform.test.ts > TaskForm.vue (render) > 空任務時顯示 Skeleton
+token dummy-token
+
+ ✓ tests/utils/usejira.test.ts (2 tests) 38ms
+stdout | tests/components/taskform.test.ts > TaskForm.vue (render) > 有任務時顯示卡片並含正確標題
+token dummy-token
+
+stdout | tests/components/taskform.test.ts > TaskForm.vue (render) > 點擊右上角按鈕會開啟 Modal
+token dummy-token
+
+ ✓ tests/components/moodle_assignment.test.ts (3 tests) 155ms
+ ✓ tests/components/jira_issues_list.test.ts (2 tests) 190ms
+ ✓ tests/components/news.test.ts (1 test) 220ms
+ ✓ tests/components/taskform.test.ts (3 tests) 221ms
+ ✓ tests/components/LinkedAccount.test.ts (21 tests) 1362ms
+
+ Test Files  2 failed | 14 passed (16)
+      Tests  4 failed | 68 passed (72)
+   Start at  01:28:10
+   Duration  6.71s (transform 3.13s, setup 0ms, collect 7.85s, tests 2.87s, environment 18.84s, prepare 6.54s)
+

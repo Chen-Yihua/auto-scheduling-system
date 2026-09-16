@@ -41,28 +41,32 @@ def _login_to_moodle(username, password):
 
     service = Service("/usr/bin/chromedriver")   # arm64 driver 的真實路徑
     driver = webdriver.Chrome(service=service, options=opts)
-    driver.get("https://i.nccu.edu.tw/Login.aspx?ReturnUrl=%2fsso_app%2fMoodleSSO2.aspx")
+    try:
+        driver.get("https://i.nccu.edu.tw/Login.aspx?ReturnUrl=%2fsso_app%2fMoodleSSO2.aspx")
 
-    wait = WebDriverWait(driver, 10)
-    # 模擬登入流程
-    username_input = wait.until(EC.element_to_be_clickable((By.ID, "captcha_Login1_UserName")))
-    username_input.send_keys(username)
+        wait = WebDriverWait(driver, 10)
+        # 模擬登入流程
+        username_input = wait.until(EC.element_to_be_clickable((By.ID, "captcha_Login1_UserName")))
+        username_input.send_keys(username)
 
-    password_input = wait.until(EC.element_to_be_clickable((By.ID, "captcha_Login1_Password")))
-    password_input.send_keys(password)
+        password_input = wait.until(EC.element_to_be_clickable((By.ID, "captcha_Login1_Password")))
+        password_input.send_keys(password)
 
-    login_button = wait.until(EC.element_to_be_clickable((By.ID, "captcha_Login1_LoginButton")))
-    login_button.click()
+        login_button = wait.until(EC.element_to_be_clickable((By.ID, "captcha_Login1_LoginButton")))
+        login_button.click()
 
-    time.sleep(4)  # 等待頁面加載
+        time.sleep(4)  # 等待頁面加載
 
-    # 確認登錄是否成功
-    current_url = driver.current_url
-    if current_url != 'https://moodle.nccu.edu.tw/my/':
+        # 確認登錄是否成功
+        current_url = driver.current_url
+        if current_url != 'https://moodle.nccu.edu.tw/my/':
+            raise NonRetryableError(f"Moodle 登入失敗，使用者：{username}")
+
+        return driver
+    except Exception:
+        # 不管是帳密錯誤、逾時還是 WebDriver 本身出包，都不能讓 Chrome 進程留著
         driver.quit()
-        raise NonRetryableError(f"Moodle 登入失敗，使用者：{username}")
-
-    return driver
+        raise
 
 
 def verify_moodle_login(username, password) -> bool:

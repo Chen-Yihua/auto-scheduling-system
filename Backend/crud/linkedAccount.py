@@ -4,11 +4,14 @@ from db.crypto import encrypt_secret, decrypt_secret, mask_secret
 from schemas.linkedAccount import LinkedAccountCreate, LinkedAccountInDB
 from crud.moodle import verify_moodle_login
 from crud.errors import NonRetryableError
-from pymongo.errors import DuplicateKeyError
+from pymongo.errors import DuplicateKeyError, PyMongoError
+from selenium.common.exceptions import WebDriverException
 from fastapi import HTTPException
 from fastapi.concurrency import run_in_threadpool
 from datetime import datetime
 import httpx
+
+HTTP_TIMEOUT = httpx.Timeout(10.0)
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +57,9 @@ async def create_linked_account(clerk_id: str, account: LinkedAccountCreate) -> 
             await run_in_threadpool(verify_moodle_login, account.username, account.password)
         except NonRetryableError:
             raise HTTPException(status_code=401, detail="Moodle 帳號或密碼錯誤")
+        except WebDriverException as e:
+            logger.error("Moodle 驗證發生非預期錯誤: %s", e)
+            raise HTTPException(status_code=503, detail="Moodle 服務暫時無法使用，請稍後再試")
         doc["username"] = account.username
         doc["avatar_url"] = ""
         doc["password"] = encrypt_secret(account.password)
@@ -64,9 +70,12 @@ async def create_linked_account(clerk_id: str, account: LinkedAccountCreate) -> 
             {"_id": doc["_id"]},           # 找條件
             {"$set": doc},                  # 更新內容
             upsert=True                     # 插入或更新
-        ) 
+        )
     except DuplicateKeyError:
         raise HTTPException(status_code=409, detail="Linked account already exists")
+    except PyMongoError as e:
+        logger.error("DB error while creating linked account: %s", e)
+        raise HTTPException(status_code=503, detail="資料庫暫時無法使用，請稍後再試")
 
     return {
         "message": "Linked account updated",
@@ -100,7 +109,9 @@ ALLOWED_UPDATE_FIELDS = {"status", "username","password","apiKey", "domain"}
 
 async def update_linked_account_by_clerk_id(clerk_id: str, platform: str, data: dict):
     composite_id = f"{clerk_id}_{platform}"
-    data = data['payload']
+    data = data.get("payload")
+    if not isinstance(data, dict):
+        raise HTTPException(status_code=400, detail="Missing or invalid 'payload' field")
     # 過濾掉允許更新的欄位
     filtered_data = {k: v for k, v in data.items() if k in ALLOWED_UPDATE_FIELDS}
     if not filtered_data:
@@ -127,6 +138,9 @@ async def update_linked_account_by_clerk_id(clerk_id: str, platform: str, data: 
                 await run_in_threadpool(verify_moodle_login, username, filtered_data["password"])
             except NonRetryableError:
                 raise HTTPException(status_code=401, detail="Moodle 帳號或密碼錯誤")
+            except WebDriverException as e:
+                logger.error("Moodle 驗證發生非預期錯誤: %s", e)
+                raise HTTPException(status_code=503, detail="Moodle 服務暫時無法使用，請稍後再試")
         filtered_data["password"] = encrypt_secret(filtered_data["password"])
         filtered_data["status"] = "connected"
 
@@ -139,7 +153,11 @@ async def update_linked_account_by_clerk_id(clerk_id: str, platform: str, data: 
         filtered_data["status"] = "connected"
         filtered_data["apiKey"] = encrypt_secret(filtered_data["apiKey"])
 
-    result = await db.linkedAccounts.update_one({"_id": composite_id}, {"$set": filtered_data},upsert=True )
+    try:
+        result = await db.linkedAccounts.update_one({"_id": composite_id}, {"$set": filtered_data}, upsert=True)
+    except PyMongoError as e:
+        logger.error("DB error while updating linked account: %s", e)
+        raise HTTPException(status_code=503, detail="資料庫暫時無法使用，請稍後再試")
     return result.modified_count > 0
 
 
@@ -153,24 +171,29 @@ async def delete_linked_account_by_id(composite_id: str):
 
 # 檢查 Linked Account 是否存在 （Github）
 async def fetch_github_userinfo(token: str) -> dict:
-    async with httpx.AsyncClient() as client:
-        response = await client.get(
-            "https://api.github.com/user",
-            headers={
-                "Authorization": f"Bearer {token}",
-                "Accept": "application/vnd.github+json",
-            }
-        )
-        if response.status_code == 401:
-            raise HTTPException(status_code=401, detail="Unauthorized GitHub token")
-        if response.status_code != 200:
-            raise HTTPException(status_code=403, detail="Invalid GitHub token or access denied")
+    try:
+        async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
+            response = await client.get(
+                "https://api.github.com/user",
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "Accept": "application/vnd.github+json",
+                }
+            )
+    except httpx.RequestError as e:
+        logger.error("GitHub 驗證連線失敗: %s", e)
+        raise HTTPException(status_code=502, detail="無法連線至 GitHub，請稍後再試")
 
-        data = response.json()
-        return {
-            "username": data.get("login"),
-            "avatar_url": data.get("avatar_url"),
-        }
+    if response.status_code == 401:
+        raise HTTPException(status_code=401, detail="Unauthorized GitHub token")
+    if response.status_code != 200:
+        raise HTTPException(status_code=403, detail="Invalid GitHub token or access denied")
+
+    data = response.json()
+    return {
+        "username": data.get("login"),
+        "avatar_url": data.get("avatar_url"),
+    }
 
 # 檢查 Linked Account 是否存在 （Jira）
 async def fetch_jira_userinfo(api_key_base64: str, domain: str) -> dict:
@@ -179,15 +202,20 @@ async def fetch_jira_userinfo(api_key_base64: str, domain: str) -> dict:
         "Authorization": f"Basic {api_key_base64}",
         "Accept": "application/json",
     }
-    async with httpx.AsyncClient() as client:
-        response = await client.get(url, headers=headers)
-        if response.status_code == 401:
-            raise HTTPException(status_code=401, detail="Unauthorized Jira token")
-        if response.status_code != 200:
-            raise HTTPException(status_code=403, detail="Invalid Jira token or access denied")
+    try:
+        async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
+            response = await client.get(url, headers=headers)
+    except httpx.RequestError as e:
+        logger.error("Jira 驗證連線失敗: %s", e)
+        raise HTTPException(status_code=502, detail="無法連線至 Jira，請稍後再試")
 
-        data = response.json()
-        return {
-            "username": data.get("displayName"),
-            "avatar_url": data.get("avatarUrls", {}).get("48x48", ""),  # 取一個大小
-        }
+    if response.status_code == 401:
+        raise HTTPException(status_code=401, detail="Unauthorized Jira token")
+    if response.status_code != 200:
+        raise HTTPException(status_code=403, detail="Invalid Jira token or access denied")
+
+    data = response.json()
+    return {
+        "username": data.get("displayName"),
+        "avatar_url": data.get("avatarUrls", {}).get("48x48", ""),  # 取一個大小
+    }

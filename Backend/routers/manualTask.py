@@ -2,7 +2,7 @@ import logging
 from fastapi import APIRouter, HTTPException, Depends, Request
 from crud import manualTask as manualTask_crud
 from crud.task_inference import infer_missing_task_fields
-from schemas.manualTask import ManualTaskInput, ManualTaskOut
+from schemas.manualTask import ManualTaskInput, ManualTaskOut, ManualTaskUpdate
 from db.security import get_current_clerk_user
 from datetime import datetime, timezone
 from uuid import uuid4
@@ -46,12 +46,12 @@ async def create_manual_task(
     task = ManualTaskOut(
         **task_data,
         id=str(uuid4()), # 隨機產生id
+        user_id=clerk_user["sub"], # 一律用登入者本人的 id，不接受 client 指定
         created=now,
         updated=now,
         inferred_fields=inferred_fields,
         inference_reason=inference_reason,
     )
-    task.user_id = clerk_user["sub"]
 
     logger.debug("Creating manual task: %s (inferred_fields=%s)", task.title, inferred_fields)
     new_task = await manualTask_crud.create_manual_task(task)
@@ -88,7 +88,7 @@ async def get_manual_task(
 @router.put("/{task_id}", response_model=ManualTaskOut)
 async def update_manual_task(
     task_id: str,
-    taskInput: ManualTaskInput,
+    taskInput: ManualTaskUpdate,
     clerk_user: dict = Depends(get_current_clerk_user)
 ):
     """

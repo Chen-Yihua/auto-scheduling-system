@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git fetch *)",
+      "Bash(gcloud auth *)",
+      "Bash(gcloud config *)"
+    ]
+  }
+}

@@ -25,3 +25,4 @@ selenium
 webdriver-manager
 slowapi
 redis
+svix

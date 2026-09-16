@@ -22,7 +22,6 @@ def override_get_current_user(fake_clerk_user):
 @pytest.fixture
 def fake_task_input():
     return ManualTaskInput(
-        user_id="clerk_user_id",
         title="Test Task",
         description="This is a test task.",
         due_date=None,

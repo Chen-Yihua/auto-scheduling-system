@@ -59,29 +59,6 @@ def test_get_current_user_not_found(mock_get_user_by_clerk_id):
     assert response.json()["detail"] == "User not found"
 
 """
-測試查詢使用者
-"""
-@patch("crud.user.get_user_by_clerk_id", new_callable=AsyncMock)
-def test_get_user_success(mock_get_user_by_clerk_id, fake_user_out):
-    mock_get_user_by_clerk_id.return_value = fake_user_out
-
-    response = client.get("/users/abc123")
-
-    assert response.status_code == 200
-    assert response.json()["name"] == "John Doe"
-    assert response.json()["email"] == "john@example.com"
-
-@patch("crud.user.get_user_by_clerk_id", new_callable=AsyncMock)
-def test_get_user_not_found(mock_get_user_by_clerk_id):
-    mock_get_user_by_clerk_id.return_value = None
-
-    response = client.get("/users/abc123")
-
-    assert response.status_code == 404
-    assert response.json()["detail"] == "User not found"
-
-
-"""
 測試註冊新使用者
 """
 @patch("crud.user.get_user_by_clerk_id", new_callable=AsyncMock)
@@ -114,8 +91,8 @@ def test_register_user_already_registered(mock_create_user, mock_get_user_by_cle
 def test_update_user_success(mock_update_user):
     mock_update_user.return_value = True  # 模擬成功更新
 
-    response = client.put("/users/abc123", json={"name": "Updated Name"})
-    
+    response = client.put("/users/me", json={"name": "Updated Name"})
+
     assert response.status_code == 200
     assert response.json() == {"success": True}
 
@@ -123,8 +100,8 @@ def test_update_user_success(mock_update_user):
 def test_update_user_not_found(mock_update_user):
     mock_update_user.return_value = False  # 模擬失敗
 
-    response = client.put("/users/abc123", json={"name": "No Change"})
-    
+    response = client.put("/users/me", json={"name": "No Change"})
+
     assert response.status_code == 404
     assert response.json()["detail"] == "User not found or no changes made"
 
@@ -136,7 +113,7 @@ def test_update_user_not_found(mock_update_user):
 def test_delete_user_success(mock_delete_user):
     mock_delete_user.return_value = True  # 模擬刪除成功
 
-    response = client.delete("/users/abc123")
+    response = client.delete("/users/me")
 
     assert response.status_code == 200
     assert response.json() == {"deleted": True}
@@ -145,7 +122,7 @@ def test_delete_user_success(mock_delete_user):
 def test_delete_user_not_found(mock_delete_user):
     mock_delete_user.return_value = False  # 模擬找不到使用者
 
-    response = client.delete("/users/abc123")
+    response = client.delete("/users/me")
 
     assert response.status_code == 404
     assert response.json()["detail"] == "User not found"

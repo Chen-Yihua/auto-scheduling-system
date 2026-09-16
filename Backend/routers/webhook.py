@@ -102,7 +102,7 @@ async def github_webhook(
             parsed = json.loads(response.text)
 
             body = f"""
-### ✅ 摘要：
+### 摘要：
 {parsed.get('summary', '（無法取得摘要）')}
 
 ### 🧩 前端改動：

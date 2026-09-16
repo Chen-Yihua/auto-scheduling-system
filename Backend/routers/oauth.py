@@ -58,7 +58,7 @@ async def oauth_callback(
         raise HTTPException(status_code=400, detail="Google OAuth callback 發生錯誤")
 
 
-# 📅 取得使用者的 Google Calendar 清單
+# 取得使用者的 Google Calendar 清單
 @router.get("/calendars")
 async def get_google_calendars(clerk_user: dict = Depends(get_current_clerk_user)):
     access_token = await get_google_calendar_token(clerk_user["sub"])
@@ -75,7 +75,7 @@ async def get_google_calendars(clerk_user: dict = Depends(get_current_clerk_user
             raise HTTPException(status_code=400, detail="取得行事曆列表失敗")
     return {"items": calendars}
 
-# 📆 取得指定行事曆 ID 下，接下來 7 天內的事件
+# 取得指定行事曆 ID 下，接下來 7 天內的事件
 @router.get("/events")
 async def get_primary_calendar_events(clerk_user: dict = Depends(get_current_clerk_user)):
     access_token = await get_google_calendar_token(clerk_user["sub"])

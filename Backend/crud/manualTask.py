@@ -34,6 +34,7 @@ async def get_manual_task_by_id(task_id: str, user_id: str):
     task = await db.manual_tasks.find_one({"id": task_id, "user_id": user_id})
     if not task:
         return None
+    task.pop("_id", None)  # Mongo 自動加的 ObjectId，不是我們自己用的 id 欄位，不該再被塞回更新內容裡
     return task
 
 # 查詢user所有任務
@@ -41,6 +42,8 @@ async def get_manual_tasks_by_user_id(user_id: str):
     tasks = await db.manual_tasks.find({"user_id": user_id}).to_list()
     if not tasks:
         return None
+    for task in tasks:
+        task.pop("_id", None)
     return tasks
 
 # 更新任務

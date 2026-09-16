@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from db.mongodb import db  # 假設有 access linkedAccounts
 from db.security import get_current_clerk_user
 from db.crypto import decrypt_secret
-from crud.jira import fetch_jira_user_issues
+from crud.jira import fetch_jira_user_issues, transform_jira_item
 from crud.external_sync import sync_platform_items
 from schemas.jira import JiraIssue
 
@@ -26,12 +26,16 @@ async def get_jira_issues(response: Response = None, user=Depends(get_current_cl
     api_key = decrypt_secret(linked["apiKey"])
     domain = linked["domain"]
 
+    async def fetch():
+        raw_issues = await fetch_jira_user_issues(api_key, domain)
+        return [transform_jira_item(issue) for issue in raw_issues]
+
     try:
         issues, stale, synced_at = await sync_platform_items(
             collection=db.jira_issues,
             user_id=user["sub"],
             id_field="id",
-            fetch_fn=lambda: fetch_jira_user_issues(api_key, domain),
+            fetch_fn=fetch,
         )
     except Exception:
         logger.exception("Failed to sync Jira issues for user_id=%s", user["sub"])

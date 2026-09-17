@@ -1,3 +1,4 @@
+from typing import List
 from fastapi import APIRouter, HTTPException, Depends, Body, Request
 from crud import linkedAccount as linkedAccount_crud
 from schemas.linkedAccount import LinkedAccountCreate, LinkedAccountOut
@@ -7,7 +8,7 @@ from rate_limit import limiter
 router = APIRouter(prefix="/user/linked-accounts", tags=["linked-accounts"])
 
 # 查詢目前登入者綁定帳號
-@router.get("/me")
+@router.get("/me", response_model=List[LinkedAccountOut])
 async def get_current_linked_accounts(
     clerk_user: dict = Depends(get_current_clerk_user)
 ):
@@ -35,7 +36,7 @@ async def create_linked_account(
     return new_account_response
 
 
-# 更新（同上，更新 Moodle 密碼一樣會觸發 Selenium 驗證）
+# 更新（更新 Moodle 密碼一樣會觸發 Selenium 驗證）
 @router.put("/")
 @limiter.limit("10/minute")
 async def update_linked_account(

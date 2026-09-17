@@ -287,7 +287,7 @@ async def test_fetch_github_userinfo_success(monkeypatch):
                 json={"login": "tester", "avatar_url": "https://avatar.com"}
             )
 
-    monkeypatch.setattr(httpx, "AsyncClient", lambda: MockClient())
+    monkeypatch.setattr(httpx, "AsyncClient", lambda *a, **kw: MockClient())
     result = await fetch_github_userinfo("token123")
     assert result["username"] == "tester"
 
@@ -300,7 +300,7 @@ async def test_fetch_github_userinfo_unauthorized(monkeypatch):
         async def get(self, *args, **kwargs):
             return httpx.Response(status_code=401)
 
-    monkeypatch.setattr(httpx, "AsyncClient", lambda: MockClient())
+    monkeypatch.setattr(httpx, "AsyncClient", lambda *a, **kw: MockClient())
     with pytest.raises(HTTPException) as exc_info:
         await fetch_github_userinfo("bad_token")
     assert exc_info.value.status_code == 401
@@ -317,7 +317,7 @@ async def test_fetch_jira_userinfo_success(monkeypatch):
                 json={"displayName": "Jira Tester", "avatarUrls": {"48x48": "https://avatar.com"}}
             )
 
-    monkeypatch.setattr(httpx, "AsyncClient", lambda: MockClient())
+    monkeypatch.setattr(httpx, "AsyncClient", lambda *a, **kw: MockClient())
     result = await fetch_jira_userinfo("base64key", "example.atlassian.net")
     assert result["username"] == "Jira Tester"
 
@@ -330,7 +330,7 @@ async def test_fetch_jira_userinfo_unauthorized(monkeypatch):
         async def get(self, *args, **kwargs):
             return httpx.Response(status_code=401)
 
-    monkeypatch.setattr(httpx, "AsyncClient", lambda: MockClient())
+    monkeypatch.setattr(httpx, "AsyncClient", lambda *a, **kw: MockClient())
     with pytest.raises(HTTPException) as exc_info:
         await fetch_jira_userinfo("bad_key", "example.atlassian.net")
     assert exc_info.value.status_code == 401

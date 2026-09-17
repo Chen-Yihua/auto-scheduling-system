@@ -105,4 +105,31 @@ describe('useJira composable', () => {
     // transform 不應被呼叫
     expect(transformJiraItem).not.toHaveBeenCalled()
   })
+
+  it('API 回傳 X-Auth-Error 時 authError 會是 true（token 失效但仍有快取）', async () => {
+    fetchRawSpy.mockResolvedValueOnce({
+      _data: [{ id: 'ISSUE-1' }],
+      headers: new Headers({ 'X-Data-Stale': 'true', 'X-Auth-Error': 'true', 'X-Synced-At': '2026-09-02T00:00:00Z' }),
+    })
+
+    const { fetchJiraIssues, authError } = useJira()
+    await fetchJiraIssues()
+
+    expect(authError.value).toBe(true)
+  })
+
+  it('token 失效且完全沒有快取（401）時，顯示授權失效的訊息', async () => {
+    fetchRawSpy.mockRejectedValueOnce({ response: { status: 401 } })
+
+    const { fetchJiraIssues, authError } = useJira()
+    await fetchJiraIssues()
+
+    expect(authError.value).toBe(true)
+    expect(toastSpy.add).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'Jira 授權已失效，請重新連結帳號',
+        color: 'error',
+      }),
+    )
+  })
 })

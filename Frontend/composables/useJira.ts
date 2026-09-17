@@ -1,7 +1,7 @@
 import { transformJiraItem } from '@/utils/jira'
 import { useAuth } from '@clerk/vue'
 import type { JiraIssue, JiraAPIRawIssue } from '@/types/jira'
-import { getFriendlyErrorTitle } from '@/utils/errorMessages'
+import { getFriendlyErrorTitle, isAuthError } from '@/utils/errorMessages'
 
 export const useJira = () => {
   const toast = useToast()
@@ -12,6 +12,7 @@ export const useJira = () => {
   const domain = ref<string>('')
   const isStale = ref(false)
   const syncedAt = ref<string | null>(null)
+  const authError = ref(false)
   const { keys, fetchKeys } = useLinkedAccount()
 
   const fetchJiraIssues = async () => {
@@ -32,15 +33,21 @@ export const useJira = () => {
       issues.value = (res._data ?? []).map(transformJiraItem)
       isStale.value = res.headers.get('X-Data-Stale') === 'true'
       syncedAt.value = res.headers.get('X-Synced-At')
+      authError.value = res.headers.get('X-Auth-Error') === 'true'
     } catch (err) {
       console.error('Jira 抓取失敗', err)
+      // 後端在 token 失效、且完全沒有快取可退時會回 401；有快取的話後端會正常回 200
+      // 加 X-Auth-Error header，不會走到這個 catch
+      authError.value = isAuthError(err)
       toast.add({
-        title: getFriendlyErrorTitle(err, 'Jira 資料抓取失敗'),
+        title: authError.value
+          ? 'Jira 授權已失效，請重新連結帳號'
+          : getFriendlyErrorTitle(err, 'Jira 資料抓取失敗'),
         color: 'error',
         icon: 'i-lucide-x',
       })
     }
   }
 
-  return { issues, fetchJiraIssues, domain, isStale, syncedAt }
+  return { issues, fetchJiraIssues, domain, isStale, syncedAt, authError }
 }

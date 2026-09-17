@@ -8,6 +8,7 @@ const props = defineProps<{
   domain?: string // 可選，從 props 傳入 Jira 網域
   isStale?: boolean
   syncedAt?: string | null
+  authError?: boolean
 }>()
 
 const openJiraIssue = (key: string) => {
@@ -19,7 +20,12 @@ const openJiraIssue = (key: string) => {
 <template>
   <div class="space-y-4">
     <h2 class="text-xl font-bold">Jira 指派任務</h2>
-    <StaleDataBanner :stale="isStale ?? false" :synced-at="syncedAt ?? null" />
+    <StaleDataBanner
+      :stale="isStale ?? false"
+      :synced-at="syncedAt ?? null"
+      :auth-error="authError ?? false"
+      platform-label="Jira"
+    />
 
     <div v-if="loading">
       <USkeleton class="h-24 mb-4" v-for="i in 3" :key="i" />

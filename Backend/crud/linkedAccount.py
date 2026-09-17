@@ -9,7 +9,6 @@ from pymongo.errors import DuplicateKeyError, PyMongoError
 from selenium.common.exceptions import WebDriverException
 from fastapi import HTTPException
 from fastapi.concurrency import run_in_threadpool
-from datetime import datetime
 import httpx
 
 HTTP_TIMEOUT = httpx.Timeout(10.0)
@@ -57,7 +56,10 @@ class _GithubProvider:
         info = await fetch_github_userinfo(doc["apiKey"])
         return {**info, "status": "connected"}
 
-    async def apply_update(self, filtered_data: LinkedAccountDoc, composite_id: str) -> LinkedAccountDoc:
+    def needs_reverify(self, filtered_data: LinkedAccountDoc) -> bool:
+        return self.secret_field in filtered_data
+
+    async def apply_update(self, filtered_data: LinkedAccountDoc, _composite_id: str) -> LinkedAccountDoc:
         info = await fetch_github_userinfo(filtered_data["apiKey"])
         filtered_data["username"] = info["username"]
         filtered_data["avatar_url"] = info["avatar_url"]
@@ -73,6 +75,9 @@ class _JiraProvider:
     async def verify_new(self, doc: LinkedAccountDoc) -> LinkedAccountDoc:
         info = await fetch_jira_userinfo(doc["apiKey"], doc["domain"])
         return {**info, "status": "connected"}
+
+    def needs_reverify(self, filtered_data: LinkedAccountDoc) -> bool:
+        return self.secret_field in filtered_data
 
     async def apply_update(self, filtered_data: LinkedAccountDoc, composite_id: str) -> LinkedAccountDoc:
         # 有 domain 才順便重新驗證；沒有也一定要加密落地
@@ -102,15 +107,30 @@ class _MoodleProvider:
         await self._verify(doc["username"], doc["password"])
         return {"avatar_url": "", "status": "connected"}
 
+    def needs_reverify(self, filtered_data: LinkedAccountDoc) -> bool:
+        # 帳號、密碼只要改其中一個都要重新驗證——不像 apiKey 平台只有一個秘密欄位
+        return "username" in filtered_data or "password" in filtered_data
+
     async def apply_update(self, filtered_data: LinkedAccountDoc, composite_id: str) -> LinkedAccountDoc:
-        # 密碼常單獨更新、帳號通常不變——沒帶 username 就查現有帳號的一起驗證
+        # 帳號、密碼改其中一個，另一個沒帶的話就用現有值湊成完整一組再驗證，
+        # 確保不管改哪一個欄位，存進資料庫前都真的登入驗證過一次
         username = filtered_data.get("username")
-        if not username:
+        password = filtered_data.get("password")
+
+        existing = None
+        if not username or not password:
             existing = await db.linkedAccounts.find_one({"_id": composite_id})
+
+        if not username:
             username = existing.get("username") if existing else None
-        if username:
-            await self._verify(username, filtered_data["password"])
-        filtered_data["password"] = encrypt_secret(filtered_data["password"])
+        if not password and existing and existing.get("password"):
+            password = decrypt_secret(existing["password"])
+
+        if username and password:
+            await self._verify(username, password)
+
+        if "password" in filtered_data:
+            filtered_data["password"] = encrypt_secret(filtered_data["password"])
         filtered_data["status"] = "connected"
         return filtered_data
 
@@ -191,7 +211,7 @@ async def update_linked_account_by_clerk_id(clerk_id: str, platform: str, data: 
         return False
 
     provider = PLATFORM_PROVIDERS.get(platform)
-    if provider and provider.secret_field in filtered_data:
+    if provider and provider.needs_reverify(filtered_data):
         filtered_data = await provider.apply_update(filtered_data, composite_id)
 
     try:

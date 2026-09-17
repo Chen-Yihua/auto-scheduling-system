@@ -171,7 +171,7 @@ onMounted(async () => {
                 :type="keyItem.showPassword ? 'text' : 'password'"
                 size="sm"
                 variant="outline"
-                placeholder="請輸入 Moodle 密碼"
+                :placeholder="keyItem.value ? '留空表示密碼不變' : '請輸入 Moodle 密碼'"
                 :ui="{ trailing: 'pe-1', base: 'w-full' }"
               >
                 <template #trailing>
@@ -183,6 +183,12 @@ onMounted(async () => {
                     />
                   </template>
               </UInput>
+              <p
+                v-if="keyItem.platform === 'moodle' && keyItem.value"
+                class="text-xs text-gray-400 -mt-1"
+              >
+                基於安全考量無法顯示原密碼；留空即代表密碼維持不變
+              </p>
 
               <div class="flex gap-2 justify-end">
                 <UButton
@@ -210,7 +216,7 @@ onMounted(async () => {
                   :disabled="
                     (keyItem.platform === 'github' && !keyItem.inputValue) ||
                     (keyItem.platform === 'jira' && (!keyItem.inputValue || !keyItem.domain)) ||
-                    (keyItem.platform === 'moodle' && (!keyItem.inputValue || !keyItem.password))
+                    (keyItem.platform === 'moodle' && (!keyItem.inputValue || (!keyItem.value && !keyItem.password)))
                   "
                   @click="() => saveKey(keyItem)"
                 >

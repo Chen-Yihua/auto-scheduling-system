@@ -2,6 +2,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from db.mongodb import db
 from db.security import get_current_clerk_user
+from crud.errors import NonRetryableError
 from crud.moodle import get_user_account, fetch_assignments
 from crud.external_sync import sync_platform_items
 from fastapi.concurrency import run_in_threadpool
@@ -28,6 +29,7 @@ async def get_assignments(request: Request, response: Response = None, clerk_use
     """
     Get the assignments for the user.
     """
+    # 查快取
     cache_key = f"moodle_assignments:{clerk_user['sub']}"
     cached = await cache_get(cache_key)
     if cached is not None:
@@ -39,24 +41,30 @@ async def get_assignments(request: Request, response: Response = None, clerk_use
 
     user = await get_user_account(clerk_user["sub"])
 
+    # 抓資料
     async def fetch():
         return await run_in_threadpool(
             fetch_assignments, user["username"], user["password"]
         )
 
     try:
-        assignments, stale, synced_at = await sync_platform_items(
+        assignments, stale, synced_at, auth_error = await sync_platform_items(
             collection=db.moodle_assignments,
             user_id=clerk_user["sub"],
             id_field="id",
             fetch_fn=fetch,
         )
+    except NonRetryableError:
+        logger.warning("Moodle login failed for user_id=%s", clerk_user["sub"])
+        raise HTTPException(status_code=401, detail="無法取得 Moodle 資料，請確認帳號密碼是否正確")
     except Exception:
         logger.exception("Failed to sync Moodle assignments for user_id=%s", clerk_user["sub"])
-        raise HTTPException(status_code=401, detail="無法取得 Moodle 資料，請確認帳號密碼是否正確")
+        raise HTTPException(status_code=500, detail="無法取得 Moodle 資料，請稍後再試")
 
     if response is not None:
         response.headers["X-Data-Stale"] = str(stale).lower()
+        if auth_error:
+            response.headers["X-Auth-Error"] = "true"
         if synced_at:
             response.headers["X-Synced-At"] = synced_at.isoformat()
 

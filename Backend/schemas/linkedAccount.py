@@ -16,35 +16,5 @@ class LinkedAccountOut(BaseModel):
     username: str
     apiKey: Optional[str] = None
     avatar_url: Optional[str] = None
-
-class LinkedAccountInDB(LinkedAccountCreate):
-    id: str   # 存Mongo時用id
-
-
-# from pydantic import BaseModel
-# from typing import Optional
-# from datetime import datetime
-
-
-# class LinkedAccountBase(BaseModel):
-#     clerk_id: str
-#     name: str
-#     platform: str
-#     #platformUid: str
-#     #accessToken: Optional[str] = None
-#     apiKey: Optional[str] = None
-#     #linkedTime: Optional[datetime] = None
-#     status: str
-    
-
-
-# class LinkedAccountCreate(LinkedAccountBase):
-#     clerk_id: str
-
-
-# class LinkedAccountCreate(LinkedAccountBase):
-#     clerk_id: str
-
-
-# class LinkedAccountInDB(LinkedAccountCreate):
-#     clerk_id : str
+    domain: Optional[str] = None  # Jira 用
+    password: Optional[str] = None  # Moodle 用，回傳前已遮罩

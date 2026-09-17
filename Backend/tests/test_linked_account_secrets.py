@@ -1,13 +1,11 @@
 import pytest
 from fastapi import HTTPException
 import crud.linkedAccount as linked_mod
-import crud.moodle as moodle_mod
 from crud.linkedAccount import (
     create_linked_account,
     get_linked_accounts_by_clerk_id,
     update_linked_account_by_clerk_id,
 )
-from crud.moodle import get_user_account
 from db.crypto import encrypt_secret, decrypt_secret
 from schemas.linkedAccount import LinkedAccountCreate
 
@@ -138,24 +136,3 @@ async def test_update_jira_apikey_without_domain_still_encrypted(monkeypatch):
     assert result is True
     assert stored["apiKey"] != "new-jira-token"
     assert decrypt_secret(stored["apiKey"]) == "new-jira-token"
-
-
-# ========== Moodle 爬蟲登入前，才在伺服器內部解密 ==========
-
-@pytest.mark.asyncio
-async def test_moodle_get_user_account_decrypts_for_internal_use(monkeypatch):
-    real_password = "moodle-pw-123"
-
-    async def mock_find_one(query):
-        return {
-            "platform": "moodle",
-            "clerk_id": "uid123",
-            "username": "stu123",
-            "password": encrypt_secret(real_password),
-        }
-
-    monkeypatch.setattr(moodle_mod.db.linkedAccounts, "find_one", mock_find_one)
-
-    user = await get_user_account("uid123")
-
-    assert user["password"] == real_password

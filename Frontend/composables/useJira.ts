@@ -1,6 +1,5 @@
-import { transformJiraItem } from '@/utils/jira'
 import { useAuth } from '@clerk/vue'
-import type { JiraIssue, JiraAPIRawIssue } from '@/types/jira'
+import type { JiraIssue } from '@/types/jira'
 import { getFriendlyErrorTitle, isAuthError } from '@/utils/errorMessages'
 
 export const useJira = () => {
@@ -24,13 +23,14 @@ export const useJira = () => {
       if (!isLoaded.value) return
 
       const token = await getToken.value()
-      const res = await $fetch.raw<JiraAPIRawIssue[]>(`${BASE_URL}/jira/issues`, {
+      const res = await $fetch.raw<JiraIssue[]>(`${BASE_URL}/jira/issues`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
       })
 
-      issues.value = (res._data ?? []).map(transformJiraItem)
+      // 後端已經把 Jira 原始 API 的巢狀結構拉平成最終顯示格式，這裡不用再轉換一次
+      issues.value = res._data ?? []
       isStale.value = res.headers.get('X-Data-Stale') === 'true'
       syncedAt.value = res.headers.get('X-Synced-At')
       authError.value = res.headers.get('X-Auth-Error') === 'true'

@@ -61,7 +61,21 @@ async def test_get_jira_issues_success(test_app):
             response = await ac.get("/jira/issues")
 
         assert response.status_code == 200
-        assert response.json() == mock_issues
+        # transform_jira_item 把 Jira 原始 API 的多層巢狀拉平成單層，回傳的不再是
+        # mock_issues 那種 fields.xxx 巢狀格式
+        assert response.json() == [
+            {
+                "id": "1",
+                "key": "JIRA-1",
+                "summary": "Test Issue 1",
+                "status": "In Progress",
+                "updated": "2024-01-01T00:00:00.000+0000",
+                "assignee": "User One",
+                "avatar": "",
+                "type": "Task",
+                "iconUrl": "",
+            }
+        ]
         assert response.headers["x-data-stale"] == "false"
 
 

@@ -47,29 +47,24 @@ async def fetch_jira_user_issues(api_key: str, domain: str, max_results: int = 1
     return all_issues
 
 
-# 將 raw 資料轉換成 JiraIssue 格式（見 schemas/jira.py）——只留需要的欄位，
-# 避免 Jira 回傳的巨大 raw issue（一堆用不到的自訂欄位、changelog、self 連結等）
-# 整包被存進 DB，同時也讓儲存結構不會隨 Jira API 回應改版而跟著變動
+# 將 raw 資料轉換成 JiraIssue 格式（見 schemas/jira.py）——直接拉平成單層，
+# 不留 Jira 原始 API 那種多層巢狀（一堆用不到的自訂欄位、changelog、self 連結等
+# 也一併濾掉），前端拿到就是最終顯示用的格式，不用再自己轉換一次
 def transform_jira_item(raw: dict) -> dict:
     fields = raw.get("fields") or {}
     assignee = fields.get("assignee") or {}
     status = fields.get("status") or {}
     issuetype = fields.get("issuetype") or {}
+    avatar_urls = assignee.get("avatarUrls") or {}
 
     return {
         "id": raw["id"],
         "key": raw["key"],
-        "fields": {
-            "summary": fields.get("summary"),
-            "status": {"name": status.get("name")} if status else None,
-            "assignee": {
-                "displayName": assignee.get("displayName"),
-                "avatarUrls": assignee.get("avatarUrls"),
-            } if assignee else None,
-            "issuetype": {
-                "name": issuetype.get("name"),
-                "iconUrl": issuetype.get("iconUrl"),
-            } if issuetype else None,
-            "updated": fields.get("updated"),
-        },
+        "summary": fields.get("summary") or "",
+        "status": status.get("name") or "",
+        "updated": fields.get("updated") or "",
+        "assignee": assignee.get("displayName") or "",
+        "avatar": avatar_urls.get("48x48") or "",
+        "type": issuetype.get("name") or "",
+        "iconUrl": issuetype.get("iconUrl") or "",
     }

@@ -1,25 +1,15 @@
 from pydantic import BaseModel
-from typing import Optional, List, Dict
 
-class JiraUser(BaseModel):
-    displayName: Optional[str]
-    avatarUrls: Optional[Dict[str, str]]  # avatarUrls["48x48"] 可取頭像
-
-class JiraStatus(BaseModel):
-    name: Optional[str]
-
-class JiraIssueType(BaseModel):
-    name: Optional[str]
-    iconUrl: Optional[str]
-
-class JiraIssueFields(BaseModel):
-    summary: str
-    status: Optional[JiraStatus]
-    assignee: Optional[JiraUser]
-    issuetype: Optional[JiraIssueType]
-    updated: Optional[str]  # 你也可以用 datetime
-
+# 前端顯示用格式（GET /jira/issues 的 response_model）——crud/jira.py 的
+# transform_jira_item() 已經把 Jira 原始 API 那種多層巢狀結構（fields.status.name、
+# fields.assignee.displayName 等）拉平成單層
 class JiraIssue(BaseModel):
     id: str
     key: str
-    fields: JiraIssueFields
+    summary: str
+    status: str
+    updated: str
+    assignee: str
+    avatar: str
+    type: str
+    iconUrl: str

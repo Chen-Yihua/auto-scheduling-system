@@ -3,6 +3,7 @@ from db.mongodb import db
 from db.crypto import decrypt_secret
 from crud.errors import NonRetryableError
 from fastapi import HTTPException
+from pymongo.errors import PyMongoError
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
@@ -20,10 +21,18 @@ async def get_user_account(clerk_id: str):
     密碼只在這裡（伺服器內部、準備拿去登入 Moodle 的當下）解密，
     絕不印出來、絕不回傳給呼叫端以外的地方。
     """
-    user = await db.linkedAccounts.find_one({"platform":"moodle","clerk_id":clerk_id})
+    try:
+        user = await db.linkedAccounts.find_one({"platform":"moodle","clerk_id":clerk_id})
+    except PyMongoError as e:
+        logger.error("DB error while fetching Moodle linked account: %s", e)
+        raise HTTPException(status_code=503, detail="資料庫暫時無法使用，請稍後再試")
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    user["password"] = decrypt_secret(user["password"])
+    try:
+        user["password"] = decrypt_secret(user["password"])
+    except Exception:
+        logger.exception("Failed to decrypt Moodle password for clerk_id=%s", clerk_id)
+        raise HTTPException(status_code=500, detail="無法取得 Moodle 資料，請稍後再試")
     return user
 
 

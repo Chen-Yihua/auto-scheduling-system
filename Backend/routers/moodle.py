@@ -1,4 +1,5 @@
 import logging
+from typing import List
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from db.mongodb import db
 from db.security import get_current_clerk_user
@@ -7,6 +8,7 @@ from pymongo.errors import PyMongoError
 from crud.errors import NonRetryableError
 from crud.moodle import fetch_assignments
 from crud.external_sync import sync_platform_items
+from schemas.moodle import MoodleAssignment
 from fastapi.concurrency import run_in_threadpool
 from rate_limit import limiter
 from cache import cache_get, cache_set
@@ -25,7 +27,7 @@ CACHE_TTL_SECONDS = 15 * 60
 # （見 crud/external_sync.py）—— Moodle 用 Selenium 爬蟲，是三個平台裡最容易失敗的一個，
 # 最需要這層 fallback。
 # 每次呼叫都是真的開一個 headless Chrome，成本比一般 API 呼叫高很多，限流限得比較嚴。
-@router.get("/assignments")
+@router.get("/assignments", response_model=List[MoodleAssignment])
 @limiter.limit("5/minute")
 async def get_assignments(request: Request, response: Response = None, clerk_user: dict = Depends(get_current_clerk_user)):
     """

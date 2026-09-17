@@ -53,11 +53,12 @@ async def test_sync_platform_items_live_success_upserts_and_returns_fresh():
     async def fetch():
         return [{"id": 1, "title": "a"}, {"id": 2, "title": "b"}]
 
-    items, stale, synced_at = await sync_platform_items(
+    items, stale, synced_at, auth_error = await sync_platform_items(
         collection=collection, user_id="u1", id_field="id", fetch_fn=fetch
     )
 
     assert stale is False
+    assert auth_error is False
     assert synced_at is not None
     assert [i["title"] for i in items] == ["a", "b"]
     assert len(collection._docs) == 2
@@ -77,7 +78,7 @@ async def test_sync_platform_items_removes_items_no_longer_returned_by_live_fetc
     async def fetch():
         return [{"id": 1, "title": "still open"}]
 
-    items, stale, _ = await sync_platform_items(
+    items, stale, _, _ = await sync_platform_items(
         collection=collection, user_id="u1", id_field="id", fetch_fn=fetch
     )
 
@@ -95,7 +96,7 @@ async def test_sync_platform_items_removal_does_not_affect_other_users():
     async def fetch():
         return []  # u1 這次即時抓資料是空的（例如全部關閉了）
 
-    items, stale, _ = await sync_platform_items(
+    items, stale, _, _ = await sync_platform_items(
         collection=collection, user_id="u1", id_field="id", fetch_fn=fetch
     )
 
@@ -112,7 +113,7 @@ async def test_sync_platform_items_live_fetch_upserts_existing_item():
     async def fetch():
         return [{"id": 1, "title": "new"}]
 
-    items, stale, _ = await sync_platform_items(
+    items, stale, _, _ = await sync_platform_items(
         collection=collection, user_id="u1", id_field="id", fetch_fn=fetch
     )
 
@@ -131,12 +132,13 @@ async def test_sync_platform_items_falls_back_to_cache_on_failure():
     async def fetch():
         raise Exception("API down")
 
-    items, stale, returned_synced_at = await sync_platform_items(
+    items, stale, returned_synced_at, auth_error = await sync_platform_items(
         collection=collection, user_id="u1", id_field="id", fetch_fn=fetch,
         retry_delay_seconds=0,
     )
 
     assert stale is True
+    assert auth_error is False  # 一般 Exception，不是憑證問題
     assert returned_synced_at == synced_at
     assert items[0]["title"] == "cached"
     assert "_id" not in items[0]
@@ -184,7 +186,7 @@ async def test_sync_platform_items_retries_and_recovers_on_second_attempt():
             raise Exception("暫時性失敗")
         return [{"id": 1, "title": "recovered"}]
 
-    items, stale, synced_at = await sync_platform_items(
+    items, stale, synced_at, _ = await sync_platform_items(
         collection=collection, user_id="u1", id_field="id", fetch_fn=fetch,
         retry_delay_seconds=0,
     )
@@ -208,13 +210,14 @@ async def test_sync_platform_items_respects_max_attempts_before_falling_back():
         call_count["n"] += 1
         raise Exception("一直失敗")
 
-    items, stale, _ = await sync_platform_items(
+    items, stale, _, auth_error = await sync_platform_items(
         collection=collection, user_id="u1", id_field="id", fetch_fn=fetch,
         max_attempts=3, retry_delay_seconds=0,
     )
 
     assert call_count["n"] == 3
     assert stale is True
+    assert auth_error is False  # 一般 Exception，不是憑證問題
     assert items[0]["title"] == "cached"
 
 
@@ -255,7 +258,7 @@ async def test_sync_platform_items_does_not_retry_non_retryable_error():
         call_count["n"] += 1
         raise NonRetryableError("401 Unauthorized")
 
-    items, stale, _ = await sync_platform_items(
+    items, stale, _, auth_error = await sync_platform_items(
         collection=collection, user_id="u1", id_field="id", fetch_fn=fetch,
         max_attempts=5, retry_delay_seconds=0,
     )
@@ -263,6 +266,9 @@ async def test_sync_platform_items_does_not_retry_non_retryable_error():
     # 就算 max_attempts=5，NonRetryableError 也只該打一次就放棄，不多試
     assert call_count["n"] == 1
     assert stale is True
+    # NonRetryableError 導致的退回快取，要標記成 auth_error，讓呼叫端知道
+    # 這不是暫時性問題，使用者的憑證可能已經失效——不能悄悄退回舊資料就當沒事
+    assert auth_error is True
     assert items[0]["title"] == "cached"
 
 

@@ -18,6 +18,89 @@ logger = logging.getLogger(__name__)
 # 這些欄位存進 DB 前一律加密，回傳給前端前一律遮罩，絕不明文往返
 SENSITIVE_FIELDS = ("apiKey", "password")
 
+# 可以允許更新的欄位只有以下幾種
+ALLOWED_UPDATE_FIELDS = {"status", "username", "password", "apiKey", "domain"}
+
+
+# ========== 平台驗證 Provider ==========
+# 要支援新平台，只要在這裡加一個 Provider class 並在 PLATFORM_PROVIDERS 註冊，
+# create_linked_account / update_linked_account_by_clerk_id 不用再改。
+# 呼叫 fetch_github_userinfo 等用的是模組層級函式（不是綁死的 import），
+# 是為了讓既有測試能用 monkeypatch.setattr(linked_mod, "fetch_github_userinfo", ...) 照樣運作。
+
+class _GithubProvider:
+    required_create_fields = ("apiKey",)
+    secret_field = "apiKey"
+
+    async def verify_new(self, doc: dict) -> dict:
+        info = await fetch_github_userinfo(doc["apiKey"])
+        return {**info, "status": "connected"}
+
+    async def apply_update(self, filtered_data: dict, composite_id: str) -> dict:
+        info = await fetch_github_userinfo(filtered_data["apiKey"])
+        filtered_data["username"] = info["username"]
+        filtered_data["avatar_url"] = info["avatar_url"]
+        filtered_data["status"] = "connected"
+        filtered_data["apiKey"] = encrypt_secret(filtered_data["apiKey"])
+        return filtered_data
+
+
+class _JiraProvider:
+    required_create_fields = ("apiKey", "domain")
+    secret_field = "apiKey"
+
+    async def verify_new(self, doc: dict) -> dict:
+        info = await fetch_jira_userinfo(doc["apiKey"], doc["domain"])
+        return {**info, "status": "connected"}
+
+    async def apply_update(self, filtered_data: dict, composite_id: str) -> dict:
+        # 有 domain 才順便重新驗證；沒有也一定要加密落地
+        if "domain" in filtered_data:
+            info = await fetch_jira_userinfo(filtered_data["apiKey"], filtered_data["domain"])
+            filtered_data["username"] = info["username"]
+            filtered_data["avatar_url"] = info["avatar_url"]
+            filtered_data["status"] = "connected"
+        filtered_data["apiKey"] = encrypt_secret(filtered_data["apiKey"])
+        return filtered_data
+
+
+class _MoodleProvider:
+    required_create_fields = ("username", "password")
+    secret_field = "password"
+
+    async def _verify(self, username: str, password: str) -> None:
+        try:
+            await run_in_threadpool(verify_moodle_login, username, password)
+        except NonRetryableError:
+            raise HTTPException(status_code=401, detail="Moodle 帳號或密碼錯誤")
+        except WebDriverException as e:
+            logger.error("Moodle 驗證發生非預期錯誤: %s", e)
+            raise HTTPException(status_code=503, detail="Moodle 服務暫時無法使用，請稍後再試")
+
+    async def verify_new(self, doc: dict) -> dict:
+        await self._verify(doc["username"], doc["password"])
+        return {"avatar_url": "", "status": "connected"}
+
+    async def apply_update(self, filtered_data: dict, composite_id: str) -> dict:
+        # 密碼常單獨更新、帳號通常不變——沒帶 username 就查現有帳號的一起驗證
+        username = filtered_data.get("username")
+        if not username:
+            existing = await db.linkedAccounts.find_one({"_id": composite_id})
+            username = existing.get("username") if existing else None
+        if username:
+            await self._verify(username, filtered_data["password"])
+        filtered_data["password"] = encrypt_secret(filtered_data["password"])
+        filtered_data["status"] = "connected"
+        return filtered_data
+
+
+PLATFORM_PROVIDERS = {
+    "github": _GithubProvider(),
+    "jira": _JiraProvider(),
+    "moodle": _MoodleProvider(),
+}
+
+
 # 建立 Linked Account
 async def create_linked_account(clerk_id: str, account: LinkedAccountCreate) -> dict:
     doc = account.model_dump()
@@ -25,45 +108,17 @@ async def create_linked_account(clerk_id: str, account: LinkedAccountCreate) -> 
     doc["clerk_id"] = clerk_id
     logger.debug("create_linked_account platform=%s domain=%s", account.platform, account.domain)
 
-    # 若是 GitHub，自動驗證 token 並抓 login + avatar
-    if account.platform == "github":
-        if not account.apiKey:
-            raise HTTPException(status_code=400, detail="GitHub API key is required")
+    provider = PLATFORM_PROVIDERS.get(account.platform)
+    if not provider:
+        raise HTTPException(status_code=400, detail=f"Unsupported platform: {account.platform}")
 
-        info = await fetch_github_userinfo(account.apiKey)
-        doc["username"] = info["username"]
-        doc["avatar_url"] = info["avatar_url"]
-        doc["status"] = "connected"
-        doc["apiKey"] = encrypt_secret(account.apiKey)  # 驗證用明文，落地前才加密
+    missing = [f for f in provider.required_create_fields if not getattr(account, f, None)]
+    if missing:
+        raise HTTPException(status_code=400, detail=f"{', '.join(missing)} required for {account.platform}")
 
-    # 若是 Jira，也驗證
-    elif account.platform == "jira":
-        if not account.apiKey:
-            raise HTTPException(status_code=400, detail="Jira API key is required")
-        if not account.domain:
-            raise HTTPException(status_code=400, detail="Jira domain is required")
-        info = await fetch_jira_userinfo(account.apiKey, account.domain)
-        doc["username"] = info["username"]
-        doc["avatar_url"] = info["avatar_url"]
-        doc["domain"] = account.domain
-        doc["status"] = "connected"
-        doc["apiKey"] = encrypt_secret(account.apiKey)  # 驗證用明文，落地前才加密
-
-    # 若是 Moodle，也驗證（帳密真的登入得進去才存）
-    elif account.platform == "moodle":
-        if not account.username or not account.password:
-            raise HTTPException(status_code=400, detail="Moodle username and password are required")
-        try:
-            await run_in_threadpool(verify_moodle_login, account.username, account.password)
-        except NonRetryableError:
-            raise HTTPException(status_code=401, detail="Moodle 帳號或密碼錯誤")
-        except WebDriverException as e:
-            logger.error("Moodle 驗證發生非預期錯誤: %s", e)
-            raise HTTPException(status_code=503, detail="Moodle 服務暫時無法使用，請稍後再試")
-        doc["username"] = account.username
-        doc["avatar_url"] = ""
-        doc["password"] = encrypt_secret(account.password)
-        doc["status"] = "connected"
+    result = await provider.verify_new(doc)
+    doc.update(result)
+    doc[provider.secret_field] = encrypt_secret(doc[provider.secret_field])  # 驗證用明文，落地前才加密
 
     try:
         await db.linkedAccounts.update_one(
@@ -104,9 +159,6 @@ async def get_linked_accounts_by_clerk_id(clerk_id: str):
     return accounts
 
 # 更新 Linked Account
-# 可以允許更新的欄位只有以下三種
-ALLOWED_UPDATE_FIELDS = {"status", "username","password","apiKey", "domain"}
-
 async def update_linked_account_by_clerk_id(clerk_id: str, platform: str, data: dict):
     composite_id = f"{clerk_id}_{platform}"
     data = data.get("payload")
@@ -117,41 +169,9 @@ async def update_linked_account_by_clerk_id(clerk_id: str, platform: str, data: 
     if not filtered_data:
         return False
 
-    # 若是 jira 且有提供 apiKey：有 domain 就順便驗證，沒有也一定要加密落地
-    if platform == "jira" and "apiKey" in filtered_data:
-        if "domain" in filtered_data:
-            info = await fetch_jira_userinfo(filtered_data["apiKey"], filtered_data["domain"])
-            filtered_data["username"] = info["username"]
-            filtered_data["avatar_url"] = info["avatar_url"]
-            filtered_data["status"] = "connected"
-        filtered_data["apiKey"] = encrypt_secret(filtered_data["apiKey"])
-
-    # 若是 moodle 且有更新 password：username 有一起帶就用新的，
-    # 沒帶就查現有帳號的 username 一起驗證（密碼常單獨更新，帳號通常不變）
-    if platform == "moodle" and "password" in filtered_data:
-        username = filtered_data.get("username")
-        if not username:
-            existing = await db.linkedAccounts.find_one({"_id": composite_id})
-            username = existing.get("username") if existing else None
-        if username:
-            try:
-                await run_in_threadpool(verify_moodle_login, username, filtered_data["password"])
-            except NonRetryableError:
-                raise HTTPException(status_code=401, detail="Moodle 帳號或密碼錯誤")
-            except WebDriverException as e:
-                logger.error("Moodle 驗證發生非預期錯誤: %s", e)
-                raise HTTPException(status_code=503, detail="Moodle 服務暫時無法使用，請稍後再試")
-        filtered_data["password"] = encrypt_secret(filtered_data["password"])
-        filtered_data["status"] = "connected"
-
-    # 若是 github，也支援驗證（可選）
-    if platform == "github" and "apiKey" in filtered_data:
-        from .linkedAccount import fetch_github_userinfo
-        info = await fetch_github_userinfo(filtered_data["apiKey"])
-        filtered_data["username"] = info["username"]
-        filtered_data["avatar_url"] = info["avatar_url"]
-        filtered_data["status"] = "connected"
-        filtered_data["apiKey"] = encrypt_secret(filtered_data["apiKey"])
+    provider = PLATFORM_PROVIDERS.get(platform)
+    if provider and provider.secret_field in filtered_data:
+        filtered_data = await provider.apply_update(filtered_data, composite_id)
 
     try:
         result = await db.linkedAccounts.update_one({"_id": composite_id}, {"$set": filtered_data}, upsert=True)

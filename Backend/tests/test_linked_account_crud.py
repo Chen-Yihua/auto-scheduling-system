@@ -205,6 +205,72 @@ async def test_update_jira_account_with_domain_reverifies(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_update_jira_apikey_only_reverifies_with_existing_domain(monkeypatch):
+    verify_calls = []
+
+    async def mock_find_one(filter):
+        return {"domain": "existing.atlassian.net"}
+
+    async def mock_fetch_jira_userinfo(api_key, domain):
+        verify_calls.append((api_key, domain))
+        return {"username": "jira_user", "avatar_url": "https://avatar"}
+
+    updated = {}
+
+    async def mock_update_one(filter, update, upsert=False):
+        nonlocal updated
+        updated = update["$set"]
+        return type("Mock", (), {"modified_count": 1})()
+
+    monkeypatch.setattr(linked_mod.db.linkedAccounts, "find_one", mock_find_one)
+    monkeypatch.setattr(linked_mod.db.linkedAccounts, "update_one", mock_update_one)
+    monkeypatch.setattr(linked_mod, "fetch_jira_userinfo", mock_fetch_jira_userinfo)
+
+    result = await update_linked_account_by_clerk_id(
+        "uid123", "jira", {"payload": {"apiKey": "newkey"}}
+    )
+    assert result is True
+    # 只改 apiKey、沒帶 domain -> 要去查現有 domain 一起驗證新 token
+    assert verify_calls == [("newkey", "existing.atlassian.net")]
+    assert updated["apiKey"] != "newkey"  # 落地前加密
+
+
+@pytest.mark.asyncio
+async def test_update_jira_domain_only_reverifies_with_existing_apikey(monkeypatch):
+    from db.crypto import encrypt_secret
+
+    verify_calls = []
+
+    async def mock_find_one(filter):
+        return {"apiKey": encrypt_secret("existingkey")}
+
+    async def mock_fetch_jira_userinfo(api_key, domain):
+        verify_calls.append((api_key, domain))
+        return {"username": "jira_user", "avatar_url": "https://avatar"}
+
+    updated = {}
+
+    async def mock_update_one(filter, update, upsert=False):
+        nonlocal updated
+        updated = update["$set"]
+        return type("Mock", (), {"modified_count": 1})()
+
+    monkeypatch.setattr(linked_mod.db.linkedAccounts, "find_one", mock_find_one)
+    monkeypatch.setattr(linked_mod.db.linkedAccounts, "update_one", mock_update_one)
+    monkeypatch.setattr(linked_mod, "fetch_jira_userinfo", mock_fetch_jira_userinfo)
+
+    result = await update_linked_account_by_clerk_id(
+        "uid123", "jira", {"payload": {"domain": "new-instance.atlassian.net"}}
+    )
+    assert result is True
+    # 只改 domain、沒帶 apiKey -> 要去查現有 apiKey（解密後）一起驗證新 domain
+    assert verify_calls == [("existingkey", "new-instance.atlassian.net")]
+    # 沒有送新 apiKey，不該把 apiKey 這個 key 塞進 $set 裡
+    assert "apiKey" not in updated
+    assert updated["domain"] == "new-instance.atlassian.net"
+
+
+@pytest.mark.asyncio
 async def test_update_moodle_password_reverifies_with_existing_username(monkeypatch):
     verify_calls = []
 

@@ -77,16 +77,32 @@ class _JiraProvider:
         return {**info, "status": "connected"}
 
     def needs_reverify(self, filtered_data: LinkedAccountDoc) -> bool:
-        return self.secret_field in filtered_data
+        # apiKey、domain 只要改其中一個都要重新驗證——兩者合起來才是完整的登入資訊
+        return "apiKey" in filtered_data or "domain" in filtered_data
 
     async def apply_update(self, filtered_data: LinkedAccountDoc, composite_id: str) -> LinkedAccountDoc:
-        # 有 domain 才順便重新驗證；沒有也一定要加密落地
-        if "domain" in filtered_data:
-            info = await fetch_jira_userinfo(filtered_data["apiKey"], filtered_data["domain"])
+        # apiKey、domain 改其中一個，另一個沒帶的話就用現有值湊成完整一組再驗證，
+        # 確保不管改哪一個欄位，存進資料庫前都真的用新的組合驗證過一次
+        api_key = filtered_data.get("apiKey")
+        domain = filtered_data.get("domain")
+
+        existing = None
+        if not api_key or not domain:
+            existing = await db.linkedAccounts.find_one({"_id": composite_id})
+
+        if not domain:
+            domain = existing.get("domain") if existing else None
+        if not api_key and existing and existing.get("apiKey"):
+            api_key = decrypt_secret(existing["apiKey"])
+
+        if api_key and domain:
+            info = await fetch_jira_userinfo(api_key, domain)
             filtered_data["username"] = info["username"]
             filtered_data["avatar_url"] = info["avatar_url"]
             filtered_data["status"] = "connected"
-        filtered_data["apiKey"] = encrypt_secret(filtered_data["apiKey"])
+
+        if "apiKey" in filtered_data:
+            filtered_data["apiKey"] = encrypt_secret(filtered_data["apiKey"])
         return filtered_data
 
 
@@ -108,7 +124,7 @@ class _MoodleProvider:
         return {"avatar_url": "", "status": "connected"}
 
     def needs_reverify(self, filtered_data: LinkedAccountDoc) -> bool:
-        # 帳號、密碼只要改其中一個都要重新驗證——不像 apiKey 平台只有一個秘密欄位
+        # 帳號、密碼只要改其中一個都要重新驗證
         return "username" in filtered_data or "password" in filtered_data
 
     async def apply_update(self, filtered_data: LinkedAccountDoc, composite_id: str) -> LinkedAccountDoc:

@@ -1,7 +1,8 @@
 import logging
+from typing import Optional, TypedDict
 from db.mongodb import db
 from db.crypto import encrypt_secret, decrypt_secret, mask_secret
-from schemas.linkedAccount import LinkedAccountCreate, LinkedAccountInDB
+from schemas.linkedAccount import LinkedAccountCreate
 from crud.moodle import verify_moodle_login
 from crud.errors import NonRetryableError
 from pymongo.errors import DuplicateKeyError, PyMongoError
@@ -14,6 +15,26 @@ import httpx
 HTTP_TIMEOUT = httpx.Timeout(10.0)
 
 logger = logging.getLogger(__name__)
+
+
+# 純粹給 IDE/型別檢查器用的形狀提示，不是 Pydantic model——不會在 runtime 驗證或擋資料。
+# 欄位天生因平台而異（Jira 才有 domain 等），所以全部宣告成非必填。
+class LinkedAccountDoc(TypedDict, total=False):
+    _id: str
+    clerk_id: str
+    platform: str
+    status: str
+    username: str
+    password: Optional[str]
+    apiKey: Optional[str]
+    domain: Optional[str]
+    avatar_url: Optional[str]
+
+
+class PlatformUserInfo(TypedDict):
+    username: str
+    avatar_url: str
+
 
 # 這些欄位存進 DB 前一律加密，回傳給前端前一律遮罩，絕不明文往返
 SENSITIVE_FIELDS = ("apiKey", "password")
@@ -32,11 +53,11 @@ class _GithubProvider:
     required_create_fields = ("apiKey",)
     secret_field = "apiKey"
 
-    async def verify_new(self, doc: dict) -> dict:
+    async def verify_new(self, doc: LinkedAccountDoc) -> LinkedAccountDoc:
         info = await fetch_github_userinfo(doc["apiKey"])
         return {**info, "status": "connected"}
 
-    async def apply_update(self, filtered_data: dict, composite_id: str) -> dict:
+    async def apply_update(self, filtered_data: LinkedAccountDoc, composite_id: str) -> LinkedAccountDoc:
         info = await fetch_github_userinfo(filtered_data["apiKey"])
         filtered_data["username"] = info["username"]
         filtered_data["avatar_url"] = info["avatar_url"]
@@ -49,11 +70,11 @@ class _JiraProvider:
     required_create_fields = ("apiKey", "domain")
     secret_field = "apiKey"
 
-    async def verify_new(self, doc: dict) -> dict:
+    async def verify_new(self, doc: LinkedAccountDoc) -> LinkedAccountDoc:
         info = await fetch_jira_userinfo(doc["apiKey"], doc["domain"])
         return {**info, "status": "connected"}
 
-    async def apply_update(self, filtered_data: dict, composite_id: str) -> dict:
+    async def apply_update(self, filtered_data: LinkedAccountDoc, composite_id: str) -> LinkedAccountDoc:
         # 有 domain 才順便重新驗證；沒有也一定要加密落地
         if "domain" in filtered_data:
             info = await fetch_jira_userinfo(filtered_data["apiKey"], filtered_data["domain"])
@@ -77,11 +98,11 @@ class _MoodleProvider:
             logger.error("Moodle 驗證發生非預期錯誤: %s", e)
             raise HTTPException(status_code=503, detail="Moodle 服務暫時無法使用，請稍後再試")
 
-    async def verify_new(self, doc: dict) -> dict:
+    async def verify_new(self, doc: LinkedAccountDoc) -> LinkedAccountDoc:
         await self._verify(doc["username"], doc["password"])
         return {"avatar_url": "", "status": "connected"}
 
-    async def apply_update(self, filtered_data: dict, composite_id: str) -> dict:
+    async def apply_update(self, filtered_data: LinkedAccountDoc, composite_id: str) -> LinkedAccountDoc:
         # 密碼常單獨更新、帳號通常不變——沒帶 username 就查現有帳號的一起驗證
         username = filtered_data.get("username")
         if not username:
@@ -103,7 +124,7 @@ PLATFORM_PROVIDERS = {
 
 # 建立 Linked Account
 async def create_linked_account(clerk_id: str, account: LinkedAccountCreate) -> dict:
-    doc = account.model_dump()
+    doc: LinkedAccountDoc = account.model_dump()
     doc["_id"] = f"{clerk_id}_{account.platform}"
     doc["clerk_id"] = clerk_id
     logger.debug("create_linked_account platform=%s domain=%s", account.platform, account.domain)
@@ -165,7 +186,7 @@ async def update_linked_account_by_clerk_id(clerk_id: str, platform: str, data: 
     if not isinstance(data, dict):
         raise HTTPException(status_code=400, detail="Missing or invalid 'payload' field")
     # 過濾掉允許更新的欄位
-    filtered_data = {k: v for k, v in data.items() if k in ALLOWED_UPDATE_FIELDS}
+    filtered_data: LinkedAccountDoc = {k: v for k, v in data.items() if k in ALLOWED_UPDATE_FIELDS}
     if not filtered_data:
         return False
 
@@ -190,7 +211,7 @@ async def delete_linked_account_by_id(composite_id: str):
 
 
 # 檢查 Linked Account 是否存在 （Github）
-async def fetch_github_userinfo(token: str) -> dict:
+async def fetch_github_userinfo(token: str) -> PlatformUserInfo:
     try:
         async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
             response = await client.get(
@@ -216,7 +237,7 @@ async def fetch_github_userinfo(token: str) -> dict:
     }
 
 # 檢查 Linked Account 是否存在 （Jira）
-async def fetch_jira_userinfo(api_key_base64: str, domain: str) -> dict:
+async def fetch_jira_userinfo(api_key_base64: str, domain: str) -> PlatformUserInfo:
     url = f"https://{domain.replace('https://','')}/rest/api/3/myself"
     headers = {
         "Authorization": f"Basic {api_key_base64}",

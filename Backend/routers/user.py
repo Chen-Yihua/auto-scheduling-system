@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException, Depends, Header, Request
 from svix.webhooks import Webhook, WebhookVerificationError
 
 from crud import user as user_crud
-from schemas.user import UserCreate, UserInDB, UserOut, UserUpdate
+from schemas.user import UserCreate, UserOut, UserUpdate
 from typing import Optional
 from db.security import get_current_clerk_user
 from motor.motor_asyncio import AsyncIOMotorDatabase
@@ -122,8 +122,13 @@ async def clerk_webhook(
     except json.JSONDecodeError:
         raise HTTPException(status_code=400, detail="Invalid JSON payload")
 
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Invalid JSON payload")
+
     event_type = payload.get("type")
-    data = payload.get("data", {})
+    data = payload.get("data")
+    if not isinstance(data, dict):
+        data = {}
 
     if event_type == "user.deleted":
         clerk_id = data.get("id")

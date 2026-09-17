@@ -1,7 +1,7 @@
 import { useAuth } from '@clerk/vue';
 import { useRuntimeConfig } from '#imports';
 import type { GitHubIssue } from '@/types/github';
-import { getFriendlyErrorTitle } from '@/utils/errorMessages';
+import { getFriendlyErrorTitle, isAuthError } from '@/utils/errorMessages';
 
 // 處理驗證、抓資料、寫入 DB
 export const useGithub = () => {
@@ -9,6 +9,7 @@ export const useGithub = () => {
   const issues = ref<GitHubIssue[]>([]);
   const isStale = ref(false);
   const syncedAt = ref<string | null>(null);
+  const authError = ref(false);
 
   const config = useRuntimeConfig();
   const BASE_URL = config.public.apiBaseUrl;
@@ -28,15 +29,21 @@ export const useGithub = () => {
       issues.value = res._data ?? [];
       isStale.value = res.headers.get('X-Data-Stale') === 'true';
       syncedAt.value = res.headers.get('X-Synced-At');
+      authError.value = res.headers.get('X-Auth-Error') === 'true';
     } catch (err) {
       console.error('GitHub 抓取失敗', err);
+      // 後端在 token 失效、且完全沒有快取可退時會回 401；有快取的話後端會正常回 200
+      // 加 X-Auth-Error header，不會走到這個 catch
+      authError.value = isAuthError(err);
       toast.add({
-        title: getFriendlyErrorTitle(err, 'GitHub 資料抓取失敗'),
+        title: authError.value
+          ? 'GitHub 授權已失效，請重新連結帳號'
+          : getFriendlyErrorTitle(err, 'GitHub 資料抓取失敗'),
         color: 'error',
         icon: 'i-lucide-x',
       });
     }
   };
 
-  return { issues, fetchGithubIssues, isStale, syncedAt };
+  return { issues, fetchGithubIssues, isStale, syncedAt, authError };
 };

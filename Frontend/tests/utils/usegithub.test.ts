@@ -93,6 +93,36 @@ describe('useGithub composable', () => {
     expect(issues.value).toEqual([])
   })
 
+  it('API 回傳 X-Auth-Error 時 authError 會是 true（token 失效但仍有快取）', async () => {
+    const cachedIssues = [{ id: 1, title: 'Cached issue', state: 'open', created_at: '2024-01-01T00:00:00Z', url: 'https://github.com/x/y/issues/1', isPR: false }]
+    fetchRawSpy.mockResolvedValueOnce({
+      _data: cachedIssues,
+      headers: new Headers({ 'X-Data-Stale': 'true', 'X-Auth-Error': 'true', 'X-Synced-At': '2026-09-02T00:00:00Z' }),
+    })
+
+    const { fetchGithubIssues, authError } = useGithub()
+    await fetchGithubIssues()
+
+    expect(authError.value).toBe(true)
+  })
+
+  it('token 失效且完全沒有快取（401）時，顯示授權失效的訊息', async () => {
+    fetchRawSpy.mockRejectedValueOnce({
+      response: { status: 401 },
+    })
+
+    const { fetchGithubIssues, authError } = useGithub()
+    await fetchGithubIssues()
+
+    expect(authError.value).toBe(true)
+    expect(toastSpy.add).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'GitHub 授權已失效，請重新連結帳號',
+        color: 'error',
+      }),
+    )
+  })
+
   it('被限流（429）時，toast 顯示「請求太頻繁」而不是一般的抓取失敗訊息', async () => {
     fetchRawSpy.mockRejectedValueOnce({
       data: { error_code: 'RATE_LIMITED', detail: '請求太頻繁，請稍後再試' },

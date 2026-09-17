@@ -143,7 +143,7 @@ onMounted(async () => {
                 :type="keyItem.showPassword ? 'text' : 'password'"
                 size="sm"
                 variant="outline"
-                placeholder="請輸入 API Token 或 Base64"
+                :placeholder="keyItem.platform === 'jira' && keyItem.value ? '留空表示 API Key 不變' : '請輸入 API Token 或 Base64'"
                 :ui="{ trailing: 'pe-1', base: 'w-full' }"
               >
                 <template #trailing>
@@ -155,6 +155,12 @@ onMounted(async () => {
                   />
                 </template>
               </UInput>
+              <p
+                v-if="keyItem.platform === 'jira' && keyItem.value"
+                class="text-xs text-gray-400 -mt-1"
+              >
+                基於安全考量無法顯示原 API Key；留空即代表 API Key 維持不變
+              </p>
 
               <!-- account & password -->
               <UInput
@@ -215,7 +221,7 @@ onMounted(async () => {
                   :loading="keyItem.loading"
                   :disabled="
                     (keyItem.platform === 'github' && !keyItem.inputValue) ||
-                    (keyItem.platform === 'jira' && (!keyItem.inputValue || !keyItem.domain)) ||
+                    (keyItem.platform === 'jira' && (!keyItem.domain || (!keyItem.value && !keyItem.inputValue))) ||
                     (keyItem.platform === 'moodle' && (!keyItem.inputValue || (!keyItem.value && !keyItem.password)))
                   "
                   @click="() => saveKey(keyItem)"

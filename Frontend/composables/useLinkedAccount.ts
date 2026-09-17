@@ -101,6 +101,7 @@ export const useLinkedAccount = () => {
   const openEdit = (keyItem: any) => {
     keyItem.inputValue = '';
     keyItem.domain = keyItem.domain ?? '';
+    keyItem._originalDomain = keyItem.domain; // 存編輯前的 domain，存檔時判斷這次有沒有真的改到
     if (keyItem.platform == 'moodle') {  // 把 moodle 帳號寫進來
       keyItem.inputValue = keyItem.username;
     }
@@ -126,9 +127,13 @@ export const useLinkedAccount = () => {
     if (keyItem.platform === 'github') {
       payload.apiKey = keyItem.inputValue;
     }
-    else if (keyItem.platform === 'jira' && keyItem.domain) { // 若是 Jira 類型，加上 domain
-      payload.apiKey = keyItem.inputValue;
+    else if (keyItem.platform === 'jira') { // 若是 Jira 類型，加上 domain
       payload.domain = keyItem.domain;
+      // 編輯既有帳號時，API Key 留空代表「不修改」，不送出這個欄位；
+      // 新建帳號一定要有 API Key（Save 按鈕本身就會擋住空值，這裡一定有值）
+      if (isNew || keyItem.inputValue) {
+        payload.apiKey = keyItem.inputValue;
+      }
     }
     else if (keyItem.platform === 'moodle') { // 若是 Moodle 類型，改成帳號和密碼
       payload.username = keyItem.inputValue;
@@ -139,9 +144,11 @@ export const useLinkedAccount = () => {
       }
     }
 
-    // 存檔前先記錄「使用者這次實際改了什麼」，存檔後 keyItem.username 會被覆蓋掉，要先比對
+    // 存檔前先記錄「使用者這次實際改了什麼」，存檔後這些欄位會被覆蓋掉，要先比對
     const moodleUsernameChanged = keyItem.platform === 'moodle' && keyItem.inputValue !== keyItem.username;
     const moodlePasswordChanged = keyItem.platform === 'moodle' && !!keyItem.password;
+    const jiraDomainChanged = keyItem.platform === 'jira' && keyItem.domain !== keyItem._originalDomain;
+    const jiraApiKeyChanged = keyItem.platform === 'jira' && !!keyItem.inputValue;
 
     try {
       let avatarUrl: string | undefined;
@@ -187,6 +194,15 @@ export const useLinkedAccount = () => {
           title = 'Moodle 帳號已更新';
         } else if (moodlePasswordChanged) {
           title = 'Moodle 密碼已更新';
+        }
+      } else if (keyItem.platform === 'jira' && !isNew) {
+        // Jira Domain、API Key 也是分開改的，同樣明確告知這次改到哪個欄位
+        if (jiraDomainChanged && jiraApiKeyChanged) {
+          title = 'Jira Domain 與 API Key 皆已更新';
+        } else if (jiraDomainChanged) {
+          title = 'Jira Domain 已更新';
+        } else if (jiraApiKeyChanged) {
+          title = 'Jira API Key 已更新';
         }
       }
 

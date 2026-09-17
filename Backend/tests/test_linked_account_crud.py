@@ -235,6 +235,41 @@ async def test_update_moodle_password_reverifies_with_existing_username(monkeypa
 
 
 @pytest.mark.asyncio
+async def test_update_moodle_username_only_reverifies_with_existing_password(monkeypatch):
+    from db.crypto import encrypt_secret
+
+    verify_calls = []
+
+    async def mock_find_one(filter):
+        return {"username": "stu001", "password": encrypt_secret("oldpass")}
+
+    def mock_verify(username, password):
+        verify_calls.append((username, password))
+
+    updated = {}
+
+    async def mock_update_one(filter, update, upsert=False):
+        nonlocal updated
+        updated = update["$set"]
+        return type("Mock", (), {"modified_count": 1})()
+
+    monkeypatch.setattr(linked_mod.db.linkedAccounts, "find_one", mock_find_one)
+    monkeypatch.setattr(linked_mod.db.linkedAccounts, "update_one", mock_update_one)
+    monkeypatch.setattr(linked_mod, "verify_moodle_login", mock_verify)
+
+    result = await update_linked_account_by_clerk_id(
+        "uid123", "moodle", {"payload": {"username": "stu002"}}
+    )
+    assert result is True
+    # 只改帳號、沒帶新密碼 -> 要去查現有密碼（解密後）一起驗證新帳號
+    assert verify_calls == [("stu002", "oldpass")]
+    # 沒有送新密碼，不該把 password 這個 key 塞進 $set 裡
+    assert "password" not in updated
+    assert updated["username"] == "stu002"
+    assert updated["status"] == "connected"
+
+
+@pytest.mark.asyncio
 async def test_update_moodle_wrong_password_raises_401(monkeypatch):
     async def mock_find_one(filter):
         return {"username": "stu001"}

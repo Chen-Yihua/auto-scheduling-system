@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { getFriendlyErrorTitle } from '~/utils/errorMessages'
+import { getFriendlyErrorTitle, isAuthError } from '~/utils/errorMessages'
 
 describe('getFriendlyErrorTitle', () => {
   it('後端自訂的 RATE_LIMITED 錯誤碼，回傳限流訊息', () => {
@@ -22,5 +22,22 @@ describe('getFriendlyErrorTitle', () => {
     expect(getFriendlyErrorTitle({ response: { status: 500 } }, 'XXX 抓取失敗')).toBe('XXX 抓取失敗')
     expect(getFriendlyErrorTitle(new Error('network error'), 'XXX 抓取失敗')).toBe('XXX 抓取失敗')
     expect(getFriendlyErrorTitle(undefined, 'XXX 抓取失敗')).toBe('XXX 抓取失敗')
+  })
+})
+
+describe('isAuthError', () => {
+  it('狀態碼 401 判定為授權失效', () => {
+    expect(isAuthError({ response: { status: 401 } })).toBe(true)
+  })
+
+  it('status 直接掛在 error 上（不同 fetch 實作的錯誤形狀）也認得出來', () => {
+    expect(isAuthError({ status: 401 })).toBe(true)
+  })
+
+  it('其他狀態碼或非 401 的錯誤，回傳 false', () => {
+    expect(isAuthError({ response: { status: 500 } })).toBe(false)
+    expect(isAuthError({ response: { status: 429 } })).toBe(false)
+    expect(isAuthError(new Error('network error'))).toBe(false)
+    expect(isAuthError(undefined)).toBe(false)
   })
 })

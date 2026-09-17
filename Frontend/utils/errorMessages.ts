@@ -15,3 +15,12 @@ export function getFriendlyErrorTitle(error: unknown, fallbackTitle: string): st
   }
   return fallbackTitle
 }
+
+// 後端在第三方憑證（GitHub token / Jira token / Moodle 帳密）失效、且完全沒有快取
+// 可以退回時，會回 401——用來跟一般的暫時性抓取失敗區分，好顯示「請重新連結帳號」
+// 而不是「請稍後再試」（重試也沒用）。
+export function isAuthError(error: unknown): boolean {
+  const err = error as any
+  const status = err?.response?.status ?? err?.status ?? err?.statusCode
+  return status === 401
+}

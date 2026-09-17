@@ -2,7 +2,7 @@ import logging
 
 from db.mongodb import db
 from schemas.user import UserCreate, UserUpdate
-from pymongo.errors import DuplicateKeyError
+from pymongo.errors import DuplicateKeyError, PyMongoError
 from fastapi import HTTPException
 
 logger = logging.getLogger(__name__)
@@ -15,7 +15,7 @@ async def create_user(user: UserCreate) -> dict:
         await db.users.insert_one(doc)
     except DuplicateKeyError:
         raise HTTPException(status_code=409, detail="User already exists")
-    except Exception:
+    except PyMongoError:
         logger.exception("Failed to create user, clerk_id=%s", doc["_id"])
         raise HTTPException(status_code=500, detail="建立使用者失敗，請稍後再試")
 
@@ -29,7 +29,7 @@ async def create_user(user: UserCreate) -> dict:
 async def get_user_by_clerk_id(clerk_id: str):
     try:
         user = await db.users.find_one({"_id": clerk_id})  # 直接查 _id，不轉 ObjectId
-    except Exception:
+    except PyMongoError:
         logger.exception("Failed to fetch user, clerk_id=%s", clerk_id)
         raise HTTPException(status_code=500, detail="查詢使用者失敗，請稍後再試")
 
@@ -50,7 +50,7 @@ async def update_user_by_clerk_id(clerk_id: str, data: UserUpdate) -> bool:
 
     try:
         result = await db.users.update_one({"_id": clerk_id}, {"$set": filtered_data})
-    except Exception:
+    except PyMongoError:
         logger.exception("Failed to update user, clerk_id=%s", clerk_id)
         raise HTTPException(status_code=500, detail="更新使用者失敗，請稍後再試")
 
@@ -63,7 +63,7 @@ async def update_user_by_clerk_id(clerk_id: str, data: UserUpdate) -> bool:
 async def delete_user_by_clerk_id(clerk_id: str) -> bool:
     try:
         result = await db.users.delete_one({"_id": clerk_id})
-    except Exception:
+    except PyMongoError:
         logger.exception("Failed to delete user, clerk_id=%s", clerk_id)
         raise HTTPException(status_code=500, detail="刪除使用者失敗，請稍後再試")
 

@@ -2,14 +2,14 @@
 import { useMoodleAssignments } from '~/composables/useMoodleAssignments';
 import { onMounted } from 'vue'
 import StaleDataBanner from './StaleDataBanner.vue'
-const { moodleAssignments, loading, fetchMoodleAssignments, openMoodleAssignments, hasAccount, isStale, syncedAt } = useMoodleAssignments();
+const { moodleAssignments, loading, fetchMoodleAssignments, openMoodleAssignments, hasAccount, isStale, syncedAt, authError } = useMoodleAssignments();
 onMounted(fetchMoodleAssignments); // 頁面載入時抓取作業資料
 </script>
 
 
 <template>
   <div class="text-xl font-bold mb-4">Moodle 作業</div>
-  <StaleDataBanner :stale="isStale" :synced-at="syncedAt" />
+  <StaleDataBanner :stale="isStale" :synced-at="syncedAt" :auth-error="authError" platform-label="Moodle" />
 
   <!-- 尚未綁定 Moodle 帳號 -->
   <div v-if="!hasAccount" class="font-medium">

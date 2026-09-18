@@ -8,11 +8,17 @@ onMounted(fetchMoodleAssignments); // 頁面載入時抓取作業資料
 
 
 <template>
-  <div class="text-xl font-bold mb-4">Moodle 作業</div>
+  <h2 class="flex items-center gap-2 text-lg font-semibold text-gray-900 dark:text-white mb-4">
+    <UIcon name="custom:moodle" class="w-5 h-5" />
+    Moodle 作業
+  </h2>
   <StaleDataBanner :stale="isStale" :synced-at="syncedAt" :auth-error="authError" platform-label="Moodle" />
 
   <!-- 尚未綁定 Moodle 帳號 -->
-  <div v-if="!hasAccount" class="font-medium">
+  <div
+    v-if="!hasAccount"
+    class="text-center text-sm text-gray-500 dark:text-gray-400 py-8 px-4 border border-dashed border-gray-300 dark:border-gray-700 rounded-lg"
+  >
     尚未綁定 Moodle 帳號，請先設定
   </div>
 
@@ -24,7 +30,9 @@ onMounted(fetchMoodleAssignments); // 頁面載入時抓取作業資料
 
   <!-- empty -->
   <template v-else-if="moodleAssignments.length === 0">
-    <p>目前沒有未繳作業</p>
+    <div class="text-center text-sm text-gray-500 dark:text-gray-400 py-8 px-4 border border-dashed border-gray-300 dark:border-gray-700 rounded-lg">
+      目前沒有未繳作業
+    </div>
   </template>
 
   <template v-else>

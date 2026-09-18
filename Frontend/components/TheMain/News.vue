@@ -58,8 +58,8 @@ const isCollapsed = ref(true)
     <UCard v-else class="mb-4 " :error="error">
       <template #header>
         <div class="flex items-center gap-2">
-          <UIcon name="i-lucide-flame" class="w-4 h-4 text-orange-500" />
-          <p class="font-medium text-black dark:text-white">
+          <UIcon name="i-lucide-flame" class="w-5 h-5 text-orange-500" />
+          <p class="text-lg font-semibold text-gray-900 dark:text-white">
             Hacker News
           </p>
         </div>

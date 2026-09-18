@@ -211,14 +211,17 @@ onMounted(async () => {
 
   <!-- 任務清單區塊 -->
   <div class="space-y-4">
-    <h2 class="text-xl font-bold mt-4 mb-4 px-4">📝 任務列表</h2>
+    <h2 class="flex items-center gap-2 text-lg font-semibold text-gray-900 dark:text-white">
+      <UIcon name="i-lucide-list-todo" class="w-5 h-5" />
+      任務列表
+    </h2>
     <div v-if="loading">
       <USkeleton class="h-24 mb-4" v-for="i in 3" :key="i" />
     </div>
     <!-- 真的沒有任務是正常狀態，不是還在載入，不該一直顯示 Skeleton -->
     <div
       v-else-if="all_tasks.length === 0"
-      class="text-center text-sm text-gray-500 dark:text-gray-400 py-8 border border-dashed border-gray-300 dark:border-gray-700 rounded-lg"
+      class="text-center text-sm text-gray-500 dark:text-gray-400 py-8 px-4 border border-dashed border-gray-300 dark:border-gray-700 rounded-lg"
     >
       目前沒有任務，點擊右上角的編輯圖示新增一個吧
     </div>

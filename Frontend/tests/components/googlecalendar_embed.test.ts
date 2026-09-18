@@ -8,6 +8,7 @@ describe('GoogleCalendarEmbed.vue', () => {
     const ids = ['cal1@group', '特殊字串 2']
     const wrapper = mount(GoogleCalendarEmbed, {
       props: { calendarIds: ids, id: 'foo', connect: true },
+      global: { stubs: { UIcon: true } },
     })
 
     const html = wrapper.html()
@@ -21,6 +22,7 @@ describe('GoogleCalendarEmbed.vue', () => {
   it('connect=false 時顯示未連線提示文字且無 iframe', () => {
     const wrapper = mount(GoogleCalendarEmbed, {
       props: { calendarIds: [], id: 'bar', connect: false },
+      global: { stubs: { UIcon: true } },
     })
 
     expect(wrapper.find('iframe').exists()).toBe(false)

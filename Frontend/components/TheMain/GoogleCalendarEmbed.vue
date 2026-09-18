@@ -15,7 +15,10 @@ const calendarUrl = computed(() => {
 
 <template>
   <div class="space-y-4">
-    <h2 class="text-xl font-bold">Google 行事曆</h2>
+    <h2 class="flex items-center gap-2 text-lg font-semibold text-gray-900 dark:text-white">
+      <UIcon name="i-lucide-calendar" class="w-5 h-5" />
+      Google 行事曆
+    </h2>
 
     <div v-if="connect">
       <div
@@ -32,7 +35,7 @@ const calendarUrl = computed(() => {
 
     <div
       v-else
-      class="p-4 border border-dashed border-gray-300 text-center text-gray-600 dark:text-gray-300 rounded-md bg-gray-50 dark:bg-gray-800"
+      class="text-center text-sm text-gray-500 dark:text-gray-400 py-8 px-4 border border-dashed border-gray-300 dark:border-gray-700 rounded-lg"
     >
       尚未連接 Google Calendar，請前往 <strong>帳號設定</strong> 以完成連接。
     </div>

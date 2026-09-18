@@ -54,7 +54,7 @@ const openJiraIssue = (key: string) => {
           <span class="text-sm text-gray-600">{{ issue.type }}</span>
         </div>
 
-        <div class="font-medium mb-2">{{ issue.summary }}</div>
+        <div class="font-medium mb-2">{{ issue.title }}</div>
 
         <div class="flex items-center gap-2">
           <UAvatar v-if="issue.avatar" :src="issue.avatar" size="xs" />
@@ -63,7 +63,7 @@ const openJiraIssue = (key: string) => {
 
         <template #footer>
           <div class="text-xs text-gray-400">
-            更新於 {{ new Date(issue.updated).toLocaleDateString() }}
+            更新於 {{ new Date(issue.updated_at).toLocaleDateString() }}
           </div>
         </template>
       </UCard>

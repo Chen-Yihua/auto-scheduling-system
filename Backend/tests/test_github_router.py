@@ -39,7 +39,7 @@ async def test_get_github_issues(monkeypatch):
         return {
             "id": raw["number"],
             "title": raw["title"],
-            "state": raw["state"],
+            "status": raw["state"],
             "created_at": raw["created_at"],
             "updated_at": raw["updated_at"],
             "url": raw["html_url"],

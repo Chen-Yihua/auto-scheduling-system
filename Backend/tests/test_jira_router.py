@@ -67,9 +67,9 @@ async def test_get_jira_issues_success(test_app):
             {
                 "id": "1",
                 "key": "JIRA-1",
-                "summary": "Test Issue 1",
+                "title": "Test Issue 1",
                 "status": "In Progress",
-                "updated": "2024-01-01T00:00:00.000+0000",
+                "updated_at": "2024-01-01T00:00:00.000+0000",
                 "assignee": "User One",
                 "avatar": "",
                 "type": "Task",

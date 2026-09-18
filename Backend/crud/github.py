@@ -53,7 +53,7 @@ def transform_github_item(raw: dict) -> dict:
     return {
         "id": raw["number"],
         "title": raw["title"],
-        "state": raw["state"],
+        "status": raw["state"],
         "created_at": raw["created_at"],
         "updated_at": raw.get("updated_at"),
         "url": raw["html_url"],

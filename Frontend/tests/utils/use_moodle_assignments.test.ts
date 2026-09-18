@@ -66,9 +66,9 @@ describe('useMoodleAssignments', () => {
     const list = [
       {
         course_name: '課程 A',
-        assignment_title: 'Moodle 作業',
+        title: 'Moodle 作業',
         due_date: '2025-07-01',
-        assignment_url: 'https://moodle/hw1',
+        url: 'https://moodle/hw1',
       },
     ]
     fetchSpy.mockResolvedValueOnce(linked(true))

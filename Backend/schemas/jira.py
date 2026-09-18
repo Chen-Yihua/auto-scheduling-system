@@ -6,9 +6,9 @@ from pydantic import BaseModel
 class JiraIssue(BaseModel):
     id: str
     key: str
-    summary: str
+    title: str
     status: str
-    updated: str
+    updated_at: str
     assignee: str
     avatar: str
     type: str

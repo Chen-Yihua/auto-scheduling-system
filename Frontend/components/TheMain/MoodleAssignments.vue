@@ -31,14 +31,14 @@ onMounted(fetchMoodleAssignments); // 頁面載入時抓取作業資料
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
       <UCard 
         v-for="item in moodleAssignments"
-        @click="openMoodleAssignments(item.assignment_url)"
+        @click="openMoodleAssignments(item.url)"
         class="rounded-lg bg-default ring ring-default divide-y divide-default cursor-pointer hover:shadow-lg transition-transform duration-300 ease-in-out transform scale-100 hover:scale-105"
       >
         <template #header>
           <div class="text-sm font-semibold">課程名稱 : {{ item.course_name }}</div>
         </template>
 
-          <div class="font-medium mb-2">作業標題 : {{ item.assignment_title }}</div>
+          <div class="font-medium mb-2">作業標題 : {{ item.title }}</div>
 
         <template #footer>
           <div class="text-sm text-gray-500">截止日期 : {{ item.due_date }}</div>

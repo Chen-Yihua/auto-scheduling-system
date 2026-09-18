@@ -74,8 +74,8 @@ async def test_get_assignments_success(monkeypatch):
             {
                 "id": "https://moodle.nccu.edu.tw/mod/assign/view.php?id=1",
                 "course_name": "資料結構",
-                "assignment_title": "HW1",
-                "assignment_url": "https://moodle.nccu.edu.tw/mod/assign/view.php?id=1",
+                "title": "HW1",
+                "url": "https://moodle.nccu.edu.tw/mod/assign/view.php?id=1",
                 "due_date": "2026-09-10",
             }
         ]
@@ -92,7 +92,7 @@ async def test_get_assignments_success(monkeypatch):
     response = Response()
     result = await moodle_router.get_assignments(request=MagicMock(), response=response, clerk_user=mock_user)
 
-    assert result[0]["assignment_title"] == "HW1"
+    assert result[0]["title"] == "HW1"
     assert response.headers["X-Data-Stale"] == "false"
     assert len(fake_collection._docs) == 1
     # 密碼在資料庫裡是加密的（MockLinkedAccounts 用 encrypt_secret 存），爬蟲登入前
@@ -112,8 +112,8 @@ async def test_get_assignments_falls_back_to_cache_when_scrape_fails(monkeypatch
     cached_doc = {
         "id": "https://moodle.nccu.edu.tw/mod/assign/view.php?id=1",
         "course_name": "資料結構",
-        "assignment_title": "HW1（上次抓到的）",
-        "assignment_url": "https://moodle.nccu.edu.tw/mod/assign/view.php?id=1",
+        "title": "HW1（上次抓到的）",
+        "url": "https://moodle.nccu.edu.tw/mod/assign/view.php?id=1",
         "due_date": "2026-09-10",
         "user_id": mock_user["sub"],
     }
@@ -129,7 +129,7 @@ async def test_get_assignments_falls_back_to_cache_when_scrape_fails(monkeypatch
     response = Response()
     result = await moodle_router.get_assignments(request=MagicMock(), response=response, clerk_user=mock_user)
 
-    assert result[0]["assignment_title"] == "HW1（上次抓到的）"
+    assert result[0]["title"] == "HW1（上次抓到的）"
     assert response.headers["X-Data-Stale"] == "true"
     # 登入失敗是 NonRetryableError，不該被重試——只該爬一次
     assert call_count["n"] == 1
@@ -167,8 +167,8 @@ async def test_get_assignments_second_call_within_ttl_skips_scrape_entirely(monk
             {
                 "id": "https://moodle.nccu.edu.tw/mod/assign/view.php?id=1",
                 "course_name": "資料結構",
-                "assignment_title": "HW1",
-                "assignment_url": "https://moodle.nccu.edu.tw/mod/assign/view.php?id=1",
+                "title": "HW1",
+                "url": "https://moodle.nccu.edu.tw/mod/assign/view.php?id=1",
                 "due_date": "2026-09-10",
             }
         ]
@@ -206,8 +206,8 @@ async def test_get_assignments_does_not_cache_stale_fallback_result(monkeypatch)
     cached_doc = {
         "id": "https://moodle.nccu.edu.tw/mod/assign/view.php?id=1",
         "course_name": "資料結構",
-        "assignment_title": "HW1（上次抓到的）",
-        "assignment_url": "https://moodle.nccu.edu.tw/mod/assign/view.php?id=1",
+        "title": "HW1（上次抓到的）",
+        "url": "https://moodle.nccu.edu.tw/mod/assign/view.php?id=1",
         "due_date": "2026-09-10",
         "user_id": mock_user["sub"],
     }

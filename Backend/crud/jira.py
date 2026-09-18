@@ -60,9 +60,9 @@ def transform_jira_item(raw: dict) -> dict:
     return {
         "id": raw["id"],
         "key": raw["key"],
-        "summary": fields.get("summary") or "",
+        "title": fields.get("summary") or "",
         "status": status.get("name") or "",
-        "updated": fields.get("updated") or "",
+        "updated_at": fields.get("updated") or "",
         "assignee": assignee.get("displayName") or "",
         "avatar": avatar_urls.get("48x48") or "",
         "type": issuetype.get("name") or "",

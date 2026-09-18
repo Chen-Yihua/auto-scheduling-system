@@ -3,9 +3,9 @@
 export interface JiraIssue {
     id: string
     key: string
-    summary: string
+    title: string
     status: string
-    updated: string
+    updated_at: string
     assignee: string
     avatar: string
     type: string

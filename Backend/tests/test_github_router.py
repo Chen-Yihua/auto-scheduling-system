@@ -1,10 +1,65 @@
 import pytest
-from fastapi import HTTPException
+from fastapi import HTTPException, Response
+from pymongo.errors import PyMongoError
 import routers.github as github_router
 from db.crypto import encrypt_secret
 from crud.errors import NonRetryableError
 
 mock_user = {"sub": "test_user_123"}
+
+
+@pytest.mark.asyncio
+async def test_get_github_issues_raises_503_when_db_down(monkeypatch):
+    class MockLinkedAccounts:
+        async def find_one(self, query):
+            raise PyMongoError("connection lost")
+
+    monkeypatch.setattr(github_router.db, "linkedAccounts", MockLinkedAccounts())
+
+    with pytest.raises(HTTPException) as exc_info:
+        await github_router.get_github_issues(clerk_user=mock_user)
+
+    assert exc_info.value.status_code == 503
+
+
+@pytest.mark.asyncio
+async def test_get_github_issues_raises_500_when_decrypt_fails(monkeypatch):
+    class MockLinkedAccounts:
+        async def find_one(self, query):
+            return {"apiKey": "not-actually-encrypted"}
+
+    monkeypatch.setattr(github_router.db, "linkedAccounts", MockLinkedAccounts())
+
+    with pytest.raises(HTTPException) as exc_info:
+        await github_router.get_github_issues(clerk_user=mock_user)
+
+    assert exc_info.value.status_code == 500
+
+
+@pytest.mark.asyncio
+async def test_get_github_issues_sets_auth_error_header(monkeypatch):
+    class MockLinkedAccounts:
+        async def find_one(self, query):
+            return {"apiKey": encrypt_secret("fake_token")}
+
+    from datetime import datetime, timezone
+
+    synced_at = datetime(2026, 9, 10, tzinfo=timezone.utc)
+
+    async def mock_sync(user_id, fetch_fn):
+        # stale=True、auth_error=True：token 失效但還有快取可以退回顯示
+        return ([{"id": 1}], True, synced_at, True)
+
+    monkeypatch.setattr(github_router.db, "linkedAccounts", MockLinkedAccounts())
+    monkeypatch.setattr(github_router, "sync_github_issues", mock_sync)
+
+    response = Response()
+    result = await github_router.get_github_issues(response=response, clerk_user=mock_user)
+
+    assert result == [{"id": 1}]
+    assert response.headers["X-Auth-Error"] == "true"
+    assert response.headers["X-Data-Stale"] == "true"
+    assert response.headers["X-Synced-At"] == synced_at.isoformat()
 
 @pytest.mark.asyncio
 async def test_get_github_issues(monkeypatch):

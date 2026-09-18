@@ -122,3 +122,99 @@ async def test_get_jira_issues_internal_error(test_app):
         # detail 應該是給使用者看的固定訊息，內部例外原因（"boom!"）只會寫進 log，
         # 不會回傳給前端（避免洩漏內部細節）
         assert response.json()["detail"] == "無法取得 Jira 資料，請稍後再試"
+
+
+# DB 連不上，預期回 503
+@pytest.mark.asyncio
+async def test_get_jira_issues_raises_503_when_db_down(test_app):
+    from pymongo.errors import PyMongoError
+
+    mock_db = MagicMock()
+    mock_db.linkedAccounts.find_one = AsyncMock(side_effect=PyMongoError("connection lost"))
+
+    with patch("routers.jira.db", mock_db):
+        async with AsyncClient(transport=ASGITransport(app=test_app), base_url="http://test") as ac:
+            response = await ac.get("/jira/issues")
+
+        assert response.status_code == 503
+
+
+# apiKey 解密失敗，預期回 500
+@pytest.mark.asyncio
+async def test_get_jira_issues_raises_500_when_decrypt_fails(test_app):
+    mock_db = MagicMock()
+    mock_db.linkedAccounts.find_one = AsyncMock(
+        return_value={"apiKey": "not-actually-encrypted", "domain": "fake.atlassian.net"}
+    )
+
+    with patch("routers.jira.db", mock_db):
+        async with AsyncClient(transport=ASGITransport(app=test_app), base_url="http://test") as ac:
+            response = await ac.get("/jira/issues")
+
+        assert response.status_code == 500
+
+
+# token 失效（NonRetryableError）是 401，跟一般暫時性失敗（500）要分開——
+# 這種情況重試也沒用，使用者要重新連結帳號才能解決
+@pytest.mark.asyncio
+async def test_get_jira_issues_token_expired_raises_401(test_app):
+    from crud.errors import NonRetryableError
+
+    mock_linked_account = {
+        "apiKey": encrypt_secret("fake_api_key"),
+        "domain": "fake.atlassian.net",
+    }
+
+    mock_db = MagicMock()
+    mock_db.linkedAccounts.find_one = AsyncMock(return_value=mock_linked_account)
+    mock_cursor = MagicMock()
+    mock_cursor.to_list = AsyncMock(return_value=[])
+    mock_db.jira_issues.find = MagicMock(return_value=mock_cursor)
+
+    with patch("routers.jira.db", mock_db), \
+         patch("crud.jira.db", mock_db), \
+         patch("routers.jira.fetch_jira_user_issues", side_effect=NonRetryableError("401 Unauthorized")):
+
+        async with AsyncClient(transport=ASGITransport(app=test_app), base_url="http://test") as ac:
+            response = await ac.get("/jira/issues")
+
+        assert response.status_code == 401
+        assert response.json()["detail"] == "Jira 授權已失效，請重新連結帳號"
+
+
+# 有快取可退回、但 token 已失效：確認 X-Auth-Error header 有正確設定
+@pytest.mark.asyncio
+async def test_get_jira_issues_sets_auth_error_header(test_app):
+    mock_linked_account = {
+        "apiKey": encrypt_secret("fake_api_key"),
+        "domain": "fake.atlassian.net",
+    }
+
+    mock_db = MagicMock()
+    mock_db.linkedAccounts.find_one = AsyncMock(return_value=mock_linked_account)
+
+    mock_issue = {
+        "id": "1",
+        "key": "JIRA-1",
+        "title": "Test Issue",
+        "status": "Open",
+        "updated_at": "2024-01-01T00:00:00.000+0000",
+        "assignee": "",
+        "avatar": "",
+        "type": "Task",
+        "iconUrl": "",
+    }
+
+    async def mock_sync(user_id, fetch_fn):
+        return ([mock_issue], True, None, True)
+
+    with patch("routers.jira.db", mock_db), \
+         patch("routers.jira.sync_jira_issues", mock_sync):
+
+        async with AsyncClient(transport=ASGITransport(app=test_app), base_url="http://test") as ac:
+            response = await ac.get("/jira/issues")
+
+        assert response.status_code == 200
+        assert response.json() == [mock_issue]
+        assert response.headers["x-auth-error"] == "true"
+        assert response.headers["x-data-stale"] == "true"

@@ -45,6 +45,25 @@ async def test_fetch_jira_user_issues_paginates_across_multiple_pages():
 
 
 @pytest.mark.asyncio
+async def test_fetch_jira_user_issues_stops_early_when_page_returns_no_issues():
+    # total 欄位跟實際筆數對不上（或根本沒回 total）時，「這頁完全沒有 issue」
+    # 本身就該是停止翻頁的訊號，不能只依賴 startAt >= total 的判斷
+    from unittest.mock import AsyncMock, MagicMock
+
+    page = MagicMock()
+    page.status_code = 200
+    page.json.return_value = {"issues": []}  # 沒有 total 欄位，也沒有任何 issue
+
+    with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
+        mock_get.return_value = page
+
+        issues = await jira.fetch_jira_user_issues("key", "domain")
+
+        assert issues == []
+        assert mock_get.call_count == 1  # 第一頁就停了，不會繼續翻頁
+
+
+@pytest.mark.asyncio
 async def test_fetch_jira_user_issues_stops_at_max_pages_safety_cap():
     from unittest.mock import AsyncMock, MagicMock
 

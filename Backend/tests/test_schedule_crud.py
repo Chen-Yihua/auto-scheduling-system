@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
-from crud.schedule import build_schedule_suggestion
+from crud.schedule import build_schedule_suggestion, _parse_iso, _sortable_due_date
 
 
 def _task(id, title, priority, status="To Do", due_date=None, duration=None):
@@ -195,6 +195,27 @@ def test_task_missing_required_field_is_skipped_not_crashed():
     assert len(result["scheduled"]) == 1
     assert result["scheduled"][0]["task_id"] == "t2"
     assert result["unscheduled"] == []
+
+
+def test_parse_iso_passes_through_existing_datetime_unchanged():
+    # free_slots 目前都是 Google Calendar／快取回來的 ISO 字串，但 _parse_iso
+    # 本身也支援直接傳 datetime 進來（防禦性设计），這個分支要單獨測到
+    dt = datetime(2026, 9, 10, 9, 0, tzinfo=timezone.utc)
+
+    result = _parse_iso(dt)
+
+    assert result is dt
+
+
+def test_sortable_due_date_strips_timezone_from_aware_datetime():
+    # due_date 存進 DB 前不保證都是 naive datetime，aware 的也要能正確排序
+    # （這裡只驗證「有時區的會被去掉 tzinfo」這個分支，不是排序結果本身）
+    aware = datetime(2026, 9, 10, 9, 0, tzinfo=timezone.utc)
+
+    result = _sortable_due_date(aware)
+
+    assert result == datetime(2026, 9, 10, 9, 0)
+    assert result.tzinfo is None
 
 
 def test_slot_missing_start_or_end_is_skipped_not_crashed():

@@ -158,6 +158,81 @@ async def test_get_assignments_raises_401_when_scrape_fails_and_no_cache(monkeyp
 
 
 @pytest.mark.asyncio
+async def test_get_assignments_raises_503_when_db_down(monkeypatch):
+    from pymongo.errors import PyMongoError
+
+    class FailingLinkedAccounts:
+        async def find_one(self, query):
+            raise PyMongoError("connection lost")
+
+    monkeypatch.setattr(moodle_router.db, "linkedAccounts", FailingLinkedAccounts())
+
+    with pytest.raises(HTTPException) as exc_info:
+        await moodle_router.get_assignments(request=MagicMock(), response=Response(), clerk_user=mock_user)
+
+    assert exc_info.value.status_code == 503
+
+
+@pytest.mark.asyncio
+async def test_get_assignments_raises_404_when_account_not_linked(monkeypatch):
+    class EmptyLinkedAccounts:
+        async def find_one(self, query):
+            return None
+
+    monkeypatch.setattr(moodle_router.db, "linkedAccounts", EmptyLinkedAccounts())
+
+    with pytest.raises(HTTPException) as exc_info:
+        await moodle_router.get_assignments(request=MagicMock(), response=Response(), clerk_user=mock_user)
+
+    assert exc_info.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_get_assignments_raises_500_when_decrypt_fails(monkeypatch):
+    class BadlyEncryptedLinkedAccounts:
+        async def find_one(self, query):
+            return {"username": "stu001", "password": "not-actually-encrypted"}
+
+    monkeypatch.setattr(moodle_router.db, "linkedAccounts", BadlyEncryptedLinkedAccounts())
+
+    with pytest.raises(HTTPException) as exc_info:
+        await moodle_router.get_assignments(request=MagicMock(), response=Response(), clerk_user=mock_user)
+
+    assert exc_info.value.status_code == 500
+
+
+@pytest.mark.asyncio
+async def test_get_assignments_raises_500_on_unexpected_sync_error(monkeypatch):
+    async def mock_sync(user_id, fetch_fn):
+        raise RuntimeError("unexpected bug")
+
+    monkeypatch.setattr(moodle_router.db, "linkedAccounts", MockLinkedAccounts())
+    monkeypatch.setattr(moodle_router, "sync_moodle_assignments", mock_sync)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await moodle_router.get_assignments(request=MagicMock(), response=Response(), clerk_user=mock_user)
+
+    assert exc_info.value.status_code == 500
+    assert exc_info.value.detail == "無法取得 Moodle 資料，請稍後再試"
+
+
+@pytest.mark.asyncio
+async def test_get_assignments_sets_auth_error_header(monkeypatch):
+    async def mock_sync(user_id, fetch_fn):
+        return ([], True, None, True)
+
+    monkeypatch.setattr(moodle_router.db, "linkedAccounts", MockLinkedAccounts())
+    monkeypatch.setattr(moodle_router, "sync_moodle_assignments", mock_sync)
+
+    response = Response()
+    result = await moodle_router.get_assignments(request=MagicMock(), response=response, clerk_user=mock_user)
+
+    assert result == []
+    assert response.headers["X-Auth-Error"] == "true"
+    assert response.headers["X-Data-Stale"] == "true"
+
+
+@pytest.mark.asyncio
 async def test_get_assignments_second_call_within_ttl_skips_scrape_entirely(monkeypatch):
     call_count = {"n": 0}
 

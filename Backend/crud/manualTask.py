@@ -7,7 +7,7 @@ logger = logging.getLogger(__name__)
 
 # 建立任務
 async def create_manual_task(task: ManualTaskOut) -> str:
-    doc = task.dict()
+    doc = task.model_dump()
     try:
         await db.manual_tasks.insert_one(doc)
         return {

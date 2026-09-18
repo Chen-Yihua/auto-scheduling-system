@@ -98,7 +98,9 @@ def test_update_user_success(mock_update_user):
 
 @patch("crud.user.update_user_by_clerk_id", new_callable=AsyncMock)
 def test_update_user_not_found(mock_update_user):
-    mock_update_user.return_value = False  # 模擬失敗
+    # 找不到或沒有變更，crud 現在直接 raise 404，不是回傳 False 讓 router 判斷
+    from fastapi import HTTPException
+    mock_update_user.side_effect = HTTPException(status_code=404, detail="User not found or no changes made")
 
     response = client.put("/users/me", json={"name": "No Change"})
 

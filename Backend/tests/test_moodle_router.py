@@ -5,8 +5,17 @@ from fastapi import HTTPException, Response
 import cache
 import routers.moodle as moodle_router
 from crud.errors import NonRetryableError
+from db.crypto import encrypt_secret
 
 mock_user = {"sub": "test_user_123"}
+
+
+class MockLinkedAccounts:
+    """模擬 db.linkedAccounts.find_one，回傳的密碼是真的加密過的，
+    確保 router 裡的 decrypt_secret 呼叫真的會被跑到、不是被繞過。"""
+
+    async def find_one(self, query):
+        return {"username": "stu001", "password": encrypt_secret("decrypted_pw")}
 
 
 @pytest.fixture(autouse=True)
@@ -57,16 +66,16 @@ class FakeMoodleAssignments:
 
 @pytest.mark.asyncio
 async def test_get_assignments_success(monkeypatch):
-    async def mock_get_user_account(clerk_id):
-        return {"username": "stu001", "password": "decrypted_pw"}
+    fetch_calls = []
 
     def mock_fetch_assignments(username, password):
+        fetch_calls.append((username, password))
         return [
             {
                 "id": "https://moodle.nccu.edu.tw/mod/assign/view.php?id=1",
                 "course_name": "資料結構",
-                "assignment_title": "HW1",
-                "assignment_url": "https://moodle.nccu.edu.tw/mod/assign/view.php?id=1",
+                "title": "HW1",
+                "url": "https://moodle.nccu.edu.tw/mod/assign/view.php?id=1",
                 "due_date": "2026-09-10",
             }
         ]
@@ -75,7 +84,7 @@ async def test_get_assignments_success(monkeypatch):
     async def instant_sleep(seconds):
         pass
 
-    monkeypatch.setattr(moodle_router, "get_user_account", mock_get_user_account)
+    monkeypatch.setattr(moodle_router.db, "linkedAccounts", MockLinkedAccounts())
     monkeypatch.setattr(moodle_router, "fetch_assignments", mock_fetch_assignments)
     monkeypatch.setattr(moodle_router.db, "moodle_assignments", fake_collection)
     monkeypatch.setattr("crud.external_sync.asyncio.sleep", instant_sleep)
@@ -83,16 +92,16 @@ async def test_get_assignments_success(monkeypatch):
     response = Response()
     result = await moodle_router.get_assignments(request=MagicMock(), response=response, clerk_user=mock_user)
 
-    assert result[0]["assignment_title"] == "HW1"
+    assert result[0]["title"] == "HW1"
     assert response.headers["X-Data-Stale"] == "false"
     assert len(fake_collection._docs) == 1
+    # 密碼在資料庫裡是加密的（MockLinkedAccounts 用 encrypt_secret 存），爬蟲登入前
+    # 一定要在伺服器內部先解密回明文，不能把密文原封不動傳給 fetch_assignments
+    assert fetch_calls == [("stu001", "decrypted_pw")]
 
 
 @pytest.mark.asyncio
 async def test_get_assignments_falls_back_to_cache_when_scrape_fails(monkeypatch):
-    async def mock_get_user_account(clerk_id):
-        return {"username": "stu001", "password": "decrypted_pw"}
-
     call_count = {"n": 0}
 
     def mock_fetch_assignments(username, password):
@@ -103,8 +112,8 @@ async def test_get_assignments_falls_back_to_cache_when_scrape_fails(monkeypatch
     cached_doc = {
         "id": "https://moodle.nccu.edu.tw/mod/assign/view.php?id=1",
         "course_name": "資料結構",
-        "assignment_title": "HW1（上次抓到的）",
-        "assignment_url": "https://moodle.nccu.edu.tw/mod/assign/view.php?id=1",
+        "title": "HW1（上次抓到的）",
+        "url": "https://moodle.nccu.edu.tw/mod/assign/view.php?id=1",
         "due_date": "2026-09-10",
         "user_id": mock_user["sub"],
     }
@@ -112,7 +121,7 @@ async def test_get_assignments_falls_back_to_cache_when_scrape_fails(monkeypatch
     async def instant_sleep(seconds):
         pass
 
-    monkeypatch.setattr(moodle_router, "get_user_account", mock_get_user_account)
+    monkeypatch.setattr(moodle_router.db, "linkedAccounts", MockLinkedAccounts())
     monkeypatch.setattr(moodle_router, "fetch_assignments", mock_fetch_assignments)
     monkeypatch.setattr(moodle_router.db, "moodle_assignments", fake_collection)
     monkeypatch.setattr("crud.external_sync.asyncio.sleep", instant_sleep)
@@ -120,7 +129,7 @@ async def test_get_assignments_falls_back_to_cache_when_scrape_fails(monkeypatch
     response = Response()
     result = await moodle_router.get_assignments(request=MagicMock(), response=response, clerk_user=mock_user)
 
-    assert result[0]["assignment_title"] == "HW1（上次抓到的）"
+    assert result[0]["title"] == "HW1（上次抓到的）"
     assert response.headers["X-Data-Stale"] == "true"
     # 登入失敗是 NonRetryableError，不該被重試——只該爬一次
     assert call_count["n"] == 1
@@ -128,16 +137,13 @@ async def test_get_assignments_falls_back_to_cache_when_scrape_fails(monkeypatch
 
 @pytest.mark.asyncio
 async def test_get_assignments_raises_401_when_scrape_fails_and_no_cache(monkeypatch):
-    async def mock_get_user_account(clerk_id):
-        return {"username": "stu001", "password": "decrypted_pw"}
-
     def mock_fetch_assignments(username, password):
         raise NonRetryableError("Moodle 登入失敗，使用者：stu001")
 
     async def instant_sleep(seconds):
         pass
 
-    monkeypatch.setattr(moodle_router, "get_user_account", mock_get_user_account)
+    monkeypatch.setattr(moodle_router.db, "linkedAccounts", MockLinkedAccounts())
     monkeypatch.setattr(moodle_router, "fetch_assignments", mock_fetch_assignments)
     monkeypatch.setattr(moodle_router.db, "moodle_assignments", FakeMoodleAssignments())
     monkeypatch.setattr("crud.external_sync.asyncio.sleep", instant_sleep)
@@ -155,17 +161,14 @@ async def test_get_assignments_raises_401_when_scrape_fails_and_no_cache(monkeyp
 async def test_get_assignments_second_call_within_ttl_skips_scrape_entirely(monkeypatch):
     call_count = {"n": 0}
 
-    async def mock_get_user_account(clerk_id):
-        return {"username": "stu001", "password": "decrypted_pw"}
-
     def mock_fetch_assignments(username, password):
         call_count["n"] += 1
         return [
             {
                 "id": "https://moodle.nccu.edu.tw/mod/assign/view.php?id=1",
                 "course_name": "資料結構",
-                "assignment_title": "HW1",
-                "assignment_url": "https://moodle.nccu.edu.tw/mod/assign/view.php?id=1",
+                "title": "HW1",
+                "url": "https://moodle.nccu.edu.tw/mod/assign/view.php?id=1",
                 "due_date": "2026-09-10",
             }
         ]
@@ -173,7 +176,7 @@ async def test_get_assignments_second_call_within_ttl_skips_scrape_entirely(monk
     async def instant_sleep(seconds):
         pass
 
-    monkeypatch.setattr(moodle_router, "get_user_account", mock_get_user_account)
+    monkeypatch.setattr(moodle_router.db, "linkedAccounts", MockLinkedAccounts())
     monkeypatch.setattr(moodle_router, "fetch_assignments", mock_fetch_assignments)
     monkeypatch.setattr(moodle_router.db, "moodle_assignments", FakeMoodleAssignments())
     monkeypatch.setattr("crud.external_sync.asyncio.sleep", instant_sleep)
@@ -196,9 +199,6 @@ async def test_get_assignments_does_not_cache_stale_fallback_result(monkeypatch)
     """
     call_count = {"n": 0}
 
-    async def mock_get_user_account(clerk_id):
-        return {"username": "stu001", "password": "decrypted_pw"}
-
     def mock_fetch_assignments(username, password):
         call_count["n"] += 1
         raise NonRetryableError("Moodle 登入失敗，使用者：stu001")
@@ -206,8 +206,8 @@ async def test_get_assignments_does_not_cache_stale_fallback_result(monkeypatch)
     cached_doc = {
         "id": "https://moodle.nccu.edu.tw/mod/assign/view.php?id=1",
         "course_name": "資料結構",
-        "assignment_title": "HW1（上次抓到的）",
-        "assignment_url": "https://moodle.nccu.edu.tw/mod/assign/view.php?id=1",
+        "title": "HW1（上次抓到的）",
+        "url": "https://moodle.nccu.edu.tw/mod/assign/view.php?id=1",
         "due_date": "2026-09-10",
         "user_id": mock_user["sub"],
     }
@@ -215,7 +215,7 @@ async def test_get_assignments_does_not_cache_stale_fallback_result(monkeypatch)
     async def instant_sleep(seconds):
         pass
 
-    monkeypatch.setattr(moodle_router, "get_user_account", mock_get_user_account)
+    monkeypatch.setattr(moodle_router.db, "linkedAccounts", MockLinkedAccounts())
     monkeypatch.setattr(moodle_router, "fetch_assignments", mock_fetch_assignments)
     monkeypatch.setattr(moodle_router.db, "moodle_assignments", FakeMoodleAssignments(initial=[cached_doc]))
     monkeypatch.setattr("crud.external_sync.asyncio.sleep", instant_sleep)

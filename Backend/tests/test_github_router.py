@@ -2,6 +2,7 @@ import pytest
 from fastapi import HTTPException
 import routers.github as github_router
 from db.crypto import encrypt_secret
+from crud.errors import NonRetryableError
 
 mock_user = {"sub": "test_user_123"}
 
@@ -38,7 +39,7 @@ async def test_get_github_issues(monkeypatch):
         return {
             "id": raw["number"],
             "title": raw["title"],
-            "state": raw["state"],
+            "status": raw["state"],
             "created_at": raw["created_at"],
             "updated_at": raw["updated_at"],
             "url": raw["html_url"],
@@ -108,3 +109,33 @@ async def test_get_github_issues_api_fail(monkeypatch):
     # detail 應該是給使用者看的固定訊息，內部例外原因（"GitHub API down"）
     # 只會寫進 log，不會回傳給前端（避免洩漏內部細節）
     assert exc_info.value.detail == "無法取得 GitHub 資料，請稍後再試"
+
+
+@pytest.mark.asyncio
+async def test_get_github_issues_token_expired(monkeypatch):
+    """token 失效（401/403 等）是 NonRetryableError，跟一般的暫時性 API 失敗要分開處理，
+    不能都回「請稍後再試」——這種情況重試也沒用，使用者要重新連結帳號才能解決。"""
+    class MockLinkedAccounts:
+        async def find_one(self, query):
+            return {"apiKey": encrypt_secret("fake_token")}
+
+    class MockCursor:
+        async def to_list(self, length=None):
+            return []  # 沒有任何快取可退回
+
+    class MockGithubIssues:
+        def find(self, *args, **kwargs):
+            return MockCursor()
+
+    async def mock_fetch(token):
+        raise NonRetryableError("GitHub API failed: 401 Unauthorized")
+
+    monkeypatch.setattr(github_router.db, "linkedAccounts", MockLinkedAccounts())
+    monkeypatch.setattr(github_router.db, "github_issues", MockGithubIssues())
+    monkeypatch.setattr(github_router, "fetch_github_user_issues", mock_fetch)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await github_router.get_github_issues(clerk_user=mock_user)
+
+    assert exc_info.value.status_code == 401
+    assert exc_info.value.detail == "GitHub 授權已失效，請重新連結帳號"

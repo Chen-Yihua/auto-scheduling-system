@@ -98,9 +98,11 @@ async def test_manual_task_full_lifecycle():
         get_after_delete = await ac.get(f"/manual_tasks/{task_id}")
         assert get_after_delete.status_code == status.HTTP_404_NOT_FOUND
 
-        # 8. 這個使用者名下已經沒有任何任務 -> 列表 endpoint 設計上是回 404，不是空陣列
+        # 8. 這個使用者名下已經沒有任何任務 -> 是正常狀態，列表 endpoint 回 200 + 空陣列，
+        # 不是 404（404 代表資源路徑不存在，這裡路徑一直都存在，只是內容剛好是空的）
         list_after_delete = await ac.get("/manual_tasks/me")
-        assert list_after_delete.status_code == status.HTTP_404_NOT_FOUND
+        assert list_after_delete.status_code == status.HTTP_200_OK
+        assert list_after_delete.json() == []
 
 
 @pytest.mark.asyncio

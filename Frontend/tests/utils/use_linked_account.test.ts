@@ -109,6 +109,30 @@ describe('useLinkedAccount', () => {
     )
   })
 
+  it('saveKey (Jira 只改 domain) 不會送出 apiKey，並顯示「Jira Domain 已更新」', async () => {
+    const { keys, fetchKeys, openEdit, saveKey } = (await load())()
+    fetchSpy.mockResolvedValueOnce(list)
+    await fetchKeys()
+
+    const jira = keys.value.find((k) => k.platform === 'jira')!
+    openEdit(jira)
+    jira.domain = 'new-domain.atlassian.net' // 只改 domain，apiKey 欄位留空
+
+    fetchSpy.mockResolvedValueOnce(undefined) // PUT 不用回傳
+
+    await saveKey(jira)
+
+    const putCall = fetchSpy.mock.calls.find(([url]) => url === 'http://api/user/linked-accounts/')
+    expect(putCall).toBeTruthy()
+    const sentPayload = putCall![1].body.data.payload
+    expect(sentPayload.domain).toBe('new-domain.atlassian.net')
+    expect(sentPayload).not.toHaveProperty('apiKey') // 沒改 apiKey 就不該送出這個 key
+
+    expect(toastSpy.add).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Jira Domain 已更新', color: 'success' }),
+    )
+  })
+
   it('deleteKey 會 DELETE 並清空所有欄位', async () => {
     const { keys, deleteKey } = (await load())()
     const jira = keys.value.find((k) => k.platform === 'jira')!

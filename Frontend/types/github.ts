@@ -6,7 +6,7 @@ export interface GitHubAuthor {
   export interface GitHubIssue {
     id: number
     title: string
-    state: string
+    status: string
     created_at: string
     updated_at?: string
     url: string

@@ -1,9 +1,13 @@
 import logging
+from typing import List
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from db.mongodb import db
 from db.security import get_current_clerk_user
-from crud.moodle import get_user_account, fetch_assignments
-from crud.external_sync import sync_platform_items
+from db.crypto import decrypt_secret
+from pymongo.errors import PyMongoError
+from crud.errors import NonRetryableError
+from crud.moodle import fetch_assignments, sync_moodle_assignments
+from schemas.moodle import MoodleAssignment
 from fastapi.concurrency import run_in_threadpool
 from rate_limit import limiter
 from cache import cache_get, cache_set
@@ -22,12 +26,13 @@ CACHE_TTL_SECONDS = 15 * 60
 # （見 crud/external_sync.py）—— Moodle 用 Selenium 爬蟲，是三個平台裡最容易失敗的一個，
 # 最需要這層 fallback。
 # 每次呼叫都是真的開一個 headless Chrome，成本比一般 API 呼叫高很多，限流限得比較嚴。
-@router.get("/assignments")
+@router.get("/assignments", response_model=List[MoodleAssignment])
 @limiter.limit("5/minute")
 async def get_assignments(request: Request, response: Response = None, clerk_user: dict = Depends(get_current_clerk_user)):
     """
     Get the assignments for the user.
     """
+    # 查快取
     cache_key = f"moodle_assignments:{clerk_user['sub']}"
     cached = await cache_get(cache_key)
     if cached is not None:
@@ -37,26 +42,47 @@ async def get_assignments(request: Request, response: Response = None, clerk_use
                 response.headers["X-Synced-At"] = cached["synced_at"]
         return cached["assignments"]
 
-    user = await get_user_account(clerk_user["sub"])
+    # 查綁定帳號
+    try:
+        user = await db.linkedAccounts.find_one({"platform": "moodle", "clerk_id": clerk_user["sub"]})
+    except PyMongoError as e:
+        logger.error("DB error while fetching Moodle linked account: %s", e)
+        raise HTTPException(status_code=503, detail="資料庫暫時無法使用，請稍後再試")
 
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # 解密
+    # 密碼只在這裡（伺服器內部、準備拿去登入 Moodle 的當下）解密，
+    # 絕不印出來、絕不回傳給呼叫端以外的地方。
+    try:
+        password = decrypt_secret(user["password"])
+    except Exception:
+        logger.exception("Failed to decrypt Moodle password for user_id=%s", clerk_user["sub"])
+        raise HTTPException(status_code=500, detail="無法取得 Moodle 資料，請稍後再試")
+
+    # 抓資料
     async def fetch():
         return await run_in_threadpool(
-            fetch_assignments, user["username"], user["password"]
+            fetch_assignments, user["username"], password
         )
 
     try:
-        assignments, stale, synced_at = await sync_platform_items(
-            collection=db.moodle_assignments,
+        assignments, stale, synced_at, auth_error = await sync_moodle_assignments(
             user_id=clerk_user["sub"],
-            id_field="id",
             fetch_fn=fetch,
         )
+    except NonRetryableError:
+        logger.warning("Moodle login failed for user_id=%s", clerk_user["sub"])
+        raise HTTPException(status_code=401, detail="無法取得 Moodle 資料，請確認帳號密碼是否正確")
     except Exception:
         logger.exception("Failed to sync Moodle assignments for user_id=%s", clerk_user["sub"])
-        raise HTTPException(status_code=401, detail="無法取得 Moodle 資料，請確認帳號密碼是否正確")
+        raise HTTPException(status_code=500, detail="無法取得 Moodle 資料，請稍後再試")
 
     if response is not None:
         response.headers["X-Data-Stale"] = str(stale).lower()
+        if auth_error:
+            response.headers["X-Auth-Error"] = "true"
         if synced_at:
             response.headers["X-Synced-At"] = synced_at.isoformat()
 

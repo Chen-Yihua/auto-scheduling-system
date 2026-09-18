@@ -10,7 +10,7 @@ class GitHubAuthor(BaseModel):
 class GitHubIssue(BaseModel):
     id: int
     title: str
-    state: str
+    status: str
     created_at: datetime
     updated_at: Optional[datetime]
     url: str

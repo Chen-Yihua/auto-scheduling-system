@@ -205,6 +205,72 @@ async def test_update_jira_account_with_domain_reverifies(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_update_jira_apikey_only_reverifies_with_existing_domain(monkeypatch):
+    verify_calls = []
+
+    async def mock_find_one(filter):
+        return {"domain": "existing.atlassian.net"}
+
+    async def mock_fetch_jira_userinfo(api_key, domain):
+        verify_calls.append((api_key, domain))
+        return {"username": "jira_user", "avatar_url": "https://avatar"}
+
+    updated = {}
+
+    async def mock_update_one(filter, update, upsert=False):
+        nonlocal updated
+        updated = update["$set"]
+        return type("Mock", (), {"modified_count": 1})()
+
+    monkeypatch.setattr(linked_mod.db.linkedAccounts, "find_one", mock_find_one)
+    monkeypatch.setattr(linked_mod.db.linkedAccounts, "update_one", mock_update_one)
+    monkeypatch.setattr(linked_mod, "fetch_jira_userinfo", mock_fetch_jira_userinfo)
+
+    result = await update_linked_account_by_clerk_id(
+        "uid123", "jira", {"payload": {"apiKey": "newkey"}}
+    )
+    assert result is True
+    # 只改 apiKey、沒帶 domain -> 要去查現有 domain 一起驗證新 token
+    assert verify_calls == [("newkey", "existing.atlassian.net")]
+    assert updated["apiKey"] != "newkey"  # 落地前加密
+
+
+@pytest.mark.asyncio
+async def test_update_jira_domain_only_reverifies_with_existing_apikey(monkeypatch):
+    from db.crypto import encrypt_secret
+
+    verify_calls = []
+
+    async def mock_find_one(filter):
+        return {"apiKey": encrypt_secret("existingkey")}
+
+    async def mock_fetch_jira_userinfo(api_key, domain):
+        verify_calls.append((api_key, domain))
+        return {"username": "jira_user", "avatar_url": "https://avatar"}
+
+    updated = {}
+
+    async def mock_update_one(filter, update, upsert=False):
+        nonlocal updated
+        updated = update["$set"]
+        return type("Mock", (), {"modified_count": 1})()
+
+    monkeypatch.setattr(linked_mod.db.linkedAccounts, "find_one", mock_find_one)
+    monkeypatch.setattr(linked_mod.db.linkedAccounts, "update_one", mock_update_one)
+    monkeypatch.setattr(linked_mod, "fetch_jira_userinfo", mock_fetch_jira_userinfo)
+
+    result = await update_linked_account_by_clerk_id(
+        "uid123", "jira", {"payload": {"domain": "new-instance.atlassian.net"}}
+    )
+    assert result is True
+    # 只改 domain、沒帶 apiKey -> 要去查現有 apiKey（解密後）一起驗證新 domain
+    assert verify_calls == [("existingkey", "new-instance.atlassian.net")]
+    # 沒有送新 apiKey，不該把 apiKey 這個 key 塞進 $set 裡
+    assert "apiKey" not in updated
+    assert updated["domain"] == "new-instance.atlassian.net"
+
+
+@pytest.mark.asyncio
 async def test_update_moodle_password_reverifies_with_existing_username(monkeypatch):
     verify_calls = []
 
@@ -235,6 +301,41 @@ async def test_update_moodle_password_reverifies_with_existing_username(monkeypa
 
 
 @pytest.mark.asyncio
+async def test_update_moodle_username_only_reverifies_with_existing_password(monkeypatch):
+    from db.crypto import encrypt_secret
+
+    verify_calls = []
+
+    async def mock_find_one(filter):
+        return {"username": "stu001", "password": encrypt_secret("oldpass")}
+
+    def mock_verify(username, password):
+        verify_calls.append((username, password))
+
+    updated = {}
+
+    async def mock_update_one(filter, update, upsert=False):
+        nonlocal updated
+        updated = update["$set"]
+        return type("Mock", (), {"modified_count": 1})()
+
+    monkeypatch.setattr(linked_mod.db.linkedAccounts, "find_one", mock_find_one)
+    monkeypatch.setattr(linked_mod.db.linkedAccounts, "update_one", mock_update_one)
+    monkeypatch.setattr(linked_mod, "verify_moodle_login", mock_verify)
+
+    result = await update_linked_account_by_clerk_id(
+        "uid123", "moodle", {"payload": {"username": "stu002"}}
+    )
+    assert result is True
+    # 只改帳號、沒帶新密碼 -> 要去查現有密碼（解密後）一起驗證新帳號
+    assert verify_calls == [("stu002", "oldpass")]
+    # 沒有送新密碼，不該把 password 這個 key 塞進 $set 裡
+    assert "password" not in updated
+    assert updated["username"] == "stu002"
+    assert updated["status"] == "connected"
+
+
+@pytest.mark.asyncio
 async def test_update_moodle_wrong_password_raises_401(monkeypatch):
     async def mock_find_one(filter):
         return {"username": "stu001"}
@@ -260,8 +361,8 @@ async def test_delete_linked_account_success(monkeypatch):
         return type("Mock", (), {"deleted_count": 1})()
 
     monkeypatch.setattr(linked_mod.db.linkedAccounts, "delete_one", mock_delete_one)
-    result = await delete_linked_account_by_id("uid123_github")
-    assert result is True
+    # 成功時不該 raise，函式本身沒有回傳值需要檢查
+    await delete_linked_account_by_id("uid123_github")
 
 
 @pytest.mark.asyncio
@@ -270,8 +371,9 @@ async def test_delete_linked_account_not_found(monkeypatch):
         return type("Mock", (), {"deleted_count": 0})()
 
     monkeypatch.setattr(linked_mod.db.linkedAccounts, "delete_one", mock_delete_one)
-    result = await delete_linked_account_by_id("uid123_github")
-    assert result is False
+    with pytest.raises(HTTPException) as exc_info:
+        await delete_linked_account_by_id("uid123_github")
+    assert exc_info.value.status_code == 404
 
 
 # ========== 第三方帳號驗證 API ==========
@@ -287,7 +389,7 @@ async def test_fetch_github_userinfo_success(monkeypatch):
                 json={"login": "tester", "avatar_url": "https://avatar.com"}
             )
 
-    monkeypatch.setattr(httpx, "AsyncClient", lambda: MockClient())
+    monkeypatch.setattr(httpx, "AsyncClient", lambda *a, **kw: MockClient())
     result = await fetch_github_userinfo("token123")
     assert result["username"] == "tester"
 
@@ -300,7 +402,7 @@ async def test_fetch_github_userinfo_unauthorized(monkeypatch):
         async def get(self, *args, **kwargs):
             return httpx.Response(status_code=401)
 
-    monkeypatch.setattr(httpx, "AsyncClient", lambda: MockClient())
+    monkeypatch.setattr(httpx, "AsyncClient", lambda *a, **kw: MockClient())
     with pytest.raises(HTTPException) as exc_info:
         await fetch_github_userinfo("bad_token")
     assert exc_info.value.status_code == 401
@@ -317,7 +419,7 @@ async def test_fetch_jira_userinfo_success(monkeypatch):
                 json={"displayName": "Jira Tester", "avatarUrls": {"48x48": "https://avatar.com"}}
             )
 
-    monkeypatch.setattr(httpx, "AsyncClient", lambda: MockClient())
+    monkeypatch.setattr(httpx, "AsyncClient", lambda *a, **kw: MockClient())
     result = await fetch_jira_userinfo("base64key", "example.atlassian.net")
     assert result["username"] == "Jira Tester"
 
@@ -330,7 +432,7 @@ async def test_fetch_jira_userinfo_unauthorized(monkeypatch):
         async def get(self, *args, **kwargs):
             return httpx.Response(status_code=401)
 
-    monkeypatch.setattr(httpx, "AsyncClient", lambda: MockClient())
+    monkeypatch.setattr(httpx, "AsyncClient", lambda *a, **kw: MockClient())
     with pytest.raises(HTTPException) as exc_info:
         await fetch_jira_userinfo("bad_key", "example.atlassian.net")
     assert exc_info.value.status_code == 401

@@ -1,5 +1,7 @@
 import httpx
+from db.mongodb import db
 from crud.errors import NonRetryableError
+from crud.external_sync import sync_platform_items
 
 # 客戶端錯誤：帳密/token 問題、資源不存在——重試也不會變成功
 NON_RETRYABLE_STATUS_CODES = {400, 401, 403, 404}
@@ -51,9 +53,9 @@ async def fetch_github_user_issues(token: str, per_page: int = 100) -> list:
 # 2. 將 raw 資料轉換成 GitHubIssue 格式（前端也用這格式）
 def transform_github_item(raw: dict) -> dict:
     return {
-        "id": raw["number"],
+        "id": raw["number"], # GitHub 用 number 代表這個 repo 內的編號
         "title": raw["title"],
-        "state": raw["state"],
+        "status": raw["state"],
         "created_at": raw["created_at"],
         "updated_at": raw.get("updated_at"),
         "url": raw["html_url"],
@@ -65,3 +67,14 @@ def transform_github_item(raw: dict) -> dict:
         "labels": [label["name"] for label in raw.get("labels", [])],
         "comments": raw.get("comments")
     }
+
+
+# 包一層 sync_platform_items，把「用哪個 collection」這個細節封裝在這裡，
+# router 就不用自己 import db、知道 collection 叫 github_issues
+async def sync_github_issues(user_id: str, fetch_fn):
+    return await sync_platform_items(
+        collection=db.github_issues,
+        user_id=user_id,
+        id_field="id",
+        fetch_fn=fetch_fn,
+    )

@@ -8,7 +8,7 @@ class UserCreate(BaseModel):
     email: EmailStr
     name: str
     
-#回傳給前端看的模型（把 _id 換成 id）
+# 回傳給前端看的模型（把 _id 換成 id）
 class UserOut(BaseModel):
     id:        str
     email:     EmailStr
@@ -19,9 +19,3 @@ class UserOut(BaseModel):
 class UserUpdate(BaseModel):
     name:  Optional[str] = None
     email: Optional[EmailStr] = None
-class UserInDB(UserCreate):
-    id: str  # MongoDB 的 ObjectId 被轉成字串後傳回
-
-class UserPublic(BaseModel):
-    id: str
-    name: str

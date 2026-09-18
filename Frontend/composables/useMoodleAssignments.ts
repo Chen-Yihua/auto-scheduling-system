@@ -3,7 +3,7 @@ import { ref } from 'vue';
 import { useAuth } from '@clerk/vue';
 import { useRuntimeConfig } from '#imports';
 import { useToast } from '#imports';
-import { getFriendlyErrorTitle } from '@/utils/errorMessages';
+import { getFriendlyErrorTitle, isAuthError } from '@/utils/errorMessages';
 
 export const useMoodleAssignments = () => {
   const config = useRuntimeConfig();
@@ -16,6 +16,7 @@ export const useMoodleAssignments = () => {
   const hasAccount = ref(false); // 是否有 moodle 帳號
   const isStale = ref(false);
   const syncedAt = ref<string | null>(null);
+  const authError = ref(false);
 
   // 檢查帳密
   const checkMoodleAccount = async (): Promise<boolean> => {
@@ -59,10 +60,16 @@ export const useMoodleAssignments = () => {
     moodleAssignments.value = res._data ?? [];
     isStale.value = res.headers.get('X-Data-Stale') === 'true';
     syncedAt.value = res.headers.get('X-Synced-At');
+    authError.value = res.headers.get('X-Auth-Error') === 'true';
     } catch (err) {
       console.error('Moodle 抓取失敗', err);
+      // 後端帳密驗證失敗、且完全沒有快取可退時會回 401；有快取的話後端會正常回 200
+      // 加 X-Auth-Error header，不會走到這個 catch
+      authError.value = isAuthError(err);
       toast.add({
-        title: getFriendlyErrorTitle(err, 'Moodle 資料抓取失敗'),
+        title: authError.value
+          ? 'Moodle 帳號或密碼已失效，請重新連結帳號'
+          : getFriendlyErrorTitle(err, 'Moodle 資料抓取失敗'),
         color: 'error',
         icon: 'i-lucide-x',
       });
@@ -82,6 +89,7 @@ export const useMoodleAssignments = () => {
     hasAccount,
     isStale,
     syncedAt,
+    authError,
     fetchMoodleAssignments,
     openMoodleAssignments,
     checkMoodleAccount

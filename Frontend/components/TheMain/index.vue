@@ -9,8 +9,8 @@ import TaskForm from './TaskForm.vue'
 import GoogleCalendarEmbed from './GoogleCalendarEmbed.vue';
 import MoodleAssignments from './MoodleAssignments.vue'
 
-const { issues: githubIssues, fetchGithubIssues, isStale: githubStale, syncedAt: githubSyncedAt } = useGithub();
-const { issues: jiraIssues, fetchJiraIssues, domain, isStale: jiraStale, syncedAt: jiraSyncedAt } = useJira();
+const { issues: githubIssues, fetchGithubIssues, isStale: githubStale, syncedAt: githubSyncedAt, authError: githubAuthError } = useGithub();
+const { issues: jiraIssues, fetchJiraIssues, domain, isStale: jiraStale, syncedAt: jiraSyncedAt, authError: jiraAuthError } = useJira();
 const { calendarIds, primaryCalendarId, fetchGoogleCalendars, isConnected } = useGoogleCalendar();
 const { isSignedIn } = useUser();
 
@@ -46,8 +46,8 @@ watch(isSignedIn, (signedIn) => {
         <TaskForm />
       </div>
       <MoodleAssignments />
-      <GithubIssuesList :issues="githubIssues" :loading="loading" :is-stale="githubStale" :synced-at="githubSyncedAt" />
-      <JiraIssuesList :issues="jiraIssues" :loading="loading" :domain="domain" :is-stale="jiraStale" :synced-at="jiraSyncedAt" />
+      <GithubIssuesList :issues="githubIssues" :loading="loading" :is-stale="githubStale" :synced-at="githubSyncedAt" :auth-error="githubAuthError" />
+      <JiraIssuesList :issues="jiraIssues" :loading="loading" :domain="domain" :is-stale="jiraStale" :synced-at="jiraSyncedAt" :auth-error="jiraAuthError" />
       <GoogleCalendarEmbed
         :id="primaryCalendarId"
         :calendar-ids="calendarIds"

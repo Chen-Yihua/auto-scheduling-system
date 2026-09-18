@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import httpx
 
 # 取得所有行事曆列表
@@ -12,8 +12,8 @@ async def fetch_google_calendar_list(access_token: str) -> list:
 
 # 抓 7 天內的事件
 async def fetch_events_in_next_7_days(access_token: str, calendar_id: str) -> list:
-    now = datetime.utcnow().isoformat() + "Z"
-    next_week = (datetime.utcnow() + timedelta(days=7)).isoformat() + "Z"
+    now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    next_week = (datetime.now(timezone.utc) + timedelta(days=7)).isoformat().replace("+00:00", "Z")
     url = f"https://www.googleapis.com/calendar/v3/calendars/{calendar_id}/events"
     headers = {"Authorization": f"Bearer {access_token}"}
     params = {
@@ -33,8 +33,8 @@ async def fetch_freebusy(access_token: str, calendar_id: str) -> dict:
     """
     使用 Google Calendar FreeBusy API 取得未來 7 天該行事曆的忙碌時間區段
     """
-    now = datetime.utcnow().isoformat() + "Z"
-    next_week = (datetime.utcnow() + timedelta(days=7)).isoformat() + "Z"
+    now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    next_week = (datetime.now(timezone.utc) + timedelta(days=7)).isoformat().replace("+00:00", "Z")
     url = "https://www.googleapis.com/calendar/v3/freeBusy"
     headers = {"Authorization": f"Bearer {access_token}"}
     body = {

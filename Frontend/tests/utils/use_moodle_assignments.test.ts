@@ -66,9 +66,9 @@ describe('useMoodleAssignments', () => {
     const list = [
       {
         course_name: '課程 A',
-        assignment_title: 'Moodle 作業',
+        title: 'Moodle 作業',
         due_date: '2025-07-01',
-        assignment_url: 'https://moodle/hw1',
+        url: 'https://moodle/hw1',
       },
     ]
     fetchSpy.mockResolvedValueOnce(linked(true))
@@ -87,5 +87,36 @@ describe('useMoodleAssignments', () => {
     expect(fetchRawSpy).toHaveBeenCalledTimes(1)
     expect(ctx.isStale.value).toBe(true)
     expect(ctx.syncedAt.value).toBe('2026-09-03T00:00:00Z')
+  })
+
+  it('API 回傳 X-Auth-Error 時 authError 會是 true（帳密失效但仍有快取）', async () => {
+    fetchSpy.mockResolvedValueOnce(linked(true))
+    fetchRawSpy.mockResolvedValueOnce({
+      _data: [],
+      headers: new Headers({ 'X-Data-Stale': 'true', 'X-Auth-Error': 'true', 'X-Synced-At': '2026-09-02T00:00:00Z' }),
+    })
+
+    const useMoodleAssignments = await loadComposable()
+    const ctx = useMoodleAssignments()
+    await ctx.fetchMoodleAssignments()
+
+    expect(ctx.authError.value).toBe(true)
+  })
+
+  it('帳密失效且完全沒有快取（401）時，顯示授權失效的訊息', async () => {
+    fetchSpy.mockResolvedValueOnce(linked(true))
+    fetchRawSpy.mockRejectedValueOnce({ response: { status: 401 } })
+
+    const useMoodleAssignments = await loadComposable()
+    const ctx = useMoodleAssignments()
+    await ctx.fetchMoodleAssignments()
+
+    expect(ctx.authError.value).toBe(true)
+    expect(toastSpy.add).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'Moodle 帳號或密碼已失效，請重新連結帳號',
+        color: 'error',
+      }),
+    )
   })
 })

@@ -1,5 +1,5 @@
 import logging
-from fastapi import APIRouter, HTTPException, Depends, Request
+from fastapi import APIRouter, Depends, Request
 from crud import manualTask as manualTask_crud
 from crud.task_inference import infer_missing_task_fields
 from schemas.manualTask import ManualTaskInput, ManualTaskOut, ManualTaskUpdate
@@ -57,20 +57,20 @@ async def create_manual_task(
     new_task = await manualTask_crud.create_manual_task(task)
     return new_task
 
-# 查詢user所有任務
+# 查詢 user 所有任務
 @router.get("/me", response_model=list[ManualTaskOut])
 async def get_user_tasks(
     clerk_user: dict = Depends(get_current_clerk_user)
 ):
     """
-    取得目前登入者的所有任務（需驗證 JWT）
+    取得目前登入者的所有任務（需驗證 JWT）。
+    沒有任何任務是正常狀態（例如新使用者、或剛好清空清單），回空陣列，不是 404——
+    404 代表資源路徑不存在，這裡的路徑本身一直都存在，只是內容剛好是空的。
     """
     tasks = await manualTask_crud.get_manual_tasks_by_user_id(clerk_user["sub"])
-    if not tasks:
-        raise HTTPException(status_code=404, detail="No tasks found")
-    return tasks
+    return tasks or []
 
-# 查詢任務
+# 查詢指定任務
 @router.get("/{task_id}", response_model=ManualTaskOut)
 async def get_manual_task(
     task_id: str,
@@ -79,10 +79,7 @@ async def get_manual_task(
     """
     取得指定的任務（需驗證 JWT）
     """
-    task = await manualTask_crud.get_manual_task_by_id(task_id, clerk_user["sub"]) # 只能查自己的task
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
-    return task
+    return await manualTask_crud.get_manual_task_by_id(task_id, clerk_user["sub"]) # 只能查自己的task；查無此任務由 crud 直接 raise 404
 
 # 更新任務
 @router.put("/{task_id}", response_model=ManualTaskOut)
@@ -94,9 +91,7 @@ async def update_manual_task(
     """
     更新指定的任務（需驗證 JWT）
     """
-    task = await manualTask_crud.get_manual_task_by_id(task_id, clerk_user["sub"]) # 只能查自己的task
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
+    task = await manualTask_crud.get_manual_task_by_id(task_id, clerk_user["sub"]) # 只能查自己的task；查無此任務由 crud 直接 raise 404
     now = datetime.now(timezone.utc)
     task.update({"updated": now})
     # exclude_none：priority/duration 現在允許留空，若這次更新沒帶，
@@ -115,10 +110,6 @@ async def delete_manual_task(
     """
     刪除指定的任務（需驗證 JWT）
     """
-    task = await manualTask_crud.get_manual_task_by_id(task_id, clerk_user["sub"])
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
-    success = await manualTask_crud.delete_manual_task_by_id(task_id)
-    if not success:
-        raise HTTPException(status_code=404, detail="Delete failed")
+    await manualTask_crud.get_manual_task_by_id(task_id, clerk_user["sub"]) # 只能刪自己的task；查無此任務由 crud 直接 raise 404
+    await manualTask_crud.delete_manual_task_by_id(task_id)
     return {"task ID": task_id,"deleted": True}

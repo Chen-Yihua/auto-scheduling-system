@@ -2,7 +2,7 @@ import pytest
 from fastapi import status
 from httpx import AsyncClient
 from httpx._transports.asgi import ASGITransport
-from datetime import datetime
+from datetime import datetime, timezone
 
 from main import app
 from db.security import get_current_clerk_user
@@ -27,8 +27,8 @@ async def test_get_github_issues(monkeypatch):
                 "number": 999,
                 "title": "Fix bug",
                 "state": "open",
-                "created_at": datetime.utcnow().isoformat(),
-                "updated_at": datetime.utcnow().isoformat(),
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
                 "html_url": "https://github.com/user/repo/issues/999",
                 "user": {"login": "mock_user", "avatar_url": "https://mock.avatar"},
                 "labels": [{"name": "bug"}],

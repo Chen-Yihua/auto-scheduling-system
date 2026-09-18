@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException, Depends, Header, Request
 from svix.webhooks import Webhook, WebhookVerificationError
 
 from crud import user as user_crud
-from schemas.user import UserCreate, UserInDB, UserOut, UserUpdate
+from schemas.user import UserCreate, UserOut, UserUpdate
 from typing import Optional
 from db.security import get_current_clerk_user
 from motor.motor_asyncio import AsyncIOMotorDatabase
@@ -86,9 +86,7 @@ async def register_user(
 # 更新使用者（只能改自己，clerk_id 從 JWT 來，不接受路徑/body 指定別人）
 @router.put("/me")
 async def update_user(data: UserUpdate, clerk_user: dict = Depends(get_current_clerk_user)):
-    success = await user_crud.update_user_by_clerk_id(clerk_user['sub'], data)
-    if not success:
-        raise HTTPException(status_code=404, detail="User not found or no changes made")
+    await user_crud.update_user_by_clerk_id(clerk_user['sub'], data) # 找不到或沒有變更由 crud 直接 raise 404
     return {"success": True}
 
 # 刪除使用者（只能刪自己）
@@ -122,8 +120,13 @@ async def clerk_webhook(
     except json.JSONDecodeError:
         raise HTTPException(status_code=400, detail="Invalid JSON payload")
 
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Invalid JSON payload")
+
     event_type = payload.get("type")
-    data = payload.get("data", {})
+    data = payload.get("data")
+    if not isinstance(data, dict):
+        data = {}
 
     if event_type == "user.deleted":
         clerk_id = data.get("id")

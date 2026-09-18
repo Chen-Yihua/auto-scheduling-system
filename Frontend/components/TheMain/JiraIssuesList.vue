@@ -8,6 +8,7 @@ const props = defineProps<{
   domain?: string // 可選，從 props 傳入 Jira 網域
   isStale?: boolean
   syncedAt?: string | null
+  authError?: boolean
 }>()
 
 const openJiraIssue = (key: string) => {
@@ -19,7 +20,12 @@ const openJiraIssue = (key: string) => {
 <template>
   <div class="space-y-4">
     <h2 class="text-xl font-bold">Jira 指派任務</h2>
-    <StaleDataBanner :stale="isStale ?? false" :synced-at="syncedAt ?? null" />
+    <StaleDataBanner
+      :stale="isStale ?? false"
+      :synced-at="syncedAt ?? null"
+      :auth-error="authError ?? false"
+      platform-label="Jira"
+    />
 
     <div v-if="loading">
       <USkeleton class="h-24 mb-4" v-for="i in 3" :key="i" />
@@ -48,7 +54,7 @@ const openJiraIssue = (key: string) => {
           <span class="text-sm text-gray-600">{{ issue.type }}</span>
         </div>
 
-        <div class="font-medium mb-2">{{ issue.summary }}</div>
+        <div class="font-medium mb-2">{{ issue.title }}</div>
 
         <div class="flex items-center gap-2">
           <UAvatar v-if="issue.avatar" :src="issue.avatar" size="xs" />
@@ -57,7 +63,7 @@ const openJiraIssue = (key: string) => {
 
         <template #footer>
           <div class="text-xs text-gray-400">
-            更新於 {{ new Date(issue.updated).toLocaleDateString() }}
+            更新於 {{ new Date(issue.updated_at).toLocaleDateString() }}
           </div>
         </template>
       </UCard>

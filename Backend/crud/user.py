@@ -2,7 +2,7 @@ import logging
 
 from db.mongodb import db
 from schemas.user import UserCreate, UserUpdate
-from pymongo.errors import DuplicateKeyError
+from pymongo.errors import DuplicateKeyError, PyMongoError
 from fastapi import HTTPException
 
 logger = logging.getLogger(__name__)
@@ -15,7 +15,7 @@ async def create_user(user: UserCreate) -> dict:
         await db.users.insert_one(doc)
     except DuplicateKeyError:
         raise HTTPException(status_code=409, detail="User already exists")
-    except Exception:
+    except PyMongoError:
         logger.exception("Failed to create user, clerk_id=%s", doc["_id"])
         raise HTTPException(status_code=500, detail="建立使用者失敗，請稍後再試")
 
@@ -29,7 +29,7 @@ async def create_user(user: UserCreate) -> dict:
 async def get_user_by_clerk_id(clerk_id: str):
     try:
         user = await db.users.find_one({"_id": clerk_id})  # 直接查 _id，不轉 ObjectId
-    except Exception:
+    except PyMongoError:
         logger.exception("Failed to fetch user, clerk_id=%s", clerk_id)
         raise HTTPException(status_code=500, detail="查詢使用者失敗，請稍後再試")
 
@@ -43,27 +43,28 @@ async def get_user_by_clerk_id(clerk_id: str):
 # 可更新欄位限制交給 UserUpdate 這個 Pydantic model 把關（避免 mass assignment，
 # 例如竄改 clerk_id 或未來新增的敏感欄位），這裡只需把「沒填的欄位」過濾掉，
 # 讓部分更新不會被 None 覆蓋掉原本的值
-async def update_user_by_clerk_id(clerk_id: str, data: UserUpdate) -> bool:
+async def update_user_by_clerk_id(clerk_id: str, data: UserUpdate) -> None:
     filtered_data = data.model_dump(exclude_unset=True)
     if not filtered_data:
-        return False
+        raise HTTPException(status_code=404, detail="User not found or no changes made")
 
     try:
         result = await db.users.update_one({"_id": clerk_id}, {"$set": filtered_data})
-    except Exception:
+    except PyMongoError:
         logger.exception("Failed to update user, clerk_id=%s", clerk_id)
         raise HTTPException(status_code=500, detail="更新使用者失敗，請稍後再試")
 
     # 用 matched_count（有沒有找到這筆文件）而不是 modified_count（值是否真的變了）——
     # 如果新值跟舊值一樣，MongoDB 會判定沒有實際變更、modified_count 是 0，
     # 但這種情況使用者明明存在，不該被當成「找不到」回 404
-    return result.matched_count > 0
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="User not found or no changes made")
 
 # 刪除使用者
 async def delete_user_by_clerk_id(clerk_id: str) -> bool:
     try:
         result = await db.users.delete_one({"_id": clerk_id})
-    except Exception:
+    except PyMongoError:
         logger.exception("Failed to delete user, clerk_id=%s", clerk_id)
         raise HTTPException(status_code=500, detail="刪除使用者失敗，請稍後再試")
 

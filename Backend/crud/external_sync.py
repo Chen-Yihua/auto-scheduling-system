@@ -15,17 +15,19 @@ async def sync_platform_items(
     fetch_fn: Callable[[], Awaitable[list[dict]]],
     max_attempts: int = 2,
     retry_delay_seconds: float = 1.0,
-) -> tuple[list[dict], bool, Optional[datetime]]:
+) -> tuple[list[dict], bool, Optional[datetime], bool]:
     """
     GitHub / Jira / Moodle 共用的「即時優先、重試、DB 當最終退路」讀取邏輯：
-    - 即時抓資料成功 -> upsert 進 collection，回傳最新資料（stale=False）
+    - 即時抓資料成功 -> upsert 進 collection，回傳最新資料（stale=False, auth_error=False）
     - 即時抓資料失敗，且判斷為暫時性失敗（見 crud/errors.py 的 NonRetryableError）
       -> 用指數退避重試最多 max_attempts 次（預設抓不到只重試 1 次，總共 2 次嘗試）
     - 即時抓資料失敗，且判斷為 NonRetryableError（帳密/token 錯誤等一定會再次
       失敗的狀況）-> 不浪費時間重試，立刻放棄
     - 重試全部失敗，或遇到 NonRetryableError -> 退回 collection 裡該使用者
-      最後一次成功的快照（stale=True）
-    - 兩者都沒有 -> 讓最後一次的例外往外拋，由呼叫端決定要回什麼錯誤
+      最後一次成功的快照（stale=True）；如果是 NonRetryableError 導致的退回快取，
+      auth_error 會是 True，讓呼叫端知道「這不是暫時性問題，使用者的憑證可能已經失效」，
+      不是單純的網路抖動
+    - 兩者都沒有（沒有快取可退）-> 讓最後一次的例外往外拋，由呼叫端決定要回什麼錯誤
     """
     last_exc: Optional[Exception] = None
     items: Optional[list[dict]] = None
@@ -67,7 +69,8 @@ async def sync_platform_items(
         synced_at = cached[0].get("synced_at")
         for doc in cached:
             doc.pop("_id", None)
-        return cached, True, synced_at
+        auth_error = isinstance(last_exc, NonRetryableError)
+        return cached, True, synced_at, auth_error
 
     now = datetime.now(timezone.utc)
     for item in items:
@@ -87,4 +90,4 @@ async def sync_platform_items(
         id_field: {"$nin": current_ids},
     })
 
-    return items, False, now
+    return items, False, now, False

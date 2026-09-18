@@ -6,6 +6,7 @@ defineProps<{
   loading: boolean
   isStale?: boolean
   syncedAt?: string | null
+  authError?: boolean
 }>()
 
 const openIssue = (url: string) => {
@@ -16,7 +17,12 @@ const openIssue = (url: string) => {
 <template>
   <div class="space-y-4">
     <h2 class="text-xl font-bold">GitHub 參與項目</h2>
-    <StaleDataBanner :stale="isStale ?? false" :synced-at="syncedAt ?? null" />
+    <StaleDataBanner
+      :stale="isStale ?? false"
+      :synced-at="syncedAt ?? null"
+      :auth-error="authError ?? false"
+      platform-label="GitHub"
+    />
 
     <div v-if="loading">
       <USkeleton class="h-24 mb-4" v-for="i in 3" :key="i" />
@@ -69,7 +75,7 @@ const openIssue = (url: string) => {
 
         <template #footer>
           <div class="text-xs text-gray-500">
-            {{ issue.state }} · 更新於 {{ new Date(issue.updated_at ?? issue.created_at).toLocaleDateString() }}
+            {{ issue.status }} · 更新於 {{ new Date(issue.updated_at ?? issue.created_at).toLocaleDateString() }}
           </div>
         </template>
       </UCard>

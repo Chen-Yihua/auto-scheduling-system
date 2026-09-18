@@ -1,4 +1,5 @@
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from unittest.mock import AsyncMock, patch
 
@@ -142,11 +143,13 @@ def test_get_user_tasks_success(mock_get_tasks, fake_task_out):
 
 @patch("crud.manualTask.get_manual_tasks_by_user_id", new_callable=AsyncMock)
 def test_get_user_tasks_empty(mock_get_tasks):
+    # 沒有任何任務是正常狀態（新使用者、或剛好清空清單），該回 200 + 空陣列，
+    # 不是 404——不然使用者刪掉最後一個任務後，前端重新整理清單會誤判成錯誤
     mock_get_tasks.return_value = []
 
     response = client.get("/manual_tasks/me")
-    assert response.status_code == 404
-    assert response.json()["detail"] == "No tasks found"
+    assert response.status_code == 200
+    assert response.json() == []
 
 
 """
@@ -165,7 +168,8 @@ def test_get_manual_task_success(mock_get_task, fake_task_out):
 
 @patch("crud.manualTask.get_manual_task_by_id", new_callable=AsyncMock)
 def test_get_manual_task_not_found(mock_get_task):
-    mock_get_task.return_value = None  # 模擬查不到
+    # 查不到時，crud 現在直接 raise 404，不是回傳 None 讓 router 判斷
+    mock_get_task.side_effect = HTTPException(status_code=404, detail="Task not found")
 
     response = client.get("/manual_tasks/does-not-exist")
 
@@ -191,7 +195,8 @@ def test_update_manual_task_success(mock_update_task, mock_get_task, fake_task_o
 
 @patch("crud.manualTask.get_manual_task_by_id", new_callable=AsyncMock)
 def test_update_manual_task_not_found(mock_get_task, fake_task_out):
-    mock_get_task.return_value = None  # 查無此任務
+    # 查無此任務，crud 現在直接 raise 404
+    mock_get_task.side_effect = HTTPException(status_code=404, detail="Task not found")
 
     response = client.put("/manual_tasks/does-not-exist", json=fake_task_out.model_dump(mode="json"))
 
@@ -215,7 +220,8 @@ def test_delete_manual_task_success(mock_delete_task, mock_get_task, fake_task_o
 
 @patch("crud.manualTask.get_manual_task_by_id", new_callable=AsyncMock)
 def test_delete_manual_task_not_found(mock_get_task):
-    mock_get_task.return_value = None  # 查無任務
+    # 查無任務，crud 現在直接 raise 404
+    mock_get_task.side_effect = HTTPException(status_code=404, detail="Task not found")
 
     response = client.delete("/manual_tasks/task-999")
 

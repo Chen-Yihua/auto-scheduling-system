@@ -53,7 +53,10 @@ async def test_get_jira_issues_success(test_app):
     mock_db.jira_issues.update_one = AsyncMock()
     mock_db.jira_issues.delete_many = AsyncMock()
 
+    # linkedAccounts 查詢還在 router 裡，jira_issues 的存取現在包進 crud/jira.py 的
+    # sync_jira_issues，兩邊各自 import 了自己的 db，要一起 patch 才會用到同一個 mock
     with patch("routers.jira.db", mock_db), \
+         patch("crud.jira.db", mock_db), \
          patch("routers.jira.fetch_jira_user_issues", new_callable=AsyncMock) as mock_fetch:
         mock_fetch.return_value = mock_issues
 
@@ -61,7 +64,21 @@ async def test_get_jira_issues_success(test_app):
             response = await ac.get("/jira/issues")
 
         assert response.status_code == 200
-        assert response.json() == mock_issues
+        # transform_jira_item 把 Jira 原始 API 的多層巢狀拉平成單層，回傳的不再是
+        # mock_issues 那種 fields.xxx 巢狀格式
+        assert response.json() == [
+            {
+                "id": "1",
+                "key": "JIRA-1",
+                "title": "Test Issue 1",
+                "status": "In Progress",
+                "updated_at": "2024-01-01T00:00:00.000+0000",
+                "assignee": "User One",
+                "avatar": "",
+                "type": "Task",
+                "iconUrl": "",
+            }
+        ]
         assert response.headers["x-data-stale"] == "false"
 
 
@@ -94,6 +111,7 @@ async def test_get_jira_issues_internal_error(test_app):
     mock_db.jira_issues.find = MagicMock(return_value=mock_cursor)
 
     with patch("routers.jira.db", mock_db), \
+         patch("crud.jira.db", mock_db), \
          patch("routers.jira.fetch_jira_user_issues", side_effect=Exception("boom!")), \
          patch("crud.external_sync.asyncio.sleep", new_callable=AsyncMock):
 

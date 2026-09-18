@@ -33,37 +33,27 @@ const isCollapsed = ref(true)
 </script>
 
 <template>
-  <!-- 這裡永遠只放一張卡片，而且固定嵌在右側窄欄位裡——sm/lg 那些多欄
-  斷點是照「瀏覽器視窗」寬度判斷，不是這個容器的寬度，桌面版視窗一寬就會
-  被硬切成 3 欄、字擠成一長條，所以這裡不用任何響應式多欄設定 -->
-  <div class="grid grid-cols-1 gap-4">
+  <UCard>
+    <template #header>
+      <div class="flex items-center gap-2">
+        <UIcon name="i-lucide-flame" class="w-5 h-5 text-orange-500" />
+        <span class="text-lg font-semibold text-gray-900 dark:text-white">Hacker News</span>
+      </div>
+    </template>
+
     <!-- Loading Skeleton -->
-    <USkeleton v-if="isLoading" class="h-80 rounded-lg" />
-    <!-- Error Card -->
-    <UCard
+    <USkeleton v-if="isLoading" class="h-64 rounded-lg" />
+
+    <!-- Error -->
+    <p
       v-else-if="error || !stories || stories.length === 0"
-      color="red"
-      icon="i-lucide-alert-circle"
-      class="mb-4"
+      class="text-sm text-gray-500 dark:text-gray-400 text-center py-6"
     >
-      <template #header>
-        <p class="font-semibold text-red-700">
-          暫時無法載入新聞，請稍後再試。
-        </p>
-      </template>
-    </UCard>
+      暫時無法載入新聞，請稍後再試。
+    </p>
 
     <!-- News List -->
-
-    <UCard v-else class="mb-4 " :error="error">
-      <template #header>
-        <div class="flex items-center gap-2">
-          <UIcon name="i-lucide-flame" class="w-5 h-5 text-orange-500" />
-          <p class="text-lg font-semibold text-gray-900 dark:text-white">
-            Hacker News
-          </p>
-        </div>
-      </template>
+    <template v-else>
       <!-- 顯示前三則新聞 -->
       <ul class="space-y-1">
         <li
@@ -129,7 +119,6 @@ const isCollapsed = ref(true)
           </ul>
         </template>
       </UCollapsible>
-    </UCard>
-  </div>
-
+    </template>
+  </UCard>
 </template>

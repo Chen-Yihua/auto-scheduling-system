@@ -16,11 +16,14 @@ const openIssue = (url: string) => {
 </script>
 
 <template>
-  <div class="space-y-4">
-    <h2 class="flex items-center gap-2 text-lg font-semibold text-gray-900 dark:text-white">
-      <UIcon name="mdi:github" class="w-5 h-5" />
-      GitHub 參與項目
-    </h2>
+  <UCard>
+    <template #header>
+      <div class="flex items-center gap-2">
+        <UIcon name="mdi:github" class="w-5 h-5" />
+        <span class="text-lg font-semibold text-gray-900 dark:text-white">GitHub 參與項目</span>
+      </div>
+    </template>
+
     <StaleDataBanner
       :stale="isStale ?? false"
       :synced-at="syncedAt ?? null"
@@ -35,7 +38,7 @@ const openIssue = (url: string) => {
     <!-- 尚未綁定 GitHub 帳號 -->
     <div
       v-else-if="notLinked"
-      class="text-center text-sm text-gray-500 dark:text-gray-400 py-8 px-4 border border-dashed border-gray-300 dark:border-gray-700 rounded-lg"
+      class="text-center text-sm text-gray-500 dark:text-gray-400 py-6"
     >
       尚未綁定 GitHub 帳號，請先設定
     </div>
@@ -95,9 +98,9 @@ const openIssue = (url: string) => {
 
     <div
       v-else
-      class="text-center text-sm text-gray-500 dark:text-gray-400 py-8 px-4 border border-dashed border-gray-300 dark:border-gray-700 rounded-lg"
+      class="text-center text-sm text-gray-500 dark:text-gray-400 py-6"
     >
       尚無資料
     </div>
-  </div>
+  </UCard>
 </template>

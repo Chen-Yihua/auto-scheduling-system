@@ -81,7 +81,13 @@ describe('JiraIssuesList.vue', () => {
     expect(wrapper.text()).toContain('ISSUE-1')
     expect(wrapper.text()).toContain('Fix the bug')
 
-    await wrapper.find('.u-card-stub').trigger('click')
+    // 整個區塊現在也包在外層的 UCard 裡（跟 Hacker News 一樣的外框），
+    // 所以畫面上有兩層 .u-card-stub：index 0 是外層的區塊容器（文字內容
+    // 涵蓋整個區塊，也會包含 'ISSUE-1'，不能用文字比對來分辨），
+    // index 1 才是真正顯示這筆 issue 內容的那一張卡片
+    const cards = wrapper.findAll('.u-card-stub')
+    expect(cards.length).toBe(2)
+    await cards[1].trigger('click')
 
     expect(openSpy).toHaveBeenCalledWith(
       'https://my-team.atlassian.net/browse/ISSUE-1',

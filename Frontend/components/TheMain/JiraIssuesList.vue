@@ -19,11 +19,14 @@ const openJiraIssue = (key: string) => {
 </script>
 
 <template>
-  <div class="space-y-4">
-    <h2 class="flex items-center gap-2 text-lg font-semibold text-gray-900 dark:text-white">
-      <UIcon name="mdi:jira" class="w-5 h-5 text-blue-500" />
-      Jira 指派任務
-    </h2>
+  <UCard>
+    <template #header>
+      <div class="flex items-center gap-2">
+        <UIcon name="mdi:jira" class="w-5 h-5 text-blue-500" />
+        <span class="text-lg font-semibold text-gray-900 dark:text-white">Jira 指派任務</span>
+      </div>
+    </template>
+
     <StaleDataBanner
       :stale="isStale ?? false"
       :synced-at="syncedAt ?? null"
@@ -38,7 +41,7 @@ const openJiraIssue = (key: string) => {
     <!-- 尚未綁定 Jira 帳號 -->
     <div
       v-else-if="notLinked"
-      class="text-center text-sm text-gray-500 dark:text-gray-400 py-8 px-4 border border-dashed border-gray-300 dark:border-gray-700 rounded-lg"
+      class="text-center text-sm text-gray-500 dark:text-gray-400 py-6"
     >
       尚未綁定 Jira 帳號，請先設定
     </div>
@@ -83,9 +86,9 @@ const openJiraIssue = (key: string) => {
 
     <div
       v-else
-      class="text-center text-sm text-gray-500 dark:text-gray-400 py-8 px-4 border border-dashed border-gray-300 dark:border-gray-700 rounded-lg"
+      class="text-center text-sm text-gray-500 dark:text-gray-400 py-6"
     >
       尚無資料
     </div>
-  </div>
+  </UCard>
 </template>

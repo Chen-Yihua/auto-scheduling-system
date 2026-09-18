@@ -3,6 +3,7 @@ from db.mongodb import db
 from fastapi import HTTPException
 from datetime import datetime, timezone
 import os, httpx
+from pymongo.errors import PyMongoError
 from services.google_calendar import (
     fetch_google_calendar_list,
     fetch_freebusy,
@@ -29,19 +30,31 @@ async def save_google_calendar_token(clerk_id: str, access_token: str, refresh_t
         "created_at": datetime.now(timezone.utc),
         "status": "connected",
     }
-    await db.googleCalendarTokens.update_one({"_id": clerk_id}, {"$set": doc}, upsert=True)
+    try:
+        await db.googleCalendarTokens.update_one({"_id": clerk_id}, {"$set": doc}, upsert=True)
+    except PyMongoError:
+        logger.exception("儲存 Google Calendar token 失敗")
+        raise HTTPException(status_code=503, detail="資料庫暫時無法使用，請稍後再試")
     return {"message": "Google Token 儲存成功"}
 
 # 只查 DB、不打 Google API 的輕量檢查，給前端在真的呼叫 /oauth/calendars
 # 之前先確認「有沒有連接過」，跟 github/jira/moodle 各自的 linked-accounts
 # 檢查一樣，避免還沒授權就白打一次注定失敗的 Google API 請求
 async def is_google_calendar_connected(clerk_id: str) -> bool:
-    doc = await db.googleCalendarTokens.find_one({"_id": clerk_id})
+    try:
+        doc = await db.googleCalendarTokens.find_one({"_id": clerk_id})
+    except PyMongoError:
+        logger.exception("查詢 Google Calendar 連接狀態失敗")
+        raise HTTPException(status_code=503, detail="資料庫暫時無法使用，請稍後再試")
     return bool(doc and doc.get("access_token"))
 
 # 取得 token
 async def get_google_calendar_token(clerk_id: str) -> str:
-    doc = await db.googleCalendarTokens.find_one({"_id": clerk_id})
+    try:
+        doc = await db.googleCalendarTokens.find_one({"_id": clerk_id})
+    except PyMongoError:
+        logger.exception("查詢 Google Calendar token 失敗")
+        raise HTTPException(status_code=503, detail="資料庫暫時無法使用，請稍後再試")
     if not doc or not doc.get("access_token"):
         # 400（尚未設定）跟 401（憑證失效，需要重新授權）分開，
         # 跟 github.py/jira.py「尚未連結帳號」統一用 400 的慣例對齊，
@@ -55,7 +68,11 @@ async def refresh_google_calendar_token(clerk_id: str) -> str:
     並把新的 token 寫回 DB。最後回傳新的 access_token。
     """
     # 從 DB 拿 refresh_token
-    doc = await db.googleCalendarTokens.find_one({"_id": clerk_id})
+    try:
+        doc = await db.googleCalendarTokens.find_one({"_id": clerk_id})
+    except PyMongoError:
+        logger.exception("查詢 Google Calendar refresh token 失敗")
+        raise HTTPException(status_code=503, detail="資料庫暫時無法使用，請稍後再試")
     if not doc or not doc.get("refresh_token"):
         raise HTTPException(status_code=401, detail="沒有可用的 Refresh Token，請重新授權")
     refresh_token = doc["refresh_token"]
@@ -68,14 +85,18 @@ async def refresh_google_calendar_token(clerk_id: str) -> str:
         "grant_type":    "refresh_token",
         "refresh_token": refresh_token,
     }
-    async with httpx.AsyncClient() as client:
-        res = await client.post(token_url, data=payload)
-        logger.debug("Google token refresh response status=%s", res.status_code)
-        if res.status_code != 200:
-            # 失敗回應是 Google 的錯誤代碼/描述，不含 token，可以安全記錄方便除錯
-            logger.warning("Google token refresh failed: %s", res.text)
-        res.raise_for_status()
-        token_data = res.json()
+    try:
+        async with httpx.AsyncClient() as client:
+            res = await client.post(token_url, data=payload)
+            logger.debug("Google token refresh response status=%s", res.status_code)
+            if res.status_code != 200:
+                # 失敗回應是 Google 的錯誤代碼/描述，不含 token，可以安全記錄方便除錯
+                logger.warning("Google token refresh failed: %s", res.text)
+            res.raise_for_status()
+            token_data = res.json()
+    except httpx.RequestError as e:
+        logger.error("連線 Google Token Endpoint 失敗: %s", e)
+        raise HTTPException(status_code=502, detail="無法連線至 Google，請稍後再試")
 
     # 擷取新的 access_token（與可能新的 refresh_token）
     access_token  = token_data.get("access_token")
@@ -85,16 +106,20 @@ async def refresh_google_calendar_token(clerk_id: str) -> str:
         raise HTTPException(status_code=400, detail="Google 刷新 Token 失敗")
 
     # 把新的 Token 寫回 DB
-    await db.googleCalendarTokens.update_one(
-        {"_id": clerk_id},
-        {
-            "$set": {
-                "access_token":  access_token,
-                "refresh_token": new_rt,
-                "updated_at":    datetime.now(timezone.utc)
+    try:
+        await db.googleCalendarTokens.update_one(
+            {"_id": clerk_id},
+            {
+                "$set": {
+                    "access_token":  access_token,
+                    "refresh_token": new_rt,
+                    "updated_at":    datetime.now(timezone.utc)
+                }
             }
-        }
-    )
+        )
+    except PyMongoError:
+        logger.exception("更新 Google Calendar token 失敗")
+        raise HTTPException(status_code=503, detail="資料庫暫時無法使用，請稍後再試")
     logger.info("Refreshed Google Calendar token for clerk_id=%s", clerk_id)
     return access_token
 
@@ -124,12 +149,19 @@ async def get_free_slots_for_user(clerk_id: str) -> list[dict]:
             calendars = await fetch_google_calendar_list(access_token)
         else:
             raise HTTPException(status_code=400, detail="取得行事曆列表失敗")
+    except httpx.RequestError as e:
+        logger.error("連線 Google Calendar API 失敗: %s", e)
+        raise HTTPException(status_code=502, detail="無法連線至 Google，請稍後再試")
 
     primary = next((c for c in calendars if c.get("primary")), None)
     if not primary:
         raise HTTPException(status_code=404, detail="找不到 primary calendar")
 
-    fb_response = await fetch_freebusy(access_token, primary["id"])
+    try:
+        fb_response = await fetch_freebusy(access_token, primary["id"])
+    except httpx.RequestError as e:
+        logger.error("連線 Google FreeBusy API 失敗: %s", e)
+        raise HTTPException(status_code=502, detail="無法連線至 Google，請稍後再試")
 
     window_start = fb_response["timeMin"]
     window_end = fb_response["timeMax"]

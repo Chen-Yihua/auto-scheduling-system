@@ -1,6 +1,7 @@
 import logging
 import os
 
+import httpx
 import pytest
 
 import logging_config
@@ -76,10 +77,10 @@ async def test_create_linked_account_logs_debug(monkeypatch, caplog):
 
 
 @pytest.mark.asyncio
-async def test_oauth_callback_logs_exception_on_failure(monkeypatch, caplog):
-    async def mock_get_current_clerk_user():
-        return {"sub": "uid123"}
-
+async def test_oauth_callback_logs_error_and_returns_502_when_google_unreachable(monkeypatch, caplog):
+    # 連不上 Google（DNS/逾時/連線被拒...）跟「Google 拒絕這個授權碼」是兩種不同情況，
+    # 不該再用同一個籠統的 except Exception 蓋成同一句訊息——這裡模擬的是前者，
+    # httpx 真正連不上時丟的是 httpx.RequestError 的子類別，不是隨便一個 Exception
     class FailingClient:
         async def __aenter__(self):
             return self
@@ -88,7 +89,7 @@ async def test_oauth_callback_logs_exception_on_failure(monkeypatch, caplog):
             pass
 
         async def post(self, *a, **k):
-            raise Exception("Google 掛了")
+            raise httpx.ConnectError("Google 掛了")
 
     monkeypatch.setattr(oauth_router_mod.httpx, "AsyncClient", lambda: FailingClient())
 
@@ -97,14 +98,14 @@ async def test_oauth_callback_logs_exception_on_failure(monkeypatch, caplog):
     payload = oauth_router_mod.OAuthCallbackPayload(code="fake-code")
 
     with caplog.at_level(logging.ERROR, logger="routers.oauth"):
-        with pytest.raises(HTTPException):
+        with pytest.raises(HTTPException) as exc_info:
             await oauth_router_mod.oauth_callback(
                 payload=payload, clerk_user={"sub": "uid123"}
             )
 
-    assert any("Google OAuth callback failed" in record.message for record in caplog.records)
-    # logger.exception 應該連 traceback 都一起記下來
-    assert any(record.exc_info for record in caplog.records)
+    # 502 = 連不上上游服務，跟「授權碼無效」的 400 分開
+    assert exc_info.value.status_code == 502
+    assert any("連線 Google Token Endpoint 失敗" in record.message for record in caplog.records)
 
 
 @pytest.mark.asyncio

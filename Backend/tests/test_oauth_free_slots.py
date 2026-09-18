@@ -1,6 +1,7 @@
 import pytest
 import httpx
 from fastapi import HTTPException
+from pymongo.errors import PyMongoError
 
 import cache
 import crud.oauth as oauth_crud
@@ -110,6 +111,52 @@ async def test_get_free_slots_raises_400_when_not_connected(monkeypatch):
         await oauth_crud.get_free_slots_for_user("uid123")
 
     assert exc_info.value.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_get_google_calendar_token_raises_503_when_db_down(monkeypatch):
+    async def mock_find_one(query):
+        raise PyMongoError("connection lost")
+
+    monkeypatch.setattr(oauth_crud.db.googleCalendarTokens, "find_one", mock_find_one)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await oauth_crud.get_google_calendar_token("uid123")
+
+    assert exc_info.value.status_code == 503
+
+
+@pytest.mark.asyncio
+async def test_is_google_calendar_connected_raises_503_when_db_down(monkeypatch):
+    async def mock_find_one(query):
+        raise PyMongoError("connection lost")
+
+    monkeypatch.setattr(oauth_crud.db.googleCalendarTokens, "find_one", mock_find_one)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await oauth_crud.is_google_calendar_connected("uid123")
+
+    assert exc_info.value.status_code == 503
+
+
+@pytest.mark.asyncio
+async def test_get_free_slots_raises_502_when_google_unreachable(monkeypatch):
+    # 網路連不上 Google（DNS/逾時/連線被拒...）是 httpx.RequestError，
+    # 跟「Google 有回應但狀態碼是錯的」httpx.HTTPStatusError 是不同情況，
+    # 502 = 連不上上游服務，不該跟其他情況共用同一個 400
+    async def mock_find_one(query):
+        return {"_id": "uid123", "access_token": "valid-token"}
+
+    async def mock_fetch_calendar_list(token):
+        raise httpx.ConnectError("Google 掛了")
+
+    monkeypatch.setattr(oauth_crud.db.googleCalendarTokens, "find_one", mock_find_one)
+    monkeypatch.setattr(oauth_crud, "fetch_google_calendar_list", mock_fetch_calendar_list)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await oauth_crud.get_free_slots_for_user("uid123")
+
+    assert exc_info.value.status_code == 502
 
 
 @pytest.mark.asyncio

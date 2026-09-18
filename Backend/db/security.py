@@ -27,8 +27,13 @@ clerk_config = ClerkConfig(
     auto_error=True # 自動回 403 / 401，未傳或驗證失敗時
 )
 
-# 產生一個 HTTP Bearer 依賴性
-clerk_auth = ClerkHTTPBearer(config=clerk_config)
+# 暫時性診斷開關：fastapi_clerk_auth 預設會把驗證過程中的任何例外
+# （JWKS 抓不到、token 過期、issuer 不符、簽章錯誤…）都吞掉，一律回覆
+# 同一句「403 Forbidden」，完全看不出真正原因。開了 debug_mode 之後，
+# 這個例外會被重新丟出來（會變成 500，但後端終端機會印出完整 traceback），
+# 幫助我們找到 403 backlog 的根本原因。問題排除後記得改回 False，
+# 避免正式環境把內部例外細節洩漏在錯誤回應裡。
+clerk_auth = ClerkHTTPBearer(config=clerk_config, debug_mode=True)
 
 
 

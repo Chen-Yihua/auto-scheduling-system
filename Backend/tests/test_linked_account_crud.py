@@ -361,8 +361,8 @@ async def test_delete_linked_account_success(monkeypatch):
         return type("Mock", (), {"deleted_count": 1})()
 
     monkeypatch.setattr(linked_mod.db.linkedAccounts, "delete_one", mock_delete_one)
-    result = await delete_linked_account_by_id("uid123_github")
-    assert result is True
+    # 成功時不該 raise，函式本身沒有回傳值需要檢查
+    await delete_linked_account_by_id("uid123_github")
 
 
 @pytest.mark.asyncio
@@ -371,8 +371,9 @@ async def test_delete_linked_account_not_found(monkeypatch):
         return type("Mock", (), {"deleted_count": 0})()
 
     monkeypatch.setattr(linked_mod.db.linkedAccounts, "delete_one", mock_delete_one)
-    result = await delete_linked_account_by_id("uid123_github")
-    assert result is False
+    with pytest.raises(HTTPException) as exc_info:
+        await delete_linked_account_by_id("uid123_github")
+    assert exc_info.value.status_code == 404
 
 
 # ========== 第三方帳號驗證 API ==========

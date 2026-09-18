@@ -28,14 +28,14 @@ async def test_get_current_linked_accounts(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_get_current_linked_accounts_empty(monkeypatch):
+    # 沒有任何綁定帳號是正常狀態，該回空陣列，不是 404
     async def mock_get_accounts(clerk_id):
         return []
 
     monkeypatch.setattr(crud_mod, "get_linked_accounts_by_clerk_id", mock_get_accounts)
 
-    with pytest.raises(HTTPException) as exc_info:
-        await router.get_current_linked_accounts(clerk_user=mock_user)
-    assert exc_info.value.status_code == 404
+    result = await router.get_current_linked_accounts(clerk_user=mock_user)
+    assert result == []
 
 
 @pytest.mark.asyncio
@@ -101,7 +101,7 @@ async def test_update_linked_account_fail(monkeypatch):
 @pytest.mark.asyncio
 async def test_delete_linked_account(monkeypatch):
     async def mock_delete(composite_id):
-        return True
+        return None  # 成功時 crud 不回傳東西，沒 raise 就代表成功
 
     monkeypatch.setattr(crud_mod, "delete_linked_account_by_id", mock_delete)
 
@@ -114,8 +114,9 @@ async def test_delete_linked_account(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_delete_linked_account_fail(monkeypatch):
+    # 查無此帳號，現在是 crud 自己 raise 404，不是回傳 False 讓 router 判斷
     async def mock_delete(composite_id):
-        return False
+        raise HTTPException(status_code=404, detail="Linked account not found")
 
     monkeypatch.setattr(crud_mod, "delete_linked_account_by_id", mock_delete)
 

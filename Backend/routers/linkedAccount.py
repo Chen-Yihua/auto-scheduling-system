@@ -12,10 +12,9 @@ router = APIRouter(prefix="/user/linked-accounts", tags=["linked-accounts"])
 async def get_current_linked_accounts(
     clerk_user: dict = Depends(get_current_clerk_user)
 ):
+    # 沒有任何綁定帳號是正常狀態（例如剛註冊、還沒連結任何平台），回空陣列，不是 404
     accounts = await linkedAccount_crud.get_linked_accounts_by_clerk_id(clerk_user["sub"])
-    if not accounts:
-        raise HTTPException(status_code=404, detail="No linked accounts found")
-    return accounts
+    return accounts or []
 
 # 註冊（新增）綁定帳號
 # 平台是 GitHub/Jira 會真的打一次驗證 API，平台是 Moodle 會真的開一次 Selenium
@@ -64,8 +63,6 @@ async def delete_linked_account(
     clerk_id = clerk_user["sub"]
     composite_id = f"{clerk_id}_{platform}"
 
-    success = await linkedAccount_crud.delete_linked_account_by_id(composite_id)
-    if not success:
-        raise HTTPException(status_code=404, detail="Linked account not found")
+    await linkedAccount_crud.delete_linked_account_by_id(composite_id) # 查無此帳號由 crud 直接 raise 404
     return {"deleted": True}
 

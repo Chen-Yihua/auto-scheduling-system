@@ -242,8 +242,13 @@ async def update_linked_account_by_clerk_id(clerk_id: str, platform: str, data: 
 
 # 刪除 Linked Account
 async def delete_linked_account_by_id(composite_id: str):
-    result = await db.linkedAccounts.delete_one({"_id": composite_id})
-    return result.deleted_count > 0
+    try:
+        result = await db.linkedAccounts.delete_one({"_id": composite_id})
+    except PyMongoError as e:
+        logger.error("DB error while deleting linked account: %s", e)
+        raise HTTPException(status_code=503, detail="資料庫暫時無法使用，請稍後再試")
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Linked account not found")
 
 
 # 檢查 Linked Account 是否存在 （Github）

@@ -71,4 +71,14 @@ describe('useGoogleCalendar composable', () => {
       }),
     )
   })
+
+  it('尚未連接（400）時，isConnected 為 false 但不跳錯誤 toast', async () => {
+    fetchSpy.mockRejectedValueOnce({ response: { status: 400 } })
+
+    const ctx = useGoogleCalendar()
+    await ctx.fetchGoogleCalendars()
+
+    expect(ctx.isConnected.value).toBe(false)
+    expect(toastSpy.add).not.toHaveBeenCalled()
+  })
 })

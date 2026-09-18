@@ -98,7 +98,9 @@ async def test_get_free_slots_raises_404_when_no_primary_calendar(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_get_free_slots_raises_401_when_not_connected(monkeypatch):
+async def test_get_free_slots_raises_400_when_not_connected(monkeypatch):
+    # 尚未連接 Google Calendar 用 400（跟 github.py/jira.py「尚未連結帳號」對齊），
+    # 跟「連過但憑證失效」的 401 分開
     async def mock_find_one(query):
         return None
 
@@ -107,7 +109,7 @@ async def test_get_free_slots_raises_401_when_not_connected(monkeypatch):
     with pytest.raises(HTTPException) as exc_info:
         await oauth_crud.get_free_slots_for_user("uid123")
 
-    assert exc_info.value.status_code == 401
+    assert exc_info.value.status_code == 400
 
 
 @pytest.mark.asyncio

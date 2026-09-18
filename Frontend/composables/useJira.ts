@@ -1,6 +1,6 @@
 import { useAuth } from '@clerk/vue'
 import type { JiraIssue } from '@/types/jira'
-import { getFriendlyErrorTitle, isAuthError } from '@/utils/errorMessages'
+import { getFriendlyErrorTitle, isAuthError, isNotLinkedError } from '@/utils/errorMessages'
 
 export const useJira = () => {
   const toast = useToast()
@@ -12,6 +12,7 @@ export const useJira = () => {
   const isStale = ref(false)
   const syncedAt = ref<string | null>(null)
   const authError = ref(false)
+  const notLinked = ref(false)
   const { keys, fetchKeys } = useLinkedAccount()
 
   const fetchJiraIssues = async () => {
@@ -35,6 +36,18 @@ export const useJira = () => {
       syncedAt.value = res.headers.get('X-Synced-At')
       authError.value = res.headers.get('X-Auth-Error') === 'true'
     } catch (err) {
+      // 還沒連結 Jira 帳號是正常狀態，不是抓取失敗，不用嚇使用者看到紅色錯誤
+      if (isNotLinkedError(err)) {
+        notLinked.value = true
+        toast.add({
+          title: '尚未連結 Jira 帳號',
+          description: '請點擊右上角頭像 → Key 分頁連結帳號',
+          color: 'warning',
+          icon: 'i-lucide-info',
+        })
+        return
+      }
+
       console.error('Jira 抓取失敗', err)
       // 後端在 token 失效、且完全沒有快取可退時會回 401；有快取的話後端會正常回 200
       // 加 X-Auth-Error header，不會走到這個 catch
@@ -49,5 +62,5 @@ export const useJira = () => {
     }
   }
 
-  return { issues, fetchJiraIssues, domain, isStale, syncedAt, authError }
+  return { issues, fetchJiraIssues, domain, isStale, syncedAt, authError, notLinked }
 }

@@ -1,6 +1,6 @@
 import { useAuth } from '@clerk/vue';
 import type { CalendarListEntry } from '@/types/google'; // 你可以自行定義這型別
-import { getFriendlyErrorTitle } from '@/utils/errorMessages';
+import { getFriendlyErrorTitle, isNotLinkedError } from '@/utils/errorMessages';
 
 export const useGoogleCalendar = () => {
   const toast = useToast();
@@ -37,6 +37,10 @@ export const useGoogleCalendar = () => {
     } catch (error) {
       isConnected.value = false;
       calendars.value = [];
+
+      // 還沒連接 Google Calendar 是正常狀態，畫面上本來就有一顆隨時看得到的
+      // 「連接 Google Calendar」按鈕，不用再跳錯誤通知重複提醒
+      if (isNotLinkedError(error)) return;
 
       toast.add({
         title: getFriendlyErrorTitle(error, 'Google Calendar 抓取失敗'),

@@ -123,4 +123,19 @@ describe('useJira composable', () => {
       }),
     )
   })
+
+  it('尚未連結帳號（400）時，顯示溫和提示，不是紅色錯誤', async () => {
+    fetchRawSpy.mockRejectedValueOnce({ response: { status: 400 } })
+
+    const { fetchJiraIssues, notLinked } = useJira()
+    await fetchJiraIssues()
+
+    expect(notLinked.value).toBe(true)
+    expect(toastSpy.add).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: '尚未連結 Jira 帳號',
+        color: 'warning',
+      }),
+    )
+  })
 })

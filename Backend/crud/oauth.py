@@ -36,7 +36,10 @@ async def save_google_calendar_token(clerk_id: str, access_token: str, refresh_t
 async def get_google_calendar_token(clerk_id: str) -> str:
     doc = await db.googleCalendarTokens.find_one({"_id": clerk_id})
     if not doc or not doc.get("access_token"):
-        raise HTTPException(status_code=401, detail="尚未連接 Google Calendar")
+        # 400（尚未設定）跟 401（憑證失效，需要重新授權）分開，
+        # 跟 github.py/jira.py「尚未連結帳號」統一用 400 的慣例對齊，
+        # 前端才能區分「本來就沒接」跟「接過但失效了」兩種情況
+        raise HTTPException(status_code=400, detail="尚未連接 Google Calendar")
     return doc["access_token"]
 
 async def refresh_google_calendar_token(clerk_id: str) -> str:

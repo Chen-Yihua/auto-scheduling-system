@@ -112,7 +112,6 @@ export function useTaskForm() {
             if (!token) {
                 throw new Error('JWT token is missing or invalid');
             }
-            console.log('token', token)
             const res = await $fetch<Task[]>(`${BASE_URL}/manual_tasks/me`, {
                 method: 'GET',
                 headers: { Authorization: `Bearer ${token}`}

@@ -24,3 +24,13 @@ export function isAuthError(error: unknown): boolean {
   const status = err?.response?.status ?? err?.status ?? err?.statusCode
   return status === 401
 }
+
+// 後端在使用者「根本還沒連結」這個平台的帳號時（GitHub/Jira/Google Calendar），
+// 一律回 400——用來跟真正的抓取失敗區分：這是正常、預期中的狀態（新使用者、
+// 或只是還沒設定），不該用跟系統錯誤一樣的紅色警示嚇使用者，只需要溫和地
+// 告訴他去哪裡連結。
+export function isNotLinkedError(error: unknown): boolean {
+  const err = error as any
+  const status = err?.response?.status ?? err?.status ?? err?.statusCode
+  return status === 400
+}

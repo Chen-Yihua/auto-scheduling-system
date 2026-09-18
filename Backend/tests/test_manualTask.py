@@ -142,11 +142,13 @@ def test_get_user_tasks_success(mock_get_tasks, fake_task_out):
 
 @patch("crud.manualTask.get_manual_tasks_by_user_id", new_callable=AsyncMock)
 def test_get_user_tasks_empty(mock_get_tasks):
+    # 沒有任何任務是正常狀態（新使用者、或剛好清空清單），該回 200 + 空陣列，
+    # 不是 404——不然使用者刪掉最後一個任務後，前端重新整理清單會誤判成錯誤
     mock_get_tasks.return_value = []
 
     response = client.get("/manual_tasks/me")
-    assert response.status_code == 404
-    assert response.json()["detail"] == "No tasks found"
+    assert response.status_code == 200
+    assert response.json() == []
 
 
 """

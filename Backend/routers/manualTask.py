@@ -57,20 +57,20 @@ async def create_manual_task(
     new_task = await manualTask_crud.create_manual_task(task)
     return new_task
 
-# 查詢user所有任務
+# 查詢 user 所有任務
 @router.get("/me", response_model=list[ManualTaskOut])
 async def get_user_tasks(
     clerk_user: dict = Depends(get_current_clerk_user)
 ):
     """
-    取得目前登入者的所有任務（需驗證 JWT）
+    取得目前登入者的所有任務（需驗證 JWT）。
+    沒有任何任務是正常狀態（例如新使用者、或剛好清空清單），回空陣列，不是 404——
+    404 代表資源路徑不存在，這裡的路徑本身一直都存在，只是內容剛好是空的。
     """
     tasks = await manualTask_crud.get_manual_tasks_by_user_id(clerk_user["sub"])
-    if not tasks:
-        raise HTTPException(status_code=404, detail="No tasks found")
-    return tasks
+    return tasks or []
 
-# 查詢任務
+# 查詢指定任務
 @router.get("/{task_id}", response_model=ManualTaskOut)
 async def get_manual_task(
     task_id: str,

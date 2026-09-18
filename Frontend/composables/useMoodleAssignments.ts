@@ -1,9 +1,10 @@
 // composables/useMoodleAssignments.ts
 import { ref } from 'vue';
 import { useAuth } from '@clerk/vue';
-import { useRuntimeConfig } from '#imports';
-import { useToast } from '#imports';
+import { useRuntimeConfig, useToast } from '#imports';
 import { getFriendlyErrorTitle, isAuthError } from '@/utils/errorMessages';
+import type { MoodleAssignment } from '@/types/moodle';
+import type { LinkedAccountRecord } from '@/types/linkedAccount';
 
 export const useMoodleAssignments = () => {
   const config = useRuntimeConfig();
@@ -11,7 +12,7 @@ export const useMoodleAssignments = () => {
   const toast = useToast();
   const { isLoaded, getToken } = useAuth();
 
-  const moodleAssignments = ref<any[]>([]);
+  const moodleAssignments = ref<MoodleAssignment[]>([]);
   const loading = ref(false); // 等待排蟲爬完
   const hasAccount = ref(false); // 是否有 moodle 帳號
   const isStale = ref(false);
@@ -21,13 +22,13 @@ export const useMoodleAssignments = () => {
   // 檢查帳密
   const checkMoodleAccount = async (): Promise<boolean> => {
     const token = await getToken.value();
-    const linkedAccounts = await $fetch<any[]>(`${BASE_URL}/user/linked-accounts/me`, {
+    const linkedAccounts = await $fetch<LinkedAccountRecord[]>(`${BASE_URL}/user/linked-accounts/me`, {
         method: 'GET',
         headers: { Authorization: `Bearer ${token}` },
     });
     // 看有沒有 moodle 的帳號
     const moodleAccount = linkedAccounts.find(acc => acc.platform === 'moodle');
-    return moodleAccount && moodleAccount.username && moodleAccount.password;
+    return Boolean(moodleAccount && moodleAccount.username && moodleAccount.password);
 };
 
   // 取得 Moodle 作業資料
@@ -60,7 +61,7 @@ export const useMoodleAssignments = () => {
 
     try {
       const token = await getToken.value();
-      const res = await $fetch.raw<any[]>(
+      const res = await $fetch.raw<MoodleAssignment[]>(
       `${BASE_URL}/moodle/assignments`,
       {
           method: 'GET',

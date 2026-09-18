@@ -4,6 +4,43 @@ import { useRuntimeConfig } from '#imports';
 import { useUser, useAuth } from '@clerk/vue';
 import { until } from '@vueuse/core';
 import { getFriendlyErrorTitle } from '@/utils/errorMessages';
+import type { LinkedAccountRecord } from '@/types/linkedAccount';
+
+// 畫面上一筆平台連結帳號（GitHub/Jira/Moodle 共用同一個形狀，欄位依平台各自使用）
+export interface LinkedAccountKey {
+  platform: string;
+  label: string;
+  value: string;
+  inputValue: string;
+  domain?: string;
+  password?: string;
+  loading: boolean;
+  editing: boolean;
+  showPassword: boolean;
+  icon: string;
+  avatar?: string;
+  username?: string;
+  // true = value 來自後端遮罩過的字串，不可複製；false = 剛建立/更新，value 是這個 session 才知道的明文，可複製一次
+  isMasked: boolean;
+  // 進入編輯模式（openEdit）當下的 domain，只有 Jira 會用到，存檔時拿來判斷
+  // 這次 domain 是否真的被改過，不是一開始就有的欄位
+  _originalDomain?: string;
+}
+
+// POST /user/linked-accounts/create 的回傳
+interface CreateLinkedAccountResponse {
+  linkedAccounts: Record<string, { avatar_url?: string }>;
+}
+
+// PUT/POST 存檔送給後端的 body，欄位依平台不同而有無
+interface LinkedAccountPayload {
+  platform: string;
+  status: string;
+  username: string;
+  apiKey?: string;
+  domain?: string;
+  password?: string;
+}
 
 export const useLinkedAccount = () => {
   const config = useRuntimeConfig();
@@ -15,24 +52,7 @@ export const useLinkedAccount = () => {
 
   const currentUserName = computed(() => user.value?.username ?? '');
 
-  const keys = ref<
-    Array<{
-      platform: string;
-      label: string;
-      value: string;
-      inputValue: string;
-      domain?: string;
-      password?: string;
-      loading: boolean;
-      editing: boolean;
-      showPassword: boolean;
-      icon: string;
-      avatar?: string;
-      username?: string;
-      // true = value 來自後端遮罩過的字串，不可複製；false = 剛建立/更新，value 是這個 session 才知道的明文，可複製一次
-      isMasked: boolean;
-    }>
-  >([
+  const keys = ref<LinkedAccountKey[]>([
     {
       platform: 'github',
       label: 'GitHub Key',
@@ -77,7 +97,7 @@ export const useLinkedAccount = () => {
   const fetchKeys = async () => {
     await until(isLoaded).toBe(true);
     const token = await getToken.value();
-    const list = await $fetch<any[]>(`${BASE_URL}/user/linked-accounts/me`, {
+    const list = await $fetch<LinkedAccountRecord[]>(`${BASE_URL}/user/linked-accounts/me`, {
       headers: { Authorization: `Bearer ${token}` },
     });
 
@@ -90,7 +110,7 @@ export const useLinkedAccount = () => {
         if (ac.avatar_url) item.avatar = ac.avatar_url;
         if (ac.username) item.username = ac.username;
         if (item.platform == 'moodle') {  // 取得遮罩過的 moodle 密碼
-          item.value = ac.password;
+          item.value = ac.password ?? '';
         }
         // 從後端拿回來的一律是遮罩值，不是完整明文，不能拿去複製
         item.isMasked = true;
@@ -98,27 +118,27 @@ export const useLinkedAccount = () => {
     });
   };
 
-  const openEdit = (keyItem: any) => {
+  const openEdit = (keyItem: LinkedAccountKey) => {
     keyItem.inputValue = '';
     keyItem.domain = keyItem.domain ?? '';
     keyItem._originalDomain = keyItem.domain; // 存編輯前的 domain，存檔時判斷這次有沒有真的改到
     if (keyItem.platform == 'moodle') {  // 把 moodle 帳號寫進來
-      keyItem.inputValue = keyItem.username;
+      keyItem.inputValue = keyItem.username ?? '';
     }
     keyItem.password = ''; // moodle 的密碼
     keyItem.editing = true;
   };
 
-  const cancelEdit = (keyItem: any) => {
+  const cancelEdit = (keyItem: LinkedAccountKey) => {
     keyItem.inputValue = '';
     keyItem.editing = false;
   };
 
-  const saveKey = async (keyItem: any) => {
+  const saveKey = async (keyItem: LinkedAccountKey) => {
     keyItem.loading = true;
     const token = await getToken.value();
     const isNew = !keyItem.value;
-    const payload: any = {
+    const payload: LinkedAccountPayload = {
       platform: keyItem.platform,
       status: 'connected',
       username: currentUserName.value,
@@ -154,7 +174,7 @@ export const useLinkedAccount = () => {
       let avatarUrl: string | undefined;
 
       if (isNew) {
-        const res = await $fetch<{ linkedAccounts: any }>(
+        const res = await $fetch<CreateLinkedAccountResponse>(
           `${BASE_URL}/user/linked-accounts/create`,
           {
             method: 'POST',
@@ -224,7 +244,7 @@ export const useLinkedAccount = () => {
     }
   };
 
-  const deleteKey = async (keyItem: any) => {
+  const deleteKey = async (keyItem: LinkedAccountKey) => {
     try {
       const token = await getToken.value();
       await $fetch(`${BASE_URL}/user/linked-accounts/${keyItem.platform}`, {

@@ -1,5 +1,5 @@
 import type { FormError, FormSubmitEvent } from '@nuxt/ui'
-import { DateFormatter, getLocalTimeZone, fromDate } from '@internationalized/date'
+import { DateFormatter, getLocalTimeZone, fromDate, toZoned, type DateValue } from '@internationalized/date'
 import { ref, computed, reactive, shallowRef } from 'vue'
 import { createSharedComposable } from '@vueuse/core'
 import type { Task } from '~/types/task'
@@ -29,11 +29,15 @@ function useTaskFormImpl() {
     const df = new DateFormatter('zh-TW', { dateStyle: 'medium' })
     const timeZone = getLocalTimeZone()
     const today = fromDate(new Date(), timeZone)
-    const modelValue = shallowRef(today)
+    // UCalendar 的 v-model 可能給 CalendarDate、CalendarDateTime 或 ZonedDateTime
+    // 這三種其中一種（使用者選日期的當下不一定跟 today 的型別一樣），
+    // 要轉成 Date 物件時得先用 toZoned 統一成 ZonedDateTime 再呼叫沒有參數的 toDate()
+    const modelValue = shallowRef<DateValue>(today)
     const minDate = today
+    const toJsDate = (value: DateValue) => toZoned(value, timeZone).toDate()
     const displayDate = computed(() =>
         modelValue.value
-            ? df.format((modelValue.value as any).toDate(timeZone as any))
+            ? df.format(toJsDate(modelValue.value))
             : 'Select a date'
     )
 
@@ -90,7 +94,7 @@ function useTaskFormImpl() {
     }
 
     // 把後端回傳「這次哪些欄位是 AI 猜的」組成一句人看得懂的話
-    function buildInferenceSummary(result: any): { title: string; description?: string } | null {
+    function buildInferenceSummary(result: Task): { title: string; description?: string } | null {
         const inferredFields: string[] = result?.inferred_fields ?? []
         if (!inferredFields.length) return null
 
@@ -155,10 +159,10 @@ function useTaskFormImpl() {
     }
 
     // 2. 新增任務
-    async function onSubmit(e: FormSubmitEvent<typeof state>) {
+    async function onSubmit(_e: FormSubmitEvent<typeof state>) {
         try {
             const token = await getToken.value()
-            const dueDate = (modelValue.value as any).toDate(timeZone as any).toISOString()
+            const dueDate = toJsDate(modelValue.value).toISOString()
             const payload = {
                 user_id: state.user_id,
                 title: state.title,
@@ -169,7 +173,7 @@ function useTaskFormImpl() {
                 duration: parseDuration(state.duration),
                 inference_hint: state.inference_hint || null,
             }
-            const result = await $fetch(`${BASE_URL}/manual_tasks/`, {
+            const result = await $fetch<Task>(`${BASE_URL}/manual_tasks/`, {
                 method: 'POST',
                 body: payload,
                 headers: { Authorization: `Bearer ${token}` }
@@ -198,11 +202,11 @@ function useTaskFormImpl() {
     }
 
     // 3. 編輯任務
-    async function onEdit(e: FormSubmitEvent<typeof state>) {
+    async function onEdit(_e: FormSubmitEvent<typeof state>) {
         if( !editing_task.value ) return
         try {
             const token = await getToken.value()
-            const dueDate = (modelValue.value as any).toDate(timeZone as any).toISOString()
+            const dueDate = toJsDate(modelValue.value).toISOString()
             const payload = {
                 user_id: state.user_id,
                 title: state.title,

@@ -23,8 +23,10 @@ export const useGoogleCalendar = () => {
       if (!token) throw new Error('找不到 JWT');
 
       // 先查有沒有做過 Google OAuth 授權，還沒授權就不用真的打 Google Calendar API，
-      // 省一次注定會失敗的請求，也不會讓使用者看到「抓取失敗」的錯覺——
-      // 這個檢查本身如果失敗（網路／認證問題），是真正的錯誤，不能誤判成「還沒授權」
+      // 省一次注定會失敗的請求，也不會讓使用者看到「抓取失敗」的錯覺。
+      // 這個檢查本身如果失敗（網路／認證問題），也不跳 toast——這只是背景
+      // 資料的其中一項，失敗了安靜降級成「未連接」的畫面就好，不用打斷使用者，
+      // 重新整理或等連線恢復自然會抓到正確狀態
       let status: { connected: boolean };
       try {
         status = await $fetch<{ connected: boolean }>(`${BASE_URL}/oauth/status`, {
@@ -35,15 +37,6 @@ export const useGoogleCalendar = () => {
         console.error('Google Calendar 授權狀態檢查失敗', err);
         isConnected.value = false;
         calendars.value = [];
-        const authFailed = isAuthError(err);
-        toast.add({
-          title: authFailed ? 'Google Calendar 授權已失效' : getFriendlyErrorTitle(err, 'Google Calendar 資料暫時無法取得'),
-          description: authFailed
-            ? '你的 Google 授權可能已過期或被撤銷，請重新點擊「連接 Google Calendar」'
-            : '伺服器暫時無法確認你的授權狀態，請稍後再試一次',
-          color: 'error',
-          icon: 'i-lucide-x',
-        });
         return;
       }
 

@@ -220,7 +220,7 @@ onMounted(async () => {
       v-else-if="all_tasks.length === 0"
       class="text-center text-sm text-gray-500 dark:text-gray-400 py-8 border border-dashed border-gray-300 dark:border-gray-700 rounded-lg"
     >
-      目前沒有任務，點擊右上角「＋」新增一個吧
+      目前沒有任務，點擊右上角的編輯圖示新增一個吧
     </div>
     <div v-else class="grid grid-cols-1 gap-4">
       <UCard 

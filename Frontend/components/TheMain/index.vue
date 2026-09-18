@@ -36,7 +36,7 @@ watch(isSignedIn, (signedIn) => {
   <div class="p-4">
     <SignedIn>
       <!-- 三欄式版面：左 待辦事項＋第三方平台任務、中 行事曆、右 動態消息／LeetCode -->
-      <div class="grid grid-cols-1 lg:grid-cols-[320px_1fr_360px] gap-6 mt-4 items-start">
+      <div class="grid grid-cols-1 lg:grid-cols-[320px_1fr_320px] gap-6 mt-4 items-start">
         <div class="space-y-6">
           <TaskForm />
           <MoodleAssignments />

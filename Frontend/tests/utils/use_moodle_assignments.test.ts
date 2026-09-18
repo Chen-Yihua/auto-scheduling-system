@@ -62,6 +62,18 @@ describe('useMoodleAssignments', () => {
     expect(toastSpy.add).not.toHaveBeenCalled()
   })
 
+  it('連結帳號檢查本身失敗（例如網路問題）時，安靜降級成尚未綁定，不跳任何 toast', async () => {
+    fetchSpy.mockRejectedValueOnce(new Error('網路爆炸'))
+
+    const useMoodleAssignments = await loadComposable()
+    const ctx = useMoodleAssignments()
+    await ctx.fetchMoodleAssignments()
+
+    expect(ctx.hasAccount.value).toBe(false)
+    expect(fetchRawSpy).not.toHaveBeenCalled()
+    expect(toastSpy.add).not.toHaveBeenCalled()
+  })
+
   it('有帳號時成功取得作業', async () => {
     const list = [
       {

@@ -145,21 +145,15 @@ describe('useJira composable', () => {
     expect(loading.value).toBe(false)
   })
 
-  it('連結帳號檢查本身失敗（例如網路問題）時，不會誤判成尚未連結，且不會卡住 loading', async () => {
+  it('連結帳號檢查本身失敗（例如網路問題）時，安靜降級成尚未綁定，不跳 toast，也不會卡住 loading', async () => {
     fetchKeysSpy.mockRejectedValueOnce(new Error('網路爆炸'))
 
     const { fetchJiraIssues, notLinked, loading } = useJira()
     await fetchJiraIssues()
 
-    expect(notLinked.value).toBe(false)
+    expect(notLinked.value).toBe(true)
     expect(fetchRawSpy).not.toHaveBeenCalled()
-    expect(toastSpy.add).toHaveBeenCalledWith(
-      expect.objectContaining({
-        title: 'Jira 資料暫時無法取得',
-        description: expect.stringContaining('稍後再試'),
-        color: 'error',
-      }),
-    )
+    expect(toastSpy.add).not.toHaveBeenCalled()
     expect(loading.value).toBe(false)
   })
 })

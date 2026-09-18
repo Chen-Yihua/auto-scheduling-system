@@ -21,21 +21,14 @@ export const useJira = () => {
     try {
       // 先查有沒有連結 Jira 帳號，還沒連結就不用打第三方 API，
       // 省一次注定會失敗的請求，也不會讓使用者看到「抓取失敗」的錯覺。
-      // 這個檢查本身如果失敗（網路／認證問題），不該被誤判成「還沒連結」，
-      // 也不能讓整頁的抓取流程卡死在 loading——跟 Moodle 的 checkMoodleAccount 一樣邏輯
+      // 這個檢查本身如果失敗（網路／認證問題），也不跳 toast——這只是背景
+      // 資料的其中一項，失敗了安靜降級成「尚未綁定」的提示就好，不用打斷使用者，
+      // 重新整理或等連線恢復自然會抓到正確狀態
       try {
         await fetchKeys()
       } catch (err) {
         console.error('Jira 帳號檢查失敗', err)
-        authError.value = isAuthError(err)
-        toast.add({
-          title: authError.value ? 'Jira 授權已失效' : getFriendlyErrorTitle(err, 'Jira 資料暫時無法取得'),
-          description: authError.value
-            ? '你的登入憑證可能已過期，請重新登入後再試'
-            : '伺服器暫時無法確認你的連結帳號狀態，請稍後再試一次',
-          color: 'error',
-          icon: 'i-lucide-x',
-        })
+        notLinked.value = true
         return
       }
 

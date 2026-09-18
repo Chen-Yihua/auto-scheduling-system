@@ -80,7 +80,7 @@ describe('useGoogleCalendar composable', () => {
     expect(toastSpy.add).not.toHaveBeenCalled()
   })
 
-  it('授權狀態檢查本身失敗（例如網路問題）時，顯示錯誤訊息且不會誤打行事曆 API', async () => {
+  it('授權狀態檢查本身失敗（例如網路問題）時，安靜降級成未連接，不跳任何 toast，也不會誤打行事曆 API', async () => {
     fetchSpy.mockRejectedValueOnce(new Error('網路爆炸'))
 
     const ctx = useGoogleCalendar()
@@ -88,13 +88,7 @@ describe('useGoogleCalendar composable', () => {
 
     expect(fetchSpy).toHaveBeenCalledTimes(1)
     expect(ctx.isConnected.value).toBe(false)
-    expect(toastSpy.add).toHaveBeenCalledWith(
-      expect.objectContaining({
-        title: 'Google Calendar 資料暫時無法取得',
-        description: expect.stringContaining('稍後再試'),
-        color: 'error',
-      }),
-    )
+    expect(toastSpy.add).not.toHaveBeenCalled()
   })
 
   it('已授權但實際抓行事曆清單失敗時，isConnected 為 false 且 toast.add 觸發', async () => {

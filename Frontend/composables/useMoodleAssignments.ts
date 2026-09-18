@@ -36,22 +36,15 @@ export const useMoodleAssignments = () => {
 
     // 先查有沒有連結 Moodle 帳號，還沒連結就不用真的觸發爬蟲，
     // 省一次注定會失敗（而且成本很高，要開 headless Chrome）的請求。
-    // 這個檢查本身如果失敗（例如網路／授權問題），不該被誤判成「還沒連結」，
-    // 要走下面的錯誤處理，給使用者正確的訊息。
+    // 這個檢查本身如果失敗（例如網路／授權問題），也不跳 toast——這只是背景
+    // 資料的其中一項，失敗了安靜降級成「尚未綁定」的提示就好，不用打斷使用者，
+    // 重新整理或等連線恢復自然會抓到正確狀態
     let checkAccount: boolean;
     try {
       checkAccount = await checkMoodleAccount();
     } catch (err) {
       console.error('Moodle 帳號檢查失敗', err);
-      authError.value = isAuthError(err);
-      toast.add({
-        title: authError.value ? 'Moodle 授權已失效' : getFriendlyErrorTitle(err, 'Moodle 資料暫時無法取得'),
-        description: authError.value
-          ? '你的登入憑證可能已過期，請重新登入後再試'
-          : '伺服器暫時無法確認你的連結帳號狀態，請稍後再試一次',
-        color: 'error',
-        icon: 'i-lucide-x',
-      });
+      hasAccount.value = false;
       return;
     }
 

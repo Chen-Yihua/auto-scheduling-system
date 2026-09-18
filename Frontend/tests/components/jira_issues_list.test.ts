@@ -1,13 +1,29 @@
 // tests/components/jiraIssuesList.test.ts
 import { describe, it, expect, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
+import { defineComponent, h } from 'vue'
 import JiraIssuesList from '~/components/TheMain/JiraIssuesList.vue'
+
+// UCard 的預設 auto-stub（`true`）不會渲染 slot 內容，這裡改用會渲染
+// header/default/footer slot 的 stub，才能斷言卡片裡實際顯示了什麼
+const UCardStub = defineComponent({
+  name: 'UCard',
+  emits: ['click'],
+  setup(_, { slots, emit }) {
+    return () =>
+      h('div', { class: 'u-card-stub', onClick: () => emit('click') }, [
+        slots.header?.(),
+        slots.default?.(),
+        slots.footer?.(),
+      ])
+  },
+})
 
 const uiStubs = {
   USkeleton: true,
   UBadge: true,
   UAvatar: true,
-  UCard: true,
+  UCard: UCardStub,
   UAlert: true,
   UIcon: true,
 }
@@ -65,7 +81,7 @@ describe('JiraIssuesList.vue', () => {
     expect(wrapper.text()).toContain('ISSUE-1')
     expect(wrapper.text()).toContain('Fix the bug')
 
-    await wrapper.find('u-card-stub').trigger('click')
+    await wrapper.find('.u-card-stub').trigger('click')
 
     expect(openSpy).toHaveBeenCalledWith(
       'https://my-team.atlassian.net/browse/ISSUE-1',

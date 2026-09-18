@@ -148,3 +148,49 @@ async def test_refresh_google_token_logs_info_on_success(monkeypatch, caplog):
         "Refreshed Google Calendar token for clerk_id=uid123" in record.message
         for record in caplog.records
     )
+
+
+@pytest.mark.asyncio
+async def test_refresh_google_token_raises_401_and_clears_doc_when_google_rejects_it(monkeypatch):
+    # Google 拒絕 refresh_token 本身（例如使用者撤銷授權，或 OAuth 同意畫面
+    # 還在 Testing 狀態時 7 天後自動失效）跟「網路連不上 Google」是不同情況，
+    # 前者換不到新 token 也沒必要留著舊的，應該清掉並回 401 請使用者重新連接
+    from fastapi import HTTPException
+
+    async def mock_find_one(query):
+        return {"_id": "uid123", "refresh_token": "revoked-refresh-token"}
+
+    delete_calls = {"n": 0}
+
+    async def mock_delete_one(query):
+        delete_calls["n"] += 1
+        assert query == {"_id": "uid123"}
+
+    class MockResponse:
+        status_code = 400
+        text = '{"error": "invalid_grant"}'
+
+        def raise_for_status(self):
+            request = httpx.Request("POST", "https://oauth2.googleapis.com/token")
+            response = httpx.Response(400, request=request, text=self.text)
+            raise httpx.HTTPStatusError("Bad Request", request=request, response=response)
+
+    class MockClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            pass
+
+        async def post(self, *a, **k):
+            return MockResponse()
+
+    monkeypatch.setattr(oauth_crud_mod.db.googleCalendarTokens, "find_one", mock_find_one)
+    monkeypatch.setattr(oauth_crud_mod.db.googleCalendarTokens, "delete_one", mock_delete_one)
+    monkeypatch.setattr(oauth_crud_mod.httpx, "AsyncClient", lambda: MockClient())
+
+    with pytest.raises(HTTPException) as exc_info:
+        await oauth_crud_mod.refresh_google_calendar_token("uid123")
+
+    assert exc_info.value.status_code == 401
+    assert delete_calls["n"] == 1

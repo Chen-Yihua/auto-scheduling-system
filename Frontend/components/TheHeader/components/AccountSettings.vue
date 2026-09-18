@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { useLinkedAccount } from '~/composables/useLinkedAccount';
+import { useGoogleCalendar } from '~/composables/useGoogleCalendar';
 import { UserButton } from '@clerk/vue';
 
 const { keys, fetchKeys, openEdit, cancelEdit, saveKey, deleteKey } = useLinkedAccount();
+const { isConnected: googleCalendarConnected, fetchGoogleCalendars } = useGoogleCalendar();
 
 onMounted(fetchKeys);
+onMounted(fetchGoogleCalendars);
 
 const copiedKey = ref<string | null>(null);
 const toast = useToast();
@@ -209,9 +212,15 @@ const goToGoogleAuth = () => {
             </div>
           </template>
         </div>
+
+        <div class="flex items-center gap-2">
           <UButton color="primary" icon="i-lucide-calendar" @click="goToGoogleAuth">
-            連接 Google Calendar
+            {{ googleCalendarConnected ? '重新連接 Google Calendar' : '連接 Google Calendar' }}
           </UButton>
+          <UBadge v-if="googleCalendarConnected" color="success" variant="subtle" icon="i-lucide-check">
+            已連接
+          </UBadge>
+        </div>
       </UserButton.UserProfilePage>
     </UserButton>
   </header>

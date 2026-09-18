@@ -97,6 +97,17 @@ async def refresh_google_calendar_token(clerk_id: str) -> str:
     except httpx.RequestError as e:
         logger.error("連線 Google Token Endpoint 失敗: %s", e)
         raise HTTPException(status_code=502, detail="無法連線至 Google，請稍後再試")
+    except httpx.HTTPStatusError as e:
+        # Google 拒絕這個 refresh_token 本身（例如使用者在 Google 那邊撤銷了授權，
+        # 或者 OAuth 同意畫面還在 Testing 狀態時，refresh token 7 天後會自動失效）。
+        # 這種情況換不到新 token 也沒有意義再留著舊的，清掉讓 /oauth/status
+        # 正確回報「尚未連接」，使用者才會看到清楚的「請重新連接」而不是卡住
+        logger.warning("Google refresh token 已失效: %s", e.response.text)
+        try:
+            await db.googleCalendarTokens.delete_one({"_id": clerk_id})
+        except PyMongoError:
+            logger.exception("清除失效的 Google Calendar token 失敗")
+        raise HTTPException(status_code=401, detail="Google 授權已失效，請重新連接 Google Calendar")
 
     # 擷取新的 access_token（與可能新的 refresh_token）
     access_token  = token_data.get("access_token")

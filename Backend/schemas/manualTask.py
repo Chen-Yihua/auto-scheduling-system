@@ -24,7 +24,7 @@ class ManualTaskInput(BaseModel):
     status: StatusEnum
     priority: Optional[PriorityEnum] = None  # 不確定就留空，由 LLM 幫忙推斷
     duration: Optional[int] = None  # 分鐘，不確定就留空，由 LLM 幫忙推斷
-    inference_hint: Optional[str] = None  # 給 LLM 推斷 priority/duration 時參考的提醒，例如「這比想像中難」
+    inference_hint: Optional[str] = None  # 給 LLM 推斷 priority/duration 時參考的提醒
 
 class ManualTaskUpdate(BaseModel):
     """

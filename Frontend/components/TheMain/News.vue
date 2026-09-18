@@ -33,7 +33,10 @@ const isCollapsed = ref(true)
 </script>
 
 <template>
-  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+  <!-- 這裡永遠只放一張卡片，而且固定嵌在右側窄欄位裡——sm/lg 那些多欄
+  斷點是照「瀏覽器視窗」寬度判斷，不是這個容器的寬度，桌面版視窗一寬就會
+  被硬切成 3 欄、字擠成一長條，所以這裡不用任何響應式多欄設定 -->
+  <div class="grid grid-cols-1 gap-4">
     <!-- Loading Skeleton -->
     <USkeleton v-if="isLoading" class="h-80 rounded-lg" />
     <!-- Error Card -->

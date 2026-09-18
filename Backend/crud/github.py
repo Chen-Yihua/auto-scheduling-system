@@ -51,7 +51,7 @@ async def fetch_github_user_issues(token: str, per_page: int = 100) -> list:
 # 2. 將 raw 資料轉換成 GitHubIssue 格式（前端也用這格式）
 def transform_github_item(raw: dict) -> dict:
     return {
-        "id": raw["number"],
+        "id": raw["number"], # GitHub 用 number 代表這個 repo 內的編號
         "title": raw["title"],
         "status": raw["state"],
         "created_at": raw["created_at"],

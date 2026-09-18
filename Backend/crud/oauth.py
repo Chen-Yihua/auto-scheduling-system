@@ -32,6 +32,13 @@ async def save_google_calendar_token(clerk_id: str, access_token: str, refresh_t
     await db.googleCalendarTokens.update_one({"_id": clerk_id}, {"$set": doc}, upsert=True)
     return {"message": "Google Token 儲存成功"}
 
+# 只查 DB、不打 Google API 的輕量檢查，給前端在真的呼叫 /oauth/calendars
+# 之前先確認「有沒有連接過」，跟 github/jira/moodle 各自的 linked-accounts
+# 檢查一樣，避免還沒授權就白打一次注定失敗的 Google API 請求
+async def is_google_calendar_connected(clerk_id: str) -> bool:
+    doc = await db.googleCalendarTokens.find_one({"_id": clerk_id})
+    return bool(doc and doc.get("access_token"))
+
 # 取得 token
 async def get_google_calendar_token(clerk_id: str) -> str:
     doc = await db.googleCalendarTokens.find_one({"_id": clerk_id})

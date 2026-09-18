@@ -2,7 +2,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-from crud.oauth import get_google_calendar_token, save_google_calendar_token, refresh_google_calendar_token, get_free_slots_for_user
+from crud.oauth import get_google_calendar_token, save_google_calendar_token, refresh_google_calendar_token, get_free_slots_for_user, is_google_calendar_connected
 from services.google_calendar import fetch_events_in_next_7_days, fetch_google_calendar_list
 from db.security import get_current_clerk_user
 import httpx
@@ -57,6 +57,13 @@ async def oauth_callback(
         logger.exception("Google OAuth callback failed")
         raise HTTPException(status_code=400, detail="Google OAuth callback 發生錯誤")
 
+
+# 輕量檢查：只查 DB 有沒有存過 token，不會真的打 Google API，
+# 給前端在呼叫 /oauth/calendars 之前先確認是否已授權
+@router.get("/status")
+async def get_google_calendar_status(clerk_user: dict = Depends(get_current_clerk_user)):
+    connected = await is_google_calendar_connected(clerk_user["sub"])
+    return {"connected": connected}
 
 # 取得使用者的 Google Calendar 清單
 @router.get("/calendars")

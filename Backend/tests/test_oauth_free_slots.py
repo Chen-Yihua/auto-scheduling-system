@@ -113,6 +113,37 @@ async def test_get_free_slots_raises_400_when_not_connected(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_is_google_calendar_connected_true_when_token_stored(monkeypatch):
+    async def mock_find_one(query):
+        return {"_id": "uid123", "access_token": "valid-token"}
+
+    monkeypatch.setattr(oauth_crud.db.googleCalendarTokens, "find_one", mock_find_one)
+
+    assert await oauth_crud.is_google_calendar_connected("uid123") is True
+
+
+@pytest.mark.asyncio
+async def test_is_google_calendar_connected_false_when_no_doc(monkeypatch):
+    async def mock_find_one(query):
+        return None
+
+    monkeypatch.setattr(oauth_crud.db.googleCalendarTokens, "find_one", mock_find_one)
+
+    assert await oauth_crud.is_google_calendar_connected("uid123") is False
+
+
+@pytest.mark.asyncio
+async def test_is_google_calendar_connected_false_when_doc_has_no_access_token(monkeypatch):
+    # 理論上不該發生，但 doc 存在卻沒有 access_token 時也該當作沒連接
+    async def mock_find_one(query):
+        return {"_id": "uid123", "access_token": None}
+
+    monkeypatch.setattr(oauth_crud.db.googleCalendarTokens, "find_one", mock_find_one)
+
+    assert await oauth_crud.is_google_calendar_connected("uid123") is False
+
+
+@pytest.mark.asyncio
 async def test_get_free_slots_second_call_within_ttl_uses_cache_not_live_api(monkeypatch):
     calendar_list_calls = {"n": 0}
     freebusy_calls = {"n": 0}

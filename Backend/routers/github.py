@@ -7,8 +7,7 @@ from typing import List
 from pymongo.errors import PyMongoError
 from schemas.github import GitHubIssue
 from crud.errors import NonRetryableError
-from crud.github import fetch_github_user_issues, transform_github_item
-from crud.external_sync import sync_platform_items
+from crud.github import fetch_github_user_issues, transform_github_item, sync_github_issues
 
 logger = logging.getLogger(__name__)
 
@@ -47,10 +46,8 @@ async def get_github_issues(response: Response = None, clerk_user=Depends(get_cu
     try:
         # stale, synced_at 決定要不要顯示「資料可能過期」的提示
         # auth_error 決定要不要顯示「請重新連結帳號」的提示
-        issues, stale, synced_at, auth_error = await sync_platform_items(
-            collection=db.github_issues,
+        issues, stale, synced_at, auth_error = await sync_github_issues(
             user_id=user_id,
-            id_field="id",
             fetch_fn=fetch,
         )
     except NonRetryableError:

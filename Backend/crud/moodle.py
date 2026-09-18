@@ -1,5 +1,7 @@
 import logging
+from db.mongodb import db
 from crud.errors import NonRetryableError
+from crud.external_sync import sync_platform_items
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
@@ -136,3 +138,14 @@ def fetch_assignments(username, password):
         return all_data
     finally:
         driver.quit()
+
+
+# 包一層 sync_platform_items，把「用哪個 collection」這個細節封裝在這裡，
+# router 就不用自己 import db、知道 collection 叫 moodle_assignments
+async def sync_moodle_assignments(user_id: str, fetch_fn):
+    return await sync_platform_items(
+        collection=db.moodle_assignments,
+        user_id=user_id,
+        id_field="id",
+        fetch_fn=fetch_fn,
+    )

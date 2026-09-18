@@ -5,8 +5,7 @@ from db.security import get_current_clerk_user
 from db.crypto import decrypt_secret
 from pymongo.errors import PyMongoError
 from crud.errors import NonRetryableError
-from crud.jira import fetch_jira_user_issues, transform_jira_item
-from crud.external_sync import sync_platform_items
+from crud.jira import fetch_jira_user_issues, transform_jira_item, sync_jira_issues
 from schemas.jira import JiraIssue
 
 logger = logging.getLogger(__name__)
@@ -43,10 +42,8 @@ async def get_jira_issues(response: Response = None, user=Depends(get_current_cl
         return [transform_jira_item(issue) for issue in raw_issues]
 
     try:
-        issues, stale, synced_at, auth_error = await sync_platform_items(
-            collection=db.jira_issues,
+        issues, stale, synced_at, auth_error = await sync_jira_issues(
             user_id=user["sub"],
-            id_field="id",
             fetch_fn=fetch,
         )
     except NonRetryableError:

@@ -6,8 +6,7 @@ from db.security import get_current_clerk_user
 from db.crypto import decrypt_secret
 from pymongo.errors import PyMongoError
 from crud.errors import NonRetryableError
-from crud.moodle import fetch_assignments
-from crud.external_sync import sync_platform_items
+from crud.moodle import fetch_assignments, sync_moodle_assignments
 from schemas.moodle import MoodleAssignment
 from fastapi.concurrency import run_in_threadpool
 from rate_limit import limiter
@@ -69,10 +68,8 @@ async def get_assignments(request: Request, response: Response = None, clerk_use
         )
 
     try:
-        assignments, stale, synced_at, auth_error = await sync_platform_items(
-            collection=db.moodle_assignments,
+        assignments, stale, synced_at, auth_error = await sync_moodle_assignments(
             user_id=clerk_user["sub"],
-            id_field="id",
             fetch_fn=fetch,
         )
     except NonRetryableError:

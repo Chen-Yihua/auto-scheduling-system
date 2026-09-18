@@ -1,5 +1,7 @@
 import httpx
+from db.mongodb import db
 from crud.errors import NonRetryableError
+from crud.external_sync import sync_platform_items
 
 # 客戶端錯誤：帳密/token 問題、資源不存在——重試也不會變成功
 NON_RETRYABLE_STATUS_CODES = {400, 401, 403, 404}
@@ -68,3 +70,14 @@ def transform_jira_item(raw: dict) -> dict:
         "type": issuetype.get("name") or "",
         "iconUrl": issuetype.get("iconUrl") or "",
     }
+
+
+# 包一層 sync_platform_items，把「用哪個 collection」這個細節封裝在這裡，
+# router 就不用自己 import db、知道 collection 叫 jira_issues
+async def sync_jira_issues(user_id: str, fetch_fn):
+    return await sync_platform_items(
+        collection=db.jira_issues,
+        user_id=user_id,
+        id_field="id",
+        fetch_fn=fetch_fn,
+    )

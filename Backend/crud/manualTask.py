@@ -38,7 +38,7 @@ async def get_manual_task_by_id(task_id: str, user_id: str):
         logger.exception("Failed to fetch manual task %s for user_id=%s", task_id, user_id)
         raise HTTPException(status_code=503, detail="資料庫暫時無法使用，請稍後再試")
     if not task:
-        return None
+        raise HTTPException(status_code=404, detail="Task not found")
     task.pop("_id", None)  # Mongo 自動加的 ObjectId，不是我們自己用的 id 欄位，不該再被塞回更新內容裡
     return task
 
@@ -75,4 +75,5 @@ async def delete_manual_task_by_id(task_id: str):
     except PyMongoError:
         logger.exception("Failed to delete manual task %s", task_id)
         raise HTTPException(status_code=503, detail="資料庫暫時無法使用，請稍後再試")
-    return result.deleted_count > 0
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Task not found")

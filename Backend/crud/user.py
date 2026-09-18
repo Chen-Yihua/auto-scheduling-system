@@ -43,10 +43,10 @@ async def get_user_by_clerk_id(clerk_id: str):
 # 可更新欄位限制交給 UserUpdate 這個 Pydantic model 把關（避免 mass assignment，
 # 例如竄改 clerk_id 或未來新增的敏感欄位），這裡只需把「沒填的欄位」過濾掉，
 # 讓部分更新不會被 None 覆蓋掉原本的值
-async def update_user_by_clerk_id(clerk_id: str, data: UserUpdate) -> bool:
+async def update_user_by_clerk_id(clerk_id: str, data: UserUpdate) -> None:
     filtered_data = data.model_dump(exclude_unset=True)
     if not filtered_data:
-        return False
+        raise HTTPException(status_code=404, detail="User not found or no changes made")
 
     try:
         result = await db.users.update_one({"_id": clerk_id}, {"$set": filtered_data})
@@ -57,7 +57,8 @@ async def update_user_by_clerk_id(clerk_id: str, data: UserUpdate) -> bool:
     # 用 matched_count（有沒有找到這筆文件）而不是 modified_count（值是否真的變了）——
     # 如果新值跟舊值一樣，MongoDB 會判定沒有實際變更、modified_count 是 0，
     # 但這種情況使用者明明存在，不該被當成「找不到」回 404
-    return result.matched_count > 0
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="User not found or no changes made")
 
 # 刪除使用者
 async def delete_user_by_clerk_id(clerk_id: str) -> bool:

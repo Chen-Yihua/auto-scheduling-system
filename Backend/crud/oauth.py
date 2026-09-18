@@ -1,7 +1,7 @@
 import logging
 from db.mongodb import db
 from fastapi import HTTPException
-from datetime import datetime
+from datetime import datetime, timezone
 import os, httpx
 from services.google_calendar import (
     fetch_google_calendar_list,
@@ -26,7 +26,7 @@ async def save_google_calendar_token(clerk_id: str, access_token: str, refresh_t
         "clerk_id": clerk_id,
         "access_token": access_token,
         "refresh_token": refresh_token,
-        "created_at": datetime.utcnow(),
+        "created_at": datetime.now(timezone.utc),
         "status": "connected",
     }
     await db.googleCalendarTokens.update_one({"_id": clerk_id}, {"$set": doc}, upsert=True)
@@ -81,7 +81,7 @@ async def refresh_google_calendar_token(clerk_id: str) -> str:
             "$set": {
                 "access_token":  access_token,
                 "refresh_token": new_rt,
-                "updated_at":    datetime.utcnow()
+                "updated_at":    datetime.now(timezone.utc)
             }
         }
     )

@@ -72,10 +72,10 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="space-y-8">
+  <div class="space-y-8 relative">
     <template v-if="user">
-      <div class="absolute top-18 right-6">
-        <UButton 
+      <div class="absolute top-0 right-0">
+        <UButton
           size="md"
           icon='mdi-file-edit' 
           color="neutral"
@@ -222,7 +222,7 @@ onMounted(async () => {
     <div v-if="all_tasks.length === 0">
       <USkeleton class="h-24 mb-4" v-for="i in 3" :key="i" />
     </div>
-    <div v-else-if="user" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+    <div v-else-if="user" class="grid grid-cols-1 gap-4">
       <UCard 
         v-for="task in all_tasks"
         :key="task.id"

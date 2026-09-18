@@ -39,23 +39,33 @@ watch(isSignedIn, (signedIn) => {
 <template>
   <div class="p-4">
     <Leetcode />
-    <News />
 
     <SignedIn>
-      <div class="flex justify-end p-6">
-        <TaskForm />
+      <!-- 三欄式版面：左 待辦事項、中 行事曆、右 動態消息／各平台任務 -->
+      <div class="grid grid-cols-1 lg:grid-cols-[320px_1fr_360px] gap-6 mt-4 items-start">
+        <div class="space-y-4">
+          <TaskForm />
+        </div>
+
+        <div>
+          <GoogleCalendarEmbed
+            :id="primaryCalendarId"
+            :calendar-ids="calendarIds"
+            :connect="isConnected"
+          />
+        </div>
+
+        <div class="space-y-6">
+          <News />
+          <MoodleAssignments />
+          <GithubIssuesList :issues="githubIssues" :loading="loading" :is-stale="githubStale" :synced-at="githubSyncedAt" :auth-error="githubAuthError" />
+          <JiraIssuesList :issues="jiraIssues" :loading="loading" :domain="domain" :is-stale="jiraStale" :synced-at="jiraSyncedAt" :auth-error="jiraAuthError" />
+        </div>
       </div>
-      <MoodleAssignments />
-      <GithubIssuesList :issues="githubIssues" :loading="loading" :is-stale="githubStale" :synced-at="githubSyncedAt" :auth-error="githubAuthError" />
-      <JiraIssuesList :issues="jiraIssues" :loading="loading" :domain="domain" :is-stale="jiraStale" :synced-at="jiraSyncedAt" :auth-error="jiraAuthError" />
-      <GoogleCalendarEmbed
-        :id="primaryCalendarId"
-        :calendar-ids="calendarIds"
-        :connect="isConnected"
-      />
     </SignedIn>
 
     <SignedOut>
+      <News />
       <div class="text-center py-16 text-gray-500 dark:text-gray-400">
         <UIcon name="i-lucide-lock" class="w-10 h-10 mx-auto mb-3" />
         <p class="text-lg font-medium">登入後即可查看你的任務、行事曆與整合服務</p>

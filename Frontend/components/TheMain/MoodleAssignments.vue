@@ -28,7 +28,7 @@ onMounted(fetchMoodleAssignments); // 頁面載入時抓取作業資料
   </template>
 
   <template v-else>
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+    <div class="grid grid-cols-1 gap-4">
       <UCard 
         v-for="item in moodleAssignments"
         @click="openMoodleAssignments(item.url)"

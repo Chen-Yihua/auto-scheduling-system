@@ -31,7 +31,7 @@ const openJiraIssue = (key: string) => {
       <USkeleton class="h-24 mb-4" v-for="i in 3" :key="i" />
     </div>
 
-    <div v-else-if="issues.length" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+    <div v-else-if="issues.length" class="grid grid-cols-1 gap-4">
       <UCard
         v-for="issue in issues"
         :key="issue.id"

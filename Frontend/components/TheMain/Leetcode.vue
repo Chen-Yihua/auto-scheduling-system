@@ -93,22 +93,16 @@ const exampleContent = computed(() => {
 
       <UCard v-else class="mb-4 " :title="data?.question.title" :loading="!data && !error" :error="error">
         <template #header>
-          <div class="flex justify-between items-center w-full">
-            <!-- 左側：LeetCode icon + 題目名稱 -->
-            <div class="flex items-center">
-              <UIcon name="custom-leetcode" class="size-6" />
-              <span class="ml-2 font-medium">Daily Problem: {{ data?.question.title }}</span>
-            </div>
-
-            <!-- 右側：難度與 Tags Badge -->
-            <div class="flex flex-wrap items-center">
-              <!-- 難度 Badge -->
-              <UBadge :color="difficultyColor(data?.question.difficulty)" variant="soft" class="mx-1">
+          <!-- 標題已經在區塊標題（LeetCode 每日一題）交代過了，卡片本身的
+          header 只需要跟 GitHub/Jira 的單張卡片一樣，顯示這筆資料自己的
+          標題＋標籤，不用再重複 icon 或「Daily Problem」字樣 -->
+          <div class="flex justify-between items-center w-full gap-2">
+            <span class="text-sm font-semibold truncate">{{ data?.question.title }}</span>
+            <div class="flex flex-wrap items-center gap-1">
+              <UBadge :color="difficultyColor(data?.question.difficulty)" variant="soft">
                 {{ data?.question.difficulty }}
               </UBadge>
-
-              <!-- 題目 Tags -->
-              <UBadge v-for="tag in data?.question.topicTags" :key="tag.slug" color="neutral" variant="soft" class="mx-1">
+              <UBadge v-for="tag in data?.question.topicTags" :key="tag.slug" color="neutral" variant="soft">
                 {{ tag.name }}
               </UBadge>
             </div>

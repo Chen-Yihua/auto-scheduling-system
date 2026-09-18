@@ -15,8 +15,10 @@ vi.stubGlobal('ref', vueRef)
 
 const toastSpy = { add: vi.fn() }
 const fetchKeysSpy = vi.fn().mockResolvedValue(undefined)
+// value 是遮罩過的 apiKey——有值代表「已連結」，這是 fetchJiraIssues 用來判斷
+// 要不要打 API 的依據，預設模擬「已連結」，個別測試要測「未連結」再覆寫
 const linkedKeys = ref([
-  { platform: 'jira', domain: 'https://example.atlassian.net' },
+  { platform: 'jira', domain: 'https://example.atlassian.net', value: 'JKEY****' },
 ])
 
 vi.stubGlobal('useToast',           () => toastSpy)
@@ -44,6 +46,9 @@ describe('useJira composable', () => {
     fetchRawSpy = vi.fn()
     toastSpy.add.mockClear()
     fetchKeysSpy.mockClear()
+    linkedKeys.value = [
+      { platform: 'jira', domain: 'https://example.atlassian.net', value: 'JKEY****' },
+    ]
   })
 
   it('成功取得 Jira Issues（後端已回傳最終顯示格式，不用前端再轉換）', async () => {
@@ -90,7 +95,8 @@ describe('useJira composable', () => {
 
     expect(toastSpy.add).toHaveBeenCalledWith(
       expect.objectContaining({
-        title: 'Jira 資料抓取失敗',
+        title: 'Jira 資料暫時無法取得',
+        description: expect.stringContaining('稍後再試'),
         color: 'error',
       }),
     )
@@ -118,19 +124,42 @@ describe('useJira composable', () => {
     expect(authError.value).toBe(true)
     expect(toastSpy.add).toHaveBeenCalledWith(
       expect.objectContaining({
-        title: 'Jira 授權已失效，請重新連結帳號',
+        title: 'Jira 授權已失效',
+        description: expect.stringContaining('重新連結'),
         color: 'error',
       }),
     )
   })
 
-  it('尚未連結帳號（400）時，設定 notLinked 但不跳任何 toast', async () => {
-    fetchRawSpy.mockRejectedValueOnce({ response: { status: 400 } })
+  it('尚未連結帳號時，根本不打 API，也不跳任何 toast', async () => {
+    // 模擬 keys 裡沒有遮罩過的 apiKey，代表這個平台還沒連結
+    linkedKeys.value = [{ platform: 'jira', domain: '' }]
 
-    const { fetchJiraIssues, notLinked } = useJira()
+    const { fetchJiraIssues, notLinked, loading } = useJira()
     await fetchJiraIssues()
 
     expect(notLinked.value).toBe(true)
+    expect(fetchRawSpy).not.toHaveBeenCalled()
     expect(toastSpy.add).not.toHaveBeenCalled()
+    // 抓取結束一定要把 loading 收回 false，不然畫面會永遠卡在 Skeleton
+    expect(loading.value).toBe(false)
+  })
+
+  it('連結帳號檢查本身失敗（例如網路問題）時，不會誤判成尚未連結，且不會卡住 loading', async () => {
+    fetchKeysSpy.mockRejectedValueOnce(new Error('網路爆炸'))
+
+    const { fetchJiraIssues, notLinked, loading } = useJira()
+    await fetchJiraIssues()
+
+    expect(notLinked.value).toBe(false)
+    expect(fetchRawSpy).not.toHaveBeenCalled()
+    expect(toastSpy.add).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'Jira 資料暫時無法取得',
+        description: expect.stringContaining('稍後再試'),
+        color: 'error',
+      }),
+    )
+    expect(loading.value).toBe(false)
   })
 })

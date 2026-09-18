@@ -11,6 +11,7 @@ const {
   displayDate,
   priorityItems,
   validate,
+  loading,
   all_tasks,
   editing_task,
   isEditMode,
@@ -72,19 +73,11 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="space-y-8 relative">
+  <div class="space-y-8">
     <template v-if="user">
-      <div class="absolute top-0 right-0">
-        <UButton
-          size="md"
-          icon='mdi-file-edit' 
-          color="neutral"
-          @click="showEditModal = true"
-          class="w-8 h-8 mb-4"
-        />
-      </div>
-
-      <UModal 
+      <!-- 新增任務按鈕移到頁面右上角的 Header 裡（見 TheHeader/index.vue），
+      這裡跟它共用同一份 showEditModal 狀態，所以在哪裡按都會打開這個 Modal -->
+      <UModal
         v-model:open="showEditModal"
         :dismissible="false" 
         :close-on-esc="false"
@@ -218,11 +211,18 @@ onMounted(async () => {
 
   <!-- 任務清單區塊 -->
   <div class="space-y-4">
-    <h2 class="text-xl font-bold mt-10 mb-4 px-4">📝 任務列表</h2>
-    <div v-if="all_tasks.length === 0">
+    <h2 class="text-xl font-bold mt-4 mb-4 px-4">📝 任務列表</h2>
+    <div v-if="loading">
       <USkeleton class="h-24 mb-4" v-for="i in 3" :key="i" />
     </div>
-    <div v-else-if="user" class="grid grid-cols-1 gap-4">
+    <!-- 真的沒有任務是正常狀態，不是還在載入，不該一直顯示 Skeleton -->
+    <div
+      v-else-if="all_tasks.length === 0"
+      class="text-center text-sm text-gray-500 dark:text-gray-400 py-8 border border-dashed border-gray-300 dark:border-gray-700 rounded-lg"
+    >
+      目前沒有任務，點擊右上角「＋」新增一個吧
+    </div>
+    <div v-else class="grid grid-cols-1 gap-4">
       <UCard 
         v-for="task in all_tasks"
         :key="task.id"

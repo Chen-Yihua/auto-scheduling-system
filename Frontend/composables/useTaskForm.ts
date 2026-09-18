@@ -1,10 +1,14 @@
 import type { FormError, FormSubmitEvent } from '@nuxt/ui'
 import { DateFormatter, getLocalTimeZone, fromDate } from '@internationalized/date'
 import { ref, computed, reactive, shallowRef } from 'vue'
+import { createSharedComposable } from '@vueuse/core'
 import type { Task } from '~/types/task'
 import { getFriendlyErrorTitle } from '@/utils/errorMessages'
 
-export function useTaskForm() {
+// 用 createSharedComposable 讓 TheHeader（新增任務按鈕）跟 TaskForm（實際的
+// Modal／任務列表）共用同一份狀態——header 按下「+」時，才能真的打開
+// TaskForm 裡定義的那個 Modal，而不是各自獨立、互不相干的兩份 state。
+function useTaskFormImpl() {
     // 控制 Modal 開關
     const showEditModal = ref(false)
 
@@ -33,6 +37,10 @@ export function useTaskForm() {
             : 'Select a date'
     )
 
+    // 是否正在抓取任務列表——跟「目前沒有任務」是兩回事，不能都用
+    // all_tasks.length === 0 判斷，不然使用者真的沒有任務時，畫面會卡在
+    // Skeleton 動畫，看起來像資料壞掉
+    const loading = ref(true)
     // **所有任務**
     const all_tasks = ref<Task[]>([])
     // **目前編輯的任務**
@@ -107,6 +115,7 @@ export function useTaskForm() {
 
     // 1. 載入所有任務
     async function fetchTasks() {
+        loading.value = true
         try{
             const token = await getToken.value()
             if (!token) {
@@ -119,6 +128,8 @@ export function useTaskForm() {
             all_tasks.value = res
         } catch (err) {
             console.error(err)
+        } finally {
+            loading.value = false
         }
     }
  
@@ -254,6 +265,7 @@ export function useTaskForm() {
         displayDate,
         priorityItems,
         validate,
+        loading,
         all_tasks,
         editing_task,
         isEditMode,
@@ -265,5 +277,7 @@ export function useTaskForm() {
         onCancel,
     }
 }
+
+export const useTaskForm = createSharedComposable(useTaskFormImpl)
 
 

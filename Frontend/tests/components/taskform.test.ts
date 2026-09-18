@@ -16,6 +16,7 @@ vi.stubGlobal('$fetch',          (...args: any[]) => fetchSpy(...args))
 
 // ---------- 2. 被測元件 ----------
 import TaskForm from '~/components/TheMain/TaskForm.vue'
+import { useTaskForm } from '~/composables/useTaskForm'
 
 // ---------- 3. UI 元件 Stub ----------
 // 可點擊的 UButton
@@ -92,13 +93,16 @@ describe('TaskForm.vue (render)', () => {
     tokenSpy.mockClear()
   })
 
-  it('空任務時顯示 Skeleton', async () => {
+  it('沒有任務時顯示提示文字，抓取完成後不該一直卡在 Skeleton', async () => {
     fetchSpy.mockResolvedValueOnce([])
 
     const wrapper = shallowMount(TaskForm, { global: { stubs: uiStubs } })
     await flushPromises()
 
-    expect(wrapper.findAll('u-skeleton-stub').length).toBe(3)
+    // 已經抓取完成、確定是「真的沒有任務」，不該再顯示 Skeleton
+    // （那會讓人誤以為資料一直載入不出來、像壞掉了）
+    expect(wrapper.findAll('u-skeleton-stub').length).toBe(0)
+    expect(wrapper.text()).toContain('目前沒有任務')
   })
 
   it('有任務時顯示卡片並含正確標題', async () => {
@@ -114,7 +118,10 @@ describe('TaskForm.vue (render)', () => {
     expect(wrapper.find('u-skeleton-stub').exists()).toBe(false)
   })
 
-  it('點擊右上角按鈕會開啟 Modal', async () => {
+  it('新增任務按鈕移到 Header，跟 TaskForm 共用同一份 showEditModal 狀態', async () => {
+    // 按鈕本身現在畫在 TheHeader/index.vue，這裡改成模擬「header 那邊按下按鈕」
+    // 的效果：直接透過共用的 useTaskForm() 把 showEditModal 設成 true，
+    // 驗證 TaskForm 自己的 Modal 真的會反應到同一份狀態上
     fetchSpy.mockResolvedValueOnce([])
 
     const wrapper = shallowMount(TaskForm, { global: { stubs: uiStubs } })
@@ -123,8 +130,8 @@ describe('TaskForm.vue (render)', () => {
     // 初始 data-open 為 false
     expect(wrapper.find('.u-modal-stub').attributes('data-open')).toBe('false')
 
-    // 點擊右上角 UButton
-    await wrapper.find('button').trigger('click')
+    const { showEditModal } = useTaskForm()
+    showEditModal.value = true
     await flushPromises()
 
     // data-open 變 true 代表 showEditModal 已被設為 true

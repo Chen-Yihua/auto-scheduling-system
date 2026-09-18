@@ -32,9 +32,9 @@ const openJiraIssue = (key: string) => {
       <USkeleton class="h-24 mb-4" v-for="i in 3" :key="i" />
     </div>
 
-    <!-- 尚未連結 Jira 帳號 -->
+    <!-- 尚未綁定 Jira 帳號 -->
     <div v-else-if="notLinked" class="font-medium">
-      尚未連結 Jira 帳號，請點擊右上角頭像 → Key 分頁連結帳號
+      尚未綁定 Jira 帳號，請先設定
     </div>
 
     <div v-else-if="issues.length" class="grid grid-cols-1 gap-4">

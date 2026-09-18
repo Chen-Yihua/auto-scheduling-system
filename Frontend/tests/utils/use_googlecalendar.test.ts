@@ -66,7 +66,8 @@ describe('useGoogleCalendar composable', () => {
     expect(ctx.calendarIds.value).toEqual([])
     expect(toastSpy.add).toHaveBeenCalledWith(
       expect.objectContaining({
-        title: 'Google Calendar 抓取失敗',
+        title: 'Google Calendar 資料暫時無法取得',
+        description: expect.stringContaining('稍後再試'),
         color: 'error',
       }),
     )

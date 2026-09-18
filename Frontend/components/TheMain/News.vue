@@ -54,35 +54,41 @@ const isCollapsed = ref(true)
 
     <UCard v-else class="mb-4 " :error="error">
       <template #header>
-        <p class ="font-medium text-black dark:text-white">
-          Hacker News
-        </p>
+        <div class="flex items-center gap-2">
+          <UIcon name="i-lucide-flame" class="w-4 h-4 text-orange-500" />
+          <p class="font-medium text-black dark:text-white">
+            Hacker News
+          </p>
+        </div>
       </template>
       <!-- 顯示前三則新聞 -->
-      <ul class="space-y-4">
+      <ul class="space-y-1">
         <li
           v-for="(story, idx) in stories.slice(0, 3)"
           :key="idx"
-          class="border-b pb-2"
+          class="flex items-start gap-3 rounded-lg px-2 py-2 -mx-2 transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/60"
         >
-          <div>
+          <span class="mt-0.5 shrink-0 text-xs font-semibold text-gray-400 dark:text-gray-500 w-4 text-right">
+            {{ idx + 1 }}
+          </span>
+          <div class="min-w-0">
             <a
               :href="story.url"
               target="_blank"
               rel="noopener"
-              class="text-lg font-medium text-black dark:text-white hover:underline"
+              class="block text-sm font-medium text-gray-900 dark:text-white hover:underline line-clamp-2"
             >
               {{ story.title }}
             </a>
-            <div class="text-sm text-gray-500">
-              發佈時間：{{ story.publishedAt }}
+            <div class="text-xs text-gray-400 dark:text-gray-500 mt-1">
+              {{ story.publishedAt }}
             </div>
           </div>
         </li>
       </ul>
 
       <!-- 折疊後的其餘新聞 -->
-      <UCollapsible class="mt-4" v-model="isCollapsed">
+      <UCollapsible class="mt-2" v-model="isCollapsed">
         <UButton
           variant="soft"
           color="info"
@@ -94,23 +100,26 @@ const isCollapsed = ref(true)
         </UButton>
 
         <template #content>
-          <ul class="space-y-4">
+          <ul class="space-y-1 mt-2">
             <li
               v-for="(story, idx) in stories.slice(3)"
               :key="idx"
-              class="border-b pb-2"
+              class="flex items-start gap-3 rounded-lg px-2 py-2 -mx-2 transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/60"
             >
-              <div>
+              <span class="mt-0.5 shrink-0 text-xs font-semibold text-gray-400 dark:text-gray-500 w-4 text-right">
+                {{ idx + 4 }}
+              </span>
+              <div class="min-w-0">
                 <a
                   :href="story.url"
                   target="_blank"
                   rel="noopener"
-                  class="text-lg font-medium text-black dark:text-white hover:underline"
+                  class="block text-sm font-medium text-gray-900 dark:text-white hover:underline line-clamp-2"
                 >
                   {{ story.title }}
                 </a>
-                <div class="text-sm text-gray-500">
-                  發佈時間：{{ story.publishedAt }}
+                <div class="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                  {{ story.publishedAt }}
                 </div>
               </div>
             </li>

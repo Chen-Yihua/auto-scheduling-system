@@ -25,7 +25,8 @@ const stubs = {
   USkeleton: Empty,
   UCard: SlotStub,
   UCollapsible: SlotStub,
-  UButton: Empty
+  UButton: Empty,
+  UIcon: Empty
 }
 
 /* 3️⃣ <Suspense> 包裝 News */

@@ -48,7 +48,7 @@ describe('useMoodleAssignments', () => {
     toastSpy.add.mockClear()
   })
 
-  it('沒有 Moodle 帳號時僅提示 warning', async () => {
+  it('沒有 Moodle 帳號時不打爬蟲 API，也不跳任何 toast', async () => {
     // 1st call: linked-accounts
     fetchSpy.mockResolvedValueOnce(linked(false))
 
@@ -59,7 +59,7 @@ describe('useMoodleAssignments', () => {
     expect(ctx.hasAccount.value).toBe(false)
     expect(fetchSpy).toHaveBeenCalledTimes(1)
     expect(fetchRawSpy).not.toHaveBeenCalled()
-    expect(toastSpy.add).toHaveBeenCalled()
+    expect(toastSpy.add).not.toHaveBeenCalled()
   })
 
   it('有帳號時成功取得作業', async () => {
@@ -114,7 +114,8 @@ describe('useMoodleAssignments', () => {
     expect(ctx.authError.value).toBe(true)
     expect(toastSpy.add).toHaveBeenCalledWith(
       expect.objectContaining({
-        title: 'Moodle 帳號或密碼已失效，請重新連結帳號',
+        title: 'Moodle 帳號或密碼已失效',
+        description: expect.stringContaining('重新輸入'),
         color: 'error',
       }),
     )

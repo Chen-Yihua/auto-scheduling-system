@@ -179,3 +179,32 @@ def test_task_without_duration_falls_back_to_default():
     result = build_schedule_suggestion(tasks, free_slots)
 
     assert result["scheduled"][0]["end"] - result["scheduled"][0]["start"] == timedelta(minutes=60)
+
+
+def test_task_missing_required_field_is_skipped_not_crashed():
+    # 理論上 id/title/priority 一定會有值（見 ManualTaskOut），但這裡故意
+    # 模擬缺欄位的壞資料，驗證不會讓整個請求 KeyError 當掉，而是跳過這筆
+    tasks = [
+        {"id": "t1", "title": "缺 priority", "priority": None, "status": "To Do"},
+        _task("t2", "正常任務", "High"),
+    ]
+    free_slots = [_slot("2026-09-10T09:00:00Z", "2026-09-10T10:00:00Z")]
+
+    result = build_schedule_suggestion(tasks, free_slots)
+
+    assert len(result["scheduled"]) == 1
+    assert result["scheduled"][0]["task_id"] == "t2"
+    assert result["unscheduled"] == []
+
+
+def test_slot_missing_start_or_end_is_skipped_not_crashed():
+    tasks = [_task("t1", "任務", "High")]
+    free_slots = [
+        {"start": "2026-09-10T09:00:00Z", "end": None},  # 壞資料，跳過
+        _slot("2026-09-10T10:00:00Z", "2026-09-10T11:00:00Z"),
+    ]
+
+    result = build_schedule_suggestion(tasks, free_slots)
+
+    assert len(result["scheduled"]) == 1
+    assert result["scheduled"][0]["start"] == datetime(2026, 9, 10, 10, 0, tzinfo=timezone.utc)

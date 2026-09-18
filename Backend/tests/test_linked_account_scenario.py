@@ -90,9 +90,10 @@ async def test_github_linked_account_full_lifecycle(monkeypatch):
         assert delete_res.status_code == status.HTTP_200_OK
         assert delete_res.json()["deleted"] is True
 
-        # 6. 刪除後查詢不到任何連結帳號 -> 404
+        # 6. 刪除後沒有任何連結帳號 -> 是正常狀態，回 200 + 空陣列，不是 404
         list_after_delete = await ac.get("/user/linked-accounts/me")
-        assert list_after_delete.status_code == status.HTTP_404_NOT_FOUND
+        assert list_after_delete.status_code == status.HTTP_200_OK
+        assert list_after_delete.json() == []
 
 
 @pytest.mark.asyncio
@@ -125,6 +126,7 @@ async def test_moodle_linked_account_rejects_wrong_password_and_leaves_nothing_b
         )
         assert create_res.status_code == status.HTTP_401_UNAUTHORIZED
 
-        # 驗證失敗不該留下任何殘影資料
+        # 驗證失敗不該留下任何殘影資料——沒有任何連結帳號，回 200 + 空陣列，不是 404
         list_res = await ac.get("/user/linked-accounts/me")
-        assert list_res.status_code == status.HTTP_404_NOT_FOUND
+        assert list_res.status_code == status.HTTP_200_OK
+        assert list_res.json() == []

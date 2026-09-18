@@ -33,15 +33,9 @@ export const useGithub = () => {
       authError.value = res.headers.get('X-Auth-Error') === 'true';
     } catch (err) {
       // 還沒連結 GitHub 帳號是正常狀態（新使用者本來就還沒設定），
-      // 不是抓取失敗，不用嚇使用者看到紅色錯誤
+      // 不是抓取失敗——不跳通知，畫面上直接顯示提示文字就好（見 GithubIssuesList.vue）
       if (isNotLinkedError(err)) {
         notLinked.value = true;
-        toast.add({
-          title: '尚未連結 GitHub 帳號',
-          description: '請點擊右上角頭像 → Key 分頁連結帳號',
-          color: 'warning',
-          icon: 'i-lucide-info',
-        });
         return;
       }
 

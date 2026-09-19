@@ -29,7 +29,9 @@
 
 ## 跨模組的測試
 
-`test_security.py`（登入驗證）、`test_cors.py`、`test_rate_limit.py`、`test_cache.py`、
+`test_security.py`（登入驗證）、`test_db_error_handling.py`（資料庫例外集中處理：連線類錯誤 503、其他 500）、
+`test_unhandled_error_handling.py`（兜底：沒預期的例外回帶 CORS 的 JSON 500）、
+`test_cors.py`、`test_rate_limit.py`、`test_cache.py`、
 `test_crypto.py`、`test_db_indexes.py`、`test_external_sync.py`、`test_logging.py` 等，
 測的是共用元件，不屬於單一模組。
 
@@ -38,3 +40,15 @@
 `conftest.py` 的 `logged_in_user` fixture：假裝已登入的使用者（`{"sub": "test_user_123"}`），
 測試結束後一定會還原，`_api.py` 需要「已登入」時就把它加進測試函式的參數。
 不想登入（測「沒登入被擋」）就不要用它。
+
+## 每個測試的說明寫法
+
+每個測試函式開頭用 docstring（一到兩行）寫「**什麼情境 → 預期什麼行為（為什麼）**」，
+例如：`token 失效（NonRetryableError）要回 401，跟一般暫時性失敗（500）分開——重試也沒用。`
+
+- docstring 寫的是「測什麼」：情境、預期結果、背後的規則或要防的問題。
+- 「怎麼測」（怎麼 mock、為什麼用某個假物件、為什麼走 HTTP）不放進 docstring，
+  需要說明時寫成測試裡面、靠近該段程式碼的 `#` 註解。
+- 名稱已經說完的不用重複。
+
+所有測試檔案都已補齊（新增測試時請照這個格式寫）。

@@ -68,7 +68,7 @@ async def get_user_tasks(
     404 代表資源路徑不存在，這裡的路徑本身一直都存在，只是內容剛好是空的。
     """
     tasks = await manualTask_crud.get_manual_tasks_by_user_id(clerk_user["sub"])
-    return tasks or []
+    return tasks
 
 # 查詢指定任務
 @router.get("/{task_id}", response_model=ManualTaskOut)

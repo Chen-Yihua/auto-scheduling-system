@@ -4,7 +4,6 @@ from db.mongodb import db
 from db.security import get_current_clerk_user
 from db.crypto import decrypt_secret
 from typing import List
-from pymongo.errors import PyMongoError
 from schemas.github import GitHubIssue
 from crud.errors import NonRetryableError
 from crud.github import fetch_github_user_issues, transform_github_item, sync_github_issues
@@ -19,14 +18,10 @@ async def get_github_issues(response: Response = None, clerk_user=Depends(get_cu
     user_id = clerk_user["sub"]
 
     # 查詢綁定的 GitHub 帳號 (clerk_id + platform 這個組合保證唯一)
-    try:
-        linked = await db.linkedAccounts.find_one({
-            "clerk_id": user_id,
-            "platform": "github"
-        })
-    except PyMongoError as e:
-        logger.error("DB error while fetching GitHub linked account: %s", e)
-        raise HTTPException(status_code=503, detail="資料庫暫時無法使用，請稍後再試")
+    linked = await db.linkedAccounts.find_one({
+        "clerk_id": user_id,
+        "platform": "github"
+    })
 
     if not linked or not linked.get("apiKey"):
         raise HTTPException(status_code=400, detail="No GitHub token linked")

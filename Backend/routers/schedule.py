@@ -18,7 +18,7 @@ async def suggest_schedule(clerk_user: dict = Depends(get_current_clerk_user)):
     依 priority／due_date 排序後依序塞進空檔。不寫回 Google Calendar，
     純粹回傳一份建議清單給前端顯示。
     """
-    tasks = await get_manual_tasks_by_user_id(clerk_user["sub"]) or []
+    tasks = await get_manual_tasks_by_user_id(clerk_user["sub"])
     free_slots = await get_free_slots_for_user(clerk_user["sub"])
 
     # build_schedule_suggestion 本身是純計算、不會自己丟 HTTPException，

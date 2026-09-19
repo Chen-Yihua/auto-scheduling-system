@@ -30,31 +30,19 @@ async def save_google_calendar_token(clerk_id: str, access_token: str, refresh_t
         "created_at": datetime.now(timezone.utc),
         "status": "connected",
     }
-    try:
-        await db.googleCalendarTokens.update_one({"_id": clerk_id}, {"$set": doc}, upsert=True)
-    except PyMongoError:
-        logger.exception("儲存 Google Calendar token 失敗")
-        raise HTTPException(status_code=503, detail="資料庫暫時無法使用，請稍後再試")
+    await db.googleCalendarTokens.update_one({"_id": clerk_id}, {"$set": doc}, upsert=True)
     return {"message": "Google Token 儲存成功"}
 
 # 只查 DB、不打 Google API 的輕量檢查，給前端在真的呼叫 /oauth/calendars
 # 之前先確認「有沒有連接過」，跟 github/jira/moodle 各自的 linked-accounts
 # 檢查一樣，避免還沒授權就白打一次注定失敗的 Google API 請求
 async def is_google_calendar_connected(clerk_id: str) -> bool:
-    try:
-        doc = await db.googleCalendarTokens.find_one({"_id": clerk_id})
-    except PyMongoError:
-        logger.exception("查詢 Google Calendar 連接狀態失敗")
-        raise HTTPException(status_code=503, detail="資料庫暫時無法使用，請稍後再試")
+    doc = await db.googleCalendarTokens.find_one({"_id": clerk_id})
     return bool(doc and doc.get("access_token"))
 
 # 取得 token
 async def get_google_calendar_token(clerk_id: str) -> str:
-    try:
-        doc = await db.googleCalendarTokens.find_one({"_id": clerk_id})
-    except PyMongoError:
-        logger.exception("查詢 Google Calendar token 失敗")
-        raise HTTPException(status_code=503, detail="資料庫暫時無法使用，請稍後再試")
+    doc = await db.googleCalendarTokens.find_one({"_id": clerk_id})
     if not doc or not doc.get("access_token"):
         # 400（尚未設定）跟 401（憑證失效，需要重新授權）分開，
         # 跟 github.py/jira.py「尚未連結帳號」統一用 400 的慣例對齊，
@@ -68,11 +56,7 @@ async def refresh_google_calendar_token(clerk_id: str) -> str:
     並把新的 token 寫回 DB。最後回傳新的 access_token。
     """
     # 從 DB 拿 refresh_token
-    try:
-        doc = await db.googleCalendarTokens.find_one({"_id": clerk_id})
-    except PyMongoError:
-        logger.exception("查詢 Google Calendar refresh token 失敗")
-        raise HTTPException(status_code=503, detail="資料庫暫時無法使用，請稍後再試")
+    doc = await db.googleCalendarTokens.find_one({"_id": clerk_id})
     if not doc or not doc.get("refresh_token"):
         raise HTTPException(status_code=401, detail="沒有可用的 Refresh Token，請重新授權")
     refresh_token = doc["refresh_token"]
@@ -117,20 +101,16 @@ async def refresh_google_calendar_token(clerk_id: str) -> str:
         raise HTTPException(status_code=400, detail="Google 刷新 Token 失敗")
 
     # 把新的 Token 寫回 DB
-    try:
-        await db.googleCalendarTokens.update_one(
-            {"_id": clerk_id},
-            {
-                "$set": {
-                    "access_token":  access_token,
-                    "refresh_token": new_rt,
-                    "updated_at":    datetime.now(timezone.utc)
-                }
+    await db.googleCalendarTokens.update_one(
+        {"_id": clerk_id},
+        {
+            "$set": {
+                "access_token":  access_token,
+                "refresh_token": new_rt,
+                "updated_at":    datetime.now(timezone.utc)
             }
-        )
-    except PyMongoError:
-        logger.exception("更新 Google Calendar token 失敗")
-        raise HTTPException(status_code=503, detail="資料庫暫時無法使用，請稍後再試")
+        }
+    )
     logger.info("Refreshed Google Calendar token for clerk_id=%s", clerk_id)
     return access_token
 

@@ -5,12 +5,14 @@ from httpx import Response, Request
 
 @pytest.mark.asyncio
 async def test_fetch_github_user_issues(monkeypatch):
-    calls = []
+    calls = []  # 記錄函式實際問了哪些 query，最後用來驗證「問了什麼、順序對不對」
 
     class MockResponse:
+        """模擬 GitHub 的 HTTP 回應：有 status_code，也有 json()"""
+        status_code = 200
+
         def __init__(self, query):
-            self.status_code = 200
-            self._query = query
+            self._query = query  # 記下這次問的是什麼，json() 才知道要回 issue 還是 PR
 
         def json(self):
             if "is:issue" in self._query:
@@ -42,9 +44,11 @@ async def test_fetch_github_user_issues_paginates_full_pages(monkeypatch):
     calls = []
 
     class MockResponse:
+        """模擬 GitHub 的 HTTP 回應：有 status_code，也有 json()"""
+        status_code = 200
+
         def __init__(self, page):
-            self.status_code = 200
-            self._page = page
+            self._page = page  # 記下這次問的是第幾頁，json() 才知道要回滿頁還是最後一頁
 
         def json(self):
             # 第 1 頁回滿 2 筆（等於這次測試用的 per_page=2），第 2 頁只回 1 筆代表抓到底了
@@ -79,6 +83,9 @@ async def test_fetch_github_user_issues_stops_at_max_pages_safety_cap(monkeypatc
     call_count = {"n": 0}
 
     class MockResponse:
+        """模擬 GitHub 的 HTTP 回應：有 status_code，也有 json()"""
+        status_code = 200
+
         def json(self):
             return {"items": [{"number": 1}]}  # 每頁都回滿（per_page=1）
 
@@ -87,9 +94,7 @@ async def test_fetch_github_user_issues_stops_at_max_pages_safety_cap(monkeypatc
         async def __aexit__(self, *args): pass
         async def get(self, url, headers, params):
             call_count["n"] += 1
-            resp = MockResponse()
-            resp.status_code = 200
-            return resp
+            return MockResponse()
 
     monkeypatch.setattr("httpx.AsyncClient", lambda: MockClient())
 

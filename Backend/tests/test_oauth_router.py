@@ -324,6 +324,8 @@ async def test_oauth_callback_happy_path_saves_token(monkeypatch):
     saved = {}
 
     class MockResponse:
+        status_code = 200
+
         def raise_for_status(self):
             pass
 
@@ -363,6 +365,8 @@ async def test_oauth_callback_happy_path_saves_token(monkeypatch):
 @pytest.mark.asyncio
 async def test_oauth_callback_raises_400_when_google_rejects_code(monkeypatch):
     class MockResponse:
+        status_code = 400
+
         def raise_for_status(self):
             raise _http_status_error(400)
 
@@ -389,6 +393,8 @@ async def test_oauth_callback_raises_400_when_google_rejects_code(monkeypatch):
 @pytest.mark.asyncio
 async def test_oauth_callback_raises_400_when_no_access_token_in_response(monkeypatch):
     class MockResponse:
+        status_code = 200
+
         def raise_for_status(self):
             pass
 

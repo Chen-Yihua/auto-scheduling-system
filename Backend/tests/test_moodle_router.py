@@ -1,3 +1,6 @@
+# 直接呼叫 router 函式（await moodle_router.get_assignments(...)）測試它自己的判斷分支：
+# 查不到帳號、DB 掛掉、解密失敗、爬蟲失敗各回什麼狀態碼，以及有沒有設定回應 header。
+# 不經過 HTTP，所以不涉及路由註冊、登入驗證、response_model —— 那些由 test_moodle_api.py 負責。
 import pytest
 from unittest.mock import MagicMock
 from fastapi import HTTPException, Response

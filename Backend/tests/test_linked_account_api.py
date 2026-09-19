@@ -5,11 +5,8 @@ from httpx import AsyncClient
 from httpx._transports.asgi import ASGITransport
 
 from main import app
-from db.security import get_current_clerk_user
 from crud import linkedAccount as linked_mod
 from schemas.linkedAccount import LinkedAccountCreate
-
-mock_user = {"sub": "test_user_123"}
 
 test_account = LinkedAccountCreate(
     platform="github",
@@ -20,11 +17,7 @@ test_account = LinkedAccountCreate(
 
 
 @pytest.mark.asyncio
-async def test_create_linked_account(monkeypatch):
-    async def mock_get_user():
-        return mock_user
-    app.dependency_overrides[get_current_clerk_user] = mock_get_user
-
+async def test_create_linked_account(monkeypatch, logged_in_user):
     async def mock_fetch(token):
         return {"username": "mock_user", "avatar_url": "https://mock.avatar"}
 
@@ -40,15 +33,10 @@ async def test_create_linked_account(monkeypatch):
         res = await ac.post("/user/linked-accounts/create", json=test_account.model_dump())
 
     assert res.status_code == status.HTTP_200_OK
-    app.dependency_overrides = {}
 
 
 @pytest.mark.asyncio
-async def test_get_linked_accounts(monkeypatch):
-    async def mock_get_user():
-        return mock_user
-    app.dependency_overrides[get_current_clerk_user] = mock_get_user
-
+async def test_get_linked_accounts(monkeypatch, logged_in_user):
     # 定義 MockCursor 支援 async for
     class MockCursor:
         def __aiter__(self):
@@ -70,15 +58,10 @@ async def test_get_linked_accounts(monkeypatch):
 
     assert res.status_code == status.HTTP_200_OK
     assert res.json()[0]["platform"] == "github"
-    app.dependency_overrides = {}
 
 
 @pytest.mark.asyncio
-async def test_update_linked_account(monkeypatch):
-    async def mock_get_user():
-        return mock_user
-    app.dependency_overrides[get_current_clerk_user] = mock_get_user
-
+async def test_update_linked_account(monkeypatch, logged_in_user):
     async def mock_update(clerk_id, platform, data):
         return True
 
@@ -92,15 +75,10 @@ async def test_update_linked_account(monkeypatch):
         })
 
     assert res.status_code == status.HTTP_200_OK
-    app.dependency_overrides = {}
 
 
 @pytest.mark.asyncio
-async def test_delete_linked_account(monkeypatch):
-    async def mock_get_user():
-        return mock_user
-    app.dependency_overrides[get_current_clerk_user] = mock_get_user
-
+async def test_delete_linked_account(monkeypatch, logged_in_user):
     async def mock_delete(composite_id):
         return True
 
@@ -111,4 +89,3 @@ async def test_delete_linked_account(monkeypatch):
         res = await ac.delete("/user/linked-accounts/github")
 
     assert res.status_code == status.HTTP_200_OK
-    app.dependency_overrides = {}

@@ -37,3 +37,28 @@ def override_mongodb():
     yield  # 測試期間使用 mock db
 
     # mongomock 是 in-memory 的，不需要手動清除
+
+
+@pytest.fixture
+def logged_in_user():
+    """API 測試（tests/test_*_api.py）用：假裝已經用 Clerk 登入的使用者。
+
+    走 HTTP 打 API 時，每個受保護的 endpoint 都會先跑 get_current_clerk_user 去驗
+    Bearer token。測試裡沒有真的 token，所以用 FastAPI 的 dependency_overrides
+    把這個驗證換成「直接回傳一個假使用者」。
+
+    寫成 fixture 而不是每個測試自己設定/清掉，是因為 fixture 的收尾（yield 之後）
+    不管測試是通過還是 assert 失敗都一定會執行——如果測試中途失敗、清除那行沒跑到，
+    假登入會殘留在共用的 app 上，讓後面「應該要被擋掉」的測試莫名其妙通過。
+    """
+    from main import app
+    from db.security import get_current_clerk_user
+
+    user = {"sub": "test_user_123"}
+
+    async def fake_get_current_clerk_user():
+        return user
+
+    app.dependency_overrides[get_current_clerk_user] = fake_get_current_clerk_user
+    yield user
+    app.dependency_overrides.clear()

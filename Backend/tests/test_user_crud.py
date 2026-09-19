@@ -1,5 +1,5 @@
 """
-crud/user.py——先前完全沒有專屬測試（test_user.py 把整個 crud 層 mock 掉，
+crud/user.py——先前完全沒有專屬測試（test_user_api.py 把整個 crud 層 mock 掉，
 只測 router），這裡直接測 crud 函式本身，包含 PyMongoError 分支。
 """
 import pytest

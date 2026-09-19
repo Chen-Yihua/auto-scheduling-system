@@ -1,3 +1,6 @@
+# 直接呼叫 router 函式（await github_router.get_github_issues(...)）測試它自己的判斷分支：
+# 查不到帳號、DB 掛掉、解密失敗、同步失敗各回什麼狀態碼，以及有沒有設定回應 header。
+# 不經過 HTTP，所以不涉及路由註冊、登入驗證、response_model —— 那些由 test_github_api.py 負責。
 import pytest
 from fastapi import HTTPException, Response
 from pymongo.errors import PyMongoError

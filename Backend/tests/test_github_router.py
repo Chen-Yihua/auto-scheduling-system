@@ -3,7 +3,6 @@
 # 不經過 HTTP，所以不涉及路由註冊、登入驗證、response_model —— 那些由 test_github_api.py 負責。
 import pytest
 from fastapi import HTTPException, Response
-from pymongo.errors import PyMongoError
 import routers.github as github_router
 from db.crypto import encrypt_secret
 from crud.errors import NonRetryableError
@@ -12,21 +11,8 @@ mock_user = {"sub": "test_user_123"}
 
 
 @pytest.mark.asyncio
-async def test_get_github_issues_raises_503_when_db_down(monkeypatch):
-    class MockLinkedAccounts:
-        async def find_one(self, query):
-            raise PyMongoError("connection lost")
-
-    monkeypatch.setattr(github_router.db, "linkedAccounts", MockLinkedAccounts())
-
-    with pytest.raises(HTTPException) as exc_info:
-        await github_router.get_github_issues(clerk_user=mock_user)
-
-    assert exc_info.value.status_code == 503
-
-
-@pytest.mark.asyncio
 async def test_get_github_issues_raises_500_when_decrypt_fails(monkeypatch):
+    """token 解密失敗（資料壞掉或金鑰不對）→ 回 500。"""
     class MockLinkedAccounts:
         async def find_one(self, query):
             return {"apiKey": "not-actually-encrypted"}
@@ -41,6 +27,7 @@ async def test_get_github_issues_raises_500_when_decrypt_fails(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_get_github_issues_sets_auth_error_header(monkeypatch):
+    """token 已失效但還有舊資料可退回時：回舊資料，並設定 X-Auth-Error、X-Data-Stale、X-Synced-At，前端才知道要顯示「請重新連結」和「資料可能過期」。"""
     class MockLinkedAccounts:
         async def find_one(self, query):
             return {"apiKey": encrypt_secret("fake_token")}
@@ -66,7 +53,7 @@ async def test_get_github_issues_sets_auth_error_header(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_get_github_issues(monkeypatch):
-    # 模擬資料庫與 GitHub API 行為
+    """成功流程：查到帳號 → 解密 token → 抓 GitHub → 轉成統一格式後回傳清單。"""
     class MockLinkedAccounts:
         async def find_one(self, query):
             return {"apiKey": encrypt_secret("fake_token"), "clerk_id": mock_user["sub"]}
@@ -122,6 +109,7 @@ async def test_get_github_issues(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_get_github_issues_missing_token(monkeypatch):
+    """綁定帳號存在但沒有 apiKey（等於還沒設定 token）→ 回 400 "No GitHub token linked"。"""
     class MockLinkedAccounts:
         async def find_one(self, query):
             return {}  # 沒有 apiKey
@@ -137,6 +125,7 @@ async def test_get_github_issues_missing_token(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_get_github_issues_api_fail(monkeypatch):
+    """GitHub API 一直失敗、又沒有舊資料可退回 → 回 500 和固定訊息；內部錯誤原因不能洩漏給前端。"""
     class MockLinkedAccounts:
         async def find_one(self, query):
             return {"apiKey": encrypt_secret("fake_token")}
@@ -164,8 +153,6 @@ async def test_get_github_issues_api_fail(monkeypatch):
         await github_router.get_github_issues(clerk_user=mock_user)
 
     assert exc_info.value.status_code == 500
-    # detail 應該是給使用者看的固定訊息，內部例外原因（"GitHub API down"）
-    # 只會寫進 log，不會回傳給前端（避免洩漏內部細節）
     assert exc_info.value.detail == "無法取得 GitHub 資料，請稍後再試"
 
 

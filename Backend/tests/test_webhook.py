@@ -61,6 +61,7 @@ async def _call_webhook(monkeypatch, payload, secret="test-secret", event="pull_
 
 @pytest.mark.asyncio
 async def test_open_pr_posts_to_configured_mr_webhook(monkeypatch):
+    """新開的 PR → 用 Gemini 產生摘要，貼到有設定的 PR 摘要 Discord webhook。"""
     monkeypatch.setattr(webhook_router, "DISCORD_WEBHOOK_URL", "https://discord.com/api/webhooks/test/mr")
     monkeypatch.setattr(webhook_router, "MAIN_WEBHOOK_URL", None)
     monkeypatch.setenv("GITHUB_BOT_TOKEN", "dummy")
@@ -77,8 +78,7 @@ async def test_open_pr_posts_to_configured_mr_webhook(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_open_pr_falls_back_when_fetching_changed_files_fails(monkeypatch):
-    # 抓 PR 變更檔案清單失敗（GitHub API 逾時/出錯）不該讓整支 webhook 處理中斷，
-    # 用一個看得懂的預設文字頂替，繼續往下產生摘要
+    """抓 PR 變更檔案清單失敗（GitHub API 逾時或出錯）不該讓整支 webhook 中斷：改用「無法取得變更檔案」的預設文字頂替，繼續產生摘要。"""
     monkeypatch.setattr(webhook_router, "DISCORD_WEBHOOK_URL", "https://discord.com/api/webhooks/test/mr")
     monkeypatch.setattr(webhook_router, "MAIN_WEBHOOK_URL", None)
     monkeypatch.setenv("GITHUB_BOT_TOKEN", "dummy")
@@ -112,6 +112,7 @@ async def test_open_pr_falls_back_when_fetching_changed_files_fails(monkeypatch)
 
 @pytest.mark.asyncio
 async def test_open_pr_skips_discord_when_webhook_not_configured(monkeypatch):
+    """沒設定 PR 摘要的 Discord webhook 網址 → 不對任何 discord.com 網址發送。"""
     monkeypatch.setattr(webhook_router, "DISCORD_WEBHOOK_URL", None)
     monkeypatch.setattr(webhook_router, "MAIN_WEBHOOK_URL", None)
     monkeypatch.setenv("GITHUB_BOT_TOKEN", "dummy")
@@ -131,6 +132,7 @@ async def test_open_pr_skips_discord_when_webhook_not_configured(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_merge_to_main_posts_to_configured_main_webhook(monkeypatch):
+    """PR 合併到 main → 發合併通知到有設定的 main Discord webhook（只發一次）。"""
     monkeypatch.setattr(webhook_router, "DISCORD_WEBHOOK_URL", None)
     monkeypatch.setattr(webhook_router, "MAIN_WEBHOOK_URL", "https://discord.com/api/webhooks/test/main")
 
@@ -145,6 +147,7 @@ async def test_merge_to_main_posts_to_configured_main_webhook(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_merge_to_main_skips_discord_when_webhook_not_configured(monkeypatch):
+    """PR 合併到 main、但沒設定 main webhook 網址 → 不發送任何通知。"""
     monkeypatch.setattr(webhook_router, "DISCORD_WEBHOOK_URL", None)
     monkeypatch.setattr(webhook_router, "MAIN_WEBHOOK_URL", None)
 
@@ -158,6 +161,7 @@ async def test_merge_to_main_skips_discord_when_webhook_not_configured(monkeypat
 
 @pytest.mark.asyncio
 async def test_closed_but_not_merged_does_not_post_merge_notification(monkeypatch):
+    """PR 被關掉但沒有 merge → 不發合併通知。"""
     monkeypatch.setattr(webhook_router, "DISCORD_WEBHOOK_URL", None)
     monkeypatch.setattr(webhook_router, "MAIN_WEBHOOK_URL", "https://discord.com/api/webhooks/test/main")
 
@@ -172,6 +176,7 @@ async def test_closed_but_not_merged_does_not_post_merge_notification(monkeypatc
 
 @pytest.mark.asyncio
 async def test_no_hardcoded_discord_url_left_in_source():
+    """原始碼裡不能寫死任何 Discord webhook 網址（網址屬於機密，只能從環境變數讀）。"""
     import inspect
     source = inspect.getsource(webhook_router)
     assert "discord.com/api/webhooks/" not in source
@@ -181,6 +186,7 @@ async def test_no_hardcoded_discord_url_left_in_source():
 
 @pytest.mark.asyncio
 async def test_gemini_failure_does_not_leak_exception_detail_to_public_comment(monkeypatch, caplog):
+    """Gemini 產生摘要失敗 → 公開的 PR 留言只能是「無法…」之類的通用訊息，不能外洩例外內容（例如連線字串）；完整例外要留在後端 log 供事後排查。"""
     monkeypatch.setattr(webhook_router, "DISCORD_WEBHOOK_URL", None)
     monkeypatch.setattr(webhook_router, "MAIN_WEBHOOK_URL", None)
     monkeypatch.setenv("GITHUB_BOT_TOKEN", "dummy")
@@ -220,6 +226,7 @@ async def test_gemini_failure_does_not_leak_exception_detail_to_public_comment(m
 
 @pytest.mark.asyncio
 async def test_webhook_rejects_missing_signature(monkeypatch):
+    """/webhook 沒帶 X-Hub-Signature-256 → 401。"""
     monkeypatch.setattr(webhook_router, "GITHUB_WEBHOOK_SECRET", "correct-secret")
     request = FakeRequest(_pr_payload("opened"))
 
@@ -231,6 +238,7 @@ async def test_webhook_rejects_missing_signature(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_webhook_rejects_wrong_signature(monkeypatch):
+    """簽章是用錯誤的密鑰算出來的 → 401。"""
     monkeypatch.setattr(webhook_router, "GITHUB_WEBHOOK_SECRET", "correct-secret")
     request = FakeRequest(_pr_payload("opened"))
     wrong_signature = _sign("wrong-secret", await request.body())
@@ -245,7 +253,7 @@ async def test_webhook_rejects_wrong_signature(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_webhook_rejects_everything_when_secret_not_configured(monkeypatch):
-    # 沒設定密鑰時要全部拒絕，不能因為忘記設定就變成沒有保護
+    """沒設定 GITHUB_WEBHOOK_SECRET → 一律拒絕（401），不能因為忘記設定就變成沒有保護。"""
     monkeypatch.setattr(webhook_router, "GITHUB_WEBHOOK_SECRET", None)
     request = FakeRequest(_pr_payload("opened"))
 
@@ -257,6 +265,8 @@ async def test_webhook_rejects_everything_when_secret_not_configured(monkeypatch
 
 @pytest.mark.asyncio
 async def test_webhook_accepts_correct_signature(monkeypatch):
+    """簽章正確 → 通過驗證，回 {"status": "ok"}。"""
+    # 用不會觸發其他動作的 ping 事件，只看驗證有沒有過
     monkeypatch.setattr(webhook_router, "DISCORD_WEBHOOK_URL", None)
     monkeypatch.setattr(webhook_router, "MAIN_WEBHOOK_URL", None)
 

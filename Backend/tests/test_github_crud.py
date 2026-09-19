@@ -5,6 +5,7 @@ from httpx import Response, Request
 
 @pytest.mark.asyncio
 async def test_fetch_github_user_issues(monkeypatch):
+    """使用者同時有 issue 和 PR → 回傳的清單兩種都要包含。"""
     calls = []  # 記錄函式實際問了哪些 query，最後用來驗證「問了什麼、順序對不對」
 
     class MockResponse:
@@ -40,7 +41,7 @@ async def test_fetch_github_user_issues(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_fetch_github_user_issues_paginates_full_pages(monkeypatch):
-    """一頁抓滿（等於 per_page）代表可能還有下一頁，該繼續翻頁，不能只抓第一頁。"""
+    """一頁抓滿代表可能還有下一頁，要繼續抓，不能只抓第一頁。"""
     calls = []
 
     class MockResponse:
@@ -107,6 +108,7 @@ async def test_fetch_github_user_issues_stops_at_max_pages_safety_cap(monkeypatc
 @pytest.mark.asyncio
 @pytest.mark.parametrize("status_code", [400, 401, 403, 404])
 async def test_fetch_github_user_issues_client_error_is_non_retryable(monkeypatch, status_code):
+    """400/401/403/404 是客戶端錯誤（token 過期、沒權限、請求不對、資源不存在），重試也沒用 → 要丟 NonRetryableError。"""
     class MockClient:
         async def __aenter__(self): return self
         async def __aexit__(self, *args): pass
@@ -115,7 +117,6 @@ async def test_fetch_github_user_issues_client_error_is_non_retryable(monkeypatc
 
     monkeypatch.setattr("httpx.AsyncClient", lambda: MockClient())
 
-    # token 過期/沒權限/請求不對/資源不存在都屬於客戶端錯誤，重試也沒用 -> 應該是 NonRetryableError
     with pytest.raises(NonRetryableError) as exc_info:
         await github_mod.fetch_github_user_issues("fake_token")
 
@@ -125,6 +126,7 @@ async def test_fetch_github_user_issues_client_error_is_non_retryable(monkeypatc
 @pytest.mark.asyncio
 @pytest.mark.parametrize("status_code", [429, 500, 502, 503])
 async def test_fetch_github_user_issues_transient_error_is_retryable(monkeypatch, status_code):
+    """429（被限流）和 5xx（伺服器錯誤）是暫時性問題，重試可能成功 → 要丟一般例外，不能是 NonRetryableError。"""
     class MockClient:
         async def __aenter__(self): return self
         async def __aexit__(self, *args): pass
@@ -133,7 +135,6 @@ async def test_fetch_github_user_issues_transient_error_is_retryable(monkeypatch
 
     monkeypatch.setattr("httpx.AsyncClient", lambda: MockClient())
 
-    # 被限流(429)和伺服器端錯誤(5xx)都是暫時性問題，重試可能會成功 -> 不該是 NonRetryableError
     with pytest.raises(Exception) as exc_info:
         await github_mod.fetch_github_user_issues("fake_token")
 
@@ -142,6 +143,7 @@ async def test_fetch_github_user_issues_transient_error_is_retryable(monkeypatch
 
 
 def test_transform_github_item_issue():
+    """一般 issue：GitHub 原始欄位要正確對應到統一格式的每個欄位（id、status、url、author、labels…），isPR 為 False。"""
     raw = {
         "number": 123,
         "title": "Test issue",
@@ -170,6 +172,7 @@ def test_transform_github_item_issue():
 
 
 def test_transform_github_item_pr():
+    """有 pull_request 欄位代表是 PR → isPR 為 True；沒有任何 label 時要是空清單。"""
     raw = {
         "number": 456,
         "title": "Add feature",
@@ -191,9 +194,7 @@ def test_transform_github_item_pr():
 
 
 def test_transform_github_item_tolerates_missing_optional_fields():
-    # 只帶必要欄位（number/title/state/created_at/html_url），其餘（updated_at、
-    # user、labels、comments）都缺——函式用 raw.get(...) 處理這些，缺了不該爆炸，
-    # 該退回 None / 空清單
+    """只帶必要欄位時也不能出錯：選填欄位（updated_at、user、labels、comments）缺了就退回 None 或空清單。"""
     raw = {
         "number": 789,
         "title": "Minimal item",

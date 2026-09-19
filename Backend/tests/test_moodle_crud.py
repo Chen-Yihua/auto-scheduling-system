@@ -31,6 +31,7 @@ def _mock_chrome(monkeypatch, final_url):
 
 
 def test_login_to_moodle_returns_driver_on_success(monkeypatch):
+    """帳密正確 → 登入成功，回傳的瀏覽器要保持開著，給後續爬蟲使用。"""
     driver = _mock_chrome(monkeypatch, "https://moodle.nccu.edu.tw/my/")
 
     result = moodle_crud._login_to_moodle("stu123", "pw123")
@@ -40,7 +41,7 @@ def test_login_to_moodle_returns_driver_on_success(monkeypatch):
 
 
 def test_login_to_moodle_quits_driver_and_raises_when_login_fails(monkeypatch):
-    # 帳密錯誤時，Moodle 不會把使用者導到 my/ 首頁
+    """帳密錯誤 → 丟 NonRetryableError（重試也沒用），而且要先關掉瀏覽器，不能留著 Chrome 行程。"""
     driver = _mock_chrome(monkeypatch, "https://i.nccu.edu.tw/Login.aspx?error=1")
 
     with pytest.raises(NonRetryableError):
@@ -50,6 +51,7 @@ def test_login_to_moodle_quits_driver_and_raises_when_login_fails(monkeypatch):
 
 
 def test_login_to_moodle_quits_driver_on_unexpected_exception(monkeypatch):
+    """登入過程出現非帳密問題的錯誤（例如等待逾時）→ 錯誤照樣往外丟，瀏覽器一樣要關掉。"""
     driver = _mock_chrome(monkeypatch, "https://moodle.nccu.edu.tw/my/")
     # 模擬 WebDriverWait 本身出包（例如逾時），不是帳密問題——驗證不管哪種
     # 例外，driver 都要被收掉，不能留著 Chrome 行程
@@ -65,6 +67,7 @@ def test_login_to_moodle_quits_driver_on_unexpected_exception(monkeypatch):
 
 
 def test_verify_moodle_login_returns_true_and_quits_driver(monkeypatch):
+    """驗證 Moodle 帳密：登入成功 → 回傳 True，用完就關掉瀏覽器。"""
     driver = MagicMock()
     monkeypatch.setattr(moodle_crud, "_login_to_moodle", lambda u, p: driver)
 
@@ -75,6 +78,7 @@ def test_verify_moodle_login_returns_true_and_quits_driver(monkeypatch):
 
 
 def test_verify_moodle_login_propagates_nonretryable_error(monkeypatch):
+    """帳密錯誤的 NonRetryableError 要原封不動往外丟，不能被吞掉或轉成 False。"""
     def fake_login(u, p):
         raise NonRetryableError("帳密錯誤")
 
@@ -85,6 +89,7 @@ def test_verify_moodle_login_propagates_nonretryable_error(monkeypatch):
 
 
 def test_fetch_assignments_quits_driver_even_when_scraping_raises(monkeypatch):
+    """爬蟲中途出錯 → 錯誤照樣往外丟，但瀏覽器一定要關掉。"""
     driver = MagicMock()
     driver.find_element.side_effect = RuntimeError("找不到課程列表")
     monkeypatch.setattr(moodle_crud, "_login_to_moodle", lambda u, p: driver)
@@ -96,6 +101,7 @@ def test_fetch_assignments_quits_driver_even_when_scraping_raises(monkeypatch):
 
 
 def test_fetch_assignments_happy_path_returns_parsed_assignments(monkeypatch):
+    """正常流程：找到課程 → 進入課程頁 → 找出作業 → 回傳課程名稱、作業標題（不含尾巴多出的「作業」二字）和截止日期，最後關掉瀏覽器。"""
     driver = MagicMock()
     monkeypatch.setattr(moodle_crud, "_login_to_moodle", lambda u, p: driver)
 
@@ -142,8 +148,7 @@ def test_fetch_assignments_happy_path_returns_parsed_assignments(monkeypatch):
 
 
 def test_fetch_assignments_skips_bad_course_link_but_keeps_going(monkeypatch):
-    # 一個課程連結本身壞掉（例如 get_attribute 出錯），不該讓整個爬蟲當掉，
-    # 跳過它、繼續處理其他正常的課程連結
+    """單一課程連結壞掉不能讓整支爬蟲當掉：跳過它，繼續處理其他課程。"""
     driver = MagicMock()
     monkeypatch.setattr(moodle_crud, "_login_to_moodle", lambda u, p: driver)
 
@@ -168,7 +173,7 @@ def test_fetch_assignments_skips_bad_course_link_but_keeps_going(monkeypatch):
 
 
 def test_fetch_assignments_skips_course_that_fails_to_open(monkeypatch):
-    # 課程頁面打不開（driver.get 出錯），跳過這個課程，繼續處理其他課程
+    """課程頁面打不開 → 跳過這個課程，繼續處理其他課程。"""
     driver = MagicMock()
     monkeypatch.setattr(moodle_crud, "_login_to_moodle", lambda u, p: driver)
 
@@ -188,7 +193,7 @@ def test_fetch_assignments_skips_course_that_fails_to_open(monkeypatch):
 
 
 def test_fetch_assignments_skips_assignment_that_fails_to_parse(monkeypatch):
-    # 某個作業區塊解析失敗（例如缺 a.stretched-link），跳過它，不影響其他作業
+    """某個作業區塊解析失敗（例如缺 a.stretched-link）→ 跳過它，不影響其他作業。"""
     driver = MagicMock()
     monkeypatch.setattr(moodle_crud, "_login_to_moodle", lambda u, p: driver)
 
@@ -211,7 +216,7 @@ def test_fetch_assignments_skips_assignment_that_fails_to_parse(monkeypatch):
 
 
 def test_fetch_assignments_defaults_due_date_when_missing(monkeypatch):
-    # 作業沒有設截止日期是正常狀態，該顯示「無截止日期」而不是讓整支爬蟲當掉
+    """作業沒設截止日期是正常狀態 → due_date 顯示「無截止日期」，不能讓爬蟲當掉。"""
     driver = MagicMock()
     monkeypatch.setattr(moodle_crud, "_login_to_moodle", lambda u, p: driver)
 
@@ -245,7 +250,7 @@ def test_fetch_assignments_defaults_due_date_when_missing(monkeypatch):
 
 
 def test_fetch_assignments_skips_assignment_page_that_fails_to_open(monkeypatch):
-    # 課程頁面打得開，但個別作業的頁面打不開——跳過這筆作業，不影響其他作業
+    """課程頁面打得開、但個別作業的頁面打不開 → 跳過這筆作業，不影響其他作業。"""
     driver = MagicMock()
     monkeypatch.setattr(moodle_crud, "_login_to_moodle", lambda u, p: driver)
 
@@ -273,6 +278,7 @@ def test_fetch_assignments_skips_assignment_page_that_fails_to_open(monkeypatch)
 
 
 def test_fetch_assignments_skips_course_with_no_assignments(monkeypatch):
+    """課程裡沒有任何作業區塊 → 回傳空清單，不是錯誤。"""
     driver = MagicMock()
     monkeypatch.setattr(moodle_crud, "_login_to_moodle", lambda u, p: driver)
 
@@ -293,8 +299,9 @@ def test_fetch_assignments_skips_course_with_no_assignments(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_sync_moodle_assignments_delegates_to_sync_platform_items(monkeypatch):
-    # 只是包一層 sync_platform_items，把 collection/id_field 封裝起來，
-    # 驗證有沒有傳對參數就好，不用重新測 sync_platform_items 本身的邏輯
+    """同步 Moodle 作業 → 交給通用的同步流程處理，並原樣回傳它的結果。"""
+    # 檢查交給通用流程的參數（儲存位置、使用者 id、識別欄位、抓資料的函式）都正確；通用流程本身的邏輯不在這裡重測
+    # 它只是包一層 sync_platform_items，所以只檢查傳進去的參數，不重測 sync_platform_items 本身的邏輯
     captured = {}
 
     async def fake_sync_platform_items(**kwargs):

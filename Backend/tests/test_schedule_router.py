@@ -10,6 +10,7 @@ mock_user = {"sub": "test_user_123"}
 
 @pytest.mark.asyncio
 async def test_suggest_schedule_combines_tasks_and_free_slots(monkeypatch):
+    """把使用者的任務和 Google Calendar 空檔組合成排程建議：高優先度的排進唯一的空檔，其餘進 unscheduled。"""
     async def mock_get_tasks(user_id):
         return [
             {"id": "t1", "title": "任務一", "priority": "High", "status": "To Do", "due_date": None},
@@ -32,8 +33,9 @@ async def test_suggest_schedule_combines_tasks_and_free_slots(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_suggest_schedule_handles_no_tasks(monkeypatch):
+    """使用者沒有任務（crud 回傳空清單）→ scheduled 和 unscheduled 都是空清單，不能出錯。"""
     async def mock_get_tasks(user_id):
-        return None  # get_manual_tasks_by_user_id 沒有任務時回傳 None
+        return []  # get_manual_tasks_by_user_id 沒有任務時回傳空清單
 
     async def mock_get_free_slots(user_id):
         return [{"start": "2026-09-10T09:00:00Z", "end": "2026-09-10T10:00:00Z"}]
@@ -49,9 +51,8 @@ async def test_suggest_schedule_handles_no_tasks(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_suggest_schedule_returns_clean_500_when_build_suggestion_fails(monkeypatch):
-    # build_schedule_suggestion 本身不會丟 HTTPException，這裡模擬它意外
-    # 丟出例外（例如未來資料格式跟假設的不一樣），驗證使用者看到的是清楚的
-    # 中文 500，而不是沒有說明的原始例外
+    """排程計算意外出錯 → 回 500 和清楚的中文訊息，而不是沒有說明的原始例外。"""
+    # build_schedule_suggestion 本身不會丟 HTTPException，這裡模擬它出意外（例如未來資料格式跟假設的不一樣）
     async def mock_get_tasks(user_id):
         return [{"id": "t1", "title": "任務一", "priority": "High", "status": "To Do", "due_date": None}]
 

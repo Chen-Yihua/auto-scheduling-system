@@ -10,9 +10,9 @@ from main import app
 import routers.schedule as schedule_router
 
 
-# 測試 GET /schedule/suggest —— 任務 + 空檔 -> 排程建議
 @pytest.mark.asyncio
 async def test_get_schedule_suggestion(monkeypatch, logged_in_user):
+    """GET /schedule/suggest 成功：200，回傳 scheduled / unscheduled 兩份清單，datetime 被轉成字串。"""
     async def mock_get_tasks(user_id):
         return [{"id": "t1", "title": "任務一", "priority": "High", "status": "To Do", "due_date": None}]
 
@@ -32,9 +32,9 @@ async def test_get_schedule_suggestion(monkeypatch, logged_in_user):
     assert body["unscheduled"] == []
 
 
-# 使用者還沒連接 Google Calendar：底層丟出 400，HTTP 回應要帶著中文說明，前端才能顯示
 @pytest.mark.asyncio
 async def test_get_schedule_suggestion_when_calendar_not_connected(monkeypatch, logged_in_user):
+    """使用者還沒連接 Google Calendar → 400，HTTP 回應要帶著中文說明，前端才能顯示。"""
     async def mock_get_tasks(user_id):
         return []
 
@@ -51,9 +51,10 @@ async def test_get_schedule_suggestion_when_calendar_not_connected(monkeypatch, 
     assert res.json() == {"detail": "尚未連接 Google Calendar"}
 
 
-# 沒帶登入 token（這個測試沒有用 logged_in_user）-> 要被擋在門外，不能進到函式裡
 @pytest.mark.asyncio
 async def test_get_schedule_suggestion_requires_login():
+    """沒帶登入 token → 被擋在門外（401/403），不能進到函式裡。"""
+    # 這個測試刻意不用 logged_in_user，所以請求是沒登入的
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         res = await ac.get("/schedule/suggest")
 

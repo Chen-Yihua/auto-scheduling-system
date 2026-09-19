@@ -1,9 +1,8 @@
 """
-routers/oauth.py 的 HTTP 層級測試——先前只有 crud/oauth.py 被直接測試過
-（test_oauth_free_slots.py），router 這一層（/status、/calendars、/events、
-/available、/callback）完全沒有測試覆蓋，包含新加的 httpx.RequestError→502
-分支。這裡直接呼叫 router 函式本身（跟 test_schedule_router.py 同一種做法），
-不用真的架一個 TestClient 打 HTTP。
+routers/oauth.py 的 router 層測試：直接呼叫 router 函式（/status、/calendars、
+/events、/available、/callback），驗證各種錯誤分支回什麼狀態碼，包含
+httpx.RequestError→502。不經過 HTTP，路由註冊、登入驗證、JSON 格式由
+test_oauth_api.py 負責；crud 層由 test_oauth_free_slots.py 負責。
 """
 import pytest
 import httpx
@@ -24,6 +23,7 @@ def _http_status_error(status_code: int) -> httpx.HTTPStatusError:
 
 @pytest.mark.asyncio
 async def test_status_returns_connected_true(monkeypatch):
+    """/oauth/status：資料庫有存 Google token → {"connected": True}。"""
     async def mock_is_connected(clerk_id):
         return True
 
@@ -36,6 +36,7 @@ async def test_status_returns_connected_true(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_status_returns_connected_false(monkeypatch):
+    """/oauth/status：資料庫沒有 Google token → {"connected": False}。"""
     async def mock_is_connected(clerk_id):
         return False
 
@@ -50,6 +51,7 @@ async def test_status_returns_connected_false(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_get_calendars_happy_path(monkeypatch):
+    """/oauth/calendars：用資料庫裡的 access token 取得行事曆清單，並用 items 回傳。"""
     async def mock_get_token(clerk_id):
         return "valid-token"
 
@@ -67,6 +69,7 @@ async def test_get_calendars_happy_path(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_get_calendars_refreshes_token_on_401(monkeypatch):
+    """access token 過期（Google 回 401）→ 自動 refresh 換新 token，再重打一次成功（共打 2 次）。"""
     calls = {"n": 0}
 
     async def mock_get_token(clerk_id):
@@ -93,6 +96,7 @@ async def test_get_calendars_refreshes_token_on_401(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_get_calendars_raises_400_on_non_401_status_error(monkeypatch):
+    """Google 回 401 以外的錯誤（例如 500）→ 400，不做 refresh。"""
     async def mock_get_token(clerk_id):
         return "token"
 
@@ -110,6 +114,7 @@ async def test_get_calendars_raises_400_on_non_401_status_error(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_get_calendars_raises_502_when_google_unreachable(monkeypatch):
+    """連不上 Google → 502。"""
     async def mock_get_token(clerk_id):
         return "token"
 
@@ -129,6 +134,7 @@ async def test_get_calendars_raises_502_when_google_unreachable(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_get_events_happy_path(monkeypatch):
+    """/oauth/events：找到 primary 行事曆，取它未來 7 天的事件並用 items 回傳。"""
     async def mock_get_token(clerk_id):
         return "token"
 
@@ -150,6 +156,7 @@ async def test_get_events_happy_path(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_get_events_refreshes_token_on_401_when_fetching_calendar_list(monkeypatch):
+    """取得行事曆清單時 token 過期（401）→ 自動 refresh 後重試。"""
     calls = {"n": 0}
 
     async def mock_get_token(clerk_id):
@@ -180,6 +187,7 @@ async def test_get_events_refreshes_token_on_401_when_fetching_calendar_list(mon
 
 @pytest.mark.asyncio
 async def test_get_events_raises_404_when_no_primary_calendar(monkeypatch):
+    """行事曆清單裡沒有 primary → 404。"""
     async def mock_get_token(clerk_id):
         return "token"
 
@@ -197,6 +205,7 @@ async def test_get_events_raises_404_when_no_primary_calendar(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_get_events_raises_400_on_non_401_status_error_when_fetching_calendar_list(monkeypatch):
+    """取得行事曆清單時 Google 回 401 以外的錯誤 → 400。"""
     async def mock_get_token(clerk_id):
         return "token"
 
@@ -214,6 +223,7 @@ async def test_get_events_raises_400_on_non_401_status_error_when_fetching_calen
 
 @pytest.mark.asyncio
 async def test_get_events_raises_502_when_calendar_list_unreachable(monkeypatch):
+    """取得行事曆清單時連不上 Google → 502。"""
     async def mock_get_token(clerk_id):
         return "token"
 
@@ -231,6 +241,7 @@ async def test_get_events_raises_502_when_calendar_list_unreachable(monkeypatch)
 
 @pytest.mark.asyncio
 async def test_get_events_refreshes_token_on_401_when_fetching_events(monkeypatch):
+    """取得事件時 token 過期（401）→ 自動 refresh 後重試。"""
     calls = {"n": 0}
 
     async def mock_get_token(clerk_id):
@@ -261,6 +272,7 @@ async def test_get_events_refreshes_token_on_401_when_fetching_events(monkeypatc
 
 @pytest.mark.asyncio
 async def test_get_events_raises_400_on_non_401_status_error_when_fetching_events(monkeypatch):
+    """取得事件時 Google 回 401 以外的錯誤 → 400。"""
     async def mock_get_token(clerk_id):
         return "token"
 
@@ -282,6 +294,7 @@ async def test_get_events_raises_400_on_non_401_status_error_when_fetching_event
 
 @pytest.mark.asyncio
 async def test_get_events_raises_502_when_events_fetch_unreachable(monkeypatch):
+    """取得事件時連不上 Google → 502。"""
     async def mock_get_token(clerk_id):
         return "token"
 
@@ -304,7 +317,8 @@ async def test_get_events_raises_502_when_events_fetch_unreachable(monkeypatch):
 # ---------- /available ----------
 
 @pytest.mark.asyncio
-async def test_get_available_times_converts_utc_to_taipei_local(monkeypatch):
+async def test_get_available_times_returns_slots_in_utc(monkeypatch):
+    """/oauth/available：回給前端的空檔維持 UTC 格式（freeSlotsUtc）；轉成台北時區只是為了寫 log 方便檢查，不影響回傳內容。"""
     async def mock_get_free_slots(clerk_id):
         return [{"start": "2026-09-10T00:00:00Z", "end": "2026-09-10T01:00:00Z"}]
 
@@ -321,6 +335,7 @@ async def test_get_available_times_converts_utc_to_taipei_local(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_oauth_callback_happy_path_saves_token(monkeypatch):
+    """/oauth/callback：用授權碼跟 Google 換 token 成功 → 把 access / refresh token 存進資料庫，回「授權成功」。"""
     saved = {}
 
     class MockResponse:
@@ -364,6 +379,7 @@ async def test_oauth_callback_happy_path_saves_token(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_oauth_callback_raises_400_when_google_rejects_code(monkeypatch):
+    """Google 拒絕這個授權碼（無效或已過期）→ 400。"""
     class MockResponse:
         status_code = 400
 
@@ -392,6 +408,7 @@ async def test_oauth_callback_raises_400_when_google_rejects_code(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_oauth_callback_raises_400_when_no_access_token_in_response(monkeypatch):
+    """Google 回 200 但回應裡沒有 access_token → 400，不能存一個空的 token。"""
     class MockResponse:
         status_code = 200
 

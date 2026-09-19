@@ -22,6 +22,7 @@ def _mock_update_one(stored: dict):
 
 @pytest.mark.asyncio
 async def test_create_moodle_account_encrypts_password(monkeypatch):
+    """建立 Moodle 帳號時，密碼存進資料庫前要加密，不能存明文；解密後要等於原本的密碼。"""
     stored = {}
     monkeypatch.setattr(linked_mod.db.linkedAccounts, "update_one", _mock_update_one(stored))
     monkeypatch.setattr(linked_mod, "verify_moodle_login", lambda username, password: True)
@@ -35,6 +36,7 @@ async def test_create_moodle_account_encrypts_password(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_create_moodle_account_rejects_wrong_credentials(monkeypatch):
+    """Moodle 帳密驗證失敗 → 401，而且完全不能寫進資料庫。"""
     from crud.errors import NonRetryableError
 
     stored = {}
@@ -56,6 +58,7 @@ async def test_create_moodle_account_rejects_wrong_credentials(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_create_github_account_encrypts_apikey(monkeypatch):
+    """建立 GitHub 帳號時，apiKey 存進資料庫前要加密；但向 GitHub 驗證 token 時用的必須是明文。"""
     stored = {}
 
     async def mock_fetch_github_userinfo(token):
@@ -76,6 +79,7 @@ async def test_create_github_account_encrypts_apikey(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_get_linked_accounts_never_returns_plaintext_or_ciphertext(monkeypatch):
+    """查詢綁定帳號時，回傳的密碼既不是明文、也不是原樣的密文，只保留最後 4 碼讓前端辨識。"""
     real_password = "super-secret-pw"
     encrypted = encrypt_secret(real_password)
 
@@ -105,6 +109,7 @@ async def test_get_linked_accounts_never_returns_plaintext_or_ciphertext(monkeyp
 
 @pytest.mark.asyncio
 async def test_update_moodle_password_encrypts_before_save(monkeypatch):
+    """更新 Moodle 密碼時，存進資料庫前也要加密。"""
     stored = {}
     monkeypatch.setattr(linked_mod.db.linkedAccounts, "update_one", _mock_update_one(stored))
     monkeypatch.setattr(linked_mod, "verify_moodle_login", lambda username, password: True)
@@ -125,7 +130,7 @@ async def test_update_moodle_password_encrypts_before_save(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_update_jira_apikey_without_domain_still_encrypted(monkeypatch):
-    # 只更新 apiKey、沒帶 domain 的邊界情況，過去會漏加密，這裡確保有修正
+    """只更新 Jira 的 apiKey、沒帶 domain 時也要加密（這個情境過去漏加密過）。"""
     stored = {}
     monkeypatch.setattr(linked_mod.db.linkedAccounts, "update_one", _mock_update_one(stored))
 

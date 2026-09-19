@@ -33,6 +33,7 @@ def _run_import_in_clean_process(code: str, env_overrides: dict) -> subprocess.C
 
 
 def test_missing_clerk_env_vars_breaks_import():
+    """沒有 CLERK_JWKS_URL / CLERK_ISSUER 時，import db.security 要直接失敗（fail fast），不能帶著壞設定啟動。"""
     result = _run_import_in_clean_process("import db.security", env_overrides={})
 
     assert result.returncode != 0
@@ -40,6 +41,7 @@ def test_missing_clerk_env_vars_breaks_import():
 
 
 def test_clerk_env_vars_present_allows_import():
+    """兩個 Clerk 環境變數都有時，import db.security 要成功。"""
     result = _run_import_in_clean_process(
         "import db.security",
         env_overrides={
@@ -52,6 +54,7 @@ def test_clerk_env_vars_present_allows_import():
 
 
 def test_missing_gemini_api_key_breaks_webhook_import():
+    """沒有 GEMINI_API_KEY 時，import routers.webhook 要失敗（建立 genai.Client 就會出錯）。"""
     result = _run_import_in_clean_process("import routers.webhook", env_overrides={})
 
     # 只斷言「import 失敗」，不比對 google-genai SDK 例外訊息的確切文字——
@@ -61,6 +64,7 @@ def test_missing_gemini_api_key_breaks_webhook_import():
 
 
 def test_gemini_api_key_present_allows_webhook_import():
+    """有 GEMINI_API_KEY 時，import routers.webhook 要成功。"""
     result = _run_import_in_clean_process(
         "import routers.webhook", env_overrides={"GEMINI_API_KEY": "fake-key"}
     )
@@ -86,6 +90,7 @@ def _get_job_block(workflow_text: str, job_name: str) -> str:
 
 
 def test_backend_test_job_has_required_env_vars_wired_in_ci():
+    """CI 的 backend-test job 一定要帶入 CLERK_ISSUER、CLERK_JWKS_URL、GEMINI_API_KEY，不然 pytest 連收集測試都會失敗；防止以後改 workflow 時不小心拿掉。"""
     with open(WORKFLOW_PATH, encoding="utf-8") as f:
         workflow_text = f.read()
 

@@ -9,6 +9,7 @@ import main as main_mod
 
 @pytest.mark.asyncio
 async def test_ensure_indexes_creates_expected_indexes(monkeypatch):
+    """啟動時建立的索引要對：linkedAccounts 用 (clerk_id, platform)；manual_tasks 的 id 唯一、user_id 有索引；三個平台的快取集合用 (user_id, id)，且不強制 unique（避免舊資料讓建立索引失敗）。"""
     linked_accounts_mock = AsyncMock()
     manual_tasks_mock = AsyncMock()
     github_issues_mock = AsyncMock()
@@ -39,6 +40,7 @@ async def test_ensure_indexes_creates_expected_indexes(monkeypatch):
 
 
 def test_app_startup_calls_ensure_indexes(monkeypatch):
+    """應用程式啟動時要自動建立資料庫索引。"""
     called = {"count": 0}
 
     async def fake_ensure_indexes():

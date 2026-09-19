@@ -11,6 +11,7 @@ def _mock_response(payload: dict):
 
 @pytest.mark.asyncio
 async def test_infer_missing_task_fields_success(monkeypatch):
+    """LLM 回傳合法結果 → 採用它給的優先度、時長和理由。"""
     monkeypatch.setattr(
         task_inference.client.models,
         "generate_content",
@@ -30,6 +31,7 @@ async def test_infer_missing_task_fields_success(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_infer_missing_task_fields_includes_hint_in_prompt(monkeypatch):
+    """使用者給的提醒（hint）要放進送給 LLM 的 prompt。"""
     captured = {}
 
     def fake_generate_content(**kwargs):
@@ -47,6 +49,7 @@ async def test_infer_missing_task_fields_includes_hint_in_prompt(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_infer_missing_task_fields_uses_placeholder_when_no_hint(monkeypatch):
+    """沒有提醒時，prompt 要寫「使用者給的提醒：（無）」，不能留空或出現 None。"""
     captured = {}
 
     def fake_generate_content(**kwargs):
@@ -62,6 +65,7 @@ async def test_infer_missing_task_fields_uses_placeholder_when_no_hint(monkeypat
 
 @pytest.mark.asyncio
 async def test_infer_missing_task_fields_falls_back_on_invalid_priority(monkeypatch):
+    """LLM 回了不在 High/Medium/Low 內的優先度 → 整組退回預設值，不採用亂掉的結果。"""
     monkeypatch.setattr(
         task_inference.client.models,
         "generate_content",
@@ -77,6 +81,7 @@ async def test_infer_missing_task_fields_falls_back_on_invalid_priority(monkeypa
 
 @pytest.mark.asyncio
 async def test_infer_missing_task_fields_falls_back_on_out_of_range_duration(monkeypatch):
+    """LLM 回的時長超出合理範圍（9999 分鐘）→ 退回預設值。"""
     monkeypatch.setattr(
         task_inference.client.models,
         "generate_content",
@@ -91,6 +96,7 @@ async def test_infer_missing_task_fields_falls_back_on_out_of_range_duration(mon
 
 @pytest.mark.asyncio
 async def test_infer_missing_task_fields_falls_back_on_non_numeric_duration(monkeypatch):
+    """LLM 回的時長不是數字（「大概兩小時吧」）→ 退回預設值。"""
     monkeypatch.setattr(
         task_inference.client.models,
         "generate_content",
@@ -105,6 +111,7 @@ async def test_infer_missing_task_fields_falls_back_on_non_numeric_duration(monk
 
 @pytest.mark.asyncio
 async def test_infer_missing_task_fields_falls_back_on_malformed_json(monkeypatch):
+    """LLM 回的不是合法 JSON → 退回預設值，不能讓建立任務失敗。"""
     monkeypatch.setattr(
         task_inference.client.models,
         "generate_content",
@@ -119,6 +126,7 @@ async def test_infer_missing_task_fields_falls_back_on_malformed_json(monkeypatc
 
 @pytest.mark.asyncio
 async def test_infer_missing_task_fields_falls_back_on_api_exception(monkeypatch):
+    """LLM 服務出錯（例如服務掛了）→ 退回預設值；推斷是輔助功能，不能因為它壞掉就擋住使用者建立任務。"""
     def raise_error(**kwargs):
         raise Exception("Gemini API down")
 

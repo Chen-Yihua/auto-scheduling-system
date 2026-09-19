@@ -25,6 +25,7 @@ def _mock_client(monkeypatch, handler):
 
 @pytest.mark.asyncio
 async def test_fetch_google_calendar_list_returns_items_with_bearer_auth(monkeypatch):
+    """取得行事曆清單：要帶 Authorization: Bearer <token>、打 calendarList 這個 URL，並回傳 items。"""
     captured = {}
 
     def handler(request):
@@ -43,6 +44,7 @@ async def test_fetch_google_calendar_list_returns_items_with_bearer_auth(monkeyp
 
 @pytest.mark.asyncio
 async def test_fetch_google_calendar_list_returns_empty_list_when_no_items_key(monkeypatch):
+    """Google 回應沒有 items 欄位 → 回傳空清單，不是 KeyError。"""
     _mock_client(monkeypatch, lambda request: httpx.Response(200, json={}))
 
     result = await gcal.fetch_google_calendar_list("token")
@@ -52,6 +54,7 @@ async def test_fetch_google_calendar_list_returns_empty_list_when_no_items_key(m
 
 @pytest.mark.asyncio
 async def test_fetch_google_calendar_list_raises_http_status_error_on_failure(monkeypatch):
+    """Google 回 401（授權失效）→ 丟出帶狀態碼的錯誤，呼叫端才能判斷要不要 refresh token。"""
     _mock_client(monkeypatch, lambda request: httpx.Response(401, json={"error": "invalid_token"}))
 
     with pytest.raises(httpx.HTTPStatusError):
@@ -62,6 +65,7 @@ async def test_fetch_google_calendar_list_raises_http_status_error_on_failure(mo
 
 @pytest.mark.asyncio
 async def test_fetch_events_in_next_7_days_returns_items_for_given_calendar(monkeypatch):
+    """取得未來 7 天事件：URL 要帶指定的行事曆 ID，並回傳 items。"""
     captured = {}
 
     def handler(request):
@@ -78,6 +82,7 @@ async def test_fetch_events_in_next_7_days_returns_items_for_given_calendar(monk
 
 @pytest.mark.asyncio
 async def test_fetch_events_in_next_7_days_raises_http_status_error_on_failure(monkeypatch):
+    """Google 回 403（沒有權限）→ 丟出錯誤，不能回傳空清單假裝成功。"""
     _mock_client(monkeypatch, lambda request: httpx.Response(403, json={"error": "forbidden"}))
 
     with pytest.raises(httpx.HTTPStatusError):
@@ -88,6 +93,7 @@ async def test_fetch_events_in_next_7_days_raises_http_status_error_on_failure(m
 
 @pytest.mark.asyncio
 async def test_fetch_freebusy_returns_json_body(monkeypatch):
+    """查詢忙碌時段：請求內容要帶指定的行事曆 ID，並回傳 Google 的 JSON。"""
     captured = {}
 
     def handler(request):
@@ -104,6 +110,7 @@ async def test_fetch_freebusy_returns_json_body(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_fetch_freebusy_raises_http_status_error_on_failure(monkeypatch):
+    """Google 回 500 → 丟出錯誤，不能回傳空結果假裝成功。"""
     _mock_client(monkeypatch, lambda request: httpx.Response(500))
 
     with pytest.raises(httpx.HTTPStatusError):
@@ -113,12 +120,14 @@ async def test_fetch_freebusy_raises_http_status_error_on_failure(monkeypatch):
 # ---------- compute_free_times ----------
 
 def test_compute_free_times_no_busy_returns_whole_window():
+    """完全沒有忙碌時段 → 整段時間都是空檔。"""
     result = gcal.compute_free_times([], "2026-09-10T00:00:00Z", "2026-09-10T08:00:00Z")
 
     assert result == [{"start": "2026-09-10T00:00:00Z", "end": "2026-09-10T08:00:00Z"}]
 
 
 def test_compute_free_times_single_busy_block_splits_window():
+    """中間有一段忙碌時段 → 空檔被切成前後兩段。"""
     busy = [{"start": "2026-09-10T02:00:00Z", "end": "2026-09-10T03:00:00Z"}]
 
     result = gcal.compute_free_times(busy, "2026-09-10T00:00:00Z", "2026-09-10T08:00:00Z")
@@ -130,6 +139,7 @@ def test_compute_free_times_single_busy_block_splits_window():
 
 
 def test_compute_free_times_busy_covering_entire_window_returns_no_free_slots():
+    """忙碌時段涵蓋整個時間窗 → 沒有任何空檔。"""
     busy = [{"start": "2026-09-10T00:00:00Z", "end": "2026-09-10T08:00:00Z"}]
 
     result = gcal.compute_free_times(busy, "2026-09-10T00:00:00Z", "2026-09-10T08:00:00Z")
@@ -138,8 +148,7 @@ def test_compute_free_times_busy_covering_entire_window_returns_no_free_slots():
 
 
 def test_compute_free_times_overlapping_busy_blocks_are_merged():
-    # 兩個重疊的忙碌區段（02:00-04:00 跟 03:00-05:00）要當成一個連續區段處理，
-    # 不能因為重疊就產生一個時間倒著走的假空檔
+    """兩個重疊的忙碌時段（02:00-04:00 和 03:00-05:00）要當成一個連續時段處理，不能因為重疊產生時間倒著走的假空檔。"""
     busy = [
         {"start": "2026-09-10T02:00:00Z", "end": "2026-09-10T04:00:00Z"},
         {"start": "2026-09-10T03:00:00Z", "end": "2026-09-10T05:00:00Z"},
@@ -154,6 +163,7 @@ def test_compute_free_times_overlapping_busy_blocks_are_merged():
 
 
 def test_compute_free_times_unsorted_busy_blocks_are_handled():
+    """忙碌時段沒照時間排序也要能正確算出空檔。"""
     busy = [
         {"start": "2026-09-10T05:00:00Z", "end": "2026-09-10T06:00:00Z"},
         {"start": "2026-09-10T02:00:00Z", "end": "2026-09-10T03:00:00Z"},

@@ -12,6 +12,7 @@ import db.security as security
 
 @pytest.mark.asyncio
 async def test_get_current_clerk_user_returns_decoded_payload_on_success():
+    """驗證成功 → 原樣回傳解碼後的 token 內容（含 sub、email）。"""
     credentials = HTTPAuthorizationCredentials(
         scheme="Bearer", credentials="valid-token", decoded={"sub": "uid123", "email": "a@b.com"}
     )
@@ -23,6 +24,7 @@ async def test_get_current_clerk_user_returns_decoded_payload_on_success():
 
 @pytest.mark.asyncio
 async def test_get_current_clerk_user_raises_401_when_credentials_missing():
+    """完全沒有 credentials → 401，並帶 WWW-Authenticate: Bearer 標頭。"""
     with pytest.raises(HTTPException) as exc_info:
         await security.get_current_clerk_user(credentials=None)
 
@@ -32,8 +34,7 @@ async def test_get_current_clerk_user_raises_401_when_credentials_missing():
 
 @pytest.mark.asyncio
 async def test_get_current_clerk_user_raises_401_when_token_fails_to_decode():
-    # decoded 是 None 代表 ClerkHTTPBearer 驗證失敗（token 過期/簽章不對/JWKS
-    # 抓不到...），但 auto_error 沒有在更上層就直接擋下來時的最後一道防線
+    """token 驗證失敗（過期、簽章不對、公鑰取不到）→ 401。這是上層驗證沒擋下時的最後一道防線。"""
     credentials = HTTPAuthorizationCredentials(
         scheme="Bearer", credentials="bad-token", decoded=None
     )

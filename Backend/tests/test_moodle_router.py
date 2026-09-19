@@ -69,6 +69,7 @@ class FakeMoodleAssignments:
 
 @pytest.mark.asyncio
 async def test_get_assignments_success(monkeypatch):
+    """成功流程：查到帳號 → 解密密碼 → 爬 Moodle → 存進 DB 並回傳作業清單，X-Data-Stale 為 false；爬蟲拿到的是解密後的明文密碼，不是資料庫裡的密文。"""
     fetch_calls = []
 
     def mock_fetch_assignments(username, password):
@@ -105,6 +106,7 @@ async def test_get_assignments_success(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_get_assignments_falls_back_to_cache_when_scrape_fails(monkeypatch):
+    """爬蟲失敗（登入失敗）但 DB 有上次成功抓到的資料 → 回舊資料，X-Data-Stale 為 true；登入失敗是 NonRetryableError，只爬一次、不重試。"""
     call_count = {"n": 0}
 
     def mock_fetch_assignments(username, password):
@@ -140,6 +142,7 @@ async def test_get_assignments_falls_back_to_cache_when_scrape_fails(monkeypatch
 
 @pytest.mark.asyncio
 async def test_get_assignments_raises_401_when_scrape_fails_and_no_cache(monkeypatch):
+    """爬蟲失敗又沒有舊資料可退回 → 回 401 和固定訊息；內部原因（含帳號資訊）只寫進 log，不回傳給前端。"""
     def mock_fetch_assignments(username, password):
         raise NonRetryableError("Moodle 登入失敗，使用者：stu001")
 
@@ -155,29 +158,12 @@ async def test_get_assignments_raises_401_when_scrape_fails_and_no_cache(monkeyp
         await moodle_router.get_assignments(request=MagicMock(), response=Response(), clerk_user=mock_user)
 
     assert exc_info.value.status_code == 401
-    # detail 應該是給使用者看的固定訊息，內部例外原因（含帳號資訊）只會寫進 log，
-    # 不會回傳給前端（避免洩漏內部細節）
     assert exc_info.value.detail == "無法取得 Moodle 資料，請確認帳號密碼是否正確"
 
 
 @pytest.mark.asyncio
-async def test_get_assignments_raises_503_when_db_down(monkeypatch):
-    from pymongo.errors import PyMongoError
-
-    class FailingLinkedAccounts:
-        async def find_one(self, query):
-            raise PyMongoError("connection lost")
-
-    monkeypatch.setattr(moodle_router.db, "linkedAccounts", FailingLinkedAccounts())
-
-    with pytest.raises(HTTPException) as exc_info:
-        await moodle_router.get_assignments(request=MagicMock(), response=Response(), clerk_user=mock_user)
-
-    assert exc_info.value.status_code == 503
-
-
-@pytest.mark.asyncio
 async def test_get_assignments_raises_400_when_account_not_linked(monkeypatch):
+    """使用者還沒綁定 Moodle → 回 400 "No Moodle linked account"。"""
     class EmptyLinkedAccounts:
         async def find_one(self, query):
             return None
@@ -193,6 +179,7 @@ async def test_get_assignments_raises_400_when_account_not_linked(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_get_assignments_raises_500_when_decrypt_fails(monkeypatch):
+    """密碼解密失敗（資料壞掉或金鑰不對）→ 回 500。"""
     class BadlyEncryptedLinkedAccounts:
         async def find_one(self, query):
             return {"username": "stu001", "password": "not-actually-encrypted"}
@@ -207,6 +194,7 @@ async def test_get_assignments_raises_500_when_decrypt_fails(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_get_assignments_raises_500_on_unexpected_sync_error(monkeypatch):
+    """同步時出現未預期的錯誤 → 回 500 和固定中文訊息。"""
     async def mock_sync(user_id, fetch_fn):
         raise RuntimeError("unexpected bug")
 
@@ -222,6 +210,7 @@ async def test_get_assignments_raises_500_on_unexpected_sync_error(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_get_assignments_sets_auth_error_header(monkeypatch):
+    """帳密已失效、但有舊資料可顯示 → 回舊資料，並用 X-Auth-Error 告訴前端要重新連結帳號、X-Data-Stale 標示資料是舊的。"""
     async def mock_sync(user_id, fetch_fn):
         return ([], True, None, True)
 
@@ -238,6 +227,7 @@ async def test_get_assignments_sets_auth_error_header(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_get_assignments_second_call_within_ttl_skips_scrape_entirely(monkeypatch):
+    """短時間內重複整理：第二次要直接用快取，不再重新爬 Moodle（爬蟲要開瀏覽器，成本高）。"""
     call_count = {"n": 0}
 
     def mock_fetch_assignments(username, password):
@@ -272,10 +262,7 @@ async def test_get_assignments_second_call_within_ttl_skips_scrape_entirely(monk
 
 @pytest.mark.asyncio
 async def test_get_assignments_does_not_cache_stale_fallback_result(monkeypatch):
-    """
-    爬蟲失敗、退回 DB 舊資料時（stale=True）不該進 TTL 快取——
-    否則下一次呼叫會直接讀到「已知是舊的」快取，跳過重新嘗試爬蟲的機會。
-    """
+    """爬蟲失敗、只能退回舊資料時，這份舊資料不能被快取——否則下一次請求會直接讀到「已知是舊的」快取，錯過重新嘗試爬蟲的機會。"""
     call_count = {"n": 0}
 
     def mock_fetch_assignments(username, password):

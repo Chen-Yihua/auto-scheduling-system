@@ -21,6 +21,7 @@ test_account = LinkedAccountCreate(
 
 @pytest.mark.asyncio
 async def test_create_linked_account(monkeypatch, logged_in_user):
+    """POST /user/linked-accounts/create：建立 GitHub 綁定帳號成功，回 200。"""
     async def mock_fetch(token):
         return {"username": "mock_user", "avatar_url": "https://mock.avatar"}
 
@@ -40,6 +41,7 @@ async def test_create_linked_account(monkeypatch, logged_in_user):
 
 @pytest.mark.asyncio
 async def test_get_linked_accounts(monkeypatch, logged_in_user):
+    """GET /user/linked-accounts/me：回傳目前使用者綁定的帳號清單。"""
     # 定義 MockCursor 支援 async for
     class MockCursor:
         def __aiter__(self):
@@ -65,6 +67,7 @@ async def test_get_linked_accounts(monkeypatch, logged_in_user):
 
 @pytest.mark.asyncio
 async def test_update_linked_account(monkeypatch, logged_in_user):
+    """PUT /user/linked-accounts/：更新綁定帳號成功，回 200。"""
     async def mock_update(clerk_id, platform, data):
         return True
 
@@ -82,6 +85,7 @@ async def test_update_linked_account(monkeypatch, logged_in_user):
 
 @pytest.mark.asyncio
 async def test_delete_linked_account(monkeypatch, logged_in_user):
+    """DELETE /user/linked-accounts/{platform}：刪除綁定帳號成功，回 200。"""
     async def mock_delete(composite_id):
         return True
 
@@ -94,9 +98,9 @@ async def test_delete_linked_account(monkeypatch, logged_in_user):
     assert res.status_code == status.HTTP_200_OK
 
 
-# 要更新的綁定帳號不存在（或沒有任何合法欄位可更新）：HTTP 回應要是 404 加上說明
 @pytest.mark.asyncio
 async def test_update_linked_account_not_found(monkeypatch, logged_in_user):
+    """要更新的綁定帳號不存在（或沒有任何合法欄位可更新）→ 404 加說明。"""
     async def mock_update(clerk_id, platform, data):
         return False
 
@@ -112,9 +116,10 @@ async def test_update_linked_account_not_found(monkeypatch, logged_in_user):
     assert res.json() == {"detail": "Linked account not found or no valid fields to update"}
 
 
-# 沒帶登入 token（這個測試沒有用 logged_in_user）-> 要被擋在門外，不能進到函式裡
 @pytest.mark.asyncio
 async def test_get_linked_accounts_requires_login():
+    """沒帶登入 token → 被擋在門外（401/403），不能進到函式裡。"""
+    # 這個測試刻意不用 logged_in_user，所以請求是沒登入的
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         res = await ac.get("/user/linked-accounts/me")
 

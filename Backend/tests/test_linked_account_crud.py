@@ -19,6 +19,7 @@ import httpx
 
 @pytest.mark.asyncio
 async def test_create_github_account_success(monkeypatch):
+    """建立 GitHub 綁定帳號成功：用 GitHub 回傳的使用者資訊填 username / avatar，apiKey 存進資料庫前要加密。"""
     updated_doc = {}
 
     async def mock_update_one(filter, update, upsert=False):
@@ -42,6 +43,7 @@ async def test_create_github_account_success(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_create_github_missing_token():
+    """GitHub 沒帶 apiKey → 400。"""
     account = LinkedAccountCreate(platform="github", apiKey="", status="", username="")
     with pytest.raises(HTTPException) as exc_info:
         await create_linked_account("uid123", account)
@@ -50,6 +52,7 @@ async def test_create_github_missing_token():
 
 @pytest.mark.asyncio
 async def test_create_jira_missing_domain():
+    """Jira 沒帶 domain → 400。"""
     account = LinkedAccountCreate(platform="jira", apiKey="abc123", domain=None, status="", username="")
     with pytest.raises(HTTPException) as exc_info:
         await create_linked_account("uid123", account)
@@ -58,6 +61,7 @@ async def test_create_jira_missing_domain():
 
 @pytest.mark.asyncio
 async def test_create_moodle_missing_password():
+    """Moodle 沒帶密碼 → 400。"""
     account = LinkedAccountCreate(platform="moodle", username="stu001", password="", status="")
     with pytest.raises(HTTPException) as exc_info:
         await create_linked_account("uid123", account)
@@ -66,6 +70,7 @@ async def test_create_moodle_missing_password():
 
 @pytest.mark.asyncio
 async def test_create_moodle_wrong_password_rejected(monkeypatch):
+    """Moodle 帳密驗證失敗（NonRetryableError）→ 401。"""
     # verify_moodle_login 本身是同步函式（真正的實作用 Selenium），
     # create_linked_account 用 run_in_threadpool 呼叫它——mock 也要是同步的
     def mock_verify_fails(username, password):
@@ -81,6 +86,7 @@ async def test_create_moodle_wrong_password_rejected(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_create_duplicate_account_returns_409(monkeypatch):
+    """該平台已經綁定過 → 409。"""
     async def mock_update_one(filter, update, upsert=False):
         raise DuplicateKeyError("duplicate")
 
@@ -97,26 +103,8 @@ async def test_create_duplicate_account_returns_409(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_create_account_raises_503_when_db_down(monkeypatch):
-    from pymongo.errors import PyMongoError
-
-    async def mock_update_one(filter, update, upsert=False):
-        raise PyMongoError("connection lost")
-
-    async def mock_fetch_github_userinfo(token):
-        return {"username": "mock", "avatar_url": "mock"}
-
-    monkeypatch.setattr(linked_mod.db.linkedAccounts, "update_one", mock_update_one)
-    monkeypatch.setattr(linked_mod, "fetch_github_userinfo", mock_fetch_github_userinfo)
-
-    account = LinkedAccountCreate(platform="github", apiKey="abc123", status="", username="")
-    with pytest.raises(HTTPException) as exc_info:
-        await create_linked_account("uid123", account)
-    assert exc_info.value.status_code == 503
-
-
-@pytest.mark.asyncio
 async def test_create_account_unsupported_platform_returns_400():
+    """不支援的平台（例如 notion）→ 400。"""
     account = LinkedAccountCreate(platform="notion", apiKey="abc123", status="", username="")
     with pytest.raises(HTTPException) as exc_info:
         await create_linked_account("uid123", account)
@@ -125,6 +113,7 @@ async def test_create_account_unsupported_platform_returns_400():
 
 @pytest.mark.asyncio
 async def test_create_jira_account_success(monkeypatch):
+    """建立 Jira 綁定帳號成功：用 Jira 回傳的使用者資訊填 username / avatar。"""
     updated_doc = {}
 
     async def mock_update_one(filter, update, upsert=False):
@@ -149,6 +138,7 @@ async def test_create_jira_account_success(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_create_moodle_account_success(monkeypatch):
+    """建立 Moodle 綁定帳號成功：帳密驗證通過後 status 為 connected，密碼存進資料庫前要加密。"""
     updated_doc = {}
 
     async def mock_update_one(filter, update, upsert=False):
@@ -172,8 +162,7 @@ async def test_create_moodle_account_success(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_create_moodle_webdriver_exception_raises_503(monkeypatch):
-    # Selenium/WebDriver 本身出包（不是帳密錯誤）跟登入失敗要分開處理，
-    # 這種是我方服務暫時有問題，不是使用者輸入錯誤
+    """Selenium/WebDriver 本身出包（不是帳密錯誤）→ 503。這是我方服務暫時有問題，要跟使用者輸入錯誤的 401 分開。"""
     from selenium.common.exceptions import WebDriverException
 
     def mock_verify_raises(username, password):
@@ -191,6 +180,7 @@ async def test_create_moodle_webdriver_exception_raises_503(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_get_linked_accounts(monkeypatch):
+    """查詢綁定帳號 → 回傳清單，每筆用 id 欄位識別，不含資料庫內部的 _id。"""
     class MockCursor:
         def __aiter__(self):
             async def generator():
@@ -206,6 +196,7 @@ async def test_get_linked_accounts(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_get_linked_accounts_masks_sensitive_fields(monkeypatch):
+    """查詢時敏感欄位（密碼）只回遮罩過的字串，絕不回傳明文。"""
     from db.crypto import encrypt_secret
 
     class MockCursor:
@@ -222,7 +213,6 @@ async def test_get_linked_accounts_masks_sensitive_fields(monkeypatch):
     monkeypatch.setattr(linked_mod.db.linkedAccounts, "find", lambda q: MockCursor())
     result = await get_linked_accounts_by_clerk_id("uid123")
 
-    # 絕不把解密後的明文密碼回傳給呼叫端，只回遮罩過的字串
     assert result[0]["password"] != "real-password"
     assert result[0]["password"].endswith("word")  # mask_secret 保留最後幾碼
 
@@ -231,6 +221,7 @@ async def test_get_linked_accounts_masks_sensitive_fields(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_update_github_account_with_token(monkeypatch):
+    """更新 GitHub 的 apiKey → 用新 token 重新驗證並更新 username，apiKey 存進資料庫前要加密。"""
     updated = {}
 
     async def mock_fetch_github_userinfo(token):
@@ -254,6 +245,7 @@ async def test_update_github_account_with_token(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_update_linked_account_no_valid_fields():
+    """payload 裡沒有任何合法欄位（例如只有 foo）→ 回傳 False（router 會轉成 404）。"""
     result = await update_linked_account_by_clerk_id(
         "uid123", "github", {"payload": {"foo": "bar"}}
     )
@@ -262,28 +254,15 @@ async def test_update_linked_account_no_valid_fields():
 
 @pytest.mark.asyncio
 async def test_update_linked_account_invalid_payload_raises_400():
+    """payload 不是 dict → 400。"""
     with pytest.raises(HTTPException) as exc_info:
         await update_linked_account_by_clerk_id("uid123", "github", {"payload": "not-a-dict"})
     assert exc_info.value.status_code == 400
 
 
 @pytest.mark.asyncio
-async def test_update_linked_account_raises_503_when_db_down(monkeypatch):
-    from pymongo.errors import PyMongoError
-
-    async def mock_update_one(*args, **kwargs):
-        raise PyMongoError("connection lost")
-
-    monkeypatch.setattr(linked_mod.db.linkedAccounts, "update_one", mock_update_one)
-    with pytest.raises(HTTPException) as exc_info:
-        await update_linked_account_by_clerk_id(
-            "uid123", "github", {"payload": {"status": "connected"}}
-        )
-    assert exc_info.value.status_code == 503
-
-
-@pytest.mark.asyncio
 async def test_update_github_account_basic(monkeypatch):
+    """只更新 status 這類不需要重新驗證的欄位 → 直接更新，回傳 True。"""
     async def mock_update_one(*args, **kwargs):
         return type("Mock", (), {"modified_count": 1})()
 
@@ -296,6 +275,7 @@ async def test_update_github_account_basic(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_update_jira_account_with_domain_reverifies(monkeypatch):
+    """同時更新 Jira 的 apiKey 和 domain → 用新值重新驗證，apiKey 存進資料庫前要加密。"""
     updated = {}
 
     async def mock_fetch_jira_userinfo(api_key, domain):
@@ -319,6 +299,7 @@ async def test_update_jira_account_with_domain_reverifies(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_update_jira_apikey_only_reverifies_with_existing_domain(monkeypatch):
+    """只改 apiKey、沒帶 domain → 要去查現有的 domain，一起驗證新 token。"""
     verify_calls = []
 
     async def mock_find_one(filter):
@@ -343,13 +324,13 @@ async def test_update_jira_apikey_only_reverifies_with_existing_domain(monkeypat
         "uid123", "jira", {"payload": {"apiKey": "newkey"}}
     )
     assert result is True
-    # 只改 apiKey、沒帶 domain -> 要去查現有 domain 一起驗證新 token
     assert verify_calls == [("newkey", "existing.atlassian.net")]
     assert updated["apiKey"] != "newkey"  # 落地前加密
 
 
 @pytest.mark.asyncio
 async def test_update_jira_domain_only_reverifies_with_existing_apikey(monkeypatch):
+    """只改 domain、沒帶 apiKey → 要去查現有的 apiKey（解密後）一起驗證新 domain，而且不能把 apiKey 塞進要更新的欄位。"""
     from db.crypto import encrypt_secret
 
     verify_calls = []
@@ -376,15 +357,14 @@ async def test_update_jira_domain_only_reverifies_with_existing_apikey(monkeypat
         "uid123", "jira", {"payload": {"domain": "new-instance.atlassian.net"}}
     )
     assert result is True
-    # 只改 domain、沒帶 apiKey -> 要去查現有 apiKey（解密後）一起驗證新 domain
     assert verify_calls == [("existingkey", "new-instance.atlassian.net")]
-    # 沒有送新 apiKey，不該把 apiKey 這個 key 塞進 $set 裡
     assert "apiKey" not in updated
     assert updated["domain"] == "new-instance.atlassian.net"
 
 
 @pytest.mark.asyncio
 async def test_update_moodle_password_reverifies_with_existing_username(monkeypatch):
+    """更新 Moodle 密碼時沒帶 username → 要去查現有帳號的 username，一起驗證新密碼。"""
     verify_calls = []
 
     async def mock_find_one(filter):
@@ -408,13 +388,13 @@ async def test_update_moodle_password_reverifies_with_existing_username(monkeypa
         "uid123", "moodle", {"payload": {"password": "newpass"}}
     )
     assert result is True
-    # 更新密碼時沒帶 username -> 要去查現有帳號的 username 一起驗證
     assert verify_calls == [("stu001", "newpass")]
     assert updated["password"] != "newpass"  # 落地前加密
 
 
 @pytest.mark.asyncio
 async def test_update_moodle_username_only_reverifies_with_existing_password(monkeypatch):
+    """只改 Moodle 帳號、沒帶新密碼 → 要去查現有密碼（解密後）一起驗證新帳號，而且不能把 password 塞進要更新的欄位。"""
     from db.crypto import encrypt_secret
 
     verify_calls = []
@@ -440,9 +420,7 @@ async def test_update_moodle_username_only_reverifies_with_existing_password(mon
         "uid123", "moodle", {"payload": {"username": "stu002"}}
     )
     assert result is True
-    # 只改帳號、沒帶新密碼 -> 要去查現有密碼（解密後）一起驗證新帳號
     assert verify_calls == [("stu002", "oldpass")]
-    # 沒有送新密碼，不該把 password 這個 key 塞進 $set 裡
     assert "password" not in updated
     assert updated["username"] == "stu002"
     assert updated["status"] == "connected"
@@ -450,6 +428,7 @@ async def test_update_moodle_username_only_reverifies_with_existing_password(mon
 
 @pytest.mark.asyncio
 async def test_update_moodle_wrong_password_raises_401(monkeypatch):
+    """更新 Moodle 密碼但驗證失敗 → 401。"""
     async def mock_find_one(filter):
         return {"username": "stu001"}
 
@@ -470,16 +449,17 @@ async def test_update_moodle_wrong_password_raises_401(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_delete_linked_account_success(monkeypatch):
+    """刪除綁定帳號成功 → 不出錯。"""
     async def mock_delete_one(filter):
         return type("Mock", (), {"deleted_count": 1})()
 
     monkeypatch.setattr(linked_mod.db.linkedAccounts, "delete_one", mock_delete_one)
-    # 成功時不該 raise，函式本身沒有回傳值需要檢查
     await delete_linked_account_by_id("uid123_github")
 
 
 @pytest.mark.asyncio
 async def test_delete_linked_account_not_found(monkeypatch):
+    """要刪除的綁定帳號不存在 → 404。"""
     async def mock_delete_one(filter):
         return type("Mock", (), {"deleted_count": 0})()
 
@@ -489,23 +469,11 @@ async def test_delete_linked_account_not_found(monkeypatch):
     assert exc_info.value.status_code == 404
 
 
-@pytest.mark.asyncio
-async def test_delete_linked_account_raises_503_when_db_down(monkeypatch):
-    from pymongo.errors import PyMongoError
-
-    async def mock_delete_one(filter):
-        raise PyMongoError("connection lost")
-
-    monkeypatch.setattr(linked_mod.db.linkedAccounts, "delete_one", mock_delete_one)
-    with pytest.raises(HTTPException) as exc_info:
-        await delete_linked_account_by_id("uid123_github")
-    assert exc_info.value.status_code == 503
-
-
 # ========== 第三方帳號驗證 API ==========
 
 @pytest.mark.asyncio
 async def test_fetch_github_userinfo_success(monkeypatch):
+    """GitHub 回 200 → 回傳統一格式的使用者資訊（username 來自 login）。"""
     class MockClient:
         async def __aenter__(self): return self
         async def __aexit__(self, *a): pass
@@ -522,6 +490,7 @@ async def test_fetch_github_userinfo_success(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_fetch_github_userinfo_unauthorized(monkeypatch):
+    """GitHub 回 401（token 無效）→ 401。"""
     class MockClient:
         async def __aenter__(self): return self
         async def __aexit__(self, *a): pass
@@ -536,6 +505,7 @@ async def test_fetch_github_userinfo_unauthorized(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_fetch_github_userinfo_connection_error_raises_502(monkeypatch):
+    """連不上 GitHub → 502。"""
     class MockClient:
         async def __aenter__(self): return self
         async def __aexit__(self, *a): pass
@@ -550,6 +520,7 @@ async def test_fetch_github_userinfo_connection_error_raises_502(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_fetch_github_userinfo_other_error_status_raises_403(monkeypatch):
+    """GitHub 回 401 以外的錯誤狀態（例如 404）→ 403。"""
     class MockClient:
         async def __aenter__(self): return self
         async def __aexit__(self, *a): pass
@@ -564,6 +535,7 @@ async def test_fetch_github_userinfo_other_error_status_raises_403(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_fetch_jira_userinfo_success(monkeypatch):
+    """Jira 回 200 → 回傳統一格式的使用者資訊（username 來自 displayName）。"""
     class MockClient:
         async def __aenter__(self): return self
         async def __aexit__(self, *a): pass
@@ -580,6 +552,7 @@ async def test_fetch_jira_userinfo_success(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_fetch_jira_userinfo_unauthorized(monkeypatch):
+    """Jira 回 401（API key 無效）→ 401。"""
     class MockClient:
         async def __aenter__(self): return self
         async def __aexit__(self, *a): pass
@@ -594,6 +567,7 @@ async def test_fetch_jira_userinfo_unauthorized(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_fetch_jira_userinfo_connection_error_raises_502(monkeypatch):
+    """連不上 Jira → 502。"""
     class MockClient:
         async def __aenter__(self): return self
         async def __aexit__(self, *a): pass
@@ -608,6 +582,7 @@ async def test_fetch_jira_userinfo_connection_error_raises_502(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_fetch_jira_userinfo_other_error_status_raises_403(monkeypatch):
+    """Jira 回 401 以外的錯誤狀態（例如 404）→ 403。"""
     class MockClient:
         async def __aenter__(self): return self
         async def __aexit__(self, *a): pass

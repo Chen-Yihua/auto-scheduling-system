@@ -48,6 +48,7 @@ class FakeCollection:
 
 @pytest.mark.asyncio
 async def test_sync_platform_items_live_success_upserts_and_returns_fresh():
+    """即時抓資料成功 → 資料存進資料庫並原樣回傳，且標示為「不是舊資料、沒有授權問題」。"""
     collection = FakeCollection()
 
     async def fetch():
@@ -68,7 +69,7 @@ async def test_sync_platform_items_live_success_upserts_and_returns_fresh():
 
 @pytest.mark.asyncio
 async def test_sync_platform_items_removes_items_no_longer_returned_by_live_fetch():
-    """使用者的第 2 筆項目（例如 issue 被關閉）這次即時抓資料已經不存在 -> 應該從 DB 清掉，
+    """使用者的第 2 筆項目（例如 issue 被關閉）這次即時抓資料已經不存在 → 應該從 DB 清掉，
     不然之後即時抓資料失敗、退回快取時，會被當成還存在的資料顯示給使用者。"""
     collection = FakeCollection(initial=[
         {"id": 1, "title": "still open", "user_id": "u1"},
@@ -88,6 +89,7 @@ async def test_sync_platform_items_removes_items_no_longer_returned_by_live_fetc
 
 @pytest.mark.asyncio
 async def test_sync_platform_items_removal_does_not_affect_other_users():
+    """清掉「這次已不存在」的項目時，只能動當前使用者的資料，不能誤刪其他使用者同 id 的項目。"""
     collection = FakeCollection(initial=[
         {"id": 1, "title": "user u1's item", "user_id": "u1"},
         {"id": 1, "title": "user u2's item", "user_id": "u2"},
@@ -108,6 +110,7 @@ async def test_sync_platform_items_removal_does_not_affect_other_users():
 
 @pytest.mark.asyncio
 async def test_sync_platform_items_live_fetch_upserts_existing_item():
+    """DB 已有同 id 的舊項目時，即時抓到的新內容要更新它（upsert），不能重複新增一筆。"""
     collection = FakeCollection(initial=[{"id": 1, "title": "old", "user_id": "u1"}])
 
     async def fetch():
@@ -124,6 +127,7 @@ async def test_sync_platform_items_live_fetch_upserts_existing_item():
 
 @pytest.mark.asyncio
 async def test_sync_platform_items_falls_back_to_cache_on_failure():
+    """即時抓資料失敗（暫時性問題）→ 退回資料庫裡的舊資料並標示為舊資料；因為不是憑證問題，不標示授權失效；回傳的資料不含資料庫內部 id。"""
     synced_at = datetime.now(timezone.utc)
     collection = FakeCollection(initial=[
         {"_id": "mongo_id", "id": 1, "title": "cached", "user_id": "u1", "synced_at": synced_at}
@@ -146,6 +150,7 @@ async def test_sync_platform_items_falls_back_to_cache_on_failure():
 
 @pytest.mark.asyncio
 async def test_sync_platform_items_raises_when_no_cache_available():
+    """即時抓資料失敗、DB 又沒有舊資料可退回 → 把原本的例外往外丟，不能回傳空清單假裝成功。"""
     collection = FakeCollection()
 
     async def fetch():
@@ -160,6 +165,7 @@ async def test_sync_platform_items_raises_when_no_cache_available():
 
 @pytest.mark.asyncio
 async def test_sync_platform_items_only_returns_cache_for_matching_user():
+    """退回舊資料時只能拿當前使用者的；DB 裡只有別人的資料就等於沒有快取，要丟例外，不能把別人的資料回給他。"""
     collection = FakeCollection(initial=[
         {"id": 1, "title": "other user's cached data", "user_id": "someone_else"}
     ])
@@ -176,7 +182,7 @@ async def test_sync_platform_items_only_returns_cache_for_matching_user():
 
 @pytest.mark.asyncio
 async def test_sync_platform_items_retries_and_recovers_on_second_attempt():
-    """第一次抓失敗、第二次就成功 -> 不需要退回快取，直接回傳重試後拿到的新資料。"""
+    """第一次抓失敗、第二次就成功 → 不需要退回快取，直接回傳重試後拿到的新資料。"""
     collection = FakeCollection()
     call_count = {"n": 0}
 
@@ -223,7 +229,7 @@ async def test_sync_platform_items_respects_max_attempts_before_falling_back():
 
 @pytest.mark.asyncio
 async def test_sync_platform_items_backs_off_exponentially_between_retries(monkeypatch):
-    """驗證重試間隔是指數成長（1s, 2s, 4s...），不是每次都等一樣久。"""
+    """重試之間的等待時間要指數成長（1 秒、2 秒、4 秒…），不是每次都等一樣久。"""
     sleep_calls = []
 
     async def fake_sleep(seconds):

@@ -36,9 +36,9 @@ class EmptyLinkedAccounts:
         return None
 
 
-# 測試 GET /moodle/assignments —— 爬 Moodle 作業並用統一格式回傳
 @pytest.mark.asyncio
 async def test_get_moodle_assignments(monkeypatch, logged_in_user):
+    """GET /moodle/assignments 成功 → 200，回傳作業清單，並帶 X-Data-Stale（是否為舊資料）和 X-Synced-At（同步時間）標頭。"""
     assignments = [
         {
             "id": "https://moodle.nccu.edu.tw/mod/assign/view.php?id=1",
@@ -65,9 +65,9 @@ async def test_get_moodle_assignments(monkeypatch, logged_in_user):
     assert res.headers["X-Synced-At"] == "2026-09-01T00:00:00+00:00"
 
 
-# 使用者還沒綁定 Moodle：HTTP 回應要是 400 加上說明，前端才能顯示「請先設定帳號」
 @pytest.mark.asyncio
 async def test_get_moodle_assignments_when_account_not_linked(monkeypatch, logged_in_user):
+    """使用者還沒綁定 Moodle → 400 加說明，前端才能顯示「請先設定帳號」。"""
     monkeypatch.setattr(moodle_router.db, "linkedAccounts", EmptyLinkedAccounts())
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
@@ -77,9 +77,10 @@ async def test_get_moodle_assignments_when_account_not_linked(monkeypatch, logge
     assert res.json() == {"detail": "No Moodle linked account"}
 
 
-# 沒帶登入 token（這個測試沒有用 logged_in_user）-> 要被擋在門外，不能進到函式裡
 @pytest.mark.asyncio
 async def test_get_moodle_assignments_requires_login():
+    """沒帶登入 token → 被擋在門外（401/403），不能進到函式裡。"""
+    # 這個測試刻意不用 logged_in_user，所以請求是沒登入的
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         res = await ac.get("/moodle/assignments")
 

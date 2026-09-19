@@ -24,9 +24,9 @@ class EmptyLinkedAccounts:
         return None
 
 
-# 測試 GET /jira/issues —— 抓 Jira issues 並用統一格式回傳
 @pytest.mark.asyncio
 async def test_get_jira_issues(monkeypatch, logged_in_user):
+    """GET /jira/issues 成功 → 200，回傳統一格式的 issue 清單，並用 X-Data-Stale 標示資料是最新的。"""
     # 解密、抓資料、同步各自有 router/crud 測試，這裡只確認 HTTP 這一層，所以直接讓 sync 回傳結果
     issue = {
         "id": "1",
@@ -55,9 +55,9 @@ async def test_get_jira_issues(monkeypatch, logged_in_user):
     assert res.headers["X-Data-Stale"] == "false"
 
 
-# 使用者還沒綁定 Jira：HTTP 回應要是 400 加上說明，前端才能顯示「請先設定帳號」
 @pytest.mark.asyncio
 async def test_get_jira_issues_when_account_not_linked(monkeypatch, logged_in_user):
+    """使用者還沒綁定 Jira → 400 加說明，前端才能顯示「請先設定帳號」。"""
     monkeypatch.setattr(jira_router.db, "linkedAccounts", EmptyLinkedAccounts())
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
@@ -67,9 +67,10 @@ async def test_get_jira_issues_when_account_not_linked(monkeypatch, logged_in_us
     assert res.json() == {"detail": "No Jira linked account"}
 
 
-# 沒帶登入 token（這個測試沒有用 logged_in_user）-> 要被擋在門外，不能進到函式裡
 @pytest.mark.asyncio
 async def test_get_jira_issues_requires_login():
+    """沒帶登入 token → 被擋在門外（401/403），不能進到函式裡。"""
+    # 這個測試刻意不用 logged_in_user，所以請求是沒登入的
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         res = await ac.get("/jira/issues")
 

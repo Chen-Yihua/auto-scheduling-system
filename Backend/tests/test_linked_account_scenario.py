@@ -30,6 +30,7 @@ def _override_auth():
 
 @pytest.mark.asyncio
 async def test_github_linked_account_full_lifecycle(monkeypatch):
+    """GitHub 綁定帳號的完整生命週期：連結 → 列表（金鑰是遮罩過的，不是明文）→ 更新金鑰（會重新驗證並寫入新值）→ 刪除 → 列表回到空清單。"""
     call_count = {"n": 0}
 
     async def mock_fetch_github_userinfo(token):
@@ -98,11 +99,9 @@ async def test_github_linked_account_full_lifecycle(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_moodle_linked_account_rejects_wrong_password_and_leaves_nothing_behind(monkeypatch):
-    """
-    Moodle 連結帳號會真的觸發 Selenium 登入驗證（見 crud/moodle.py）。
-    這裡驗證帳密錯誤時：(a) API 回 401，(b) 完全沒有東西被寫進 DB——
-    不會留下一筆「看起來已連結、其實密碼從沒驗證成功過」的殘影資料。
-    """
+    """Moodle 帳密錯誤 → API 回 401，而且完全沒有資料寫進資料庫，
+不會留下一筆「看起來已連結、其實密碼從沒驗證成功過」的殘影資料。
+（連結 Moodle 帳號會真的觸發 Selenium 登入驗證，見 crud/moodle.py。）"""
     from crud.errors import NonRetryableError
 
     # verify_moodle_login 本身是同步函式（真正的實作用 Selenium，是阻塞的），

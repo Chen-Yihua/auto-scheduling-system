@@ -10,6 +10,8 @@ from logging_config import setup_logging
 from db.mongodb import ensure_indexes
 from slowapi.errors import RateLimitExceeded
 from rate_limit import limiter, rate_limit_exceeded_handler
+from pymongo.errors import ConnectionFailure, PyMongoError
+from exception_handlers import database_unavailable_handler, database_error_handler, UnhandledExceptionMiddleware
 
 
 # 載入環境變數
@@ -37,6 +39,9 @@ def _get_allowed_origins() -> list[str]:
     return [origin.strip() for origin in origins.split(",") if origin.strip()]
 
 
+# 兜底的 500 必須比 CORS 更內層（先註冊的在內層），回應才會帶 CORS 標頭；順序不能對調
+app.add_middleware(UnhandledExceptionMiddleware)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_get_allowed_origins(),
@@ -48,6 +53,11 @@ app.add_middleware(
 # 流量限制：記憶體或 Redis 由 rate_limit.py 依 REDIS_URL 是否設定自動切換
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
+
+# 資料庫例外集中處理：連線類錯誤回 503，其他資料庫錯誤回 500（見 exception_handlers.py）。
+# Starlette 會依例外的繼承順序挑最具體的 handler，ConnectionFailure 是 PyMongoError 的子類別
+app.add_exception_handler(ConnectionFailure, database_unavailable_handler)
+app.add_exception_handler(PyMongoError, database_error_handler)
 
 # 路由註冊
 app.include_router(user.router)

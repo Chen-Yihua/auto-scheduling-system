@@ -81,27 +81,29 @@ async def test_fetch_jira_user_issues_stops_at_max_pages_safety_cap():
 
 
 @pytest.mark.asyncio
-async def test_fetch_jira_user_issues_failure():
-    # 401（帳密/token 錯誤）屬於客戶端錯誤，重試也沒用 -> 應該是 NonRetryableError
+@pytest.mark.parametrize("status_code", [400, 401, 403, 404])
+async def test_fetch_jira_user_issues_client_error_is_non_retryable(status_code):
     with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
-        mock_get.return_value.status_code = 401
-        mock_get.return_value.text = "Unauthorized"
+        mock_get.return_value.status_code = status_code
+        mock_get.return_value.text = "error"
 
+        # token 過期/沒權限/請求不對/資源不存在都屬於客戶端錯誤，重試也沒用 -> 應該是 NonRetryableError
         with pytest.raises(NonRetryableError) as exc_info:
-            await jira.fetch_jira_user_issues("invalid", "wrong.domain")
+            await jira.fetch_jira_user_issues("fake_key", "fake.atlassian.net")
 
-        assert "Jira API failed" in str(exc_info.value)
+        assert f"Jira API failed: {status_code}" in str(exc_info.value)
 
 
 @pytest.mark.asyncio
-async def test_fetch_jira_user_issues_server_error_is_retryable():
-    # 503 是伺服器端暫時性問題，重試可能會成功 -> 不該是 NonRetryableError
+@pytest.mark.parametrize("status_code", [429, 500, 502, 503])
+async def test_fetch_jira_user_issues_transient_error_is_retryable(status_code):
     with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
-        mock_get.return_value.status_code = 503
-        mock_get.return_value.text = "Service Unavailable"
+        mock_get.return_value.status_code = status_code
+        mock_get.return_value.text = "error"
 
+        # 被限流(429)和伺服器端錯誤(5xx)都是暫時性問題，重試可能會成功 -> 不該是 NonRetryableError
         with pytest.raises(Exception) as exc_info:
-            await jira.fetch_jira_user_issues("key", "domain")
+            await jira.fetch_jira_user_issues("fake_key", "fake.atlassian.net")
 
         assert not isinstance(exc_info.value, NonRetryableError)
-        assert "Jira API failed" in str(exc_info.value)
+        assert f"Jira API failed: {status_code}" in str(exc_info.value)

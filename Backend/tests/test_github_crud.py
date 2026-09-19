@@ -105,38 +105,40 @@ async def test_fetch_github_user_issues_stops_at_max_pages_safety_cap(monkeypatc
 
 
 @pytest.mark.asyncio
-async def test_fetch_github_user_issues_api_fail(monkeypatch):
+@pytest.mark.parametrize("status_code", [400, 401, 403, 404])
+async def test_fetch_github_user_issues_client_error_is_non_retryable(monkeypatch, status_code):
     class MockClient:
         async def __aenter__(self): return self
         async def __aexit__(self, *args): pass
         async def get(self, url, headers, params):
-            return Response(status_code=403, content=b"Forbidden", request=Request("GET", url))
+            return Response(status_code=status_code, content=b"error", request=Request("GET", url))
 
     monkeypatch.setattr("httpx.AsyncClient", lambda: MockClient())
 
-    # 403（token 沒權限）屬於客戶端錯誤，重試也沒用 -> 應該是 NonRetryableError
+    # token 過期/沒權限/請求不對/資源不存在都屬於客戶端錯誤，重試也沒用 -> 應該是 NonRetryableError
     with pytest.raises(NonRetryableError) as exc_info:
-        await github_mod.fetch_github_user_issues("invalid_token")
+        await github_mod.fetch_github_user_issues("fake_token")
 
-    assert "GitHub API failed" in str(exc_info.value)
+    assert f"GitHub API failed: {status_code}" in str(exc_info.value)
 
 
 @pytest.mark.asyncio
-async def test_fetch_github_user_issues_server_error_is_retryable(monkeypatch):
+@pytest.mark.parametrize("status_code", [429, 500, 502, 503])
+async def test_fetch_github_user_issues_transient_error_is_retryable(monkeypatch, status_code):
     class MockClient:
         async def __aenter__(self): return self
         async def __aexit__(self, *args): pass
         async def get(self, url, headers, params):
-            return Response(status_code=500, content=b"Internal Server Error", request=Request("GET", url))
+            return Response(status_code=status_code, content=b"error", request=Request("GET", url))
 
     monkeypatch.setattr("httpx.AsyncClient", lambda: MockClient())
 
-    # 500 是伺服器端暫時性問題，重試可能會成功 -> 不該是 NonRetryableError
+    # 被限流(429)和伺服器端錯誤(5xx)都是暫時性問題，重試可能會成功 -> 不該是 NonRetryableError
     with pytest.raises(Exception) as exc_info:
-        await github_mod.fetch_github_user_issues("token")
+        await github_mod.fetch_github_user_issues("fake_token")
 
     assert not isinstance(exc_info.value, NonRetryableError)
-    assert "GitHub API failed" in str(exc_info.value)
+    assert f"GitHub API failed: {status_code}" in str(exc_info.value)
 
 
 def test_transform_github_item_issue():
@@ -156,8 +158,13 @@ def test_transform_github_item_issue():
 
     assert result["id"] == 123
     assert result["title"] == "Test issue"
+    assert result["status"] == "open"
+    assert result["created_at"] == "2024-01-01T00:00:00Z"
+    assert result["updated_at"] == "2024-01-02T00:00:00Z"
+    assert result["url"] == "https://github.com/example/repo/issues/123"
     assert result["isPR"] is False
     assert result["author"]["username"] == "alice"
+    assert result["author"]["avatar"] == "https://avatar"
     assert result["labels"] == ["bug"]
     assert result["comments"] == 3
 
@@ -180,3 +187,26 @@ def test_transform_github_item_pr():
 
     assert result["id"] == 456
     assert result["isPR"] is True
+    assert result["labels"] == []  # 沒有任何 label 是正常狀態，該回空清單，不是 None 或例外
+
+
+def test_transform_github_item_tolerates_missing_optional_fields():
+    # 只帶必要欄位（number/title/state/created_at/html_url），其餘（updated_at、
+    # user、labels、comments）都缺——函式用 raw.get(...) 處理這些，缺了不該爆炸，
+    # 該退回 None / 空清單
+    raw = {
+        "number": 789,
+        "title": "Minimal item",
+        "state": "closed",
+        "created_at": "2024-01-05T00:00:00Z",
+        "html_url": "https://github.com/example/repo/issues/789",
+    }
+
+    result = github_mod.transform_github_item(raw)
+
+    assert result["id"] == 789
+    assert result["updated_at"] is None
+    assert result["author"] == {"username": None, "avatar": None}
+    assert result["labels"] == []
+    assert result["comments"] is None
+    assert result["isPR"] is False

@@ -1,5 +1,5 @@
 """
-端對端「情境」測試：跟其他 test_manualTask.py / test_manual_task_scenario.py 不同的地方是——
+端對端「情境」測試：跟其他 test_manual_task_api.py / test_manual_task_scenario.py 不同的地方是——
 這裡不是逐一測試單一 endpoint，而是把使用者真實會做的一整串操作串起來，
 在同一個測試裡透過真的 HTTP（httpx + ASGITransport 打 main.app）依序呼叫，
 確認「上一步寫進去的資料，下一步真的讀得到、也真的反映了更新」。

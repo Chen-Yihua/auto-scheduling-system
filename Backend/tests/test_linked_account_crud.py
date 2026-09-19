@@ -96,6 +96,97 @@ async def test_create_duplicate_account_returns_409(monkeypatch):
     assert exc_info.value.status_code == 409
 
 
+@pytest.mark.asyncio
+async def test_create_account_raises_503_when_db_down(monkeypatch):
+    from pymongo.errors import PyMongoError
+
+    async def mock_update_one(filter, update, upsert=False):
+        raise PyMongoError("connection lost")
+
+    async def mock_fetch_github_userinfo(token):
+        return {"username": "mock", "avatar_url": "mock"}
+
+    monkeypatch.setattr(linked_mod.db.linkedAccounts, "update_one", mock_update_one)
+    monkeypatch.setattr(linked_mod, "fetch_github_userinfo", mock_fetch_github_userinfo)
+
+    account = LinkedAccountCreate(platform="github", apiKey="abc123", status="", username="")
+    with pytest.raises(HTTPException) as exc_info:
+        await create_linked_account("uid123", account)
+    assert exc_info.value.status_code == 503
+
+
+@pytest.mark.asyncio
+async def test_create_account_unsupported_platform_returns_400():
+    account = LinkedAccountCreate(platform="notion", apiKey="abc123", status="", username="")
+    with pytest.raises(HTTPException) as exc_info:
+        await create_linked_account("uid123", account)
+    assert exc_info.value.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_create_jira_account_success(monkeypatch):
+    updated_doc = {}
+
+    async def mock_update_one(filter, update, upsert=False):
+        nonlocal updated_doc
+        updated_doc = update["$set"]
+        return type("Mock", (), {"upserted_id": "uid123_jira"})()
+
+    async def mock_fetch_jira_userinfo(api_key, domain):
+        return {"username": "jira_user", "avatar_url": "https://avatar"}
+
+    monkeypatch.setattr(linked_mod.db.linkedAccounts, "update_one", mock_update_one)
+    monkeypatch.setattr(linked_mod, "fetch_jira_userinfo", mock_fetch_jira_userinfo)
+
+    account = LinkedAccountCreate(
+        platform="jira", apiKey="abc123", domain="example.atlassian.net", status="", username=""
+    )
+    result = await create_linked_account("uid123", account)
+
+    assert updated_doc["username"] == "jira_user"
+    assert result["linkedAccounts"]["jira"]["avatar_url"] == "https://avatar"
+
+
+@pytest.mark.asyncio
+async def test_create_moodle_account_success(monkeypatch):
+    updated_doc = {}
+
+    async def mock_update_one(filter, update, upsert=False):
+        nonlocal updated_doc
+        updated_doc = update["$set"]
+        return type("Mock", (), {"upserted_id": "uid123_moodle"})()
+
+    def mock_verify_succeeds(username, password):
+        return True
+
+    monkeypatch.setattr(linked_mod.db.linkedAccounts, "update_one", mock_update_one)
+    monkeypatch.setattr(linked_mod, "verify_moodle_login", mock_verify_succeeds)
+
+    account = LinkedAccountCreate(platform="moodle", username="stu001", password="pw123", status="")
+    result = await create_linked_account("uid123", account)
+
+    assert updated_doc["status"] == "connected"
+    assert updated_doc["password"] != "pw123"  # 落地前一定要加密
+    assert result["linkedAccounts"]["moodle"]["status"] == "connected"
+
+
+@pytest.mark.asyncio
+async def test_create_moodle_webdriver_exception_raises_503(monkeypatch):
+    # Selenium/WebDriver 本身出包（不是帳密錯誤）跟登入失敗要分開處理，
+    # 這種是我方服務暫時有問題，不是使用者輸入錯誤
+    from selenium.common.exceptions import WebDriverException
+
+    def mock_verify_raises(username, password):
+        raise WebDriverException("driver crashed")
+
+    monkeypatch.setattr(linked_mod, "verify_moodle_login", mock_verify_raises)
+
+    account = LinkedAccountCreate(platform="moodle", username="stu001", password="pw123", status="")
+    with pytest.raises(HTTPException) as exc_info:
+        await create_linked_account("uid123", account)
+    assert exc_info.value.status_code == 503
+
+
 # ========== 查詢 Linked Accounts ==========
 
 @pytest.mark.asyncio
@@ -167,6 +258,28 @@ async def test_update_linked_account_no_valid_fields():
         "uid123", "github", {"payload": {"foo": "bar"}}
     )
     assert result is False
+
+
+@pytest.mark.asyncio
+async def test_update_linked_account_invalid_payload_raises_400():
+    with pytest.raises(HTTPException) as exc_info:
+        await update_linked_account_by_clerk_id("uid123", "github", {"payload": "not-a-dict"})
+    assert exc_info.value.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_update_linked_account_raises_503_when_db_down(monkeypatch):
+    from pymongo.errors import PyMongoError
+
+    async def mock_update_one(*args, **kwargs):
+        raise PyMongoError("connection lost")
+
+    monkeypatch.setattr(linked_mod.db.linkedAccounts, "update_one", mock_update_one)
+    with pytest.raises(HTTPException) as exc_info:
+        await update_linked_account_by_clerk_id(
+            "uid123", "github", {"payload": {"status": "connected"}}
+        )
+    assert exc_info.value.status_code == 503
 
 
 @pytest.mark.asyncio
@@ -376,6 +489,19 @@ async def test_delete_linked_account_not_found(monkeypatch):
     assert exc_info.value.status_code == 404
 
 
+@pytest.mark.asyncio
+async def test_delete_linked_account_raises_503_when_db_down(monkeypatch):
+    from pymongo.errors import PyMongoError
+
+    async def mock_delete_one(filter):
+        raise PyMongoError("connection lost")
+
+    monkeypatch.setattr(linked_mod.db.linkedAccounts, "delete_one", mock_delete_one)
+    with pytest.raises(HTTPException) as exc_info:
+        await delete_linked_account_by_id("uid123_github")
+    assert exc_info.value.status_code == 503
+
+
 # ========== 第三方帳號驗證 API ==========
 
 @pytest.mark.asyncio
@@ -409,6 +535,34 @@ async def test_fetch_github_userinfo_unauthorized(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_fetch_github_userinfo_connection_error_raises_502(monkeypatch):
+    class MockClient:
+        async def __aenter__(self): return self
+        async def __aexit__(self, *a): pass
+        async def get(self, *args, **kwargs):
+            raise httpx.ConnectError("GitHub 掛了")
+
+    monkeypatch.setattr(httpx, "AsyncClient", lambda *a, **kw: MockClient())
+    with pytest.raises(HTTPException) as exc_info:
+        await fetch_github_userinfo("token123")
+    assert exc_info.value.status_code == 502
+
+
+@pytest.mark.asyncio
+async def test_fetch_github_userinfo_other_error_status_raises_403(monkeypatch):
+    class MockClient:
+        async def __aenter__(self): return self
+        async def __aexit__(self, *a): pass
+        async def get(self, *args, **kwargs):
+            return httpx.Response(status_code=404)  # 不是 401，但也不是 200
+
+    monkeypatch.setattr(httpx, "AsyncClient", lambda *a, **kw: MockClient())
+    with pytest.raises(HTTPException) as exc_info:
+        await fetch_github_userinfo("token123")
+    assert exc_info.value.status_code == 403
+
+
+@pytest.mark.asyncio
 async def test_fetch_jira_userinfo_success(monkeypatch):
     class MockClient:
         async def __aenter__(self): return self
@@ -436,3 +590,31 @@ async def test_fetch_jira_userinfo_unauthorized(monkeypatch):
     with pytest.raises(HTTPException) as exc_info:
         await fetch_jira_userinfo("bad_key", "example.atlassian.net")
     assert exc_info.value.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_fetch_jira_userinfo_connection_error_raises_502(monkeypatch):
+    class MockClient:
+        async def __aenter__(self): return self
+        async def __aexit__(self, *a): pass
+        async def get(self, *args, **kwargs):
+            raise httpx.ConnectError("Jira 掛了")
+
+    monkeypatch.setattr(httpx, "AsyncClient", lambda *a, **kw: MockClient())
+    with pytest.raises(HTTPException) as exc_info:
+        await fetch_jira_userinfo("base64key", "example.atlassian.net")
+    assert exc_info.value.status_code == 502
+
+
+@pytest.mark.asyncio
+async def test_fetch_jira_userinfo_other_error_status_raises_403(monkeypatch):
+    class MockClient:
+        async def __aenter__(self): return self
+        async def __aexit__(self, *a): pass
+        async def get(self, *args, **kwargs):
+            return httpx.Response(status_code=404)
+
+    monkeypatch.setattr(httpx, "AsyncClient", lambda *a, **kw: MockClient())
+    with pytest.raises(HTTPException) as exc_info:
+        await fetch_jira_userinfo("base64key", "example.atlassian.net")
+    assert exc_info.value.status_code == 403

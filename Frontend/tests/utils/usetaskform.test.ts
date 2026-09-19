@@ -43,6 +43,8 @@ describe('useTaskForm', () => {
     expect(ctx.showEditModal.value).toBe(false)
     expect(ctx.editing_task.value).toBe(null)
     expect(ctx.isEditMode.value).toBe(false)
+    // 一開始還沒抓過資料，loading 應該是 true，不能跟「抓完發現沒有任務」混在一起判斷
+    expect(ctx.loading.value).toBe(true)
   })
 
   it('startEditTask 能切換為編輯模式', () => {
@@ -65,7 +67,7 @@ describe('useTaskForm', () => {
     expect(ctx.state.inference_hint).toBe('之前留給 AI 的提醒')
   })
 
-  it('fetchTasks 會帶 token 呼叫正確路徑', async () => {
+  it('fetchTasks 會帶 token 呼叫正確路徑，並在結束後把 loading 設回 false', async () => {
     const ctx = useTaskForm()
     await ctx.fetchTasks()
     expect(fetchSpy).toHaveBeenCalledWith(
@@ -75,6 +77,7 @@ describe('useTaskForm', () => {
         headers: { Authorization: 'Bearer dummy-token' },
       }),
     )
+    expect(ctx.loading.value).toBe(false)
   })
 
   // ---------- 新增任務 ----------

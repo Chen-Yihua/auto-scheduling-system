@@ -7,6 +7,7 @@ defineProps<{
   isStale?: boolean
   syncedAt?: string | null
   authError?: boolean
+  notLinked?: boolean
 }>()
 
 const openIssue = (url: string) => {
@@ -15,8 +16,14 @@ const openIssue = (url: string) => {
 </script>
 
 <template>
-  <div class="space-y-4">
-    <h2 class="text-xl font-bold">GitHub 參與項目</h2>
+  <UCard>
+    <template #header>
+      <div class="flex items-center gap-2">
+        <UIcon name="mdi:github" class="w-5 h-5" />
+        <span class="text-lg font-semibold text-gray-900 dark:text-white">GitHub 參與項目</span>
+      </div>
+    </template>
+
     <StaleDataBanner
       :stale="isStale ?? false"
       :synced-at="syncedAt ?? null"
@@ -28,7 +35,15 @@ const openIssue = (url: string) => {
       <USkeleton class="h-24 mb-4" v-for="i in 3" :key="i" />
     </div>
 
-    <div v-else-if="issues.length" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+    <!-- 尚未綁定 GitHub 帳號 -->
+    <div
+      v-else-if="notLinked"
+      class="text-center text-sm text-gray-500 dark:text-gray-400 py-6"
+    >
+      尚未綁定 GitHub 帳號，請先設定
+    </div>
+
+    <div v-else-if="issues.length" class="grid grid-cols-1 gap-4">
       <UCard
         v-for="issue in issues"
         :key="issue.id"
@@ -81,6 +96,11 @@ const openIssue = (url: string) => {
       </UCard>
     </div>
 
-    <p v-else class="text-gray-500 text-sm">尚無資料</p>
-  </div>
+    <div
+      v-else
+      class="text-center text-sm text-gray-500 dark:text-gray-400 py-6"
+    >
+      尚無資料
+    </div>
+  </UCard>
 </template>

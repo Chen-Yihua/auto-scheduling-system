@@ -1,4 +1,7 @@
+import logging
 from datetime import datetime, timedelta
+
+logger = logging.getLogger(__name__)
 
 # manual_tasks 現在允許每個任務自己填（或由 LLM 推斷）預估時長；
 # 這裡的預設值只給「沒有 duration 欄位」的舊資料當退路。
@@ -53,18 +56,32 @@ def build_schedule_suggestion(
 
     pending_sorted = sorted(pending, key=sort_key)
 
-    slots = sorted(
-        (
-            {"start": _parse_iso(s["start"]), "end": _parse_iso(s["end"])}
-            for s in free_slots
-        ),
-        key=lambda s: s["start"],
-    )
+    # 理論上 tasks 一定有 id/title/priority（見 schemas/manualTask.py 的
+    # ManualTaskOut，這三個是必填欄位），但這裡不假設一定成立——資料格式
+    # 以後可能改變、也可能有繞過驗證的舊資料。少了這些欄位就湊不出一筆
+    # 有意義的排程結果（回傳的 ScheduleSuggestion 這幾個欄位也都是必填），
+    # 與其讓整個請求因為一筆壞資料就當掉，不如跳過它、記錄下來
+    valid_tasks = []
+    for t in pending_sorted:
+        if not t.get("id") or not t.get("title") or not t.get("priority"):
+            logger.warning("排程建議跳過缺少必要欄位的任務: %s", t)
+            continue
+        valid_tasks.append(t)
+
+    # free_slots 同理，缺 start/end 就不是一個有意義的空檔，直接跳過
+    valid_slots = []
+    for s in free_slots:
+        if not s.get("start") or not s.get("end"):
+            logger.warning("排程建議跳過缺少 start/end 的空檔: %s", s)
+            continue
+        valid_slots.append({"start": _parse_iso(s["start"]), "end": _parse_iso(s["end"])})
+
+    slots = sorted(valid_slots, key=lambda s: s["start"])
 
     scheduled = []
     unscheduled = []
 
-    for task in pending_sorted:
+    for task in valid_tasks:
         duration = timedelta(minutes=task.get("duration") or task_duration_minutes)
         placed = False
         for slot in slots:

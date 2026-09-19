@@ -50,7 +50,7 @@ async def get_assignments(request: Request, response: Response = None, clerk_use
         raise HTTPException(status_code=503, detail="資料庫暫時無法使用，請稍後再試")
 
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=400, detail="No Moodle linked account")
 
     # 解密
     # 密碼只在這裡（伺服器內部、準備拿去登入 Moodle 的當下）解密，

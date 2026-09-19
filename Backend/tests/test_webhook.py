@@ -76,6 +76,41 @@ async def test_open_pr_posts_to_configured_mr_webhook(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_open_pr_falls_back_when_fetching_changed_files_fails(monkeypatch):
+    # 抓 PR 變更檔案清單失敗（GitHub API 逾時/出錯）不該讓整支 webhook 處理中斷，
+    # 用一個看得懂的預設文字頂替，繼續往下產生摘要
+    monkeypatch.setattr(webhook_router, "DISCORD_WEBHOOK_URL", "https://discord.com/api/webhooks/test/mr")
+    monkeypatch.setattr(webhook_router, "MAIN_WEBHOOK_URL", None)
+    monkeypatch.setenv("GITHUB_BOT_TOKEN", "dummy")
+
+    def raise_error(*a, **k):
+        raise ConnectionError("GitHub API 連不上")
+
+    monkeypatch.setattr(webhook_router.requests, "get", raise_error)
+
+    posted = []
+    monkeypatch.setattr(webhook_router.requests, "post", lambda url, **k: posted.append((url, k)))
+
+    captured_prompt = {}
+
+    def fake_generate_content(**kwargs):
+        captured_prompt["contents"] = kwargs.get("contents")
+        fake_response = MagicMock()
+        fake_response.text = json.dumps(
+            {"summary": "摘要", "frontend": None, "backend": None, "refactor": None}
+        )
+        return fake_response
+
+    monkeypatch.setattr(webhook_router.client.models, "generate_content", fake_generate_content)
+
+    # 不會因為 requests.get 出錯而讓整支處理當掉
+    await _call_webhook(monkeypatch, _pr_payload("opened"))
+
+    assert "https://discord.com/api/webhooks/test/mr" in [url for url, _ in posted]
+    assert "無法取得變更檔案" in captured_prompt["contents"]
+
+
+@pytest.mark.asyncio
 async def test_open_pr_skips_discord_when_webhook_not_configured(monkeypatch):
     monkeypatch.setattr(webhook_router, "DISCORD_WEBHOOK_URL", None)
     monkeypatch.setattr(webhook_router, "MAIN_WEBHOOK_URL", None)

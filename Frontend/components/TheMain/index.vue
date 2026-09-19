@@ -9,19 +9,17 @@ import TaskForm from './TaskForm.vue'
 import GoogleCalendarEmbed from './GoogleCalendarEmbed.vue';
 import MoodleAssignments from './MoodleAssignments.vue'
 
-const { issues: githubIssues, fetchGithubIssues, isStale: githubStale, syncedAt: githubSyncedAt, authError: githubAuthError } = useGithub();
-const { issues: jiraIssues, fetchJiraIssues, domain, isStale: jiraStale, syncedAt: jiraSyncedAt, authError: jiraAuthError } = useJira();
+const { issues: githubIssues, fetchGithubIssues, isStale: githubStale, syncedAt: githubSyncedAt, authError: githubAuthError, notLinked: githubNotLinked, loading: githubLoading } = useGithub();
+const { issues: jiraIssues, fetchJiraIssues, domain, isStale: jiraStale, syncedAt: jiraSyncedAt, authError: jiraAuthError, notLinked: jiraNotLinked, loading: jiraLoading } = useJira();
 const { calendarIds, primaryCalendarId, fetchGoogleCalendars, isConnected } = useGoogleCalendar();
 const { isSignedIn } = useUser();
 
-const loading = ref(true);
-
-async function loadDashboardData() {
-  loading.value = true;
-  await fetchGoogleCalendars();
-  await fetchGithubIssues();
-  await fetchJiraIssues();
-  loading.value = false;
+// 三個各自獨立抓取、互不影響——任何一個失敗都不該卡住其他兩個
+// （之前串成一條 await 鏈，其中一個丟出例外就會讓後面的都卡在 loading 動不了）
+function loadDashboardData() {
+  fetchGoogleCalendars();
+  fetchGithubIssues();
+  fetchJiraIssues();
 }
 
 // 這幾個都是需要授權才能查的個人資料，還沒登入時打了只會是 401，
@@ -30,32 +28,40 @@ watch(isSignedIn, (signedIn) => {
   if (signedIn === undefined) return; // Clerk 還在初始化，先不動作
   if (signedIn) {
     loadDashboardData();
-  } else {
-    loading.value = false;
   }
 }, { immediate: true });
 </script>
 
 <template>
   <div class="p-4">
-    <Leetcode />
-    <News />
-
     <SignedIn>
-      <div class="flex justify-end p-6">
-        <TaskForm />
+      <!-- 三欄式版面：左 待辦事項＋第三方平台任務、中 行事曆、右 動態消息／LeetCode -->
+      <div class="grid grid-cols-1 lg:grid-cols-[320px_1fr_320px] gap-6 mt-4 items-start">
+        <div class="space-y-6">
+          <TaskForm />
+          <MoodleAssignments />
+          <GithubIssuesList :issues="githubIssues" :loading="githubLoading" :is-stale="githubStale" :synced-at="githubSyncedAt" :auth-error="githubAuthError" :not-linked="githubNotLinked" />
+          <JiraIssuesList :issues="jiraIssues" :loading="jiraLoading" :domain="domain" :is-stale="jiraStale" :synced-at="jiraSyncedAt" :auth-error="jiraAuthError" :not-linked="jiraNotLinked" />
+        </div>
+
+        <div>
+          <GoogleCalendarEmbed
+            :id="primaryCalendarId"
+            :calendar-ids="calendarIds"
+            :connect="isConnected"
+          />
+        </div>
+
+        <div class="space-y-6">
+          <News />
+          <Leetcode />
+        </div>
       </div>
-      <MoodleAssignments />
-      <GithubIssuesList :issues="githubIssues" :loading="loading" :is-stale="githubStale" :synced-at="githubSyncedAt" :auth-error="githubAuthError" />
-      <JiraIssuesList :issues="jiraIssues" :loading="loading" :domain="domain" :is-stale="jiraStale" :synced-at="jiraSyncedAt" :auth-error="jiraAuthError" />
-      <GoogleCalendarEmbed
-        :id="primaryCalendarId"
-        :calendar-ids="calendarIds"
-        :connect="isConnected"
-      />
     </SignedIn>
 
     <SignedOut>
+      <News />
+      <Leetcode />
       <div class="text-center py-16 text-gray-500 dark:text-gray-400">
         <UIcon name="i-lucide-lock" class="w-10 h-10 mx-auto mb-3" />
         <p class="text-lg font-medium">登入後即可查看你的任務、行事曆與整合服務</p>

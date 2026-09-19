@@ -1,6 +1,7 @@
 import logging
 import os
 
+import httpx
 import pytest
 
 import logging_config
@@ -76,10 +77,10 @@ async def test_create_linked_account_logs_debug(monkeypatch, caplog):
 
 
 @pytest.mark.asyncio
-async def test_oauth_callback_logs_exception_on_failure(monkeypatch, caplog):
-    async def mock_get_current_clerk_user():
-        return {"sub": "uid123"}
-
+async def test_oauth_callback_logs_error_and_returns_502_when_google_unreachable(monkeypatch, caplog):
+    # 連不上 Google（DNS/逾時/連線被拒...）跟「Google 拒絕這個授權碼」是兩種不同情況，
+    # 不該再用同一個籠統的 except Exception 蓋成同一句訊息——這裡模擬的是前者，
+    # httpx 真正連不上時丟的是 httpx.RequestError 的子類別，不是隨便一個 Exception
     class FailingClient:
         async def __aenter__(self):
             return self
@@ -88,7 +89,7 @@ async def test_oauth_callback_logs_exception_on_failure(monkeypatch, caplog):
             pass
 
         async def post(self, *a, **k):
-            raise Exception("Google 掛了")
+            raise httpx.ConnectError("Google 掛了")
 
     monkeypatch.setattr(oauth_router_mod.httpx, "AsyncClient", lambda: FailingClient())
 
@@ -97,14 +98,14 @@ async def test_oauth_callback_logs_exception_on_failure(monkeypatch, caplog):
     payload = oauth_router_mod.OAuthCallbackPayload(code="fake-code")
 
     with caplog.at_level(logging.ERROR, logger="routers.oauth"):
-        with pytest.raises(HTTPException):
+        with pytest.raises(HTTPException) as exc_info:
             await oauth_router_mod.oauth_callback(
                 payload=payload, clerk_user={"sub": "uid123"}
             )
 
-    assert any("Google OAuth callback failed" in record.message for record in caplog.records)
-    # logger.exception 應該連 traceback 都一起記下來
-    assert any(record.exc_info for record in caplog.records)
+    # 502 = 連不上上游服務，跟「授權碼無效」的 400 分開
+    assert exc_info.value.status_code == 502
+    assert any("連線 Google Token Endpoint 失敗" in record.message for record in caplog.records)
 
 
 @pytest.mark.asyncio
@@ -147,3 +148,49 @@ async def test_refresh_google_token_logs_info_on_success(monkeypatch, caplog):
         "Refreshed Google Calendar token for clerk_id=uid123" in record.message
         for record in caplog.records
     )
+
+
+@pytest.mark.asyncio
+async def test_refresh_google_token_raises_401_and_clears_doc_when_google_rejects_it(monkeypatch):
+    # Google 拒絕 refresh_token 本身（例如使用者撤銷授權，或 OAuth 同意畫面
+    # 還在 Testing 狀態時 7 天後自動失效）跟「網路連不上 Google」是不同情況，
+    # 前者換不到新 token 也沒必要留著舊的，應該清掉並回 401 請使用者重新連接
+    from fastapi import HTTPException
+
+    async def mock_find_one(query):
+        return {"_id": "uid123", "refresh_token": "revoked-refresh-token"}
+
+    delete_calls = {"n": 0}
+
+    async def mock_delete_one(query):
+        delete_calls["n"] += 1
+        assert query == {"_id": "uid123"}
+
+    class MockResponse:
+        status_code = 400
+        text = '{"error": "invalid_grant"}'
+
+        def raise_for_status(self):
+            request = httpx.Request("POST", "https://oauth2.googleapis.com/token")
+            response = httpx.Response(400, request=request, text=self.text)
+            raise httpx.HTTPStatusError("Bad Request", request=request, response=response)
+
+    class MockClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            pass
+
+        async def post(self, *a, **k):
+            return MockResponse()
+
+    monkeypatch.setattr(oauth_crud_mod.db.googleCalendarTokens, "find_one", mock_find_one)
+    monkeypatch.setattr(oauth_crud_mod.db.googleCalendarTokens, "delete_one", mock_delete_one)
+    monkeypatch.setattr(oauth_crud_mod.httpx, "AsyncClient", lambda: MockClient())
+
+    with pytest.raises(HTTPException) as exc_info:
+        await oauth_crud_mod.refresh_google_calendar_token("uid123")
+
+    assert exc_info.value.status_code == 401
+    assert delete_calls["n"] == 1

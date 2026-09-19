@@ -9,9 +9,8 @@
 | `test_<x>_api.py` | 走 HTTP：`AsyncClient(ASGITransport(app=main.app))` + `logged_in_user` fixture | 「接線」：路由有註冊、登入驗證有掛上、`response_model` 的 JSON 格式、狀態碼與 `detail` 真的送得出去、請求內容驗證（422） | 每個錯誤分支（交給 router 測試） |
 | `test_<x>_scenario.py` | 走 HTTP，串多個步驟 | 端對端情境（例如建立 -> 查詢 -> 刪除） | 單一分支 |
 
-`_api.py` 的標準結構是三種測試：**成功**、**典型錯誤**（例如未綁定帳號）、**沒登入被擋**。
-github、jira、moodle、oauth、schedule 已照這個結構；linked account、manual task、user 的 `_api.py` 是較早寫的，
-還沒補「沒登入被擋」，manual task 與 user 也還用自己的 `TestClient` + fixture，沒改用 `logged_in_user`。
+`_api.py` 的標準結構是三種測試：**成功**、**典型錯誤**（例如未綁定帳號回 400、找不到回 404），以及**沒登入被擋**。
+所有 `_api.py` 都用 `AsyncClient` + `logged_in_user` fixture，crud 或外部呼叫用 `monkeypatch` / `@patch` 換掉。
 
 ## 各模組現況
 

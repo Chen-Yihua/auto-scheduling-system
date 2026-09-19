@@ -65,7 +65,7 @@ async def test_get_moodle_assignments(monkeypatch, logged_in_user):
     assert res.headers["X-Synced-At"] == "2026-09-01T00:00:00+00:00"
 
 
-# 使用者還沒綁定 Moodle：HTTP 回應要是 404，前端才能顯示「請先設定帳號」
+# 使用者還沒綁定 Moodle：HTTP 回應要是 400 加上說明，前端才能顯示「請先設定帳號」
 @pytest.mark.asyncio
 async def test_get_moodle_assignments_when_account_not_linked(monkeypatch, logged_in_user):
     monkeypatch.setattr(moodle_router.db, "linkedAccounts", EmptyLinkedAccounts())
@@ -73,8 +73,8 @@ async def test_get_moodle_assignments_when_account_not_linked(monkeypatch, logge
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         res = await ac.get("/moodle/assignments")
 
-    assert res.status_code == status.HTTP_404_NOT_FOUND
-    assert res.json() == {"detail": "User not found"}
+    assert res.status_code == status.HTTP_400_BAD_REQUEST
+    assert res.json() == {"detail": "No Moodle linked account"}
 
 
 # 沒帶登入 token（這個測試沒有用 logged_in_user）-> 要被擋在門外，不能進到函式裡

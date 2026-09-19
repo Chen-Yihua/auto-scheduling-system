@@ -1,20 +1,19 @@
+# 透過 HTTP 測試 /users 這組 API：路由有註冊、登入驗證有掛上、
+# 回傳的 JSON 格式（response_model）跟錯誤狀態碼真的送得出去。
+# crud 層在這裡整個被 mock 掉；crud 本身由 test_user_crud.py 負責。
 import pytest
-from fastapi.testclient import TestClient
+from httpx import AsyncClient
+from httpx._transports.asgi import ASGITransport
 from unittest.mock import AsyncMock, patch
 
 from main import app  # 假設 FastAPI app 是定義在 main.py 裡
 from schemas.user import UserOut, UserCreate
 
-client = TestClient(app)
-
-@pytest.fixture
-def fake_clerk_user():
-    return {"sub": "clerk_user_id"}
 
 @pytest.fixture
 def fake_user_out():
     return UserOut(
-        id="clerk_user_id",
+        id="test_user_123",
         name="John Doe",
         email="john@example.com"
     )
@@ -22,38 +21,34 @@ def fake_user_out():
 @pytest.fixture
 def fake_user_create():
     return UserCreate(
-        clerk_id="clerk_user_id",
+        clerk_id="test_user_123",
         name="John Doe",
         email="john@example.com"
     )
-
-# override get jwt token function to return a fake token
-@pytest.fixture(autouse=True)
-def override_get_current_user(fake_clerk_user):
-    from db.security import get_current_clerk_user
-    app.dependency_overrides[get_current_clerk_user] = lambda: fake_clerk_user
-    yield
-    app.dependency_overrides.clear()
 
 
 """
 測試get me
 """
+@pytest.mark.asyncio
 @patch("crud.user.get_user_by_clerk_id", new_callable=AsyncMock)
-def test_get_current_user_success(mock_get_user_by_clerk_id, fake_user_out):
+async def test_get_current_user_success(mock_get_user_by_clerk_id, fake_user_out, logged_in_user):
     mock_get_user_by_clerk_id.return_value = fake_user_out
 
-    response = client.get("/users/me")
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        response = await ac.get("/users/me")
 
     assert response.status_code == 200
     assert response.json()["name"] == "John Doe"
     assert response.json()["email"] == "john@example.com"
 
+@pytest.mark.asyncio
 @patch("crud.user.get_user_by_clerk_id", new_callable=AsyncMock)
-def test_get_current_user_not_found(mock_get_user_by_clerk_id):
+async def test_get_current_user_not_found(mock_get_user_by_clerk_id, logged_in_user):
     mock_get_user_by_clerk_id.return_value = None
 
-    response = client.get("/users/me")
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        response = await ac.get("/users/me")
 
     assert response.status_code == 404
     assert response.json()["detail"] == "User not found"
@@ -61,24 +56,28 @@ def test_get_current_user_not_found(mock_get_user_by_clerk_id):
 """
 測試註冊新使用者
 """
+@pytest.mark.asyncio
 @patch("crud.user.get_user_by_clerk_id", new_callable=AsyncMock)
 @patch("crud.user.create_user", new_callable=AsyncMock)
-def test_register_user_success(mock_create_user, mock_get_user_by_clerk_id, fake_clerk_user, fake_user_create, fake_user_out):
+async def test_register_user_success(mock_create_user, mock_get_user_by_clerk_id, fake_user_create, fake_user_out, logged_in_user):
     mock_get_user_by_clerk_id.return_value = None
     mock_create_user.return_value = fake_user_out
 
-    response = client.post("/users/", json=fake_user_create.model_dump())
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        response = await ac.post("/users/", json=fake_user_create.model_dump())
 
     assert response.status_code == 200
     assert response.json()["name"] == "John Doe"
 
+@pytest.mark.asyncio
 @patch("crud.user.get_user_by_clerk_id", new_callable=AsyncMock)
 @patch("crud.user.create_user", new_callable=AsyncMock)
-def test_register_user_already_registered(mock_create_user, mock_get_user_by_clerk_id, fake_clerk_user, fake_user_create, fake_user_out):
+async def test_register_user_already_registered(mock_create_user, mock_get_user_by_clerk_id, fake_user_create, fake_user_out, logged_in_user):
     mock_get_user_by_clerk_id.return_value = fake_user_out
     mock_create_user.return_value = fake_user_out
 
-    response = client.post("/users/", json=fake_user_create.model_dump())
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        response = await ac.post("/users/", json=fake_user_create.model_dump())
 
     assert response.status_code == 409
     assert response.json()["detail"] == "User already registered"
@@ -87,22 +86,26 @@ def test_register_user_already_registered(mock_create_user, mock_get_user_by_cle
 """
 測試更新使用者
 """
+@pytest.mark.asyncio
 @patch("crud.user.update_user_by_clerk_id", new_callable=AsyncMock)
-def test_update_user_success(mock_update_user):
+async def test_update_user_success(mock_update_user, logged_in_user):
     mock_update_user.return_value = True  # 模擬成功更新
 
-    response = client.put("/users/me", json={"name": "Updated Name"})
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        response = await ac.put("/users/me", json={"name": "Updated Name"})
 
     assert response.status_code == 200
     assert response.json() == {"success": True}
 
+@pytest.mark.asyncio
 @patch("crud.user.update_user_by_clerk_id", new_callable=AsyncMock)
-def test_update_user_not_found(mock_update_user):
+async def test_update_user_not_found(mock_update_user, logged_in_user):
     # 找不到或沒有變更，crud 現在直接 raise 404，不是回傳 False 讓 router 判斷
     from fastapi import HTTPException
     mock_update_user.side_effect = HTTPException(status_code=404, detail="User not found or no changes made")
 
-    response = client.put("/users/me", json={"name": "No Change"})
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        response = await ac.put("/users/me", json={"name": "No Change"})
 
     assert response.status_code == 404
     assert response.json()["detail"] == "User not found or no changes made"
@@ -111,20 +114,36 @@ def test_update_user_not_found(mock_update_user):
 """
 測試刪除使用者
 """
+@pytest.mark.asyncio
 @patch("crud.user.delete_user_by_clerk_id", new_callable=AsyncMock)
-def test_delete_user_success(mock_delete_user):
+async def test_delete_user_success(mock_delete_user, logged_in_user):
     mock_delete_user.return_value = True  # 模擬刪除成功
 
-    response = client.delete("/users/me")
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        response = await ac.delete("/users/me")
 
     assert response.status_code == 200
     assert response.json() == {"deleted": True}
 
+@pytest.mark.asyncio
 @patch("crud.user.delete_user_by_clerk_id", new_callable=AsyncMock)
-def test_delete_user_not_found(mock_delete_user):
+async def test_delete_user_not_found(mock_delete_user, logged_in_user):
     mock_delete_user.return_value = False  # 模擬找不到使用者
 
-    response = client.delete("/users/me")
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        response = await ac.delete("/users/me")
 
     assert response.status_code == 404
     assert response.json()["detail"] == "User not found"
+
+
+"""
+測試沒登入
+"""
+# 沒帶登入 token（這個測試沒有用 logged_in_user）-> 要被擋在門外，不能進到函式裡
+@pytest.mark.asyncio
+async def test_get_current_user_requires_login():
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        response = await ac.get("/users/me")
+
+    assert response.status_code in (401, 403)

@@ -177,7 +177,7 @@ async def test_get_assignments_raises_503_when_db_down(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_get_assignments_raises_404_when_account_not_linked(monkeypatch):
+async def test_get_assignments_raises_400_when_account_not_linked(monkeypatch):
     class EmptyLinkedAccounts:
         async def find_one(self, query):
             return None
@@ -187,7 +187,8 @@ async def test_get_assignments_raises_404_when_account_not_linked(monkeypatch):
     with pytest.raises(HTTPException) as exc_info:
         await moodle_router.get_assignments(request=MagicMock(), response=Response(), clerk_user=mock_user)
 
-    assert exc_info.value.status_code == 404
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.detail == "No Moodle linked account"
 
 
 @pytest.mark.asyncio

@@ -41,10 +41,10 @@ pytest                     # 全部（CI 用這個）
 | oauth | ✅（`_free_slots`） | ✅ | ✅ | `test_google_calendar_service.py`（`services/`） |
 | schedule | ✅ | ✅ | ✅ | |
 | linked account | ✅ | ✅ | ✅ | `_scenario`、`_secrets` |
-| manual task | ✅ | — | ✅ | `_scenario` |
+| manual task | ✅ | ✅ | ✅ | `_scenario` |
 | user | ✅ | — | ✅ | `test_user_webhook.py` |
 
-`—` 代表目前沒有獨立的 router 測試（該 router 沒有額外分支，或分支已由 `_api.py` 涵蓋）。
+`—` 代表目前沒有獨立的 router 測試（該 router 沒有額外分支，或分支已由 `_api.py` 涵蓋）。目前只有 user。
 
 ## 跨模組的測試
 

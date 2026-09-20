@@ -1,7 +1,7 @@
 # 透過 HTTP 測試 /manual_tasks 這組 API：路由有註冊、登入驗證有掛上、
-# 回傳的 JSON 格式（response_model）跟錯誤狀態碼真的送得出去，以及建立任務時
-# 「哪些欄位交給 LLM 推斷」的規則。crud 層在這裡被 mock 掉；crud 本身由
-# test_manual_task_crud.py 負責。
+# 回傳的 JSON 格式（response_model）跟錯誤狀態碼真的送得出去。
+# crud 層在這裡被 mock 掉；建立任務時「哪些欄位交給 LLM 推斷」、更新時保留原值、
+# 只能動自己的任務等規則，由 unit/test_manual_task_router.py 和 unit/test_manual_task_crud.py 負責。
 import pytest
 from fastapi import HTTPException
 from httpx import AsyncClient
@@ -71,61 +71,27 @@ async def test_create_manual_task_success(mock_create_manual_task, mock_infer, f
     mock_infer.assert_not_called()
 
 @pytest.mark.asyncio
+@patch("crud.manualTask.create_manual_task", new_callable=AsyncMock)
+async def test_create_manual_task_ignores_client_supplied_user_id(mock_create_manual_task, fake_task_input, fake_task_out, logged_in_user):
+    """建立任務時，就算請求裡帶了別人的 user_id，任務的擁有者仍是登入者本人。"""
+    mock_create_manual_task.return_value = fake_task_out
+    payload = fake_task_input.model_dump()
+    payload["user_id"] = "someone_else"  # 冒充別人
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        response = await ac.post("/manual_tasks/", json=payload)
+
+    assert response.status_code == 200
+    saved_task = mock_create_manual_task.call_args[0][0]
+    assert saved_task.user_id == logged_in_user["sub"]
+
+
+@pytest.mark.asyncio
 async def test_create_manual_task_invalid_input(logged_in_user):
     """請求內容缺必填欄位 → 回 422。"""
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         response = await ac.post("/manual_tasks/", json={})
     assert response.status_code == 422  # FastAPI 的預設驗證
-
-
-@pytest.mark.asyncio
-@patch("routers.manualTask.infer_missing_task_fields", new_callable=AsyncMock)
-@patch("crud.manualTask.create_manual_task", new_callable=AsyncMock)
-async def test_create_manual_task_infers_missing_priority_and_duration(mock_create_manual_task, mock_infer, fake_task_input, fake_task_out, logged_in_user):
-    """priority 和 duration 都沒填 → 交給 LLM 推斷，存進去的要是推斷值，並記錄哪些欄位是推斷的（inferred_fields）和理由。"""
-    mock_infer.return_value = {"priority": "High", "duration": 120, "reason": "看起來很重要"}
-    mock_create_manual_task.return_value = fake_task_out
-
-    payload = fake_task_input.model_dump()
-    payload["priority"] = None
-    payload["duration"] = None
-
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        response = await ac.post("/manual_tasks/", json=payload)
-
-    assert response.status_code == 200
-    mock_infer.assert_called_once_with(
-        fake_task_input.title, fake_task_input.description, fake_task_input.inference_hint
-    )
-
-    # 檢查真正存進去的任務資料，確認 priority/duration 有被 LLM 推斷值取代
-    saved_task = mock_create_manual_task.call_args[0][0]
-    assert saved_task.priority == "High"
-    assert saved_task.duration == 120
-    assert saved_task.inferred_fields == ["priority", "duration"]
-    assert saved_task.inference_reason == "看起來很重要"
-
-
-@pytest.mark.asyncio
-@patch("routers.manualTask.infer_missing_task_fields", new_callable=AsyncMock)
-@patch("crud.manualTask.create_manual_task", new_callable=AsyncMock)
-async def test_create_manual_task_infers_only_missing_field(mock_create_manual_task, mock_infer, fake_task_input, fake_task_out, logged_in_user):
-    """只有 duration 沒填 → 只推斷 duration；使用者自己選的 priority 不能被 LLM 的推斷值覆蓋。"""
-    mock_infer.return_value = {"priority": "Medium", "duration": 45, "reason": "普通任務"}
-    mock_create_manual_task.return_value = fake_task_out
-
-    payload = fake_task_input.model_dump()
-    payload["duration"] = None  # 只有 duration 沒填，priority 使用者已經選了 "Low"
-
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        response = await ac.post("/manual_tasks/", json=payload)
-
-    assert response.status_code == 200
-    saved_task = mock_create_manual_task.call_args[0][0]
-    # priority 是使用者自己選的，不該被 LLM 的推斷值覆蓋
-    assert saved_task.priority == "Low"
-    assert saved_task.duration == 45
-    assert saved_task.inferred_fields == ["duration"]
 
 
 """

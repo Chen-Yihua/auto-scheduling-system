@@ -9,6 +9,49 @@ from fastapi import HTTPException
 import crud.manualTask as manual_task_crud
 
 
+# ---------- 只能查自己的任務、回傳不含 Mongo 內部的 _id（用記憶體資料庫，不 mock 查詢）----------
+
+@pytest.mark.asyncio
+async def test_get_manual_task_by_id_returns_own_task_without_mongo_id():
+    """查自己的任務 → 回傳任務內容，且不含 Mongo 自動加的 _id（否則之後更新時會被塞回去）。"""
+    await manual_task_crud.db.manual_tasks.insert_one({"id": "crud-t1", "user_id": "alice", "title": "Alice 的任務"})
+    try:
+        task = await manual_task_crud.get_manual_task_by_id("crud-t1", "alice")
+        assert task["title"] == "Alice 的任務"
+        assert "_id" not in task
+    finally:
+        await manual_task_crud.db.manual_tasks.delete_many({"id": "crud-t1"})
+
+
+@pytest.mark.asyncio
+async def test_get_manual_task_by_id_hides_other_users_task():
+    """使用者 bob 查 alice 的任務 → 404，不能讓他看到。"""
+    await manual_task_crud.db.manual_tasks.insert_one({"id": "crud-t2", "user_id": "alice", "title": "Alice 的任務"})
+    try:
+        with pytest.raises(HTTPException) as exc_info:
+            await manual_task_crud.get_manual_task_by_id("crud-t2", "bob")
+        assert exc_info.value.status_code == 404
+    finally:
+        await manual_task_crud.db.manual_tasks.delete_many({"id": "crud-t2"})
+
+
+@pytest.mark.asyncio
+async def test_get_manual_tasks_by_user_id_returns_only_own_tasks_without_mongo_id():
+    """列出任務只會回傳自己的（不含別人的），而且每筆都不含 Mongo 內部的 _id。"""
+    collection = manual_task_crud.db.manual_tasks
+    await collection.insert_many([
+        {"id": "crud-t3", "user_id": "alice", "title": "Alice 的任務一"},
+        {"id": "crud-t4", "user_id": "alice", "title": "Alice 的任務二"},
+        {"id": "crud-t5", "user_id": "bob", "title": "Bob 的任務"},
+    ])
+    try:
+        tasks = await manual_task_crud.get_manual_tasks_by_user_id("alice")
+        assert sorted(t["id"] for t in tasks) == ["crud-t3", "crud-t4"]
+        assert all("_id" not in t for t in tasks)
+    finally:
+        await collection.delete_many({"id": {"$in": ["crud-t3", "crud-t4", "crud-t5"]}})
+
+
 # ---------- get_manual_task_by_id ----------
 
 @pytest.mark.asyncio

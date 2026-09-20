@@ -285,7 +285,7 @@ async def test_refresh_google_calendar_token_raises_502_when_google_unreachable(
             raise httpx.ConnectError("Google 掛了")
 
     monkeypatch.setattr(oauth_crud.db.googleCalendarTokens, "find_one", mock_find_one)
-    monkeypatch.setattr(oauth_crud.httpx, "AsyncClient", lambda: FailingClient())
+    monkeypatch.setattr(oauth_crud.httpx, "AsyncClient", lambda *a, **kw: FailingClient())
 
     with pytest.raises(HTTPException) as exc_info:
         await oauth_crud.refresh_google_calendar_token("uid123")
@@ -323,7 +323,7 @@ async def test_refresh_google_calendar_token_still_401s_when_cleanup_delete_fail
 
     monkeypatch.setattr(oauth_crud.db.googleCalendarTokens, "find_one", mock_find_one)
     monkeypatch.setattr(oauth_crud.db.googleCalendarTokens, "delete_one", mock_delete_one)
-    monkeypatch.setattr(oauth_crud.httpx, "AsyncClient", lambda: MockClient())
+    monkeypatch.setattr(oauth_crud.httpx, "AsyncClient", lambda *a, **kw: MockClient())
 
     with pytest.raises(HTTPException) as exc_info:
         await oauth_crud.refresh_google_calendar_token("uid123")
@@ -358,7 +358,7 @@ async def test_refresh_google_calendar_token_raises_400_when_google_response_mis
             return MockResponse()
 
     monkeypatch.setattr(oauth_crud.db.googleCalendarTokens, "find_one", mock_find_one)
-    monkeypatch.setattr(oauth_crud.httpx, "AsyncClient", lambda: MockClient())
+    monkeypatch.setattr(oauth_crud.httpx, "AsyncClient", lambda *a, **kw: MockClient())
 
     with pytest.raises(HTTPException) as exc_info:
         await oauth_crud.refresh_google_calendar_token("uid123")

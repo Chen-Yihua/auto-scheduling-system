@@ -18,7 +18,7 @@ def _mock_client(monkeypatch, handler):
     # 剛剛才 patch 上去的自己，無限遞迴
     transport = httpx.MockTransport(handler)
     real_async_client = httpx.AsyncClient
-    monkeypatch.setattr(gcal.httpx, "AsyncClient", lambda: real_async_client(transport=transport))
+    monkeypatch.setattr(gcal.httpx, "AsyncClient", lambda **kw: real_async_client(transport=transport, **kw))
 
 
 # ---------- fetch_google_calendar_list ----------

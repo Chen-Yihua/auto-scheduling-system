@@ -362,7 +362,7 @@ async def test_oauth_callback_happy_path_saves_token(monkeypatch):
         saved["access_token"] = access_token
         saved["refresh_token"] = refresh_token
 
-    monkeypatch.setattr(oauth_router.httpx, "AsyncClient", lambda: MockClient())
+    monkeypatch.setattr(oauth_router.httpx, "AsyncClient", lambda *a, **kw: MockClient())
     monkeypatch.setattr(oauth_router, "save_google_calendar_token", mock_save)
 
     payload = oauth_router.OAuthCallbackPayload(code="auth-code")
@@ -396,7 +396,7 @@ async def test_oauth_callback_raises_400_when_google_rejects_code(monkeypatch):
         async def post(self, *a, **k):
             return MockResponse()
 
-    monkeypatch.setattr(oauth_router.httpx, "AsyncClient", lambda: MockClient())
+    monkeypatch.setattr(oauth_router.httpx, "AsyncClient", lambda *a, **kw: MockClient())
 
     payload = oauth_router.OAuthCallbackPayload(code="bad-code")
 
@@ -428,7 +428,7 @@ async def test_oauth_callback_raises_400_when_no_access_token_in_response(monkey
         async def post(self, *a, **k):
             return MockResponse()
 
-    monkeypatch.setattr(oauth_router.httpx, "AsyncClient", lambda: MockClient())
+    monkeypatch.setattr(oauth_router.httpx, "AsyncClient", lambda *a, **kw: MockClient())
 
     payload = oauth_router.OAuthCallbackPayload(code="auth-code")
 

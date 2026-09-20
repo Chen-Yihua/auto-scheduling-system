@@ -94,7 +94,7 @@ async def test_oauth_callback_logs_error_and_returns_502_when_google_unreachable
         async def post(self, *a, **k):
             raise httpx.ConnectError("Google 掛了")
 
-    monkeypatch.setattr(oauth_router_mod.httpx, "AsyncClient", lambda: FailingClient())
+    monkeypatch.setattr(oauth_router_mod.httpx, "AsyncClient", lambda *a, **kw: FailingClient())
 
     from fastapi import HTTPException
 
@@ -142,7 +142,7 @@ async def test_refresh_google_token_logs_info_on_success(monkeypatch, caplog):
 
     monkeypatch.setattr(oauth_crud_mod.db.googleCalendarTokens, "find_one", mock_find_one)
     monkeypatch.setattr(oauth_crud_mod.db.googleCalendarTokens, "update_one", mock_update_one)
-    monkeypatch.setattr(oauth_crud_mod.httpx, "AsyncClient", lambda: MockClient())
+    monkeypatch.setattr(oauth_crud_mod.httpx, "AsyncClient", lambda *a, **kw: MockClient())
 
     with caplog.at_level(logging.INFO, logger="crud.oauth"):
         token = await oauth_crud_mod.refresh_google_calendar_token("uid123")
@@ -189,7 +189,7 @@ async def test_refresh_google_token_raises_401_and_clears_doc_when_google_reject
 
     monkeypatch.setattr(oauth_crud_mod.db.googleCalendarTokens, "find_one", mock_find_one)
     monkeypatch.setattr(oauth_crud_mod.db.googleCalendarTokens, "delete_one", mock_delete_one)
-    monkeypatch.setattr(oauth_crud_mod.httpx, "AsyncClient", lambda: MockClient())
+    monkeypatch.setattr(oauth_crud_mod.httpx, "AsyncClient", lambda *a, **kw: MockClient())
 
     with pytest.raises(HTTPException) as exc_info:
         await oauth_crud_mod.refresh_google_calendar_token("uid123")

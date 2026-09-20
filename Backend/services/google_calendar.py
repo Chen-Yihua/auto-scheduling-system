@@ -1,11 +1,18 @@
 from datetime import datetime, timedelta, timezone
 import httpx
 
+# 呼叫 Google 的逾時時間。httpx 預設只有 5 秒（連線階段包含 DNS 查詢），
+# 在 DNS 偶爾卡住 5 秒的網路環境（例如本機 WSL 開發環境）第一次呼叫就會剛好逾時、
+# 回 502，下一次 DNS 有快取又成功，使用者看到的就是「先失敗、過幾秒又成功」。
+# 放寬成 15 秒，讓這種偶發的慢一點也能成功；真的連不上 Google 時，
+# 各處仍會照樣回 502，只是最多多等 15 秒。
+GOOGLE_HTTP_TIMEOUT = httpx.Timeout(15.0)
+
 # 取得所有行事曆列表
 async def fetch_google_calendar_list(access_token: str) -> list:
     url = "https://www.googleapis.com/calendar/v3/users/me/calendarList"
     headers = {"Authorization": f"Bearer {access_token}"}
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=GOOGLE_HTTP_TIMEOUT) as client:
         res = await client.get(url, headers=headers)
         res.raise_for_status()
         return res.json().get("items", [])
@@ -23,7 +30,7 @@ async def fetch_events_in_next_7_days(access_token: str, calendar_id: str) -> li
         "orderBy": "startTime"
     }
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=GOOGLE_HTTP_TIMEOUT) as client:
         res = await client.get(url, headers=headers, params=params)
         res.raise_for_status()
         return res.json().get("items", [])
@@ -43,7 +50,7 @@ async def fetch_freebusy(access_token: str, calendar_id: str) -> dict:
         "timeZone": "UTC",
         "items": [{"id": calendar_id}]
     }
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=GOOGLE_HTTP_TIMEOUT) as client:
         res = await client.post(url, headers=headers, json=body)
         res.raise_for_status()
         return res.json()

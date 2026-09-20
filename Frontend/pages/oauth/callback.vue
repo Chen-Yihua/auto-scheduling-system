@@ -57,3 +57,12 @@ onMounted(async () => {
   }
 });
 </script>
+
+<template>
+  <!-- 從 Google 導回來後，要等後端去跟 Google 換 token（偶爾要好幾秒），
+  這段時間不能是空白畫面，讓使用者知道還在處理 -->
+  <div class="flex flex-col items-center justify-center py-32 text-gray-500 dark:text-gray-400">
+    <UIcon name="i-lucide-loader" class="animate-spin w-8 h-8 text-primary mb-3" />
+    <p>正在連接 Google Calendar，請稍候…</p>
+  </div>
+</template>

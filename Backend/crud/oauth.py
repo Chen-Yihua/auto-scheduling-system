@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 import os, httpx
 from pymongo.errors import PyMongoError
 from services.google_calendar import (
+    GOOGLE_HTTP_TIMEOUT,
     fetch_google_calendar_list,
     fetch_freebusy,
     compute_free_times,
@@ -70,7 +71,7 @@ async def refresh_google_calendar_token(clerk_id: str) -> str:
         "refresh_token": refresh_token,
     }
     try:
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=GOOGLE_HTTP_TIMEOUT) as client:
             res = await client.post(token_url, data=payload)
             logger.debug("Google token refresh response status=%s", res.status_code)
             if res.status_code != 200:

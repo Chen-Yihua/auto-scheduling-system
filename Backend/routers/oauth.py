@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from crud.oauth import get_google_calendar_token, save_google_calendar_token, refresh_google_calendar_token, get_free_slots_for_user, is_google_calendar_connected
-from services.google_calendar import fetch_events_in_next_7_days, fetch_google_calendar_list
+from services.google_calendar import GOOGLE_HTTP_TIMEOUT, fetch_events_in_next_7_days, fetch_google_calendar_list
 from db.security import get_current_clerk_user
 import httpx
 import os
@@ -41,7 +41,7 @@ async def oauth_callback(
     # 不要用大範圍的 except Exception 把下面更具體的錯誤（例如
     # save_google_calendar_token 可能丟出的 503）也接住蓋掉
     try:
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=GOOGLE_HTTP_TIMEOUT) as client:
             res = await client.post(token_url, data=token_payload)
             res.raise_for_status()
     except httpx.RequestError as e:

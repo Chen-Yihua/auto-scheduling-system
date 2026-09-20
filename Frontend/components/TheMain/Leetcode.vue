@@ -1,7 +1,8 @@
 <script setup lang="ts">
+import type { DailyChallenge } from '~/types/leetcode'
 
-let data = ref<any>(null);
-let error = ref<{ message: string } | null>(null);
+const data = ref<DailyChallenge | null>(null);
+const error = ref<{ message: string } | null>(null);
 const toast = useToast()
 const isCollapsed = ref(true)
 
@@ -9,7 +10,7 @@ async function fetchData() {
   try {
     error.value = null
     
-    data.value = await $fetch('/api/leetcode')
+    data.value = await $fetch<DailyChallenge>('/api/leetcode')
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : 'Unknown error occurred'
     error.value = { message: msg }
@@ -99,10 +100,13 @@ const exampleContent = computed(() => {
       </div>
 
       <!-- 主內容，截斷顯示 -->
-      <div class="prose max-w-none text-sm" v-html="mainContent"></div>
+      <!-- v-html：內容是 LeetCode 官方 API 回傳的題目 HTML（第三方，但屬受信任來源），目前沒有另外過濾。
+           若日後要顯示不受信任的內容，需先用 DOMPurify 清理 -->
+      <!-- eslint-disable-next-line vue/no-v-html -->
+      <div class="prose max-w-none text-sm" v-html="mainContent" />
 
       <!-- Example 區塊 -->
-      <UCollapsible class="mt-4" v-model="isCollapsed">
+      <UCollapsible v-model="isCollapsed" class="mt-4">
         <UButton
           variant="ghost" color="neutral" size="xs"
           :icon="isCollapsed ? 'i-lucide-chevron-down' : 'i-lucide-chevron-up'"
@@ -112,6 +116,7 @@ const exampleContent = computed(() => {
         </UButton>
 
         <template #content>
+          <!-- eslint-disable-next-line vue/no-v-html -->
           <div class="mt-2 prose max-w-none text-sm" v-html="exampleContent" />
         </template>
       </UCollapsible>

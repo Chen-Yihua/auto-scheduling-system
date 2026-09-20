@@ -5,10 +5,24 @@
 // 1. 後端自己的限流（rate_limit.py）——回應會帶 { error_code: "RATE_LIMITED" }
 // 2. Cloud Run 流量爆掉、instance 數量到頂——Google 基礎設施直接擋下來的 429，
 //    不會有我們自訂的 error_code，只能靠狀態碼判斷
+
+// 前端各處拿到的錯誤形狀不一（ofetch 的 FetchError、原生 Response 錯誤、測試裡手寫的物件…），
+// 這裡只描述我們會讀的欄位，全部都是選填
+type ErrorLike = {
+  response?: { status?: number }
+  status?: number
+  statusCode?: number
+  data?: { error_code?: string }
+}
+
+function getErrorStatus(error: unknown): number | undefined {
+  const err = error as ErrorLike | null | undefined
+  return err?.response?.status ?? err?.status ?? err?.statusCode
+}
+
 export function getFriendlyErrorTitle(error: unknown, fallbackTitle: string): string {
-  const err = error as any
-  const status = err?.response?.status ?? err?.status ?? err?.statusCode
-  const errorCode = err?.data?.error_code
+  const status = getErrorStatus(error)
+  const errorCode = (error as ErrorLike | null | undefined)?.data?.error_code
 
   if (status === 429 || errorCode === 'RATE_LIMITED') {
     return '請求太頻繁，請稍後再試'
@@ -20,9 +34,7 @@ export function getFriendlyErrorTitle(error: unknown, fallbackTitle: string): st
 // 可以退回時，會回 401——用來跟一般的暫時性抓取失敗區分，好顯示「請重新連結帳號」
 // 而不是「請稍後再試」（重試也沒用）。
 export function isAuthError(error: unknown): boolean {
-  const err = error as any
-  const status = err?.response?.status ?? err?.status ?? err?.statusCode
-  return status === 401
+  return getErrorStatus(error) === 401
 }
 
 // 後端在使用者「根本還沒連結」這個平台的帳號時（GitHub/Jira/Google Calendar），
@@ -30,7 +42,5 @@ export function isAuthError(error: unknown): boolean {
 // 或只是還沒設定），不該用跟系統錯誤一樣的紅色警示嚇使用者，只需要溫和地
 // 告訴他去哪裡連結。
 export function isNotLinkedError(error: unknown): boolean {
-  const err = error as any
-  const status = err?.response?.status ?? err?.status ?? err?.statusCode
-  return status === 400
+  return getErrorStatus(error) === 400
 }

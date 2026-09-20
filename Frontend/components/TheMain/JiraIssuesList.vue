@@ -35,7 +35,7 @@ const openJiraIssue = (key: string) => {
     />
 
     <div v-if="loading">
-      <USkeleton class="h-24 mb-4" v-for="i in 3" :key="i" />
+      <USkeleton v-for="i in 3" :key="i" class="h-24 mb-4" />
     </div>
 
     <!-- 尚未綁定 Jira 帳號 -->
@@ -50,10 +50,10 @@ const openJiraIssue = (key: string) => {
       <UCard
         v-for="issue in issues"
         :key="issue.id"
-        @click="openJiraIssue(issue.key)"
         :ui="{
           root: 'cursor-pointer hover:shadow-lg transition-transform duration-300 ease-in-out transform scale-100 hover:scale-105',
         }"
+        @click="openJiraIssue(issue.key)"
       >
         <template #header>
           <div class="flex items-center justify-between">
@@ -65,7 +65,7 @@ const openJiraIssue = (key: string) => {
         </template>
 
         <div class="flex items-center gap-2 mb-1">
-          <img v-if="issue.iconUrl" :src="issue.iconUrl" alt="type" class="w-5 h-5" />
+          <img v-if="issue.iconUrl" :src="issue.iconUrl" alt="type" class="w-5 h-5" >
           <span class="text-sm text-gray-600">{{ issue.type }}</span>
         </div>
 

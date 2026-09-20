@@ -40,8 +40,9 @@ onMounted(fetchMoodleAssignments); // 頁面載入時抓取作業資料
     <div v-else class="grid grid-cols-1 gap-4">
       <UCard
         v-for="item in moodleAssignments"
-        @click="openMoodleAssignments(item.url)"
+        :key="item.url"
         class="rounded-lg bg-default ring ring-default divide-y divide-default cursor-pointer hover:shadow-lg transition-transform duration-300 ease-in-out transform scale-100 hover:scale-105"
+        @click="openMoodleAssignments(item.url)"
       >
         <template #header>
           <div class="text-sm font-semibold">課程名稱 : {{ item.course_name }}</div>

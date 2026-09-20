@@ -32,7 +32,7 @@ const openIssue = (url: string) => {
     />
 
     <div v-if="loading">
-      <USkeleton class="h-24 mb-4" v-for="i in 3" :key="i" />
+      <USkeleton v-for="i in 3" :key="i" class="h-24 mb-4" />
     </div>
 
     <!-- 尚未綁定 GitHub 帳號 -->
@@ -47,10 +47,10 @@ const openIssue = (url: string) => {
       <UCard
         v-for="issue in issues"
         :key="issue.id"
-        @click="openIssue(issue.url)"
         :ui="{
           root: 'cursor-pointer hover:shadow-lg transition-transform duration-300 ease-in-out transform scale-100 hover:scale-105',
         }"
+        @click="openIssue(issue.url)"
       >
         <template #header>
           <div class="flex items-center justify-between">

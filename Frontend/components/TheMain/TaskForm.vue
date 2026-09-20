@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useTaskForm } from '~/composables/useTaskForm'
 import { onMounted } from 'vue'
+import type { FormSubmitEvent } from '@nuxt/ui'
 
 const {
   user,
@@ -13,7 +14,6 @@ const {
   validate,
   loading,
   all_tasks,
-  editing_task,
   isEditMode,
   fetchTasks,
   startEditTask,
@@ -39,13 +39,13 @@ const getPriorityColor = (priority: string | undefined) => {
 
 
 // 等待 user 有值再 resolve
-function waitForUser(userRef: Ref<any>) {
+function waitForUser<T>(userRef: Ref<T>): Promise<NonNullable<T>> {
   return new Promise(resolve => {
-    if (userRef.value) return resolve(userRef.value)
+    if (userRef.value) return resolve(userRef.value as NonNullable<T>)
     const stop = watch(userRef, (val) => {
       if (val) {
         stop()
-        resolve(val)
+        resolve(val as NonNullable<T>)
       }
     })
   })
@@ -53,7 +53,7 @@ function waitForUser(userRef: Ref<any>) {
 
 
 // 提交表單時的處理函數
-function handleSubmit(e: any) {
+function handleSubmit(e: FormSubmitEvent<typeof state>) {
   if (isEditMode.value) {
     onEdit(e)
   } else {
@@ -99,8 +99,8 @@ onMounted(async () => {
             </h2>
 
             <UInput 
-              name="Title"
-              v-model="state.title" 
+              v-model="state.title"
+              name="Title" 
               :placeholder="isEditMode ? '編輯代辦事項' : '新增代辦事項'"
               size="xl" 
               required
@@ -108,8 +108,8 @@ onMounted(async () => {
             />
 
             <UTextarea 
-              name="Description"
-              v-model="state.description" 
+              v-model="state.description"
+              name="Description" 
               :placeholder="isEditMode ? '編輯附註' : '新增附註'"
               size="xl"
               required
@@ -223,7 +223,7 @@ onMounted(async () => {
       </template>
 
       <div v-if="loading">
-        <USkeleton class="h-24 mb-4" v-for="i in 3" :key="i" />
+        <USkeleton v-for="i in 3" :key="i" class="h-24 mb-4" />
       </div>
       <!-- 真的沒有任務是正常狀態，不是還在載入，不該一直顯示 Skeleton -->
       <div
@@ -268,9 +268,9 @@ onMounted(async () => {
             <UButton
               icon="i-lucide-pencil"
               size="xs"
-              @click.stop="startEditTask(task)"
               color="info"
               variant="soft"
+              @click.stop="startEditTask(task)"
             >
               編輯
             </UButton>

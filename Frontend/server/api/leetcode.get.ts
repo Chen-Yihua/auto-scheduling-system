@@ -1,7 +1,7 @@
 // server/api/leetcode.get.ts
-import { DailyChallengeResponse } from '~/types/leetcode'
+import type { DailyChallengeResponse } from '~/types/leetcode'
 
-export default defineEventHandler(async (event) => {
+export default defineEventHandler(async () => {
   const query = `
     query GetDailyChallenge {
       activeDailyCodingChallengeQuestion {

@@ -81,7 +81,7 @@ const isCollapsed = ref(true)
       </ul>
 
       <!-- 折疊後的其餘新聞 -->
-      <UCollapsible class="mt-2" v-model="isCollapsed">
+      <UCollapsible v-model="isCollapsed" class="mt-2">
         <UButton
           variant="soft"
           color="info"

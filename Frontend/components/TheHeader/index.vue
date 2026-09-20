@@ -1,50 +1,19 @@
 <script setup lang="ts">
 import ColorModeButton from './components/ColorModeButton.vue';
 import AccountSettings from './components/AccountSettings.vue';
-import { useUser, useAuth } from '@clerk/vue';
+import { useUser } from '@clerk/vue';
 import { useTaskForm } from '~/composables/useTaskForm';
-
-const config = useRuntimeConfig();
-
-const BASE_URL = config.public.apiBaseUrl;
+import { useUserSync } from '~/composables/useUserSync';
 
 const { user } = useUser();
-const { getToken } = useAuth();
+const { ensureUserRecord } = useUserSync();
 // 跟 TaskForm.vue 共用同一份狀態（見 useTaskForm.ts 的 createSharedComposable）
-// 這裡按下編輯圖示，TaskForm 裡的 Modal 才會真的打開
+// 這裡按下「+」，TaskForm 裡的 Modal 才會真的打開
 const { showEditModal } = useTaskForm();
 
-// Watch for user changes
-watch(user, async (newUser) => {
-  if (!newUser) return;
-  const token = await getToken.value();
-  try {
-    // Call GET /users/me
-    const response = await fetch(`${BASE_URL}/users/me`, {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
-
-    if (response.status === 404) {
-      // If the response is 404, use POST to create a new user
-      await fetch(`${BASE_URL}/users/`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          clerk_id: newUser.id,
-          email: newUser.primaryEmailAddress?.emailAddress,
-          name: newUser.fullName,
-        }),
-      });
-    }
-  } catch (error) {
-    console.error('Error fetching or creating user:', error);
-  }
+// 使用者登入後，確認後端資料庫有這個使用者，沒有就建立（建立失敗會提示使用者）
+watch(user, (newUser) => {
+  if (newUser) ensureUserRecord(newUser);
 });
 </script>
 

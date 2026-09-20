@@ -9,3 +9,11 @@ htmlcov/
 .coverage
 .DS_Store
 .claude/settings.local.json
+
+# GitLab 專用設定（專案在 GitHub 上，用不到）
+.gitlab/
+.gitlab-*.yml
+
+# 本機產生的覆蓋率輸出、根目錄多餘的 lock 檔（根目錄沒有 package.json）
+frontend-coverage.txt
+/package-lock.json

@@ -22,7 +22,6 @@ Backend/
 ├── requirements.txt         # 套件列表
 ├── .env.example             # 環境變數範本（複製成 .env 並填值）
 ├── Dockerfile               # 正式環境用的 image（Cloud Run 部署用這個 build）
-├── Dockerfile.test          # 在乾淨的容器裡跑 pytest（選用，CI 沒用到，見「用 Docker 跑測試」）
 ├── cache.py                 # 通用 TTL 快取（Redis，沒設定就退回記憶體）
 ├── rate_limit.py            # 流量限制（slowapi），key 用 Authorization header 雜湊
 ├── logging_config.py        # logging 設定
@@ -234,24 +233,5 @@ pytest tests/integration                   # 只跑走 HTTP 的測試
 - **單元測試**（`tests/unit/`）：不碰 HTTP，直接呼叫函式，資料庫、外部 API 都 mock 掉，測邏輯對不對。
 - **API 測試**（`tests/integration/test_*_api.py`）：走 HTTP 打 endpoint，確認路由、登入驗證、回應格式都接對了。
 - **端對端情境測試**（`tests/integration/test_*_scenario.py`）：不 mock 資料庫，用 `mongomock-motor`（假的、但支援 async/await 的 MongoDB）串好幾個真的 HTTP 呼叫，驗證「上一步寫的資料，下一步真的讀得到、也真的反映更新」——例如建立任務 → 列表看得到 → 編輯 → 確認更新落地 → 刪除 → 確認查不到。
-
-### 用 Docker 跑測試（選用）
-
-`Dockerfile.test` 是想在**乾淨的 Linux 容器**裡跑 `pytest` 時用的映像，跟部署用的 `Dockerfile` 是分開的。目前**沒有任何 CI 使用它**（GitHub Actions 直接在 runner 上執行 `pytest`），只有想在本機複驗時才需要：
-
-```bash
-cd Backend
-docker build -f Dockerfile.test -t backend-test .
-docker run --rm \
-  -e CLERK_ISSUER=https://fake.clerk.dev \
-  -e CLERK_JWKS_URL=https://fake.clerk.dev/.well-known/jwks.json \
-  backend-test
-```
-
-注意：
-
-- 容器裡**一定要帶 `CLERK_ISSUER` 和 `CLERK_JWKS_URL`**，沒帶的話所有測試在載入階段就會報 `Missing environment variable`。測試不會真的連 Clerk，填假的網址就可以（`GEMINI_API_KEY` 等其他變數，測試會自己補預設值）。
-- 這個映像用 Python 3.13，CI 和正式環境是 3.11。
-- 專案目前沒有 `.dockerignore`，`COPY . .` 會把本機的 `Backend/.env` 也複製進映像，**不要把這個映像推送到任何 registry**。
 
 > 如果要新增會真的碰資料庫（不整個 mock 掉）的測試，資料庫 fixture 一定要用 `mongomock_motor.AsyncMongoMockClient`（見 `tests/conftest.py`），不能用純同步的 `mongomock.MongoClient()`——後者對 `await` 出來的結果會直接噴 `TypeError`，而且不會在「有 mock 掉」的測試裡被發現。

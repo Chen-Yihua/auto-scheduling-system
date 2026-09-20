@@ -32,3 +32,6 @@ coverage/
 storageState.json
 test-results/
 playwright-report/
+
+# .env.example 是要進版本控制的範本，必須放在最後面，才能蓋過上面的 .env* 規則
+!.env.example

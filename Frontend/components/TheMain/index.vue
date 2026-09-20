@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { useGithub } from '@/composables/useGithub'
-import { SignedIn, SignedOut, useUser } from '@clerk/vue'
+import { useUser } from '@clerk/vue'
 import GithubIssuesList from './GithubIssuesList.vue'
+import LoginRequiredCard from './LoginRequiredCard.vue'
 import Leetcode from './Leetcode.vue'
 import JiraIssuesList from './JiraIssuesList.vue'
 import News from './News.vue'
@@ -34,39 +35,43 @@ watch(isSignedIn, (signedIn) => {
 
 <template>
   <div class="p-4">
-    <SignedIn>
-      <!-- 三欄式版面：左 待辦事項＋第三方平台任務、中 行事曆、右 動態消息／LeetCode -->
-      <div class="grid grid-cols-1 lg:grid-cols-[320px_1fr_320px] gap-6 mt-4 items-start">
-        <div class="space-y-6">
+    <!-- Clerk 還在初始化（isSignedIn 是 undefined）時先不畫，避免登入的人一進來先閃一下「請先登入」 -->
+    <!-- 三欄式版面：左 待辦事項＋第三方平台任務、中 行事曆、右 動態消息／LeetCode。
+    登入前後版面完全一樣：需要登入的卡片，訪客只看到標題加一句提示（LoginRequiredCard），
+    位置不變；Hacker News／LeetCode 不需要登入，兩邊都照常顯示 -->
+    <div
+      v-if="isSignedIn !== undefined"
+      class="grid grid-cols-1 lg:grid-cols-[320px_1fr_320px] gap-6 mt-4 items-start"
+    >
+      <div class="space-y-6">
+        <template v-if="isSignedIn">
           <TaskForm />
           <MoodleAssignments />
           <GithubIssuesList :issues="githubIssues" :loading="githubLoading" :is-stale="githubStale" :synced-at="githubSyncedAt" :auth-error="githubAuthError" :not-linked="githubNotLinked" />
           <JiraIssuesList :issues="jiraIssues" :loading="jiraLoading" :domain="domain" :is-stale="jiraStale" :synced-at="jiraSyncedAt" :auth-error="jiraAuthError" :not-linked="jiraNotLinked" />
-        </div>
-
-        <div>
-          <GoogleCalendarEmbed
-            :id="primaryCalendarId"
-            :calendar-ids="calendarIds"
-            :connect="isConnected"
-          />
-        </div>
-
-        <div class="space-y-6">
-          <News />
-          <Leetcode />
-        </div>
+        </template>
+        <template v-else>
+          <LoginRequiredCard title="任務列表" icon="i-lucide-list-todo" message="登入後即可查看與新增你的任務" />
+          <LoginRequiredCard title="Moodle 作業" icon="custom:moodle" message="登入後即可查看 Moodle 作業" />
+          <LoginRequiredCard title="GitHub 參與項目" icon="mdi:github" message="登入後即可查看 GitHub 參與項目" />
+          <LoginRequiredCard title="Jira 指派任務" icon="mdi:jira" icon-class="text-blue-500" message="登入後即可查看 Jira 指派任務" />
+        </template>
       </div>
-    </SignedIn>
 
-    <SignedOut>
-      <News />
-      <Leetcode />
-      <div class="text-center py-16 text-gray-500 dark:text-gray-400">
-        <UIcon name="i-lucide-lock" class="w-10 h-10 mx-auto mb-3" />
-        <p class="text-lg font-medium">登入後即可查看你的任務、行事曆與整合服務</p>
-        <p class="text-sm mt-1">點右上角「登入」開始使用</p>
+      <div>
+        <GoogleCalendarEmbed
+          v-if="isSignedIn"
+          :id="primaryCalendarId"
+          :calendar-ids="calendarIds"
+          :connect="isConnected"
+        />
+        <LoginRequiredCard v-else title="Google 行事曆" icon="i-lucide-calendar" message="登入後即可查看 Google 行事曆" />
       </div>
-    </SignedOut>
+
+      <div class="space-y-6">
+        <News />
+        <Leetcode />
+      </div>
+    </div>
   </div>
 </template>

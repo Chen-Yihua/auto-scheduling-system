@@ -5,7 +5,7 @@ import { useUser } from '@clerk/vue';
 import { useTaskForm } from '~/composables/useTaskForm';
 import { useUserSync } from '~/composables/useUserSync';
 
-const { user } = useUser();
+const { user, isSignedIn } = useUser();
 const { ensureUserRecord } = useUserSync();
 // 跟 TaskForm.vue 共用同一份狀態（見 useTaskForm.ts 的 createSharedComposable）
 // 這裡按下「+」，TaskForm 裡的 Modal 才會真的打開
@@ -30,16 +30,16 @@ watch(user, (newUser) => {
     <!-- 切換 Light/Dark 模式 -->
     <ColorModeButton />
 
-    <!-- 手動新增任務 -->
-    <SignedIn>
-      <UButton
-        icon="mdi-file-edit"
-        aria-label="新增任務"
-        color="neutral"
-        size="md"
-        @click="() => { showEditModal = true }"
-      />
-    </SignedIn>
+    <!-- 手動新增任務：訪客也畫出來（位置跟登入後一樣），只是不能按 -->
+    <UButton
+      icon="mdi-file-edit"
+      aria-label="新增任務"
+      :title="isSignedIn ? undefined : '登入後才能新增任務'"
+      color="neutral"
+      size="md"
+      :disabled="!isSignedIn"
+      @click="() => { showEditModal = true }"
+    />
 
     <!-- 登入按鈕 -->
     <SignedOut>

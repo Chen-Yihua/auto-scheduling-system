@@ -74,14 +74,15 @@ async function printPostSignInDiagnostics(page: Page, redirects: string[]) {
 }
 
 describe('Dashboard（真實瀏覽器 E2E）', () => {
-  it('訪客未登入時，看到登入提示，不會看到任務/整合服務內容', async () => {
+  it('訪客未登入時，版面跟登入後一樣，需要登入的區塊只顯示提示、新增任務按鈕不能按', async () => {
     const page = await createPage('/')
-    await page.waitForSelector('text=登入後即可查看你的任務、行事曆與整合服務')
+    await page.waitForSelector('text=登入後即可查看與新增你的任務')
 
     const bodyText = await page.textContent('body')
-    expect(bodyText).toContain('登入後即可查看你的任務、行事曆與整合服務')
-    // 訪客不該看到「新增任務」按鈕（只有登入後才會顯示）
-    expect(await page.getByRole('button', { name: '新增任務' }).count()).toBe(0)
+    expect(bodyText).toContain('登入後即可查看 Google 行事曆')
+    // 「新增任務」按鈕訪客也看得到（位置跟登入後一樣），只是不能按
+    // aria-label／disabled 都是真的 HTML 屬性，可以直接用來找
+    expect(await page.locator('button[aria-label="新增任務"][disabled]').count()).toBe(1)
 
     await page.close()
   })
@@ -111,17 +112,18 @@ describe('Dashboard（真實瀏覽器 E2E）', () => {
 
       await page.goto(url('/'))
       try {
-        // 找的是真實網頁上的按鈕（角色 + 名稱）。不能用 [icon="..."] 這種屬性選擇器：
+        // 找的是真實網頁上的按鈕（aria-label）。不能用 [icon="..."] 這種屬性選擇器：
         // icon 是 Nuxt UI 元件的 prop，只會畫成圖示，不會出現在網頁的 HTML 屬性上
         // （單元測試把元件換成假元件，假元件才會把 prop 印成屬性，兩邊行為不一樣）
-        await page.getByRole('button', { name: '新增任務' }).waitFor({ timeout: 30_000 })
+        // 訪客也看得到這顆按鈕（disabled），所以要等到它「可以按」才代表登入完成
+        await page.waitForSelector('button[aria-label="新增任務"]:not([disabled])', { timeout: 30_000 })
       } catch (error) {
         await printPostSignInDiagnostics(page, redirects)
         throw error
       }
 
       const bodyText = await page.textContent('body')
-      expect(bodyText).not.toContain('登入後即可查看你的任務、行事曆與整合服務')
+      expect(bodyText).not.toContain('登入後即可查看')
 
       await page.close()
     },

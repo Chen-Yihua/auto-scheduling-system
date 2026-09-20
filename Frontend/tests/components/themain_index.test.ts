@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount } from '@vue/test-utils'
-import { ref, watch, onMounted } from 'vue'
-import type { SetupContext } from 'vue'
+import { ref, watch, onMounted, h, defineComponent } from 'vue'
 
 import TheMainIndex from '~/components/TheMain/index.vue'
 
@@ -14,16 +13,6 @@ const isSignedInRef = ref<boolean | undefined>(undefined)
 
 vi.mock('@clerk/vue', () => ({
   useUser: () => ({ isSignedIn: isSignedInRef }),
-  SignedIn: {
-    setup(_props: unknown, { slots }: SetupContext) {
-      return () => (isSignedInRef.value ? slots.default?.() : null)
-    },
-  },
-  SignedOut: {
-    setup(_props: unknown, { slots }: SetupContext) {
-      return () => (!isSignedInRef.value ? slots.default?.() : null)
-    },
-  },
 }))
 
 // ---------- 需要授權的 composables：用 spy 追蹤有沒有被呼叫 ----------
@@ -67,6 +56,17 @@ const uiStubs = {
   JiraIssuesList: true,
   GoogleCalendarEmbed: true,
   UIcon: true,
+  // LoginRequiredCard 用到 UCard 的 header slot，要用會把 slot 畫出來的假元件
+  UCard: defineComponent({
+    setup(_props, { slots }) {
+      return () => h('div', { class: 'ucard' }, [slots.header?.(), slots.default?.()])
+    },
+  }),
+}
+
+// 取出三欄各自有幾張卡片（第一層子元素），拿來比對登入前後版面是否一樣
+function columnSizes(wrapper: ReturnType<typeof mount>) {
+  return wrapper.findAll('.grid > div').map((col) => col.element.children.length)
 }
 
 describe('TheMain/index.vue', () => {
@@ -94,7 +94,14 @@ describe('TheMain/index.vue', () => {
     expect(fetchGoogleCalendarsSpy).not.toHaveBeenCalled()
   })
 
-  it('未登入（isSignedIn=false）時，不會打任何需要授權的 API，也不顯示需要登入的區塊', async () => {
+  it('Clerk 還在載入時，先不畫任何卡片，避免登入的人先閃一下「請先登入」', () => {
+    activeWrapper = mount(TheMainIndex, { global: { stubs: uiStubs } })
+
+    expect(activeWrapper.text()).not.toContain('登入後即可')
+    expect(activeWrapper.find('.grid').exists()).toBe(false)
+  })
+
+  it('未登入（isSignedIn=false）時，不會打任何需要授權的 API，也不掛載需要登入的元件', async () => {
     isSignedInRef.value = false
     const wrapper = mount(TheMainIndex, { global: { stubs: uiStubs } })
     activeWrapper = wrapper
@@ -103,10 +110,43 @@ describe('TheMain/index.vue', () => {
     expect(fetchGithubIssuesSpy).not.toHaveBeenCalled()
     expect(fetchJiraIssuesSpy).not.toHaveBeenCalled()
     expect(fetchGoogleCalendarsSpy).not.toHaveBeenCalled()
-    expect(wrapper.text()).toContain('登入後即可查看')
-    expect(wrapper.findComponent({ name: 'GithubIssuesList' }).exists()).toBe(false)
-    // TaskForm 會抓使用者自己的任務，訪客不該讓它掛載
-    expect(wrapper.findComponent({ name: 'TaskForm' }).exists()).toBe(false)
+    // TaskForm、Moodle 掛載時會自己去抓資料，訪客不該讓它們掛載
+    for (const name of ['TaskForm', 'MoodleAssignments', 'GithubIssuesList', 'JiraIssuesList', 'GoogleCalendarEmbed']) {
+      expect(wrapper.findComponent({ name }).exists(), name).toBe(false)
+    }
+  })
+
+  it('未登入時，需要登入的區塊各放一張提示卡，順序跟登入後一樣；不需登入的 News／Leetcode 照常顯示', async () => {
+    isSignedInRef.value = false
+    const wrapper = mount(TheMainIndex, { global: { stubs: uiStubs } })
+    activeWrapper = wrapper
+    await wrapper.vm.$nextTick()
+
+    const titles = wrapper.findAll('.ucard span').map((el) => el.text())
+    expect(titles).toEqual(['任務列表', 'Moodle 作業', 'GitHub 參與項目', 'Jira 指派任務', 'Google 行事曆'])
+    expect(wrapper.text()).toContain('登入後即可查看與新增你的任務')
+    expect(wrapper.text()).toContain('登入後即可查看 Google 行事曆')
+    expect(wrapper.findComponent({ name: 'News' }).exists()).toBe(true)
+    expect(wrapper.findComponent({ name: 'Leetcode' }).exists()).toBe(true)
+  })
+
+  it('登入前後三欄版面一樣：每一欄的卡片數量相同，News／Leetcode 都在右欄', async () => {
+    isSignedInRef.value = false
+    const guest = mount(TheMainIndex, { global: { stubs: uiStubs } })
+    await guest.vm.$nextTick()
+    const guestSizes = columnSizes(guest)
+    guest.unmount()
+
+    isSignedInRef.value = true
+    const signedIn = mount(TheMainIndex, { global: { stubs: uiStubs } })
+    activeWrapper = signedIn
+    await signedIn.vm.$nextTick()
+
+    expect(guestSizes).toEqual([4, 1, 2])
+    expect(columnSizes(signedIn)).toEqual(guestSizes)
+    const rightColumn = signedIn.findAll('.grid > div')[2]!
+    expect(rightColumn.findComponent({ name: 'News' }).exists()).toBe(true)
+    expect(rightColumn.findComponent({ name: 'Leetcode' }).exists()).toBe(true)
   })
 
   it('已登入（isSignedIn=true）時，才會打需要授權的 API', async () => {
@@ -118,7 +158,7 @@ describe('TheMain/index.vue', () => {
     expect(fetchGithubIssuesSpy).toHaveBeenCalledTimes(1)
     expect(fetchJiraIssuesSpy).toHaveBeenCalledTimes(1)
     expect(fetchGoogleCalendarsSpy).toHaveBeenCalledTimes(1)
-    expect(wrapper.text()).not.toContain('登入後即可查看')
+    expect(wrapper.text()).not.toContain('登入後即可')
     expect(wrapper.findComponent({ name: 'TaskForm' }).exists()).toBe(true)
   })
 })

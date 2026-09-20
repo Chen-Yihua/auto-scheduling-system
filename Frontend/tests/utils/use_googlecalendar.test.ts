@@ -1,6 +1,9 @@
 // tests/utils/useGoogleCalendar.test.ts
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { ref as vueRef, computed as vueComputed } from 'vue'          /** MOD */
+import { ref as vueRef, computed as vueComputed } from 'vue'
+
+// ---------- 載入被測 composable ----------
+import { useGoogleCalendar } from '~/composables/useGoogleCalendar'          /** MOD */
 
 // ---------- Clerk mock ----------
 vi.mock('@clerk/vue', () => ({
@@ -22,10 +25,7 @@ vi.stubGlobal('useRuntimeConfig', () => ({
 }))
 
 let fetchSpy = vi.fn()
-vi.stubGlobal('$fetch', (...args: any[]) => fetchSpy(...args))
-
-// ---------- 載入被測 composable ----------
-import { useGoogleCalendar } from '~/composables/useGoogleCalendar'
+vi.stubGlobal('$fetch', (...args: unknown[]) => fetchSpy(...args))
 
 describe('useGoogleCalendar composable', () => {
   beforeEach(() => {

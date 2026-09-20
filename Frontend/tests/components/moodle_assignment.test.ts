@@ -1,17 +1,21 @@
 import { describe, it, expect, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 
+// 建立可變的 ref 供元件使用
+import { ref as vueRef, h, defineComponent } from 'vue'
+
+// 再引入元件
+import MoodleAssignments from '~/components/TheMain/MoodleAssignments.vue'
+import type { MoodleAssignment } from '~/types/moodle'
+
 // mock Nuxt 的 #imports
 vi.mock('#imports', () => ({
   useRuntimeConfig: () => ({ public: { apiBaseUrl: 'http://api' } }),
   useToast: () => ({ add: vi.fn() }),
 }))
-
-// 建立可變的 ref 供元件使用
-import { ref as vueRef, h } from 'vue'
 const loadingRef = vueRef(false)
 const hasAccountRef = vueRef(true)
-const assignmentsRef = vueRef<any[]>([])
+const assignmentsRef = vueRef<MoodleAssignment[]>([])
 const isStaleRef = vueRef(false)
 const syncedAtRef = vueRef<string | null>(null)
 const openSpy = vi.fn()
@@ -31,14 +35,10 @@ vi.mock('~/composables/useMoodleAssignments', () => ({
 
 // 自訂 UCard stub，渲染 slot（UCard 的預設 auto-stub 不會渲染 slot 內容，
 // 但這個元件整個區塊、以及裡面每筆作業，現在都包在 UCard 裡）
-const UCardStub = {
+const UCardStub = defineComponent({
   name: 'UCard',
   emits: ['click'],
-  setup(
-    _props: Record<string, unknown>,
-    context: { slots: Record<string, () => any>; emit: (event: string, ...args: any[]) => void }
-  ) {
-    const { slots, emit } = context;
+  setup(_props, { slots, emit }) {
     return () =>
       h(
         'div',
@@ -50,10 +50,7 @@ const UCardStub = {
         ],
       )
   },
-}
-
-// 再引入元件
-import MoodleAssignments from '~/components/TheMain/MoodleAssignments.vue'
+})
 
 const uiStubs = { UCard: UCardStub, UIcon: true, UAlert: true }
 //

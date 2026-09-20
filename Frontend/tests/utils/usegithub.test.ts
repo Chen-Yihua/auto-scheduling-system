@@ -2,6 +2,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { ref as vueRef } from 'vue'
 
+import { useGithub } from '~/composables/useGithub'
+
 vi.mock('@clerk/vue', () => ({
   useAuth: () => ({
     getToken: { value: vi.fn().mockResolvedValue('jwt-token') },
@@ -27,12 +29,10 @@ let fetchSpy = vi.fn()
 let fetchRawSpy = vi.fn()
 vi.stubGlobal(
   '$fetch',
-  Object.assign((...args: any[]) => fetchSpy(...args), {
-    raw: (...args: any[]) => fetchRawSpy(...args),
+  Object.assign((...args: unknown[]) => fetchSpy(...args), {
+    raw: (...args: unknown[]) => fetchRawSpy(...args),
   }),
 )
-
-import { useGithub } from '~/composables/useGithub'
 
 describe('useGithub composable', () => {
   beforeEach(() => {

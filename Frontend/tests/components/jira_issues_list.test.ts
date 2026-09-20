@@ -39,6 +39,8 @@ const baseIssue = {
   type: 'Task',
   title: 'Fix the bug',
   assignee: 'Alice',
+  avatar: '',
+  iconUrl: '',
   updated_at: '2025-07-01T00:00:00Z',
 }
 

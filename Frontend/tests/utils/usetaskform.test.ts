@@ -3,6 +3,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { ref } from 'vue'
 import { fromDate, getLocalTimeZone } from '@internationalized/date'
 
+// ======== 被測 hook ========
+import { useTaskForm } from '~/composables/useTaskForm'
+import type { Task } from '~/types/task'
+
 // ======== Nuxt auto-import 的 global mock ========
 const tokenSpy  = vi.fn().mockResolvedValue('dummy-token')
 const toastSpy  = { add: vi.fn() }
@@ -14,11 +18,8 @@ vi.stubGlobal('useToast',        () => toastSpy)
 vi.stubGlobal('useRuntimeConfig',() => ({ public: { apiBaseUrl: 'http://localhost:8000' } }))
 vi.stubGlobal('$fetch',          fetchSpy)
 
-// ======== 被測 hook ========
-import { useTaskForm } from '~/composables/useTaskForm'
-
 // ======== 共用工具 ========
-function fakeTask(id = 't1') {
+function fakeTask(id = 't1'): Task {
   return {
     id,
     user_id: 'u1',
@@ -27,8 +28,12 @@ function fakeTask(id = 't1') {
     priority: 'High',
     status: 'To Do',
     due_date: new Date('2025-06-01T00:00:00Z').toISOString(),
-  } as any
+  }
 }
+
+// 送出表單的事件，測試只需要 data 這個欄位；型別直接跟著 onSubmit / onEdit 的參數走
+type SubmitEvent = Parameters<ReturnType<typeof useTaskForm>['onSubmit']>[0]
+const submitEvent = (state: unknown) => ({ data: state }) as unknown as SubmitEvent
 
 // ======== 測試 ========
 describe('useTaskForm', () => {
@@ -89,7 +94,7 @@ describe('useTaskForm', () => {
     ctx.modelValue.value  = fromDate(new Date('2025-07-01T00:00:00Z'), getLocalTimeZone())
 
     vi.useFakeTimers()
-    await ctx.onSubmit({ data: ctx.state } as any)
+    await ctx.onSubmit(submitEvent(ctx.state))
 
     // 第一次呼叫：POST
     expect(fetchSpy).toHaveBeenNthCalledWith(
@@ -124,7 +129,7 @@ describe('useTaskForm', () => {
     ctx.modelValue.value  = fromDate(new Date('2025-07-01T00:00:00Z'), getLocalTimeZone())
 
     vi.useFakeTimers()
-    await ctx.onSubmit({ data: ctx.state } as any)
+    await ctx.onSubmit(submitEvent(ctx.state))
 
     expect(fetchSpy).toHaveBeenNthCalledWith(
       1,
@@ -145,7 +150,7 @@ describe('useTaskForm', () => {
     ctx.modelValue.value     = fromDate(new Date('2025-07-01T00:00:00Z'), getLocalTimeZone())
 
     vi.useFakeTimers()
-    await ctx.onSubmit({ data: ctx.state } as any)
+    await ctx.onSubmit(submitEvent(ctx.state))
 
     expect(fetchSpy).toHaveBeenNthCalledWith(
       1,
@@ -168,7 +173,7 @@ describe('useTaskForm', () => {
     ctx.modelValue.value     = fromDate(new Date('2025-07-01T00:00:00Z'), getLocalTimeZone())
 
     vi.useFakeTimers()
-    await ctx.onSubmit({ data: ctx.state } as any)
+    await ctx.onSubmit(submitEvent(ctx.state))
 
     expect(fetchSpy).toHaveBeenNthCalledWith(
       1,
@@ -188,7 +193,7 @@ describe('useTaskForm', () => {
     ctx.modelValue.value  = fromDate(new Date('2025-07-01T00:00:00Z'), getLocalTimeZone())
 
     vi.useFakeTimers()
-    await ctx.onSubmit({ data: ctx.state } as any)
+    await ctx.onSubmit(submitEvent(ctx.state))
 
     expect(fetchSpy).toHaveBeenNthCalledWith(
       1,
@@ -216,7 +221,7 @@ describe('useTaskForm', () => {
     })
 
     vi.useFakeTimers()
-    await ctx.onSubmit({ data: ctx.state } as any)
+    await ctx.onSubmit(submitEvent(ctx.state))
 
     expect(toastSpy.add).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -249,7 +254,7 @@ describe('useTaskForm', () => {
     })
 
     vi.useFakeTimers()
-    await ctx.onSubmit({ data: ctx.state } as any)
+    await ctx.onSubmit(submitEvent(ctx.state))
 
     expect(toastSpy.add).toHaveBeenCalledWith(
       expect.objectContaining({ title: '儲存成功', color: 'success' }),
@@ -266,7 +271,7 @@ describe('useTaskForm', () => {
     ctx.state.title = '更新後標題'
 
     vi.useFakeTimers()
-    await ctx.onEdit({ data: ctx.state } as any)
+    await ctx.onEdit(submitEvent(ctx.state))
 
     expect(fetchSpy).toHaveBeenNthCalledWith(
       1,

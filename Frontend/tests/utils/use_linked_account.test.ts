@@ -26,7 +26,7 @@ vi.stubGlobal('computed', vueComputed)
 
 /* ---------- $fetch / toast ---------- */
 let fetchSpy = vi.fn()
-vi.stubGlobal('$fetch', (...a: any[]) => fetchSpy(...a))
+vi.stubGlobal('$fetch', (...a: unknown[]) => fetchSpy(...a))
 const toastSpy = { add: vi.fn() }
 vi.stubGlobal('useToast', () => toastSpy)
 

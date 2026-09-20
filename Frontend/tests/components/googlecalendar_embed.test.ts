@@ -1,17 +1,17 @@
 // tests/components/googleCalendarEmbed.test.ts
 import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
-import { h } from 'vue'
+import { defineComponent, h } from 'vue'
 import GoogleCalendarEmbed from '~/components/TheMain/GoogleCalendarEmbed.vue'
 
 // UCard 的預設 auto-stub（`true`）不會渲染 slot 內容，這裡改用會渲染
 // header/default slot 的 stub，元件整個區塊現在都包在 UCard 裡
-const UCardStub = {
+const UCardStub = defineComponent({
   name: 'UCard',
-  setup(_: unknown, { slots }: { slots: Record<string, () => unknown> }) {
+  setup(_, { slots }) {
     return () => h('div', { class: 'u-card-stub' }, [slots.header?.(), slots.default?.()])
   },
-}
+})
 
 const uiStubs = { UIcon: true, UCard: UCardStub }
 

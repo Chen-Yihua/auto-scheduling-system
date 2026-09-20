@@ -1,6 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { ref, watch, onMounted } from 'vue'
+import type { SetupContext } from 'vue'
+
+import TheMainIndex from '~/components/TheMain/index.vue'
 
 vi.stubGlobal('ref', ref)
 vi.stubGlobal('watch', watch)
@@ -12,12 +15,12 @@ const isSignedInRef = ref<boolean | undefined>(undefined)
 vi.mock('@clerk/vue', () => ({
   useUser: () => ({ isSignedIn: isSignedInRef }),
   SignedIn: {
-    setup(_props: unknown, { slots }: any) {
+    setup(_props: unknown, { slots }: SetupContext) {
       return () => (isSignedInRef.value ? slots.default?.() : null)
     },
   },
   SignedOut: {
-    setup(_props: unknown, { slots }: any) {
+    setup(_props: unknown, { slots }: SetupContext) {
       return () => (!isSignedInRef.value ? slots.default?.() : null)
     },
   },
@@ -65,8 +68,6 @@ const uiStubs = {
   GoogleCalendarEmbed: true,
   UIcon: true,
 }
-
-import TheMainIndex from '~/components/TheMain/index.vue'
 
 describe('TheMain/index.vue', () => {
   let activeWrapper: ReturnType<typeof mount> | null = null

@@ -2,6 +2,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { ref as vueRef } from 'vue'
 
+// ---------- 被測 Composable ----------
+import { useJira } from '~/composables/useJira'
+
 // mock @clerk/vue
 vi.mock('@clerk/vue', () => ({
   useAuth: () => ({
@@ -17,7 +20,7 @@ const toastSpy = { add: vi.fn() }
 const fetchKeysSpy = vi.fn().mockResolvedValue(undefined)
 // value 是遮罩過的 apiKey——有值代表「已連結」，這是 fetchJiraIssues 用來判斷
 // 要不要打 API 的依據，預設模擬「已連結」，個別測試要測「未連結」再覆寫
-const linkedKeys = ref([
+const linkedKeys = ref<{ platform: string; domain: string; value?: string }[]>([
   { platform: 'jira', domain: 'https://example.atlassian.net', value: 'JKEY****' },
 ])
 
@@ -32,13 +35,10 @@ let fetchSpy = vi.fn()
 let fetchRawSpy = vi.fn()
 vi.stubGlobal(
   '$fetch',
-  Object.assign((...args: any[]) => fetchSpy(...args), {
-    raw: (...args: any[]) => fetchRawSpy(...args),
+  Object.assign((...args: unknown[]) => fetchSpy(...args), {
+    raw: (...args: unknown[]) => fetchRawSpy(...args),
   }),
 )
-
-// ---------- 被測 Composable ----------
-import { useJira } from '~/composables/useJira'
 
 describe('useJira composable', () => {
   beforeEach(() => {

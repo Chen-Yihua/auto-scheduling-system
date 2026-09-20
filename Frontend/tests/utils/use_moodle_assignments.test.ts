@@ -28,8 +28,8 @@ let fetchSpy = vi.fn()
 let fetchRawSpy = vi.fn()
 vi.stubGlobal(
   '$fetch',
-  Object.assign((...args: any[]) => fetchSpy(...args), {
-    raw: (...args: any[]) => fetchRawSpy(...args),
+  Object.assign((...args: unknown[]) => fetchSpy(...args), {
+    raw: (...args: unknown[]) => fetchRawSpy(...args),
   }),
 )
 

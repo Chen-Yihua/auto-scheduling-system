@@ -2,6 +2,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { shallowMount, flushPromises } from '@vue/test-utils'
 import { ref, defineComponent, h } from 'vue'
+import type { Component } from 'vue'
+
+// ---------- 2. 被測元件 ----------
+import TaskForm from '~/components/TheMain/TaskForm.vue'
+import { useTaskForm } from '~/composables/useTaskForm'
 
 // ---------- 1. Nuxt/全域依賴 Stub ----------
 const tokenSpy = vi.fn().mockResolvedValue('dummy-token')
@@ -12,11 +17,7 @@ vi.stubGlobal('useAuth',         () => ({ getToken: { value: tokenSpy } }))
 vi.stubGlobal('useUser',         () => ({ user: ref({ id: 'u1' }) }))
 vi.stubGlobal('useToast',        () => toastSpy)
 vi.stubGlobal('useRuntimeConfig',() => ({ public: { apiBaseUrl: 'http://localhost:8000' } }))
-vi.stubGlobal('$fetch',          (...args: any[]) => fetchSpy(...args))
-
-// ---------- 2. 被測元件 ----------
-import TaskForm from '~/components/TheMain/TaskForm.vue'
-import { useTaskForm } from '~/composables/useTaskForm'
+vi.stubGlobal('$fetch',          (...args: unknown[]) => fetchSpy(...args))
 
 // ---------- 3. UI 元件 Stub ----------
 // 可點擊的 UButton
@@ -57,7 +58,7 @@ const StubModal = defineComponent({
 })
 
 // 其他元件直接 true stub
-const uiStubs: Record<string, any> = {
+const uiStubs: Record<string, boolean | Component> = {
   UButton: StubButton,
   UCard: StubCard,
   UModal: StubModal,

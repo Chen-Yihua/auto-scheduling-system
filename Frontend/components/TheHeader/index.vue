@@ -66,6 +66,7 @@ watch(user, async (newUser) => {
     <SignedIn>
       <UButton
         icon="mdi-file-edit"
+        aria-label="新增任務"
         color="neutral"
         size="md"
         @click="showEditModal = true"

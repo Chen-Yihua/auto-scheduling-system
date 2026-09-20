@@ -67,7 +67,10 @@ async function printPostSignInDiagnostics(page: Page, redirects: string[]) {
     })
     .catch((error: unknown) => ({ error: String(error) }))
   const cookieNames = (await page.context().cookies()).map((cookie) => cookie.name).sort()
-  console.error('[e2e] 登入後診斷：' + JSON.stringify({ clerkState, cookieNames, redirects }, null, 2))
+  const addTaskButtonCount = await page.getByRole('button', { name: '新增任務' }).count()
+  console.error(
+    '[e2e] 登入後診斷：' + JSON.stringify({ clerkState, addTaskButtonCount, cookieNames, redirects }, null, 2),
+  )
 }
 
 describe('Dashboard（真實瀏覽器 E2E）', () => {
@@ -77,8 +80,8 @@ describe('Dashboard（真實瀏覽器 E2E）', () => {
 
     const bodyText = await page.textContent('body')
     expect(bodyText).toContain('登入後即可查看你的任務、行事曆與整合服務')
-    // 訪客不該看到「編輯任務」的浮動按鈕（TaskForm 只在登入後掛載）
-    expect(await page.locator('[icon="mdi-file-edit"]').count()).toBe(0)
+    // 訪客不該看到「新增任務」按鈕（只有登入後才會顯示）
+    expect(await page.getByRole('button', { name: '新增任務' }).count()).toBe(0)
 
     await page.close()
   })
@@ -97,11 +100,6 @@ describe('Dashboard（真實瀏覽器 E2E）', () => {
       const page = await createPage('/')
       // clerk.signIn 要求先 goto 過一個會載入 Clerk 的頁面，才能繼續
       await clerk.signIn({ page, emailAddress: process.env.E2E_CLERK_TEST_EMAIL! })
-      // clerk.signIn 為了繞過機器人偵測，會在這個瀏覽器上攔截所有打向 Clerk 的請求。
-      // 登入完成後要拿掉：下面 page.goto 之後，伺服器可能需要做一次 Clerk handshake
-      // （把瀏覽器導去 Clerk 再導回來），如果這個重導向也被攔截，就導不回來，
-      // 形成「infinite redirect loop」。
-      await page.context().unrouteAll({ behavior: 'ignoreErrors' })
 
       const redirects: string[] = []
       page.on('response', (response) => {
@@ -113,7 +111,10 @@ describe('Dashboard（真實瀏覽器 E2E）', () => {
 
       await page.goto(url('/'))
       try {
-        await page.waitForSelector('[icon="mdi-file-edit"]')
+        // 找的是真實網頁上的按鈕（角色 + 名稱）。不能用 [icon="..."] 這種屬性選擇器：
+        // icon 是 Nuxt UI 元件的 prop，只會畫成圖示，不會出現在網頁的 HTML 屬性上
+        // （單元測試把元件換成假元件，假元件才會把 prop 印成屬性，兩邊行為不一樣）
+        await page.getByRole('button', { name: '新增任務' }).waitFor({ timeout: 30_000 })
       } catch (error) {
         await printPostSignInDiagnostics(page, redirects)
         throw error

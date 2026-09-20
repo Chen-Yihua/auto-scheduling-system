@@ -8,3 +8,4 @@ docker-compose.yaml
 htmlcov/
 .coverage
 .DS_Store
+.claude/settings.local.json

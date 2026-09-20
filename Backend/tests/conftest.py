@@ -11,7 +11,7 @@ os.environ.setdefault("SECRET_ENCRYPTION_KEY", Fernet.generate_key().decode())
 os.environ.setdefault("GEMINI_API_KEY", "test-gemini-key")
 
 # 測試會在短時間內對同個 endpoint 打很多次請求，關掉全域限流避免測試互相干擾、
-# 被自己的流量限制誤傷。rate_limit.py 自己的行為由 tests/test_rate_limit.py
+# 被自己的流量限制誤傷。rate_limit.py 自己的行為由 tests/integration/test_rate_limit.py
 # 直接用獨立的 Limiter 實例測試，不受這個影響。
 os.environ.setdefault("DISABLE_RATE_LIMIT", "true")
 
@@ -41,7 +41,7 @@ def override_mongodb():
 
 @pytest.fixture
 def logged_in_user():
-    """API 測試（tests/test_*_api.py）用：假裝已經用 Clerk 登入的使用者。
+    """API 測試（tests/integration/test_*_api.py）用：假裝已經用 Clerk 登入的使用者。
 
     走 HTTP 打 API 時，每個受保護的 endpoint 都會先跑 get_current_clerk_user 去驗
     Bearer token。測試裡沒有真的 token，所以用 FastAPI 的 dependency_overrides

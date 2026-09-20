@@ -1,4 +1,4 @@
-# Backend/tests/test_jira.py
+# Backend/tests/unit/test_jira_crud.py
 
 import pytest
 from unittest.mock import AsyncMock, patch

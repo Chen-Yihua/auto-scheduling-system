@@ -188,8 +188,13 @@ pytest                              # 全部測試
 pytest --cov=. --cov-report=term-missing   # 含覆蓋率（CI 用這個）
 ```
 
-測試分兩種：
-- **單元測試**（大部分 `tests/test_*.py`）：每個 endpoint/函式各自把資料庫、外部 API mock 掉，測邏輯對不對。
-- **端對端情境測試**（`tests/test_*_scenario.py`）：不 mock 資料庫，用 `mongomock-motor`（假的、但支援 async/await 的 MongoDB）串好幾個真的 HTTP 呼叫，驗證「上一步寫的資料，下一步真的讀得到、也真的反映更新」——例如建立任務 → 列表看得到 → 編輯 → 確認更新落地 → 刪除 → 確認查不到。
+測試依「有沒有走 HTTP」分成兩個資料夾（詳細規則見 `tests/README.md`）：
+```bash
+pytest tests/unit          # 單元測試：不碰 HTTP，直接呼叫函式，資料庫、外部 API 都 mock 掉
+pytest tests/integration   # 整合 / API 測試：用 AsyncClient 打 endpoint
+```
+- **單元測試**（`tests/unit/`）：每個函式各自把資料庫、外部 API mock 掉，測邏輯對不對。
+- **API 測試**（`tests/integration/test_*_api.py`）：走 HTTP 打 endpoint，確認路由、登入驗證、回應格式都接對了。
+- **端對端情境測試**（`tests/integration/test_*_scenario.py`）：不 mock 資料庫，用 `mongomock-motor`（假的、但支援 async/await 的 MongoDB）串好幾個真的 HTTP 呼叫，驗證「上一步寫的資料，下一步真的讀得到、也真的反映更新」——例如建立任務 → 列表看得到 → 編輯 → 確認更新落地 → 刪除 → 確認查不到。
 
 > 如果要新增會真的碰資料庫（不整個 mock 掉）的測試，資料庫 fixture 一定要用 `mongomock_motor.AsyncMongoMockClient`（見 `tests/conftest.py`），不能用純同步的 `mongomock.MongoClient()`——後者對 `await` 出來的結果會直接噴 `TypeError`，而且不會在「有 mock 掉」的測試裡被發現。

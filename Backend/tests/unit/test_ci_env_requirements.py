@@ -13,7 +13,7 @@ import os
 import subprocess
 import sys
 
-BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 WORKFLOW_PATH = os.path.abspath(
     os.path.join(BACKEND_DIR, "..", ".github", "workflows", "deploy.yml")
 )

@@ -19,7 +19,7 @@ MODULES_CONVERTED_TO_LOGGING = [
     "routers/oauth.py",
     "routers/manualTask.py",
 ]
-BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 
 
 # ========== logging_config ==========

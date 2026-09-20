@@ -1,13 +1,32 @@
 # 後端測試：哪種測試寫在哪個檔案
 
-每個模組（github、jira、moodle…）的測試依「測到哪一層」分成最多四種檔案：
+## 資料夾：先看有沒有走 HTTP
+
+```
+tests/
+├── conftest.py      共用設定（假資料庫、假登入 logged_in_user），所有子資料夾都會自動使用
+├── unit/            單元測試：不碰 HTTP，直接呼叫函式（crud、router 函式、services、cache、crypto…）
+└── integration/     整合 / API 測試：用 AsyncClient 打 endpoint（*_api、*_scenario，以及
+                     資料庫錯誤處理、兜底 500、CORS、限流）
+```
+
+只跑其中一類：
+
+```bash
+pytest tests/unit          # 幾秒內跑完，開發時常跑
+pytest tests/integration   # 走 HTTP 的測試
+pytest                     # 全部（CI 用這個）
+```
+
+新增測試時：先決定「有沒有走 HTTP」放進對應資料夾，再照下面的檔名規則命名。
+每個模組的測試依「測到哪一層」分成最多四種檔案：
 
 | 檔名 | 怎麼測 | 負責測什麼 | 不測什麼 |
 |---|---|---|---|
-| `test_<x>_crud.py` | 直接呼叫 `crud/<x>.py` 的函式 | 商業邏輯、資料轉換、對外 API 呼叫（翻頁、重試規則、錯誤分類） | HTTP、狀態碼 |
-| `test_<x>_router.py` | 直接呼叫 router 函式，例如 `await jira_router.get_jira_issues(...)` | router 自己的判斷分支：查不到帳號 / DB 掛掉 / 解密失敗 / 同步失敗各回什麼狀態碼、有沒有設回應 header | 路由註冊、登入驗證、JSON 格式 |
-| `test_<x>_api.py` | 走 HTTP：`AsyncClient(ASGITransport(app=main.app))` + `logged_in_user` fixture | 「接線」：路由有註冊、登入驗證有掛上、`response_model` 的 JSON 格式、狀態碼與 `detail` 真的送得出去、請求內容驗證（422） | 每個錯誤分支（交給 router 測試） |
-| `test_<x>_scenario.py` | 走 HTTP，串多個步驟 | 端對端情境（例如建立 -> 查詢 -> 刪除） | 單一分支 |
+| `unit/test_<x>_crud.py` | 直接呼叫 `crud/<x>.py` 的函式 | 商業邏輯、資料轉換、對外 API 呼叫（翻頁、重試規則、錯誤分類） | HTTP、狀態碼 |
+| `unit/test_<x>_router.py` | 直接呼叫 router 函式，例如 `await jira_router.get_jira_issues(...)` | router 自己的判斷分支：查不到帳號 / 解密失敗 / 同步失敗各回什麼狀態碼、有沒有設回應 header（資料庫連不上由全域 handler 統一處理，見 `integration/test_db_error_handling.py`） | 路由註冊、登入驗證、JSON 格式 |
+| `integration/test_<x>_api.py` | 走 HTTP：`AsyncClient(ASGITransport(app=main.app))` + `logged_in_user` fixture | 「接線」：路由有註冊、登入驗證有掛上、`response_model` 的 JSON 格式、狀態碼與 `detail` 真的送得出去、請求內容驗證（422） | 每個錯誤分支（交給 router 測試） |
+| `integration/test_<x>_scenario.py` | 走 HTTP，串多個步驟 | 端對端情境（例如建立 -> 查詢 -> 刪除） | 單一分支 |
 
 `_api.py` 的標準結構是三種測試：**成功**、**典型錯誤**（例如未綁定帳號回 400、找不到回 404），以及**沒登入被擋**。
 所有 `_api.py` 都用 `AsyncClient` + `logged_in_user` fixture，crud 或外部呼叫用 `monkeypatch` / `@patch` 換掉。
@@ -29,11 +48,13 @@
 
 ## 跨模組的測試
 
-`test_security.py`（登入驗證）、`test_db_error_handling.py`（資料庫例外集中處理：連線類錯誤 503、其他 500）、
-`test_unhandled_error_handling.py`（兜底：沒預期的例外回帶 CORS 的 JSON 500）、
-`test_cors.py`、`test_rate_limit.py`、`test_cache.py`、
-`test_crypto.py`、`test_db_indexes.py`、`test_external_sync.py`、`test_logging.py` 等，
-測的是共用元件，不屬於單一模組。
+測的是共用元件，不屬於單一模組：
+
+- `integration/`（走 HTTP）：`test_db_error_handling.py`（資料庫例外集中處理：連線類錯誤 503、其他 500）、
+  `test_unhandled_error_handling.py`（兜底：沒預期的例外回帶 CORS 的 JSON 500）、
+  `test_cors.py`、`test_rate_limit.py`。
+- `unit/`（不走 HTTP）：`test_security.py`（登入驗證）、`test_cache.py`、`test_crypto.py`、
+  `test_db_indexes.py`、`test_external_sync.py`、`test_logging.py`、`test_ci_env_requirements.py` 等。
 
 ## 共用工具
 

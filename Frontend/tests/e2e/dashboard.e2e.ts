@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url'
 import { describe, it, expect } from 'vitest'
 import { setup, createPage, url } from '@nuxt/test-utils/e2e'
 import { clerkSetup, clerk } from '@clerk/testing/playwright'
+import type { Page } from 'playwright-core'
 
 await setup({
   rootDir: fileURLToPath(new URL('../..', import.meta.url)),
@@ -49,6 +50,26 @@ function assertClerkKeysLookRight(publishableKey?: string, secretKey?: string) {
   console.info(`[e2e] 使用的 Clerk 專案：${domain}`)
 }
 
+// 登入後頁面卡住時，把「能安全印出來」的狀態印到 log，下次失敗才看得出卡在哪一步。
+// 只印 cookie 的名稱和網址的路徑，不印 cookie 值和網址參數（裡面會有 token），
+// 避免把憑證洩漏到公開的 CI log。
+async function printPostSignInDiagnostics(page: Page, redirects: string[]) {
+  type ClerkInBrowser = { loaded?: boolean; user?: unknown; session?: unknown }
+  const clerkState = await page
+    .evaluate(() => {
+      const clerk = (window as unknown as { Clerk?: ClerkInBrowser }).Clerk
+      return {
+        path: location.pathname,
+        clerkLoaded: !!clerk?.loaded,
+        hasUser: !!clerk?.user,
+        hasSession: !!clerk?.session,
+      }
+    })
+    .catch((error: unknown) => ({ error: String(error) }))
+  const cookieNames = (await page.context().cookies()).map((cookie) => cookie.name).sort()
+  console.error('[e2e] 登入後診斷：' + JSON.stringify({ clerkState, cookieNames, redirects }, null, 2))
+}
+
 describe('Dashboard（真實瀏覽器 E2E）', () => {
   it('訪客未登入時，看到登入提示，不會看到任務/整合服務內容', async () => {
     const page = await createPage('/')
@@ -76,9 +97,27 @@ describe('Dashboard（真實瀏覽器 E2E）', () => {
       const page = await createPage('/')
       // clerk.signIn 要求先 goto 過一個會載入 Clerk 的頁面，才能繼續
       await clerk.signIn({ page, emailAddress: process.env.E2E_CLERK_TEST_EMAIL! })
+      // clerk.signIn 為了繞過機器人偵測，會在這個瀏覽器上攔截所有打向 Clerk 的請求。
+      // 登入完成後要拿掉：下面 page.goto 之後，伺服器可能需要做一次 Clerk handshake
+      // （把瀏覽器導去 Clerk 再導回來），如果這個重導向也被攔截，就導不回來，
+      // 形成「infinite redirect loop」。
+      await page.context().unrouteAll({ behavior: 'ignoreErrors' })
+
+      const redirects: string[] = []
+      page.on('response', (response) => {
+        if (response.status() >= 300 && response.status() < 400 && redirects.length < 30) {
+          const target = new URL(response.url())
+          redirects.push(`${response.status()} ${target.host}${target.pathname}`)
+        }
+      })
 
       await page.goto(url('/'))
-      await page.waitForSelector('[icon="mdi-file-edit"]')
+      try {
+        await page.waitForSelector('[icon="mdi-file-edit"]')
+      } catch (error) {
+        await printPostSignInDiagnostics(page, redirects)
+        throw error
+      }
 
       const bodyText = await page.textContent('body')
       expect(bodyText).not.toContain('登入後即可查看你的任務、行事曆與整合服務')

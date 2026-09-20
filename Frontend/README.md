@@ -97,8 +97,7 @@ npm run coverage    # 單元測試 + 覆蓋率報表
 │   └── time.ts                 # 相對時間格式化
 ├── types/                      # 跟後端 schema 對齊的 TypeScript type（手動維護，非自動生成）
 ├── pages/
-│   ├── index.vue                # 首頁（Header + 主畫面）
-│   └── oauth/callback.vue       # Google OAuth 導回頁
+│   └── index.vue                # 首頁（Header + 主畫面）；/oauth/callback 也用這個頁面，處理 Google 授權導回
 ├── server/
 │   ├── api/leetcode.get.ts     # Nuxt server route：取得 LeetCode 每日一題
 │   └── tsconfig.json           # Nuxt server 模組的 TypeScript 設定

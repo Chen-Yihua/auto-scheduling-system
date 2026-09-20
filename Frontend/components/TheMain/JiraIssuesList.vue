@@ -65,7 +65,7 @@ const openJiraIssue = (key: string) => {
         </template>
 
         <div class="flex items-center gap-2 mb-1">
-          <img v-if="issue.iconUrl" :src="issue.iconUrl" alt="type" class="w-5 h-5" >
+          <img v-if="issue.iconUrl" :src="issue.iconUrl" alt="類型" class="w-5 h-5" >
           <span class="text-sm text-gray-600">{{ issue.type }}</span>
         </div>
 

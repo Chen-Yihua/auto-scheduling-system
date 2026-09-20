@@ -11,16 +11,15 @@ const BASE_URL = config.public.apiBaseUrl;
 const { user } = useUser();
 const { getToken } = useAuth();
 // 跟 TaskForm.vue 共用同一份狀態（見 useTaskForm.ts 的 createSharedComposable）
-// 這裡按下「+」，TaskForm 裡的 Modal 才會真的打開
+// 這裡按下編輯圖示，TaskForm 裡的 Modal 才會真的打開
 const { showEditModal } = useTaskForm();
 
 // Watch for user changes
-
 watch(user, async (newUser) => {
   if (!newUser) return;
   const token = await getToken.value();
   try {
-    // Call GET /user/me
+    // Call GET /users/me
     const response = await fetch(`${BASE_URL}/users/me`, {
       method: 'GET',
       headers: {
@@ -54,9 +53,9 @@ watch(user, async (newUser) => {
     class="w-full flex justify-end items-center px-6 py-3 border-b shadow-sm bg-white dark:bg-gray-900 gap-4"
   >
     <p>
-      Welcome !
+      歡迎！
       {{
-        user?.fullName ? (user.lastName ?? '') + (user.firstName ?? '') : 'guest, please login !!'
+        user?.fullName ? (user.lastName ?? '') + (user.firstName ?? '') : '訪客，請先登入'
       }}
     </p>
     <!-- 切換 Light/Dark 模式 -->
@@ -88,7 +87,6 @@ watch(user, async (newUser) => {
       </SignInButton>
     </SignedOut>
     <SignedIn>
-      <!-- <UserButton /> -->
       <AccountSettings />
     </SignedIn>
   </header>

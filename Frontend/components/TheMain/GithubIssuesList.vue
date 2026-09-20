@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { GitHubIssue } from '~/types/github'
+import { githubStateLabel } from '~/utils/labels'
 import StaleDataBanner from './StaleDataBanner.vue'
 defineProps<{
   issues: GitHubIssue[]
@@ -90,7 +91,7 @@ const openIssue = (url: string) => {
 
         <template #footer>
           <div class="text-xs text-gray-500">
-            {{ issue.status }} · 更新於 {{ new Date(issue.updated_at ?? issue.created_at).toLocaleDateString() }}
+            {{ githubStateLabel(issue.status) }} · 更新於 {{ new Date(issue.updated_at ?? issue.created_at).toLocaleDateString() }}
           </div>
         </template>
       </UCard>

@@ -52,13 +52,13 @@ const goToGoogleAuth = () => {
 <template>
   <header>
     <UserButton>
-      <UserButton.UserProfilePage label="Key" url="custom">
+      <UserButton.UserProfilePage label="金鑰" url="custom">
         <template #labelIcon>
           <Icon name="mdi:key" class="w-4 h-4" />
         </template>
 
         <div class="cl-header mb-4">
-          <h1 class="text-xl font-semibold">Key</h1>
+          <h1 class="text-xl font-semibold">金鑰管理</h1>
         </div>
 
         <div
@@ -98,7 +98,7 @@ const goToGoogleAuth = () => {
                 size="sm"
                 color="primary"
                 @click="() => openEdit(keyItem)"
-                > Edit
+                > 編輯
               </UButton>
             </div>
           </template>
@@ -112,7 +112,7 @@ const goToGoogleAuth = () => {
                 v-model="keyItem.domain"
                 size="sm"
                 variant="outline"
-                placeholder="請輸入 Jira Domain (e.g. your-company.atlassian.net)"
+                placeholder="請輸入 Jira Domain（例如 your-company.atlassian.net）"
                 :ui="{ base: 'w-full' }"
               />
 
@@ -184,7 +184,7 @@ const goToGoogleAuth = () => {
                   color="neutral"
                   @click="() => cancelEdit(keyItem)"
                 >
-                  Cancel
+                  取消
                 </UButton>
                 <UButton
                   v-if="keyItem.value"
@@ -193,7 +193,7 @@ const goToGoogleAuth = () => {
                   color="neutral"
                   @click="() => deleteKey(keyItem)"
                 >
-                  Delete
+                  刪除
                 </UButton>
                 <UButton
                   size="sm"
@@ -206,7 +206,7 @@ const goToGoogleAuth = () => {
                   "
                   @click="() => saveKey(keyItem)"
                 >
-                  Save
+                  儲存
                 </UButton>
               </div>
             </div>

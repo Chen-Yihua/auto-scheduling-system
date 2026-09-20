@@ -23,7 +23,12 @@ function useTaskFormImpl() {
     const BASE_URL = config.public.apiBaseUrl
 
     // 優先度
-    const priorityItems = ref<string[]>(['High', 'Medium', 'Low'])
+    // label 是畫面上看到的中文，value 是實際送給後端的值（必須是 High / Medium / Low）
+    const priorityItems = ref([
+      { label: '高', value: 'High' },
+      { label: '中', value: 'Medium' },
+      { label: '低', value: 'Low' },
+    ])
 
     // 日期設定
     const df = new DateFormatter('zh-TW', { dateStyle: 'medium' })

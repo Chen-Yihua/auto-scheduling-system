@@ -2,6 +2,7 @@
 import { useTaskForm } from '~/composables/useTaskForm'
 import { onMounted } from 'vue'
 import type { FormSubmitEvent } from '@nuxt/ui'
+import { priorityLabel, taskStatusLabel } from '~/utils/labels'
 
 const {
   user,
@@ -132,7 +133,7 @@ onMounted(async () => {
               <label class="w-26 whitespace-nowrap text-gray-700">截止日期</label>
               <UFormField
                 size="lg"
-                hint="Optional"
+                hint="選填"
                 class="flex-shrink-0"
               >
                 <UPopover>
@@ -249,10 +250,10 @@ onMounted(async () => {
               <div class="flex text-sm font-semibold truncate items-center">{{ task.title }}</div>
               <div class="flex flex-wrap items-center">
                 <UBadge class="mx-1" :color="getPriorityColor(task.priority)" variant="soft" size="sm">
-                  {{ task.priority }}
+                  {{ priorityLabel(task.priority) }}
                 </UBadge>
                 <UBadge class="mx-1" color="info" variant="soft" size="sm">
-                  {{ task.status }}
+                  {{ taskStatusLabel(task.status) }}
                 </UBadge>
               </div>
             </div>

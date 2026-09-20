@@ -87,11 +87,13 @@ const isCollapsed = ref(true)
           color="info"
           size="sm"
           :icon="isCollapsed ? 'i-lucide-chevron-down' : 'i-lucide-chevron-up'"
-          @click="isCollapsed = !isCollapsed"
+          @click="() => { isCollapsed = !isCollapsed }"
         >
           {{ isCollapsed ? '顯示更多' : '收起' }}
         </UButton>
 
+        <!-- Nuxt UI 3.1.0 的 slot 型別寫法跟新版 Vue 型別檢查不相容（誤報，執行時正常）；升級 @nuxt/ui 後若檢查不再報錯，vue-tsc 會提示可以移除下面這行 -->
+        <!-- @vue-expect-error -->
         <template #content>
           <ul class="space-y-1 mt-2">
             <li

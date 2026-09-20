@@ -87,6 +87,8 @@ onMounted(async () => {
         :dismissible="false" 
         :close-on-esc="false"
       >    
+        <!-- Nuxt UI 3.1.0 的 slot 型別寫法跟新版 Vue 型別檢查不相容（誤報，執行時正常）；升級 @nuxt/ui 後若檢查不再報錯，vue-tsc 會提示可以移除下面這行 -->
+        <!-- @vue-expect-error -->
         <template #content>
           <UForm 
               :validate="validate"
@@ -137,6 +139,8 @@ onMounted(async () => {
                     <UButton class="justify-start text-left w-full" color="neutral" variant="subtle" icon="i-lucide-calendar">
                         {{ displayDate }}
                     </UButton>
+                    <!-- Nuxt UI 3.1.0 的 slot 型別寫法跟新版 Vue 型別檢查不相容（誤報，執行時正常）；升級 @nuxt/ui 後若檢查不再報錯，vue-tsc 會提示可以移除下面這行 -->
+                    <!-- @vue-expect-error -->
                     <template #content>
                         <UCalendar v-model="modelValue" :min-value="minDate" class="p-2" />
                     </template>

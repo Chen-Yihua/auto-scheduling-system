@@ -69,7 +69,7 @@ watch(user, async (newUser) => {
         aria-label="新增任務"
         color="neutral"
         size="md"
-        @click="showEditModal = true"
+        @click="() => { showEditModal = true }"
       />
     </SignedIn>
 

@@ -131,7 +131,7 @@ const goToGoogleAuth = () => {
                     variant="link"
                     size="xs"
                     :icon="keyItem.showPassword ? 'i-lucide-eye-off' : 'i-lucide-eye'"
-                    @click="keyItem.showPassword = !keyItem.showPassword"
+                    @click="() => { keyItem.showPassword = !keyItem.showPassword }"
                   />
                 </template>
               </UInput>
@@ -165,7 +165,7 @@ const goToGoogleAuth = () => {
                       variant="link"
                       size="xs"
                       :icon="keyItem.showPassword ? 'i-lucide-eye-off' : 'i-lucide-eye'"
-                      @click="keyItem.showPassword = !keyItem.showPassword"
+                      @click="() => { keyItem.showPassword = !keyItem.showPassword }"
                     />
                   </template>
               </UInput>

@@ -76,10 +76,10 @@ const exampleContent = computed(() => {
       </div>
     </template>
 
-    <!-- 🕓 Skeleton Loading -->
+    <!-- Skeleton Loading -->
     <USkeleton v-if="!data && !error" class="h-64 rounded-lg" />
 
-    <!-- ❌ 錯誤訊息 -->
+    <!-- 錯誤訊息 -->
     <template v-else-if="error">
       <p class="text-sm text-red-500 mb-3">{{ error.message }}</p>
       <UButton label="Retry" color="error" variant="soft" @click="fetchData" />
@@ -110,11 +110,13 @@ const exampleContent = computed(() => {
         <UButton
           variant="ghost" color="neutral" size="xs"
           :icon="isCollapsed ? 'i-lucide-chevron-down' : 'i-lucide-chevron-up'"
-          @click="isCollapsed = !isCollapsed"
+          @click="() => { isCollapsed = !isCollapsed }"
         >
           {{ isCollapsed ? 'Show Example ' : 'Close' }}
         </UButton>
 
+        <!-- Nuxt UI 3.1.0 的 slot 型別寫法跟新版 Vue 型別檢查不相容（誤報，執行時正常）；升級 @nuxt/ui 後若檢查不再報錯，vue-tsc 會提示可以移除下面這行 -->
+        <!-- @vue-expect-error -->
         <template #content>
           <!-- eslint-disable-next-line vue/no-v-html -->
           <div class="mt-2 prose max-w-none text-sm" v-html="exampleContent" />

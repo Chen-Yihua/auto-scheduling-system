@@ -1,6 +1,7 @@
 import logging
 import os
 
+import httpx
 import pytest
 
 import logging_config
@@ -24,6 +25,7 @@ BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 # ========== logging_config ==========
 
 def test_setup_logging_defaults_to_info(monkeypatch):
+    """沒設定 LOG_LEVEL → 預設 INFO。"""
     monkeypatch.delenv("LOG_LEVEL", raising=False)
     logging_config.setup_logging()
 
@@ -31,6 +33,8 @@ def test_setup_logging_defaults_to_info(monkeypatch):
 
 
 def test_setup_logging_respects_log_level_env_var(monkeypatch):
+    """LOG_LEVEL 設為 DEBUG → 日誌層級要跟著變成 DEBUG。"""
+    # 測完把層級還原成 INFO，避免影響其他測試
     monkeypatch.setenv("LOG_LEVEL", "DEBUG")
     logging_config.setup_logging()
 
@@ -44,6 +48,7 @@ def test_setup_logging_respects_log_level_env_var(monkeypatch):
 # ========== 沒有殘留 print() ==========
 
 def test_no_print_left_in_converted_modules():
+    """已經改用 logging 的模組不能再殘留 print()。"""
     for relative_path in MODULES_CONVERTED_TO_LOGGING:
         full_path = os.path.join(BACKEND_DIR, relative_path)
         with open(full_path, encoding="utf-8") as f:
@@ -56,6 +61,7 @@ def test_no_print_left_in_converted_modules():
 
 @pytest.mark.asyncio
 async def test_create_linked_account_logs_debug(monkeypatch, caplog):
+    """建立綁定帳號時要留下 debug log（記錄是哪個平台）。"""
     async def mock_update_one(*args, **kwargs):
         return type("Mock", (), {"modified_count": 1, "upserted_id": None})()
 
@@ -76,10 +82,8 @@ async def test_create_linked_account_logs_debug(monkeypatch, caplog):
 
 
 @pytest.mark.asyncio
-async def test_oauth_callback_logs_exception_on_failure(monkeypatch, caplog):
-    async def mock_get_current_clerk_user():
-        return {"sub": "uid123"}
-
+async def test_oauth_callback_logs_error_and_returns_502_when_google_unreachable(monkeypatch, caplog):
+    """連不上 Google → 記錄 error log 並回 502，跟「Google 拒絕這個授權碼」的 400 分開。"""
     class FailingClient:
         async def __aenter__(self):
             return self
@@ -88,7 +92,7 @@ async def test_oauth_callback_logs_exception_on_failure(monkeypatch, caplog):
             pass
 
         async def post(self, *a, **k):
-            raise Exception("Google 掛了")
+            raise httpx.ConnectError("Google 掛了")
 
     monkeypatch.setattr(oauth_router_mod.httpx, "AsyncClient", lambda: FailingClient())
 
@@ -97,18 +101,19 @@ async def test_oauth_callback_logs_exception_on_failure(monkeypatch, caplog):
     payload = oauth_router_mod.OAuthCallbackPayload(code="fake-code")
 
     with caplog.at_level(logging.ERROR, logger="routers.oauth"):
-        with pytest.raises(HTTPException):
+        with pytest.raises(HTTPException) as exc_info:
             await oauth_router_mod.oauth_callback(
                 payload=payload, clerk_user={"sub": "uid123"}
             )
 
-    assert any("Google OAuth callback failed" in record.message for record in caplog.records)
-    # logger.exception 應該連 traceback 都一起記下來
-    assert any(record.exc_info for record in caplog.records)
+    # 502 = 連不上上游服務，跟「授權碼無效」的 400 分開
+    assert exc_info.value.status_code == 502
+    assert any("連線 Google Token Endpoint 失敗" in record.message for record in caplog.records)
 
 
 @pytest.mark.asyncio
 async def test_refresh_google_token_logs_info_on_success(monkeypatch, caplog):
+    """換新 token 成功 → 回傳新 token，並用 logging 記下 info 訊息。"""
     async def mock_find_one(query):
         return {"_id": "uid123", "refresh_token": "old-refresh-token"}
 
@@ -147,3 +152,47 @@ async def test_refresh_google_token_logs_info_on_success(monkeypatch, caplog):
         "Refreshed Google Calendar token for clerk_id=uid123" in record.message
         for record in caplog.records
     )
+
+
+@pytest.mark.asyncio
+async def test_refresh_google_token_raises_401_and_clears_doc_when_google_rejects_it(monkeypatch):
+    """Google 拒絕 refresh token 本身（使用者撤銷授權，或 OAuth 同意畫面還在 Testing 狀態時 7 天後自動失效）→ 清掉資料庫裡失效的 token 並回 401，請使用者重新連接。這跟「網路連不上 Google」是不同情況。"""
+    from fastapi import HTTPException
+
+    async def mock_find_one(query):
+        return {"_id": "uid123", "refresh_token": "revoked-refresh-token"}
+
+    delete_calls = {"n": 0}
+
+    async def mock_delete_one(query):
+        delete_calls["n"] += 1
+        assert query == {"_id": "uid123"}
+
+    class MockResponse:
+        status_code = 400
+        text = '{"error": "invalid_grant"}'
+
+        def raise_for_status(self):
+            request = httpx.Request("POST", "https://oauth2.googleapis.com/token")
+            response = httpx.Response(400, request=request, text=self.text)
+            raise httpx.HTTPStatusError("Bad Request", request=request, response=response)
+
+    class MockClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            pass
+
+        async def post(self, *a, **k):
+            return MockResponse()
+
+    monkeypatch.setattr(oauth_crud_mod.db.googleCalendarTokens, "find_one", mock_find_one)
+    monkeypatch.setattr(oauth_crud_mod.db.googleCalendarTokens, "delete_one", mock_delete_one)
+    monkeypatch.setattr(oauth_crud_mod.httpx, "AsyncClient", lambda: MockClient())
+
+    with pytest.raises(HTTPException) as exc_info:
+        await oauth_crud_mod.refresh_google_calendar_token("uid123")
+
+    assert exc_info.value.status_code == 401
+    assert delete_calls["n"] == 1

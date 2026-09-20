@@ -12,9 +12,9 @@ router = APIRouter(prefix="/user/linked-accounts", tags=["linked-accounts"])
 async def get_current_linked_accounts(
     clerk_user: dict = Depends(get_current_clerk_user)
 ):
-    # 沒有任何綁定帳號是正常狀態（例如剛註冊、還沒連結任何平台），回空陣列，不是 404
-    accounts = await linkedAccount_crud.get_linked_accounts_by_clerk_id(clerk_user["sub"])
-    return accounts or []
+    # 沒有任何綁定帳號是正常狀態（例如剛註冊、還沒連結任何平台），crud 會回空清單，
+    # 這裡原樣回傳成 200 + 空陣列，不是 404
+    return await linkedAccount_crud.get_linked_accounts_by_clerk_id(clerk_user["sub"])
 
 # 註冊（新增）綁定帳號
 # 平台是 GitHub/Jira 會真的打一次驗證 API，平台是 Moodle 會真的開一次 Selenium

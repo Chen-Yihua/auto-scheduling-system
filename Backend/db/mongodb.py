@@ -12,9 +12,9 @@ client = AsyncIOMotorClient(MONGO_URI)
 # 指定使用哪個資料庫
 db = client[DB_NAME]
 
-#取得資料庫連線
-async def get_db():
-    return db
+# #取得資料庫連線
+# async def get_db():
+#     return db
 
 
 async def ensure_indexes() -> None:

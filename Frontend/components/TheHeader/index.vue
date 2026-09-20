@@ -2,6 +2,7 @@
 import ColorModeButton from './components/ColorModeButton.vue';
 import AccountSettings from './components/AccountSettings.vue';
 import { useUser, useAuth } from '@clerk/vue';
+import { useTaskForm } from '~/composables/useTaskForm';
 
 const config = useRuntimeConfig();
 
@@ -9,6 +10,9 @@ const BASE_URL = config.public.apiBaseUrl;
 
 const { user } = useUser();
 const { getToken } = useAuth();
+// 跟 TaskForm.vue 共用同一份狀態（見 useTaskForm.ts 的 createSharedComposable）
+// 這裡按下「+」，TaskForm 裡的 Modal 才會真的打開
+const { showEditModal } = useTaskForm();
 
 // Watch for user changes
 
@@ -58,15 +62,16 @@ watch(user, async (newUser) => {
     <!-- 切換 Light/Dark 模式 -->
     <ColorModeButton />
 
-    <!-- GitHub icon + hover 展開 -->
-    <UButton
-      class="group relative overflow-hidden transition-all duration-300 w-[40px] hover:w-[120px]"
-      icon="i-lucide-github"
-    >
-      <span class="ml-2 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap"
-        >GitHub</span
-      >
-    </UButton>
+    <!-- 手動新增任務 -->
+    <SignedIn>
+      <UButton
+        icon="mdi-file-edit"
+        aria-label="新增任務"
+        color="neutral"
+        size="md"
+        @click="showEditModal = true"
+      />
+    </SignedIn>
 
     <!-- 登入按鈕 -->
     <SignedOut>

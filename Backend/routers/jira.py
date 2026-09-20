@@ -3,7 +3,6 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from db.mongodb import db  # 假設有 access linkedAccounts
 from db.security import get_current_clerk_user
 from db.crypto import decrypt_secret
-from pymongo.errors import PyMongoError
 from crud.errors import NonRetryableError
 from crud.jira import fetch_jira_user_issues, transform_jira_item, sync_jira_issues
 from schemas.jira import JiraIssue
@@ -16,14 +15,10 @@ router = APIRouter(prefix="/jira", tags=["jira"])
 @router.get("/issues", response_model=list[JiraIssue])
 async def get_jira_issues(response: Response = None, user=Depends(get_current_clerk_user)):
     # 查找 Jira 的 API Key & Domain (clerk_id + platform 這個組合保證唯一)
-    try:
-        linked = await db.linkedAccounts.find_one({
-            "clerk_id": user["sub"],
-            "platform": "jira"
-        })
-    except PyMongoError as e:
-        logger.error("DB error while fetching Jira linked account: %s", e)
-        raise HTTPException(status_code=503, detail="資料庫暫時無法使用，請稍後再試")
+    linked = await db.linkedAccounts.find_one({
+        "clerk_id": user["sub"],
+        "platform": "jira"
+    })
 
     if not linked:
         raise HTTPException(status_code=400, detail="No Jira linked account")

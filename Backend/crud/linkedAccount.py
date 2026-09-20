@@ -5,7 +5,7 @@ from db.crypto import encrypt_secret, decrypt_secret, mask_secret
 from schemas.linkedAccount import LinkedAccountCreate
 from crud.moodle import verify_moodle_login
 from crud.errors import NonRetryableError
-from pymongo.errors import DuplicateKeyError, PyMongoError
+from pymongo.errors import DuplicateKeyError
 from selenium.common.exceptions import WebDriverException
 from fastapi import HTTPException
 from fastapi.concurrency import run_in_threadpool
@@ -185,9 +185,6 @@ async def create_linked_account(clerk_id: str, account: LinkedAccountCreate) -> 
         )
     except DuplicateKeyError:
         raise HTTPException(status_code=409, detail="Linked account already exists")
-    except PyMongoError as e:
-        logger.error("DB error while creating linked account: %s", e)
-        raise HTTPException(status_code=503, detail="資料庫暫時無法使用，請稍後再試")
 
     return {
         "message": "Linked account updated",
@@ -230,11 +227,7 @@ async def update_linked_account_by_clerk_id(clerk_id: str, platform: str, data: 
     if provider and provider.needs_reverify(filtered_data):
         filtered_data = await provider.apply_update(filtered_data, composite_id)
 
-    try:
-        result = await db.linkedAccounts.update_one({"_id": composite_id}, {"$set": filtered_data}, upsert=True)
-    except PyMongoError as e:
-        logger.error("DB error while updating linked account: %s", e)
-        raise HTTPException(status_code=503, detail="資料庫暫時無法使用，請稍後再試")
+    result = await db.linkedAccounts.update_one({"_id": composite_id}, {"$set": filtered_data}, upsert=True)
     return result.modified_count > 0
 
 
@@ -242,11 +235,7 @@ async def update_linked_account_by_clerk_id(clerk_id: str, platform: str, data: 
 
 # 刪除 Linked Account
 async def delete_linked_account_by_id(composite_id: str):
-    try:
-        result = await db.linkedAccounts.delete_one({"_id": composite_id})
-    except PyMongoError as e:
-        logger.error("DB error while deleting linked account: %s", e)
-        raise HTTPException(status_code=503, detail="資料庫暫時無法使用，請稍後再試")
+    result = await db.linkedAccounts.delete_one({"_id": composite_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Linked account not found")
 

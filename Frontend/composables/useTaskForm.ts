@@ -1,10 +1,14 @@
 import type { FormError, FormSubmitEvent } from '@nuxt/ui'
-import { DateFormatter, getLocalTimeZone, fromDate } from '@internationalized/date'
+import { DateFormatter, getLocalTimeZone, fromDate, toZoned, type DateValue } from '@internationalized/date'
 import { ref, computed, reactive, shallowRef } from 'vue'
+import { createSharedComposable } from '@vueuse/core'
 import type { Task } from '~/types/task'
 import { getFriendlyErrorTitle } from '@/utils/errorMessages'
 
-export function useTaskForm() {
+// 用 createSharedComposable 讓 TheHeader（新增任務按鈕）跟 TaskForm（實際的
+// Modal／任務列表）共用同一份狀態——header 按下「+」時，才能真的打開
+// TaskForm 裡定義的那個 Modal，而不是各自獨立、互不相干的兩份 state。
+function useTaskFormImpl() {
     // 控制 Modal 開關
     const showEditModal = ref(false)
 
@@ -25,14 +29,22 @@ export function useTaskForm() {
     const df = new DateFormatter('zh-TW', { dateStyle: 'medium' })
     const timeZone = getLocalTimeZone()
     const today = fromDate(new Date(), timeZone)
-    const modelValue = shallowRef(today)
+    // UCalendar 的 v-model 可能給 CalendarDate、CalendarDateTime 或 ZonedDateTime
+    // 這三種其中一種（使用者選日期的當下不一定跟 today 的型別一樣），
+    // 要轉成 Date 物件時得先用 toZoned 統一成 ZonedDateTime 再呼叫沒有參數的 toDate()
+    const modelValue = shallowRef<DateValue>(today)
     const minDate = today
+    const toJsDate = (value: DateValue) => toZoned(value, timeZone).toDate()
     const displayDate = computed(() =>
         modelValue.value
-            ? df.format((modelValue.value as any).toDate(timeZone as any))
+            ? df.format(toJsDate(modelValue.value))
             : 'Select a date'
     )
 
+    // 是否正在抓取任務列表——跟「目前沒有任務」是兩回事，不能都用
+    // all_tasks.length === 0 判斷，不然使用者真的沒有任務時，畫面會卡在
+    // Skeleton 動畫，看起來像資料壞掉
+    const loading = ref(true)
     // **所有任務**
     const all_tasks = ref<Task[]>([])
     // **目前編輯的任務**
@@ -82,7 +94,7 @@ export function useTaskForm() {
     }
 
     // 把後端回傳「這次哪些欄位是 AI 猜的」組成一句人看得懂的話
-    function buildInferenceSummary(result: any): { title: string; description?: string } | null {
+    function buildInferenceSummary(result: Task): { title: string; description?: string } | null {
         const inferredFields: string[] = result?.inferred_fields ?? []
         if (!inferredFields.length) return null
 
@@ -107,12 +119,12 @@ export function useTaskForm() {
 
     // 1. 載入所有任務
     async function fetchTasks() {
+        loading.value = true
         try{
             const token = await getToken.value()
             if (!token) {
                 throw new Error('JWT token is missing or invalid');
             }
-            console.log('token', token)
             const res = await $fetch<Task[]>(`${BASE_URL}/manual_tasks/me`, {
                 method: 'GET',
                 headers: { Authorization: `Bearer ${token}`}
@@ -120,6 +132,8 @@ export function useTaskForm() {
             all_tasks.value = res
         } catch (err) {
             console.error(err)
+        } finally {
+            loading.value = false
         }
     }
  
@@ -145,10 +159,10 @@ export function useTaskForm() {
     }
 
     // 2. 新增任務
-    async function onSubmit(e: FormSubmitEvent<typeof state>) {
+    async function onSubmit(_e: FormSubmitEvent<typeof state>) {
         try {
             const token = await getToken.value()
-            const dueDate = (modelValue.value as any).toDate(timeZone as any).toISOString()
+            const dueDate = toJsDate(modelValue.value).toISOString()
             const payload = {
                 user_id: state.user_id,
                 title: state.title,
@@ -159,7 +173,7 @@ export function useTaskForm() {
                 duration: parseDuration(state.duration),
                 inference_hint: state.inference_hint || null,
             }
-            const result = await $fetch(`${BASE_URL}/manual_tasks/`, {
+            const result = await $fetch<Task>(`${BASE_URL}/manual_tasks/`, {
                 method: 'POST',
                 body: payload,
                 headers: { Authorization: `Bearer ${token}` }
@@ -188,11 +202,11 @@ export function useTaskForm() {
     }
 
     // 3. 編輯任務
-    async function onEdit(e: FormSubmitEvent<typeof state>) {
+    async function onEdit(_e: FormSubmitEvent<typeof state>) {
         if( !editing_task.value ) return
         try {
             const token = await getToken.value()
-            const dueDate = (modelValue.value as any).toDate(timeZone as any).toISOString()
+            const dueDate = toJsDate(modelValue.value).toISOString()
             const payload = {
                 user_id: state.user_id,
                 title: state.title,
@@ -255,6 +269,7 @@ export function useTaskForm() {
         displayDate,
         priorityItems,
         validate,
+        loading,
         all_tasks,
         editing_task,
         isEditMode,
@@ -266,5 +281,7 @@ export function useTaskForm() {
         onCancel,
     }
 }
+
+export const useTaskForm = createSharedComposable(useTaskFormImpl)
 
 

@@ -9,6 +9,7 @@ const props = defineProps<{
   isStale?: boolean
   syncedAt?: string | null
   authError?: boolean
+  notLinked?: boolean
 }>()
 
 const openJiraIssue = (key: string) => {
@@ -18,8 +19,14 @@ const openJiraIssue = (key: string) => {
 </script>
 
 <template>
-  <div class="space-y-4">
-    <h2 class="text-xl font-bold">Jira 指派任務</h2>
+  <UCard>
+    <template #header>
+      <div class="flex items-center gap-2">
+        <UIcon name="mdi:jira" class="w-5 h-5 text-blue-500" />
+        <span class="text-lg font-semibold text-gray-900 dark:text-white">Jira 指派任務</span>
+      </div>
+    </template>
+
     <StaleDataBanner
       :stale="isStale ?? false"
       :synced-at="syncedAt ?? null"
@@ -31,7 +38,15 @@ const openJiraIssue = (key: string) => {
       <USkeleton class="h-24 mb-4" v-for="i in 3" :key="i" />
     </div>
 
-    <div v-else-if="issues.length" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+    <!-- 尚未綁定 Jira 帳號 -->
+    <div
+      v-else-if="notLinked"
+      class="text-center text-sm text-gray-500 dark:text-gray-400 py-6"
+    >
+      尚未綁定 Jira 帳號，請先設定
+    </div>
+
+    <div v-else-if="issues.length" class="grid grid-cols-1 gap-4">
       <UCard
         v-for="issue in issues"
         :key="issue.id"
@@ -69,6 +84,11 @@ const openJiraIssue = (key: string) => {
       </UCard>
     </div>
 
-    <p v-else class="text-gray-500 text-sm">尚無資料</p>
-  </div>
+    <div
+      v-else
+      class="text-center text-sm text-gray-500 dark:text-gray-400 py-6"
+    >
+      尚無資料
+    </div>
+  </UCard>
 </template>

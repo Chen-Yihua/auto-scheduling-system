@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { useLinkedAccount } from '~/composables/useLinkedAccount';
+import { useGoogleCalendar } from '~/composables/useGoogleCalendar';
 import { UserButton } from '@clerk/vue';
 
 const { keys, fetchKeys, openEdit, cancelEdit, saveKey, deleteKey } = useLinkedAccount();
-const { getToken } = useAuth();
+const { isConnected: googleCalendarConnected, fetchGoogleCalendars } = useGoogleCalendar();
 
 onMounted(fetchKeys);
+onMounted(fetchGoogleCalendars);
 
 const copiedKey = ref<string | null>(null);
 const toast = useToast();
@@ -32,10 +34,6 @@ const config = useRuntimeConfig()
 const FRONT_END_URL = config.public.frontEndUrl
 const GOOGLE_CLIENT_ID = config.public.apiGoogleClientId
 const REDIRECT_URI = `${FRONT_END_URL}/oauth/callback`
-const BASE_URL = config.public.apiBaseUrl;
-
-const isConnected = ref(false);
-
 const goToGoogleAuth = () => {
   const params = new URLSearchParams({
     client_id: GOOGLE_CLIENT_ID,
@@ -48,24 +46,6 @@ const goToGoogleAuth = () => {
 
   window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
 };
-
-onMounted(async () => {
-  try {
-    const token = await getToken.value();
-    if (!token) throw new Error('找不到 JWT');
-
-    await $fetch(`${BASE_URL}/oauth/calendars`, {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
-    isConnected.value = true;
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  } catch (error) {
-    isConnected.value = false;
-  }
-});
 </script>
 
 
@@ -232,9 +212,15 @@ onMounted(async () => {
             </div>
           </template>
         </div>
+
+        <div class="flex items-center gap-2">
           <UButton color="primary" icon="i-lucide-calendar" @click="goToGoogleAuth">
-            連接 Google Calendar
+            {{ googleCalendarConnected ? '重新連接 Google Calendar' : '連接 Google Calendar' }}
           </UButton>
+          <UBadge v-if="googleCalendarConnected" color="success" variant="subtle" icon="i-lucide-check">
+            已連接
+          </UBadge>
+        </div>
       </UserButton.UserProfilePage>
     </UserButton>
   </header>

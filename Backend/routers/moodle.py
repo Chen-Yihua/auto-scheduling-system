@@ -4,7 +4,6 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from db.mongodb import db
 from db.security import get_current_clerk_user
 from db.crypto import decrypt_secret
-from pymongo.errors import PyMongoError
 from crud.errors import NonRetryableError
 from crud.moodle import fetch_assignments, sync_moodle_assignments
 from schemas.moodle import MoodleAssignment
@@ -43,14 +42,10 @@ async def get_assignments(request: Request, response: Response = None, clerk_use
         return cached["assignments"]
 
     # 查綁定帳號
-    try:
-        user = await db.linkedAccounts.find_one({"platform": "moodle", "clerk_id": clerk_user["sub"]})
-    except PyMongoError as e:
-        logger.error("DB error while fetching Moodle linked account: %s", e)
-        raise HTTPException(status_code=503, detail="資料庫暫時無法使用，請稍後再試")
+    user = await db.linkedAccounts.find_one({"platform": "moodle", "clerk_id": clerk_user["sub"]})
 
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=400, detail="No Moodle linked account")
 
     # 解密
     # 密碼只在這裡（伺服器內部、準備拿去登入 Moodle 的當下）解密，

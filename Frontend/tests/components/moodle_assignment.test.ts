@@ -8,7 +8,7 @@ vi.mock('#imports', () => ({
 }))
 
 // 建立可變的 ref 供元件使用
-import { ref as vueRef } from 'vue'
+import { ref as vueRef, h } from 'vue'
 const loadingRef = vueRef(false)
 const hasAccountRef = vueRef(true)
 const assignmentsRef = vueRef<any[]>([])
@@ -29,7 +29,8 @@ vi.mock('~/composables/useMoodleAssignments', () => ({
   }),
 }))
 
-// 自訂 UCard stub，渲染 slot
+// 自訂 UCard stub，渲染 slot（UCard 的預設 auto-stub 不會渲染 slot 內容，
+// 但這個元件整個區塊、以及裡面每筆作業，現在都包在 UCard 裡）
 const UCardStub = {
   name: 'UCard',
   emits: ['click'],
@@ -54,9 +55,8 @@ const UCardStub = {
 // 再引入元件
 import MoodleAssignments from '~/components/TheMain/MoodleAssignments.vue'
 
-// 將 UCardStub 註冊為全域 stub
-const uiStubs = { UCard: true, UIcon: true, UAlert: true }
-// 
+const uiStubs = { UCard: UCardStub, UIcon: true, UAlert: true }
+//
 const render = () =>
   mount(MoodleAssignments, {
     global: { stubs: uiStubs },
@@ -70,7 +70,9 @@ describe('MoodleAssignments.vue', () => {
 
     const wrapper = render()
     expect(wrapper.text()).toContain('尚未綁定 Moodle 帳號')
-    expect(wrapper.find('u-card-stub').exists()).toBe(false)
+    // 整個區塊現在固定包在一張 UCard 裡（跟 Hacker News 一樣的外框），
+    // 差別只在於裡面沒有渲染任何一筆「作業」的卡片
+    expect(wrapper.findAll('.u-card-stub').length).toBe(1)
   })
 
   it('Loading 顯示 icon', () => {
@@ -95,11 +97,12 @@ describe('MoodleAssignments.vue', () => {
     ]
 
     const wrapper = render()
-    const card = wrapper.find('u-card-stub')
-    expect(card.exists()).toBe(true)
+    // index 0 是外層的區塊容器卡片，index 1 才是這筆作業自己的卡片
+    const cards = wrapper.findAll('.u-card-stub')
+    expect(cards.length).toBe(2)
     expect(wrapper.text()).toContain('Moodle 作業')
 
-    await card.trigger('click')
+    await cards[1].trigger('click')
     expect(openSpy).toHaveBeenCalledWith('https://moodle/hw1')
   })
 })

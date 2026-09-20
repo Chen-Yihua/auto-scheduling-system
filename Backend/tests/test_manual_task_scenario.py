@@ -1,5 +1,5 @@
 """
-端對端「情境」測試：跟其他 test_manualTask.py / test_manual_task_scenario.py 不同的地方是——
+端對端「情境」測試：跟其他 test_manual_task_api.py / test_manual_task_scenario.py 不同的地方是——
 這裡不是逐一測試單一 endpoint，而是把使用者真實會做的一整串操作串起來，
 在同一個測試裡透過真的 HTTP（httpx + ASGITransport 打 main.app）依序呼叫，
 確認「上一步寫進去的資料，下一步真的讀得到、也真的反映了更新」。
@@ -33,6 +33,7 @@ def _override_auth():
 
 @pytest.mark.asyncio
 async def test_manual_task_full_lifecycle():
+    """任務的完整生命週期：建立（priority/duration 都有填，不觸發 AI 推斷）→ 列表 → 單筆查詢 → 編輯（更新有真的落地）→ 刪除 → 單筆查不到（404）→ 列表回到空清單（200，不是 404）。"""
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         # 1. 建立任務（priority/duration 都有填，不會觸發 AI 推斷，
@@ -107,10 +108,8 @@ async def test_manual_task_full_lifecycle():
 
 @pytest.mark.asyncio
 async def test_manual_task_ai_inference_fills_missing_fields_and_survives_full_lifecycle():
-    """
-    沒填 priority/duration 時，情境是：AI 推斷出的值要能一路撐過
-    列表顯示、單筆查詢、編輯保留、最後刪除——不是只有建立當下那一次回應正確。
-    """
+    """沒填 priority/duration → AI 推斷出的值要能一路撐過列表顯示、單筆查詢、編輯保留、
+最後刪除——不是只有建立當下那一次回應正確。"""
     from unittest.mock import AsyncMock, patch
 
     with patch(

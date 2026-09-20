@@ -1,11 +1,7 @@
-import logging
-
 from db.mongodb import db
 from schemas.user import UserCreate, UserUpdate
-from pymongo.errors import DuplicateKeyError, PyMongoError
+from pymongo.errors import DuplicateKeyError
 from fastapi import HTTPException
-
-logger = logging.getLogger(__name__)
 
 # 建立使用者並回報重複使用者錯誤
 async def create_user(user: UserCreate) -> dict:
@@ -15,9 +11,6 @@ async def create_user(user: UserCreate) -> dict:
         await db.users.insert_one(doc)
     except DuplicateKeyError:
         raise HTTPException(status_code=409, detail="User already exists")
-    except PyMongoError:
-        logger.exception("Failed to create user, clerk_id=%s", doc["_id"])
-        raise HTTPException(status_code=500, detail="建立使用者失敗，請稍後再試")
 
     return {
         "id": doc["_id"],
@@ -27,12 +20,7 @@ async def create_user(user: UserCreate) -> dict:
 
 # 透過 clerk_id 取得使用者
 async def get_user_by_clerk_id(clerk_id: str):
-    try:
-        user = await db.users.find_one({"_id": clerk_id})  # 直接查 _id，不轉 ObjectId
-    except PyMongoError:
-        logger.exception("Failed to fetch user, clerk_id=%s", clerk_id)
-        raise HTTPException(status_code=500, detail="查詢使用者失敗，請稍後再試")
-
+    user = await db.users.find_one({"_id": clerk_id})  # 直接查 _id，不轉 ObjectId
     if not user:
         return None
     user["id"] = user["_id"]  # 保留一個 id 欄位給前端用
@@ -48,11 +36,7 @@ async def update_user_by_clerk_id(clerk_id: str, data: UserUpdate) -> None:
     if not filtered_data:
         raise HTTPException(status_code=404, detail="User not found or no changes made")
 
-    try:
-        result = await db.users.update_one({"_id": clerk_id}, {"$set": filtered_data})
-    except PyMongoError:
-        logger.exception("Failed to update user, clerk_id=%s", clerk_id)
-        raise HTTPException(status_code=500, detail="更新使用者失敗，請稍後再試")
+    result = await db.users.update_one({"_id": clerk_id}, {"$set": filtered_data})
 
     # 用 matched_count（有沒有找到這筆文件）而不是 modified_count（值是否真的變了）——
     # 如果新值跟舊值一樣，MongoDB 會判定沒有實際變更、modified_count 是 0，
@@ -62,10 +46,5 @@ async def update_user_by_clerk_id(clerk_id: str, data: UserUpdate) -> None:
 
 # 刪除使用者
 async def delete_user_by_clerk_id(clerk_id: str) -> bool:
-    try:
-        result = await db.users.delete_one({"_id": clerk_id})
-    except PyMongoError:
-        logger.exception("Failed to delete user, clerk_id=%s", clerk_id)
-        raise HTTPException(status_code=500, detail="刪除使用者失敗，請稍後再試")
-
+    result = await db.users.delete_one({"_id": clerk_id})
     return result.deleted_count > 0

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { getFriendlyErrorTitle, isAuthError } from '~/utils/errorMessages'
+import { getFriendlyErrorTitle, isAuthError, isNotLinkedError } from '~/utils/errorMessages'
 
 describe('getFriendlyErrorTitle', () => {
   it('後端自訂的 RATE_LIMITED 錯誤碼，回傳限流訊息', () => {
@@ -39,5 +39,22 @@ describe('isAuthError', () => {
     expect(isAuthError({ response: { status: 429 } })).toBe(false)
     expect(isAuthError(new Error('network error'))).toBe(false)
     expect(isAuthError(undefined)).toBe(false)
+  })
+})
+
+describe('isNotLinkedError', () => {
+  it('狀態碼 400 判定為尚未連結', () => {
+    expect(isNotLinkedError({ response: { status: 400 } })).toBe(true)
+  })
+
+  it('status 直接掛在 error 上（不同 fetch 實作的錯誤形狀）也認得出來', () => {
+    expect(isNotLinkedError({ status: 400 })).toBe(true)
+  })
+
+  it('其他狀態碼或非 400 的錯誤，回傳 false', () => {
+    expect(isNotLinkedError({ response: { status: 401 } })).toBe(false)
+    expect(isNotLinkedError({ response: { status: 500 } })).toBe(false)
+    expect(isNotLinkedError(new Error('network error'))).toBe(false)
+    expect(isNotLinkedError(undefined)).toBe(false)
   })
 })

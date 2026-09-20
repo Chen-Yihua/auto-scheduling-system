@@ -11,8 +11,17 @@ vi.mock('@clerk/vue', () => ({
 vi.stubGlobal('ref', vueRef)
 
 const toastSpy = { add: vi.fn() }
+const fetchKeysSpy = vi.fn().mockResolvedValue(undefined)
+// value 是遮罩過的 apiKey——有值代表「已連結」，這是 fetchGithubIssues 用來判斷
+// 要不要打 API 的依據，預設模擬「已連結」，個別測試要測「未連結」再覆寫
+const linkedKeys = vueRef([{ platform: 'github', value: 'GKEY****' }])
+
 vi.stubGlobal('useToast', () => toastSpy)
 vi.stubGlobal('useRuntimeConfig', () => ({ public: { apiBaseUrl: 'http://api' } }))
+vi.stubGlobal('useLinkedAccount', () => ({
+  keys: linkedKeys,
+  fetchKeys: fetchKeysSpy,
+}))
 
 let fetchSpy = vi.fn()
 let fetchRawSpy = vi.fn()
@@ -30,6 +39,8 @@ describe('useGithub composable', () => {
     fetchSpy = vi.fn()
     fetchRawSpy = vi.fn()
     toastSpy.add.mockClear()
+    fetchKeysSpy.mockClear()
+    linkedKeys.value = [{ platform: 'github', value: 'GKEY****' }]
   })
 
   it('只呼叫後端 /github/issues，不直接打 GitHub API', async () => {
@@ -86,7 +97,8 @@ describe('useGithub composable', () => {
 
     expect(toastSpy.add).toHaveBeenCalledWith(
       expect.objectContaining({
-        title: 'GitHub 資料抓取失敗',
+        title: 'GitHub 資料暫時無法取得',
+        description: expect.stringContaining('稍後再試'),
         color: 'error',
       }),
     )
@@ -117,7 +129,8 @@ describe('useGithub composable', () => {
     expect(authError.value).toBe(true)
     expect(toastSpy.add).toHaveBeenCalledWith(
       expect.objectContaining({
-        title: 'GitHub 授權已失效，請重新連結帳號',
+        title: 'GitHub 授權已失效',
+        description: expect.stringContaining('重新連結'),
         color: 'error',
       }),
     )
@@ -138,5 +151,31 @@ describe('useGithub composable', () => {
         color: 'error',
       }),
     )
+  })
+
+  it('尚未連結帳號時，根本不打 API，也不跳任何 toast', async () => {
+    // 模擬 keys 裡沒有遮罩過的 apiKey，代表這個平台還沒連結
+    linkedKeys.value = [{ platform: 'github', value: '' }]
+
+    const { fetchGithubIssues, notLinked, loading } = useGithub()
+    await fetchGithubIssues()
+
+    expect(notLinked.value).toBe(true)
+    expect(fetchRawSpy).not.toHaveBeenCalled()
+    expect(toastSpy.add).not.toHaveBeenCalled()
+    // 抓取結束一定要把 loading 收回 false，不然畫面會永遠卡在 Skeleton
+    expect(loading.value).toBe(false)
+  })
+
+  it('連結帳號檢查本身失敗（例如網路問題）時，安靜降級成尚未綁定，不跳 toast，也不會卡住 loading', async () => {
+    fetchKeysSpy.mockRejectedValueOnce(new Error('網路爆炸'))
+
+    const { fetchGithubIssues, notLinked, loading } = useGithub()
+    await fetchGithubIssues()
+
+    expect(notLinked.value).toBe(true)
+    expect(fetchRawSpy).not.toHaveBeenCalled()
+    expect(toastSpy.add).not.toHaveBeenCalled()
+    expect(loading.value).toBe(false)
   })
 })

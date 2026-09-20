@@ -14,27 +14,28 @@ const calendarUrl = computed(() => {
 </script>
 
 <template>
-  <div class="space-y-4">
-    <h2 class="text-xl font-bold">Google 行事曆</h2>
-
-    <div v-if="connect">
-      <div
-        class="rounded-lg shadow hover:shadow-lg transition-transform duration-300 ease-in-out transform hover:scale-[1.01] border bg-white dark:bg-gray-900 overflow-hidden"
-      >
-        <iframe
-          :src="calendarUrl"
-          class="w-full h-[600px] border-0"
-          frameborder="0"
-          scrolling="no"
-        />
+  <UCard>
+    <template #header>
+      <div class="flex items-center gap-2">
+        <UIcon name="i-lucide-calendar" class="w-5 h-5" />
+        <span class="text-lg font-semibold text-gray-900 dark:text-white">Google 行事曆</span>
       </div>
+    </template>
+
+    <div v-if="connect" class="rounded-lg overflow-hidden">
+      <iframe
+        :src="calendarUrl"
+        class="w-full h-[600px] border-0"
+        frameborder="0"
+        scrolling="no"
+      />
     </div>
 
     <div
       v-else
-      class="p-4 border border-dashed border-gray-300 text-center text-gray-600 dark:text-gray-300 rounded-md bg-gray-50 dark:bg-gray-800"
+      class="text-center text-sm text-gray-500 dark:text-gray-400 py-6"
     >
       尚未連接 Google Calendar，請前往 <strong>帳號設定</strong> 以完成連接。
     </div>
-  </div>
+  </UCard>
 </template>

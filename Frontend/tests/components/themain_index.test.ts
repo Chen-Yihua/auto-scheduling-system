@@ -34,6 +34,7 @@ vi.mock('@/composables/useGithub', () => ({
     fetchGithubIssues: fetchGithubIssuesSpy,
     isStale: ref(false),
     syncedAt: ref(null),
+    loading: ref(false),
   }),
 }))
 
@@ -43,6 +44,7 @@ vi.stubGlobal('useJira', () => ({
   domain: ref(''),
   isStale: ref(false),
   syncedAt: ref(null),
+  loading: ref(false),
 }))
 
 vi.stubGlobal('useGoogleCalendar', () => ({

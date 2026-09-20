@@ -11,6 +11,7 @@ const {
   displayDate,
   priorityItems,
   validate,
+  loading,
   all_tasks,
   editing_task,
   isEditMode,
@@ -72,19 +73,16 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="space-y-8">
+  <!-- 這裡整個元件要用同一個根節點包起來，不能讓 Modal 跟下面的任務清單
+  UCard 變成兩個各自獨立的頂層節點——外層 TheMain/index.vue 左欄用
+  space-y-6 控制各區塊間距，如果這裡是兩個 root，Modal 關閉時那個空的
+  wrapper div 還是會被當成一個「子元素」，害任務清單卡片多吃到一份
+  margin-top，跟右欄卡片對不齊 -->
+  <div>
     <template v-if="user">
-      <div class="absolute top-18 right-6">
-        <UButton 
-          size="md"
-          icon='mdi-file-edit' 
-          color="neutral"
-          @click="showEditModal = true"
-          class="w-8 h-8 mb-4"
-        />
-      </div>
-
-      <UModal 
+      <!-- 新增任務按鈕移到頁面右上角的 Header 裡（見 TheHeader/index.vue），
+      這裡跟它共用同一份 showEditModal 狀態，所以在哪裡按都會打開這個 Modal -->
+      <UModal
         v-model:open="showEditModal"
         :dismissible="false" 
         :close-on-esc="false"
@@ -214,59 +212,72 @@ onMounted(async () => {
         </template>
       </UModal>
     </template>
-  </div>
 
-  <!-- 任務清單區塊 -->
-  <div class="space-y-4">
-    <h2 class="text-xl font-bold mt-10 mb-4 px-4">📝 任務列表</h2>
-    <div v-if="all_tasks.length === 0">
-      <USkeleton class="h-24 mb-4" v-for="i in 3" :key="i" />
-    </div>
-    <div v-else-if="user" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-      <UCard 
-        v-for="task in all_tasks"
-        :key="task.id"
-        :ui="{
-          root: 'cursor-pointer hover:shadow-lg transition-transform duration-300 ease-in-out transform scale-100 hover:scale-105',
-        }"
+    <!-- 任務清單區塊 -->
+    <UCard>
+      <template #header>
+        <div class="flex items-center gap-2">
+          <UIcon name="i-lucide-list-todo" class="w-5 h-5" />
+          <span class="text-lg font-semibold text-gray-900 dark:text-white">任務列表</span>
+        </div>
+      </template>
+
+      <div v-if="loading">
+        <USkeleton class="h-24 mb-4" v-for="i in 3" :key="i" />
+      </div>
+      <!-- 真的沒有任務是正常狀態，不是還在載入，不該一直顯示 Skeleton -->
+      <div
+        v-else-if="all_tasks.length === 0"
+        class="text-center text-sm text-gray-500 dark:text-gray-400 py-6"
       >
-        <template #header>
-          <div class="flex justify-between items-center w-full">
-            <div class="flex text-sm font-semibold truncate items-center">{{ task.title }}</div>
-            <div class="flex flex-wrap items-center">
-              <UBadge class="mx-1" :color="getPriorityColor(task.priority)" variant="soft" size="sm">
-                {{ task.priority }}
-              </UBadge>
-              <UBadge class="mx-1" color="info" variant="soft" size="sm">
-                {{ task.status }}
-              </UBadge>
+        目前沒有任務，點擊右上角的編輯圖示新增一個吧
+      </div>
+      <div v-else class="grid grid-cols-1 gap-4">
+        <UCard
+          v-for="task in all_tasks"
+          :key="task.id"
+          :ui="{
+            root: 'cursor-pointer hover:shadow-lg transition-transform duration-300 ease-in-out transform scale-100 hover:scale-105',
+          }"
+        >
+          <template #header>
+            <div class="flex justify-between items-center w-full">
+              <div class="flex text-sm font-semibold truncate items-center">{{ task.title }}</div>
+              <div class="flex flex-wrap items-center">
+                <UBadge class="mx-1" :color="getPriorityColor(task.priority)" variant="soft" size="sm">
+                  {{ task.priority }}
+                </UBadge>
+                <UBadge class="mx-1" color="info" variant="soft" size="sm">
+                  {{ task.status }}
+                </UBadge>
+              </div>
+            </div>
+          </template>
+
+          <div>
+            <div class="font-medium mb-2 text-gray-800 dark:text-white truncate">
+              {{ task.description }}
+            </div>
+            <div class="flex items-center gap-2 mb-1">
+              <UIcon name="i-lucide-calendar" class="w-4 h-4 text-gray-400" />
+              <span class="text-xs text-gray-500">截止：{{ new Date(task.due_date).toLocaleString() }}</span>
             </div>
           </div>
-        </template>
 
-        <div>
-          <div class="font-medium mb-2 text-gray-800 dark:text-white truncate">
-            {{ task.description }}
-          </div>
-          <div class="flex items-center gap-2 mb-1">
-            <UIcon name="i-lucide-calendar" class="w-4 h-4 text-gray-400" />
-            <span class="text-xs text-gray-500">截止：{{ new Date(task.due_date).toLocaleString() }}</span>
-          </div>
-        </div>
-
-        <template #footer>
-          <UButton
-            icon="i-lucide-pencil"
-            size="xs"
-            @click.stop="startEditTask(task)"
-            color="info"
-            variant="soft"
-          >
-            編輯
-          </UButton>
-        </template>
-      </UCard>
-    </div>
+          <template #footer>
+            <UButton
+              icon="i-lucide-pencil"
+              size="xs"
+              @click.stop="startEditTask(task)"
+              color="info"
+              variant="soft"
+            >
+              編輯
+            </UButton>
+          </template>
+        </UCard>
+      </div>
+    </UCard>
   </div>
 </template>
 

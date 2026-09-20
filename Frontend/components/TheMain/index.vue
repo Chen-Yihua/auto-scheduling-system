@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useGithub } from '@/composables/useGithub'
 import { useUser } from '@clerk/vue'
+import { useGoogleCalendarAuth } from '@/composables/useGoogleCalendarAuth'
 import GithubIssuesList from './GithubIssuesList.vue'
 import LoginRequiredCard from './LoginRequiredCard.vue'
 import Leetcode from './Leetcode.vue'
@@ -14,6 +15,7 @@ const { issues: githubIssues, fetchGithubIssues, isStale: githubStale, syncedAt:
 const { issues: jiraIssues, fetchJiraIssues, domain, isStale: jiraStale, syncedAt: jiraSyncedAt, authError: jiraAuthError, notLinked: jiraNotLinked, loading: jiraLoading } = useJira();
 const { calendarIds, primaryCalendarId, fetchGoogleCalendars, isConnected } = useGoogleCalendar();
 const { isSignedIn } = useUser();
+const { connecting: googleConnecting, connectedCount: googleConnectedCount } = useGoogleCalendarAuth();
 
 // 三個各自獨立抓取、互不影響——任何一個失敗都不該卡住其他兩個
 // （之前串成一條 await 鏈，其中一個丟出例外就會讓後面的都卡在 loading 動不了）
@@ -31,6 +33,11 @@ watch(isSignedIn, (signedIn) => {
     loadDashboardData();
   }
 }, { immediate: true });
+
+// Google 授權是回到首頁之後才在背景完成的，完成時要重新查一次，卡片才會從「連接中」換成行事曆
+watch(googleConnectedCount, () => {
+  fetchGoogleCalendars();
+});
 </script>
 
 <template>
@@ -64,6 +71,7 @@ watch(isSignedIn, (signedIn) => {
           :id="primaryCalendarId"
           :calendar-ids="calendarIds"
           :connect="isConnected"
+          :connecting="googleConnecting"
         />
         <LoginRequiredCard v-else title="Google 行事曆" icon="i-lucide-calendar" message="登入後即可查看 Google 行事曆" />
       </div>

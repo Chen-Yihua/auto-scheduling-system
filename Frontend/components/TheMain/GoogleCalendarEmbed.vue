@@ -5,6 +5,7 @@ const props = defineProps<{
   calendarIds: string[]; // 所有calendar ID
   id: string;
   connect: boolean; // 是否已連接Google Calendar
+  connecting?: boolean; // 正在跟後端完成 Google 授權（授權完成後的幾秒內）
 }>();
 
 const calendarUrl = computed(() => {
@@ -22,7 +23,13 @@ const calendarUrl = computed(() => {
       </div>
     </template>
 
-    <div v-if="connect" class="rounded-lg overflow-hidden">
+    <!-- 授權剛完成、後端還在換 token：只有這張卡片顯示「連接中」，其他區塊照常顯示 -->
+    <div v-if="connecting" class="flex justify-center items-center py-6">
+      <UIcon name="i-lucide-loader" class="animate-spin w-6 h-6 text-primary" />
+      <span class="ml-2 text-primary">正在連接 Google Calendar，請稍候…</span>
+    </div>
+
+    <div v-else-if="connect" class="rounded-lg overflow-hidden">
       <iframe
         :src="calendarUrl"
         class="w-full h-[600px] border-0"

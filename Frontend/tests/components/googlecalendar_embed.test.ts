@@ -40,4 +40,17 @@ describe('GoogleCalendarEmbed.vue', () => {
     expect(wrapper.find('iframe').exists()).toBe(false)
     expect(wrapper.text()).toContain('尚未連接 Google Calendar')
   })
+
+  it('connecting=true 時只在這張卡片顯示「連接中」，不顯示未連線提示，也沒有 iframe', () => {
+    const wrapper = mount(GoogleCalendarEmbed, {
+      props: { calendarIds: [], id: 'baz', connect: false, connecting: true },
+      global: { stubs: uiStubs },
+    })
+
+    expect(wrapper.text()).toContain('正在連接 Google Calendar')
+    expect(wrapper.text()).not.toContain('尚未連接')
+    expect(wrapper.find('iframe').exists()).toBe(false)
+    // 標題列仍在，卡片位置不變
+    expect(wrapper.text()).toContain('Google 行事曆')
+  })
 })

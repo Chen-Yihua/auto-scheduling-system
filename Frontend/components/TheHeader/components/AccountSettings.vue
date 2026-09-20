@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useLinkedAccount } from '~/composables/useLinkedAccount';
 import { useGoogleCalendar } from '~/composables/useGoogleCalendar';
+import { useGoogleCalendarAuth } from '~/composables/useGoogleCalendarAuth';
 import { UserButton } from '@clerk/vue';
 
 const { keys, fetchKeys, openEdit, cancelEdit, saveKey, deleteKey } = useLinkedAccount();
@@ -8,6 +9,10 @@ const { isConnected: googleCalendarConnected, fetchGoogleCalendars } = useGoogle
 
 onMounted(fetchKeys);
 onMounted(fetchGoogleCalendars);
+
+// Google 授權是回到首頁之後才在背景完成的，完成時重新查一次，「已連接」標記才會更新
+const { connectedCount: googleConnectedCount } = useGoogleCalendarAuth();
+watch(googleConnectedCount, fetchGoogleCalendars);
 
 const copiedKey = ref<string | null>(null);
 const toast = useToast();

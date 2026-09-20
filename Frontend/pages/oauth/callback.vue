@@ -2,11 +2,13 @@
 import { useRouter, useRoute } from 'vue-router';
 import { onMounted } from 'vue';
 import { useAuth } from '@clerk/vue';
+import { useGoogleCalendarAuth } from '~/composables/useGoogleCalendarAuth';
 
 const toast = useToast();
 const router = useRouter();
 const route = useRoute();
 const { getToken } = useAuth();
+const { connecting, connectedCount } = useGoogleCalendarAuth();
 
 const config = useRuntimeConfig();
 
@@ -21,46 +23,57 @@ onMounted(async () => {
       title: `Google 授權失敗：${error}`,
       color: 'error',
     });
-    router.push('/'); // Redirect to home or show an error message
+    router.replace('/');
     return;
   }
 
-  // Handle successful authorization with code
-  if (code) {
-    try {
-      const token = await getToken.value();
-      if (!token) throw new Error('找不到 JWT');
+  // 直接打開這個網址、沒有授權碼：沒有事情可做，回首頁
+  if (!code) {
+    router.replace('/');
+    return;
+  }
 
-      await $fetch(`${BASE_URL}/oauth/callback`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-        body: { code },
-      });
+  // 先回首頁，讓畫面照常顯示，只有行事曆卡片顯示「連接中」（見 GoogleCalendarEmbed.vue）；
+  // 換 token 在背景繼續做。用 replace 是為了讓網址列不再留著授權碼，
+  // 按「上一頁」也不會回到這個一次性的網址
+  connecting.value = true;
+  router.replace('/');
 
-      router.push('/'); // Or show success message
-      toast.add({
-        title: '成功連接 Google Calendar',
-        color: 'success',
-        icon: 'i-lucide-check',
-      });
-    } catch (error) {
-      console.error('OAuth callback failed', error);
-      router.push('/'); // Or show error message
-      toast.add({
-        title: '連接 Google Calendar 失敗',
-        color: 'error',
-        icon: 'i-lucide-x',
-      });
-    }
+  try {
+    const token = await getToken.value();
+    if (!token) throw new Error('找不到 JWT');
+
+    await $fetch(`${BASE_URL}/oauth/callback`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      body: { code },
+    });
+
+    // 通知首頁的行事曆卡片、帳號設定重新查一次連接狀態
+    connectedCount.value++;
+    toast.add({
+      title: '成功連接 Google Calendar',
+      color: 'success',
+      icon: 'i-lucide-check',
+    });
+  } catch (error) {
+    console.error('OAuth callback failed', error);
+    toast.add({
+      title: '連接 Google Calendar 失敗',
+      color: 'error',
+      icon: 'i-lucide-x',
+    });
+  } finally {
+    connecting.value = false;
   }
 });
 </script>
 
 <template>
-  <!-- 從 Google 導回來後，要等後端去跟 Google 換 token（偶爾要好幾秒），
-  這段時間不能是空白畫面，讓使用者知道還在處理 -->
+  <!-- 一進來就會馬上導回首頁（見上面 onMounted），這裡只是導頁前那一瞬間的畫面，
+  避免出現空白（沒有 template 時 Vue 會警告） -->
   <div class="flex flex-col items-center justify-center py-32 text-gray-500 dark:text-gray-400">
     <UIcon name="i-lucide-loader" class="animate-spin w-8 h-8 text-primary mb-3" />
     <p>正在連接 Google Calendar，請稍候…</p>

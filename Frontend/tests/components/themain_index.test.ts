@@ -1,12 +1,19 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount } from '@vue/test-utils'
-import { ref, watch, onMounted, h, defineComponent } from 'vue'
+import { ref, watch, onMounted, h, defineComponent, type Ref } from 'vue'
 
 import TheMainIndex from '~/components/TheMain/index.vue'
 
 vi.stubGlobal('ref', ref)
 vi.stubGlobal('watch', watch)
 vi.stubGlobal('onMounted', onMounted)
+
+// Nuxt 的 useState：同一個 key 在所有元件之間共用同一份狀態
+const stateStore = new Map<string, Ref<unknown>>()
+vi.stubGlobal('useState', (key: string, init: () => unknown) => {
+  if (!stateStore.has(key)) stateStore.set(key, ref(init()))
+  return stateStore.get(key)
+})
 
 // ---------- Clerk mock：isSignedIn 可由測試動態控制 ----------
 const isSignedInRef = ref<boolean | undefined>(undefined)
@@ -74,6 +81,7 @@ describe('TheMain/index.vue', () => {
 
   beforeEach(() => {
     isSignedInRef.value = undefined
+    stateStore.clear()
     fetchGithubIssuesSpy.mockClear()
     fetchJiraIssuesSpy.mockClear()
     fetchGoogleCalendarsSpy.mockClear()
@@ -160,5 +168,37 @@ describe('TheMain/index.vue', () => {
     expect(fetchGoogleCalendarsSpy).toHaveBeenCalledTimes(1)
     expect(wrapper.text()).not.toContain('登入後即可')
     expect(wrapper.findComponent({ name: 'TaskForm' }).exists()).toBe(true)
+  })
+
+  it('Google 授權在背景進行時，只有行事曆卡片收到「連接中」，其他卡片照常掛載', async () => {
+    isSignedInRef.value = true
+    const wrapper = mount(TheMainIndex, { global: { stubs: uiStubs } })
+    activeWrapper = wrapper
+    await wrapper.vm.$nextTick()
+
+    const calendar = wrapper.findComponent({ name: 'GoogleCalendarEmbed' })
+    expect(calendar.props('connecting')).toBe(false)
+
+    stateStore.get('googleCalendarConnecting')!.value = true
+    await wrapper.vm.$nextTick()
+
+    expect(calendar.props('connecting')).toBe(true)
+    for (const name of ['TaskForm', 'MoodleAssignments', 'GithubIssuesList', 'JiraIssuesList', 'News', 'Leetcode']) {
+      expect(wrapper.findComponent({ name }).exists(), name).toBe(true)
+    }
+  })
+
+  it('Google 授權完成（連接成功次數 +1）時，重新查一次行事曆，卡片才會換成行事曆', async () => {
+    isSignedInRef.value = true
+    const wrapper = mount(TheMainIndex, { global: { stubs: uiStubs } })
+    activeWrapper = wrapper
+    await wrapper.vm.$nextTick()
+    expect(fetchGoogleCalendarsSpy).toHaveBeenCalledTimes(1) // 進頁面時的那一次
+
+    const connectedCount = stateStore.get('googleCalendarConnectedCount') as Ref<number>
+    connectedCount.value++
+    await wrapper.vm.$nextTick()
+
+    expect(fetchGoogleCalendarsSpy).toHaveBeenCalledTimes(2)
   })
 })

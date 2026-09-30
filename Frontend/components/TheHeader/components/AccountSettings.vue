@@ -44,7 +44,14 @@ const goToGoogleAuth = () => {
     client_id: GOOGLE_CLIENT_ID,
     redirect_uri: REDIRECT_URI,
     response_type: 'code',
-    scope: 'https://www.googleapis.com/auth/calendar.readonly',
+    // calendar.readonly 只夠列出行事曆／查 FreeBusy／讀事件——「確認排程並寫入
+    // Calendar」要真的新增事件（crud/oauth.py 的 create_calendar_event，
+    // POST .../events），readonly 範圍下 Google 一律擋掉，回傳的錯誤被
+    // create_calendar_events_for_scheduled_tasks 接住變成「寫入 Google
+    // Calendar 失敗，請稍後再試」，看起來像伺服器出錯，其實是權限不夠。
+    // calendar.events 補上事件的新增/修改/刪除權限，讀的部分維持 readonly
+    // 就好，不用整個開放成 calendar 全權限。
+    scope: 'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/calendar.events',
     access_type: 'offline',
     prompt: 'consent',
   })

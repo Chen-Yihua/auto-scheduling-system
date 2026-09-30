@@ -57,6 +57,13 @@ function useTaskFormImpl() {
     // 判斷是否編輯模式
     const isEditMode = computed(() => editing_task.value !== null)
 
+    // 是否正在送出表單。原本只靠 UButton 的 loading-auto，但 TaskForm.vue 的
+    // handleSubmit 沒有 await/回傳 onSubmit/onEdit 的 promise，loading-auto
+    // 追蹤不到真正的非同步流程，按鈕全程都可以按——加上這個 API 回應本身有
+    // 延遲、成功後又刻意等 300ms 才關閉 Modal，使用者連續點擊「提交」就會
+    // 建出好幾筆重複的任務。這裡自己擋重入，不依賴 loading-auto 猜得準不準。
+    const submitting = ref(false)
+
     // 表單狀態
     const state = reactive({
         user_id: currentUserId.value,
@@ -163,8 +170,16 @@ function useTaskFormImpl() {
         showEditModal.value = true
     }
 
+    function delay(ms: number) {
+        return new Promise((resolve) => setTimeout(resolve, ms))
+    }
+
     // 2. 新增任務
     async function onSubmit(_e: FormSubmitEvent<typeof state>) {
+        // 擋重入：API 回應本身有延遲，使用者在按鈕還沒變成不能按之前多點幾下
+        // 提交，不擋的話會建出好幾筆一模一樣的任務
+        if (submitting.value) return
+        submitting.value = true
         try {
             const token = await getToken.value()
             const dueDate = toJsDate(modelValue.value).toISOString()
@@ -196,19 +211,24 @@ function useTaskFormImpl() {
                 toast.add({ title: '儲存成功', color: 'success', icon: 'i-lucide-check' })
             }
 
-            setTimeout(() => {
-                fetchTasks()
-                resetAndClose()
-            }, 300)
+            // 讓使用者看得到剛剛那個 toast 再關 Modal，不是失敗退路，
+            // 所以刻意 await，讓 submitting 涵蓋這段等待，按鈕全程保持不能按
+            await delay(300)
+            await fetchTasks()
+            resetAndClose()
         } catch (err) {
             console.error(err)
             toast.add({ title: getFriendlyErrorTitle(err, '儲存失敗'), color: 'error', icon: 'i-lucide-x' })
+        } finally {
+            submitting.value = false
         }
     }
 
     // 3. 編輯任務
     async function onEdit(_e: FormSubmitEvent<typeof state>) {
         if( !editing_task.value ) return
+        if (submitting.value) return
+        submitting.value = true
         try {
             const token = await getToken.value()
             const dueDate = toJsDate(modelValue.value).toISOString()
@@ -228,13 +248,14 @@ function useTaskFormImpl() {
                 headers: { Authorization: `Bearer ${token}` }
             })
             toast.add({ title: '儲存成功', color: 'success', icon: 'i-lucide-check' })
-            setTimeout(() => {
-                fetchTasks()
-                resetAndClose()
-            }, 300)
+            await delay(300)
+            await fetchTasks()
+            resetAndClose()
         } catch (err) {
             console.error(err)
             toast.add({ title: getFriendlyErrorTitle(err, '儲存失敗'), color: 'error', icon: 'i-lucide-x' })
+        } finally {
+            submitting.value = false
         }
     }
 
@@ -275,6 +296,7 @@ function useTaskFormImpl() {
         priorityItems,
         validate,
         loading,
+        submitting,
         all_tasks,
         editing_task,
         isEditMode,

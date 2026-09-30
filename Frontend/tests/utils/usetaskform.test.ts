@@ -85,6 +85,19 @@ describe('useTaskForm', () => {
     expect(ctx.loading.value).toBe(false)
   })
 
+  // onSubmit/onEdit 現在會自己 await 那段 300ms 的延遲（見 useTaskForm.ts 的
+  // submitting 擋重入邏輯），不能再像以前那樣「await 呼叫本身 → 再手動推進
+  // fake timer」，因為 await 那一行會卡住，永遠不會執行到後面推進 timer 的
+  // 程式碼。改成「先呼叫但不 await → 推進 timer 讓內部的 delay 有機會解決
+  // → 最後才 await 那個 promise」。
+  async function submitAndFlushTimers(promiseFactory: () => Promise<unknown>) {
+    vi.useFakeTimers()
+    const promise = promiseFactory()
+    await vi.runAllTimersAsync()
+    await promise
+    vi.useRealTimers()
+  }
+
   // ---------- 新增任務 ----------
   it('onSubmit 會 POST 任務並刷新列表', async () => {
     const ctx = useTaskForm()
@@ -93,8 +106,7 @@ describe('useTaskForm', () => {
     ctx.state.priority    = 'Medium'
     ctx.modelValue.value  = fromDate(new Date('2025-07-01T00:00:00Z'), getLocalTimeZone())
 
-    vi.useFakeTimers()
-    await ctx.onSubmit(submitEvent(ctx.state))
+    await submitAndFlushTimers(() => ctx.onSubmit(submitEvent(ctx.state)))
 
     // 第一次呼叫：POST
     expect(fetchSpy).toHaveBeenNthCalledWith(
@@ -102,22 +114,37 @@ describe('useTaskForm', () => {
       'http://localhost:8000/manual_tasks/',
       expect.objectContaining({ method: 'POST' }),
     )
-
-    // 手動推進 300 ms，觸發 fetchTasks
-    await vi.runAllTimersAsync()
-
     // 第二次呼叫：GET (由 fetchTasks)
     expect(fetchSpy).toHaveBeenNthCalledWith(
       2,
       'http://localhost:8000/manual_tasks/me',
       expect.objectContaining({ method: 'GET' }),
     )
-
     // Toast 成功訊息
     expect(toastSpy.add).toHaveBeenCalledWith(
       expect.objectContaining({ title: '儲存成功', color: 'success' }),
     )
+    // 送出流程結束後，按鈕要恢復成可以再按一次的狀態
+    expect(ctx.submitting.value).toBe(false)
+  })
+
+  it('送出期間重複呼叫 onSubmit 會被擋下來，不會送出第二次請求', async () => {
+    const ctx = useTaskForm()
+    ctx.state.title       = '新任務'
+    ctx.state.description = '內容'
+    ctx.state.priority    = 'Medium'
+    ctx.modelValue.value  = fromDate(new Date('2025-07-01T00:00:00Z'), getLocalTimeZone())
+
+    vi.useFakeTimers()
+    const first = ctx.onSubmit(submitEvent(ctx.state))
+    const second = ctx.onSubmit(submitEvent(ctx.state)) // 在第一次還沒結束前手速很快地再按一次
+    await vi.runAllTimersAsync()
+    await Promise.all([first, second])
     vi.useRealTimers()
+
+    // POST 只會被打一次，不會因為連點兩下就建出兩筆任務
+    const postCalls = fetchSpy.mock.calls.filter(([, options]) => options?.method === 'POST')
+    expect(postCalls).toHaveLength(1)
   })
 
   it('onSubmit 沒填 duration 時，送給後端的是 null（不是空字串）', async () => {
@@ -128,16 +155,13 @@ describe('useTaskForm', () => {
     ctx.state.duration    = ''
     ctx.modelValue.value  = fromDate(new Date('2025-07-01T00:00:00Z'), getLocalTimeZone())
 
-    vi.useFakeTimers()
-    await ctx.onSubmit(submitEvent(ctx.state))
+    await submitAndFlushTimers(() => ctx.onSubmit(submitEvent(ctx.state)))
 
     expect(fetchSpy).toHaveBeenNthCalledWith(
       1,
       'http://localhost:8000/manual_tasks/',
       expect.objectContaining({ body: expect.objectContaining({ duration: null }) }),
     )
-    await vi.runAllTimersAsync()
-    vi.useRealTimers()
   })
 
   it('onSubmit 有填 inference_hint 時，會一起送給後端', async () => {
@@ -149,8 +173,7 @@ describe('useTaskForm', () => {
     ctx.state.inference_hint = '這比想像中難，可能要抓長一點'
     ctx.modelValue.value     = fromDate(new Date('2025-07-01T00:00:00Z'), getLocalTimeZone())
 
-    vi.useFakeTimers()
-    await ctx.onSubmit(submitEvent(ctx.state))
+    await submitAndFlushTimers(() => ctx.onSubmit(submitEvent(ctx.state)))
 
     expect(fetchSpy).toHaveBeenNthCalledWith(
       1,
@@ -159,8 +182,6 @@ describe('useTaskForm', () => {
         body: expect.objectContaining({ inference_hint: '這比想像中難，可能要抓長一點' }),
       }),
     )
-    await vi.runAllTimersAsync()
-    vi.useRealTimers()
   })
 
   it('onSubmit 沒填 inference_hint 時，送給後端的是 null', async () => {
@@ -172,16 +193,13 @@ describe('useTaskForm', () => {
     ctx.state.inference_hint = ''
     ctx.modelValue.value     = fromDate(new Date('2025-07-01T00:00:00Z'), getLocalTimeZone())
 
-    vi.useFakeTimers()
-    await ctx.onSubmit(submitEvent(ctx.state))
+    await submitAndFlushTimers(() => ctx.onSubmit(submitEvent(ctx.state)))
 
     expect(fetchSpy).toHaveBeenNthCalledWith(
       1,
       'http://localhost:8000/manual_tasks/',
       expect.objectContaining({ body: expect.objectContaining({ inference_hint: null }) }),
     )
-    await vi.runAllTimersAsync()
-    vi.useRealTimers()
   })
 
   it('onSubmit 有填 duration 時，送給後端的是數字', async () => {
@@ -192,16 +210,13 @@ describe('useTaskForm', () => {
     ctx.state.duration    = '90'
     ctx.modelValue.value  = fromDate(new Date('2025-07-01T00:00:00Z'), getLocalTimeZone())
 
-    vi.useFakeTimers()
-    await ctx.onSubmit(submitEvent(ctx.state))
+    await submitAndFlushTimers(() => ctx.onSubmit(submitEvent(ctx.state)))
 
     expect(fetchSpy).toHaveBeenNthCalledWith(
       1,
       'http://localhost:8000/manual_tasks/',
       expect.objectContaining({ body: expect.objectContaining({ duration: 90 }) }),
     )
-    await vi.runAllTimersAsync()
-    vi.useRealTimers()
   })
 
   it('後端回傳 inferred_fields 時，顯示 AI 補值提示而不是「儲存成功」', async () => {
@@ -220,8 +235,7 @@ describe('useTaskForm', () => {
       inference_reason: '報告類任務通常需要較長時間準備',
     })
 
-    vi.useFakeTimers()
-    await ctx.onSubmit(submitEvent(ctx.state))
+    await submitAndFlushTimers(() => ctx.onSubmit(submitEvent(ctx.state)))
 
     expect(toastSpy.add).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -233,8 +247,6 @@ describe('useTaskForm', () => {
     expect(toastSpy.add).not.toHaveBeenCalledWith(
       expect.objectContaining({ title: '儲存成功' }),
     )
-    await vi.runAllTimersAsync()
-    vi.useRealTimers()
   })
 
   it('後端沒有推斷任何欄位時，維持顯示「儲存成功」', async () => {
@@ -253,14 +265,11 @@ describe('useTaskForm', () => {
       inference_reason: null,
     })
 
-    vi.useFakeTimers()
-    await ctx.onSubmit(submitEvent(ctx.state))
+    await submitAndFlushTimers(() => ctx.onSubmit(submitEvent(ctx.state)))
 
     expect(toastSpy.add).toHaveBeenCalledWith(
       expect.objectContaining({ title: '儲存成功', color: 'success' }),
     )
-    await vi.runAllTimersAsync()
-    vi.useRealTimers()
   })
 
   // ---------- 編輯任務 ----------
@@ -270,15 +279,13 @@ describe('useTaskForm', () => {
     ctx.startEditTask(t)
     ctx.state.title = '更新後標題'
 
-    vi.useFakeTimers()
-    await ctx.onEdit(submitEvent(ctx.state))
+    await submitAndFlushTimers(() => ctx.onEdit(submitEvent(ctx.state)))
 
     expect(fetchSpy).toHaveBeenNthCalledWith(
       1,
       `http://localhost:8000/manual_tasks/${t.id}`,
       expect.objectContaining({ method: 'PUT' }),
     )
-    await vi.runAllTimersAsync()
     expect(fetchSpy).toHaveBeenNthCalledWith(
       2,
       'http://localhost:8000/manual_tasks/me',
@@ -287,7 +294,6 @@ describe('useTaskForm', () => {
     expect(toastSpy.add).toHaveBeenCalledWith(
       expect.objectContaining({ title: '儲存成功', color: 'success' }),
     )
-    vi.useRealTimers()
   })
 
   // ---------- 刪除任務 ----------

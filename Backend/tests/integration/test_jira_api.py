@@ -51,7 +51,14 @@ async def test_get_jira_issues(monkeypatch, logged_in_user):
         res = await ac.get("/jira/issues")
 
     assert res.status_code == status.HTTP_200_OK
-    assert res.json() == [issue]
+    # 排程相關欄位（priority/duration/scheduling_due_date/sort_order/calendar_event_id/done）
+    # 是 JiraIssue response_model 加上的，沒同步回來的原始資料一律是預設值，這裡不重複列
+    body = res.json()
+    assert len(body) == 1
+    assert body[0]["id"] == issue["id"]
+    assert body[0]["status_category"] == ""
+    for key, value in issue.items():
+        assert body[0][key] == value
     assert res.headers["X-Data-Stale"] == "false"
 
 

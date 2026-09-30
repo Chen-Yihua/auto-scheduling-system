@@ -56,6 +56,26 @@ async def fetch_freebusy(access_token: str, calendar_id: str) -> dict:
         return res.json()
 
 
+async def create_calendar_event(access_token: str, calendar_id: str, summary: str, start: str, end: str) -> dict:
+    """
+    在指定行事曆建立一個事件（單一時段，不是全天事件）。
+    start/end 是 ISO 8601 UTC 字串（例如 "2026-09-10T09:00:00Z"），
+    由呼叫端（crud/oauth.py 的 create_calendar_events_for_scheduled_tasks）
+    對應到排程建議算出來的 start/end。
+    """
+    url = f"https://www.googleapis.com/calendar/v3/calendars/{calendar_id}/events"
+    headers = {"Authorization": f"Bearer {access_token}"}
+    body = {
+        "summary": summary,
+        "start": {"dateTime": start},
+        "end": {"dateTime": end},
+    }
+    async with httpx.AsyncClient(timeout=GOOGLE_HTTP_TIMEOUT) as client:
+        res = await client.post(url, headers=headers, json=body)
+        res.raise_for_status()
+        return res.json()
+
+
 def compute_free_times(busy: list[dict], window_start: str, window_end: str) -> list[dict]:
     """
     busy: [{ "start": "...Z", "end": "...Z" }, ...]

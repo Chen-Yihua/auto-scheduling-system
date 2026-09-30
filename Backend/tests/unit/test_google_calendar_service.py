@@ -117,6 +117,41 @@ async def test_fetch_freebusy_raises_http_status_error_on_failure(monkeypatch):
         await gcal.fetch_freebusy("token", "cal1")
 
 
+# ---------- create_calendar_event ----------
+
+@pytest.mark.asyncio
+async def test_create_calendar_event_posts_summary_and_start_end_with_bearer_auth(monkeypatch):
+    """建立事件：要帶 Authorization、打對行事曆的 events 端點，body 帶 summary/start/end，回傳建立好的事件。"""
+    captured = {}
+
+    def handler(request):
+        captured["url"] = str(request.url)
+        captured["auth"] = request.headers.get("authorization")
+        captured["body"] = request.content
+        return httpx.Response(200, json={"id": "event-abc", "summary": "寫報告"})
+
+    _mock_client(monkeypatch, handler)
+
+    result = await gcal.create_calendar_event(
+        "my-token", "primary-cal-id", "寫報告", "2026-09-10T09:00:00Z", "2026-09-10T10:00:00Z"
+    )
+
+    assert result == {"id": "event-abc", "summary": "寫報告"}
+    assert captured["auth"] == "Bearer my-token"
+    assert "primary-cal-id" in captured["url"]
+    assert b"2026-09-10T09:00:00Z" in captured["body"]
+    assert b"2026-09-10T10:00:00Z" in captured["body"]
+
+
+@pytest.mark.asyncio
+async def test_create_calendar_event_raises_http_status_error_on_failure(monkeypatch):
+    """Google 回 400（例如時間格式不對）→ 丟出錯誤，不能假裝建立成功。"""
+    _mock_client(monkeypatch, lambda request: httpx.Response(400, json={"error": "invalid time"}))
+
+    with pytest.raises(httpx.HTTPStatusError):
+        await gcal.create_calendar_event("token", "cal1", "任務", "2026-09-10T09:00:00Z", "2026-09-10T10:00:00Z")
+
+
 # ---------- compute_free_times ----------
 
 def test_compute_free_times_no_busy_returns_whole_window():

@@ -60,7 +60,12 @@ async def test_get_moodle_assignments(monkeypatch, logged_in_user):
         res = await ac.get("/moodle/assignments")
 
     assert res.status_code == status.HTTP_200_OK
-    assert res.json() == assignments
+    # 排程相關欄位（priority/duration/scheduling_due_date/sort_order/calendar_event_id/done）
+    # 是 MoodleAssignment response_model 加上的，沒同步回來的原始資料一律是預設值，這裡不重複列
+    body = res.json()
+    assert len(body) == 1
+    for key, value in assignments[0].items():
+        assert body[0][key] == value
     assert res.headers["X-Data-Stale"] == "false"
     assert res.headers["X-Synced-At"] == "2026-09-01T00:00:00+00:00"
 

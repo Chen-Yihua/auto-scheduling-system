@@ -56,6 +56,7 @@ def transform_jira_item(raw: dict) -> dict:
     fields = raw.get("fields") or {}
     assignee = fields.get("assignee") or {}
     status = fields.get("status") or {}
+    status_category = status.get("statusCategory") or {}
     issuetype = fields.get("issuetype") or {}
     avatar_urls = assignee.get("avatarUrls") or {}
 
@@ -64,6 +65,9 @@ def transform_jira_item(raw: dict) -> dict:
         "key": raw["key"],
         "title": fields.get("summary") or "",
         "status": status.get("name") or "",
+        # Jira 正規化過的完成狀態（"new"／"indeterminate"／"done"），
+        # 跟 status.name 不一樣——後者是專案自訂的字串，不能拿來判斷完成與否
+        "status_category": status_category.get("key") or "",
         "updated_at": fields.get("updated") or "",
         "assignee": assignee.get("displayName") or "",
         "avatar": avatar_urls.get("48x48") or "",

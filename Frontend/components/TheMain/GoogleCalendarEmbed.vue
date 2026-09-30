@@ -6,11 +6,16 @@ const props = defineProps<{
   id: string;
   connect: boolean; // 是否已連接Google Calendar
   connecting?: boolean; // 正在跟後端完成 Google 授權（授權完成後的幾秒內）
+  // 確認排程寫入 Calendar 後會被 bump，用來強制這個 iframe 重新載入
+  // （見下方 calendarUrl／:key）——這個 iframe 是嵌入 Google 自己 host 的
+  // 網頁，props 不變的話瀏覽器不會主動重新請求，新寫入的事件不會自動出現
+  reloadToken?: number;
 }>();
 
 const calendarUrl = computed(() => {
   const query = props.calendarIds.map((id) => `src=${encodeURIComponent(id)}`).join('&');
-  return `https://calendar.google.com/calendar/embed?${query}&ctz=Asia%2FTaipei`;
+  const cacheBust = props.reloadToken ? `&_r=${props.reloadToken}` : '';
+  return `https://calendar.google.com/calendar/embed?${query}&ctz=Asia%2FTaipei${cacheBust}`;
 });
 </script>
 
@@ -31,6 +36,7 @@ const calendarUrl = computed(() => {
 
     <div v-else-if="connect" class="rounded-lg overflow-hidden">
       <iframe
+        :key="reloadToken"
         :src="calendarUrl"
         class="w-full h-[600px] border-0"
         frameborder="0"

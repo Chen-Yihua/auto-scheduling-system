@@ -9,8 +9,10 @@ from services.google_calendar import (
     fetch_google_calendar_list,
     fetch_freebusy,
     compute_free_times,
+    create_calendar_event,
 )
 from cache import cache_get, cache_set
+from crud.schedulable_items import set_calendar_event_id_for_composite
 
 logger = logging.getLogger(__name__)
 
@@ -116,21 +118,11 @@ async def refresh_google_calendar_token(clerk_id: str) -> str:
     return access_token
 
 
-async def get_free_slots_for_user(clerk_id: str) -> list[dict]:
+async def _get_access_token_and_primary_calendar_id(clerk_id: str) -> tuple[str, str]:
     """
-    取得使用者 primary calendar 未來 7 天的空閒時段（UTC ISO 字串）。
-    被 /oauth/available 跟排程建議（crud/schedule.py）共用，
-    401 就自動 refresh token 重打一次，不用兩邊各寫一份。
-
-    這裡是單純的效能快取（見 cache.py），不是失敗時的退路——跟
-    crud/external_sync.py 那套「live-first + 失敗才退回 DB」是不同用途：
-    這裡只要快取沒過期就直接用，減少重複打 Google API 的次數。
+    取得可用的 access_token 跟 primary calendar id，401 就自動 refresh token 重打一次。
+    被 get_free_slots_for_user 跟 create_calendar_events_for_scheduled_tasks 共用。
     """
-    cache_key = f"free_slots:{clerk_id}"
-    cached = await cache_get(cache_key)
-    if cached is not None:
-        return cached
-
     access_token = await get_google_calendar_token(clerk_id)
 
     try:
@@ -149,16 +141,86 @@ async def get_free_slots_for_user(clerk_id: str) -> list[dict]:
     if not primary:
         raise HTTPException(status_code=404, detail="找不到 primary calendar")
 
+    return access_token, primary["id"]
+
+
+async def get_free_slots_for_user(clerk_id: str) -> list[dict]:
+    """
+    取得使用者 primary calendar 未來 7 天的空閒時段（UTC ISO 字串）。
+    被 /oauth/available 跟排程建議（crud/schedule.py）共用，
+    401 就自動 refresh token 重打一次，不用兩邊各寫一份。
+
+    這裡是單純的效能快取（見 cache.py），不是失敗時的退路——跟
+    crud/external_sync.py 那套「live-first + 失敗才退回 DB」是不同用途：
+    這裡只要快取沒過期就直接用，減少重複打 Google API 的次數。
+    """
+    cache_key = f"free_slots:{clerk_id}"
+    cached = await cache_get(cache_key)
+    if cached is not None:
+        return cached
+
+    access_token, primary_calendar_id = await _get_access_token_and_primary_calendar_id(clerk_id)
+
     try:
-        fb_response = await fetch_freebusy(access_token, primary["id"])
+        fb_response = await fetch_freebusy(access_token, primary_calendar_id)
     except httpx.RequestError as e:
         logger.error("連線 Google FreeBusy API 失敗: %s", e)
         raise HTTPException(status_code=502, detail="無法連線至 Google，請稍後再試")
 
     window_start = fb_response["timeMin"]
     window_end = fb_response["timeMax"]
-    busy_list = fb_response["calendars"][primary["id"]]["busy"]
+    busy_list = fb_response["calendars"][primary_calendar_id]["busy"]
     free_slots = compute_free_times(busy_list, window_start, window_end)
 
     await cache_set(cache_key, free_slots, FREE_SLOTS_CACHE_TTL_SECONDS)
     return free_slots
+
+
+async def create_calendar_events_for_scheduled_tasks(clerk_id: str, scheduled: list[dict]) -> dict:
+    """
+    使用者「確認排程」時呼叫：把排程建議裡「已排入時段」的任務，逐一寫進
+    使用者 Google Calendar 的 primary calendar，當作一個事件。寫入成功的
+    任務會把 calendar_event_id 存回去（見 crud/schedulable_items.py 的
+    set_calendar_event_id_for_composite，依 task_id 的來源前綴寫回手動任務
+    或對應的外部平台 collection）標記為已鎖定，之後不會再被排程建議或拖拉
+    排序精靈動到，要改時間只能直接去 Google Calendar 改。
+
+    scheduled 裡每一筆的 task_id/title 一定有值（build_schedule_suggestion
+    已經驗證過），start/end 是 datetime 物件，這裡轉成 Google API 要的
+    ISO 字串。
+
+    Google API 這種第三方呼叫，一筆一筆各自獨立成功/失敗，不能因為某一筆
+    炸了就讓整批都失敗，也不能靜靜吞掉失敗不讓使用者知道——回傳成功／
+    失敗兩份清單，讓前端清楚呈現「這幾筆確認了、這幾筆要重試」。
+    """
+    if not scheduled:
+        return {"confirmed": [], "failed": []}
+
+    access_token, primary_calendar_id = await _get_access_token_and_primary_calendar_id(clerk_id)
+
+    confirmed = []
+    failed = []
+    for task in scheduled:
+        start_iso = task["start"].isoformat().replace("+00:00", "Z")
+        end_iso = task["end"].isoformat().replace("+00:00", "Z")
+        try:
+            event = await create_calendar_event(
+                access_token, primary_calendar_id, task["title"], start_iso, end_iso
+            )
+        except (httpx.HTTPStatusError, httpx.RequestError):
+            logger.exception("寫入 Google Calendar 失敗 task_id=%s", task["task_id"])
+            failed.append({
+                "task_id": task["task_id"],
+                "title": task["title"],
+                "reason": "寫入 Google Calendar 失敗，請稍後再試",
+            })
+            continue
+
+        await set_calendar_event_id_for_composite(clerk_id, task["task_id"], event["id"])
+        confirmed.append({
+            "task_id": task["task_id"],
+            "title": task["title"],
+            "calendar_event_id": event["id"],
+        })
+
+    return {"confirmed": confirmed, "failed": failed}

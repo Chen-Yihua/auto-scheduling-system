@@ -28,7 +28,7 @@ async def test_get_jira_issues_success(monkeypatch):
                 "key": "JIRA-1",
                 "fields": {
                     "summary": "Test Issue 1",
-                    "status": {"name": "In Progress"},
+                    "status": {"name": "In Progress", "statusCategory": {"key": "indeterminate"}},
                     "assignee": {"displayName": "User One", "avatarUrls": {}},
                     "issuetype": {"name": "Task", "iconUrl": ""},
                     "updated": "2024-01-01T00:00:00.000+0000",
@@ -54,6 +54,7 @@ async def test_get_jira_issues_success(monkeypatch):
             "key": "JIRA-1",
             "title": "Test Issue 1",
             "status": "In Progress",
+            "status_category": "indeterminate",
             "updated_at": "2024-01-01T00:00:00.000+0000",
             "assignee": "User One",
             "avatar": "",

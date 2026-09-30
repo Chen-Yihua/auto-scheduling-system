@@ -1,8 +1,14 @@
 <script setup lang="ts">
 import { useTaskForm } from '~/composables/useTaskForm'
-import { onMounted } from 'vue'
+import { useSchedulableTasks } from '~/composables/useSchedulableTasks'
+import { onMounted, computed } from 'vue'
 import type { FormSubmitEvent } from '@nuxt/ui'
+import type { SchedulableTask } from '~/types/schedulableTask'
 import { priorityLabel, taskStatusLabel } from '~/utils/labels'
+
+// limit 不給就顯示全部——dashboard 卡片用小數字避免無限拉長，
+// /tasks 這個完整清單頁面則不傳，直接看到全部任務
+const props = defineProps<{ limit?: number }>()
 
 const {
   user,
@@ -13,7 +19,7 @@ const {
   displayDate,
   priorityItems,
   validate,
-  loading,
+  submitting,
   all_tasks,
   isEditMode,
   fetchTasks,
@@ -24,8 +30,37 @@ const {
   onCancel,
 } = useTaskForm()
 
+// 任務列表現在顯示手動任務 + GitHub/Jira/Moodle 統一清單（見
+// crud/schedulable_items.py），不是只有手動任務。新增/編輯/刪除仍然只
+// 作用在手動任務（外部平台項目沒有標題/描述可以編輯），all_tasks 只用來
+// 在按下「編輯」時找到完整的任務資料（SchedulableTask 沒有 duration/
+// inference_hint 這些編輯表單需要的欄位）
+const { tasks: schedulableTasks, loading, fetchSchedulableTasks, toggleDone } = useSchedulableTasks()
 
-const getPriorityColor = (priority: string | undefined) => {
+const displayedTasks = computed(() =>
+  props.limit ? schedulableTasks.value.slice(0, props.limit) : schedulableTasks.value
+)
+const hasMoreTasks = computed(() => !!props.limit && schedulableTasks.value.length > props.limit)
+
+const sourceIcon: Record<SchedulableTask['source'], string> = {
+  manual: 'i-lucide-list-todo',
+  github: 'mdi:github',
+  jira: 'mdi:jira',
+  moodle: 'custom:moodle',
+}
+
+function startEditSchedulableTask(item: SchedulableTask) {
+  // 組合 id 去掉 "manual:" 前綴才是 useTaskForm 認得的原始 id
+  const rawId = item.id.replace(/^manual:/, '')
+  const task = all_tasks.value.find((t) => t.id === rawId)
+  if (task) startEditTask(task)
+}
+
+function openSchedulableTask(item: SchedulableTask) {
+  if (item.url) window.open(item.url, '_blank')
+}
+
+const getPriorityColor = (priority: string | null | undefined) => {
   switch (priority) {
     case 'Low':
       return 'success'
@@ -53,19 +88,28 @@ function waitForUser<T>(userRef: Ref<T>): Promise<NonNullable<T>> {
 }
 
 
-// 提交表單時的處理函數
-function handleSubmit(e: FormSubmitEvent<typeof state>) {
+// 提交表單時的處理函數。一定要 await，UButton 的 loading-auto 才追蹤得到
+// 真正的非同步流程；不然按鈕全程可以按，使用者手速快一點就會連點出好幾筆
+// 重複的任務（onSubmit/onEdit 自己也有 submitting 擋重入，這裡是雙重保險）。
+// 成功後順便重新抓一次統一清單，畫面上的任務列表才會反映剛剛的新增/修改
+async function handleSubmit(e: FormSubmitEvent<typeof state>) {
   if (isEditMode.value) {
-    onEdit(e)
+    await onEdit(e)
   } else {
-    onSubmit(e)
+    await onSubmit(e)
   }
+  await fetchSchedulableTasks()
+}
+
+async function handleDelete() {
+  await onDelete()
+  await fetchSchedulableTasks()
 }
 
 onMounted(async () => {
   try {
     await waitForUser(user)
-    await fetchTasks()
+    await Promise.all([fetchTasks(), fetchSchedulableTasks()])
   } catch (err) {
     // 可以根據 err 處理 403 或顯示提示
     console.error('❌ 載入任務失敗', err)
@@ -189,7 +233,7 @@ onMounted(async () => {
                 color="error"
                 variant="soft"
                 icon="i-lucide-trash-2"
-                @click="onDelete"
+                @click="handleDelete"
               >
                 刪除
               </UButton>
@@ -203,9 +247,10 @@ onMounted(async () => {
                 >
                     取消
                 </UButton>
-                <UButton 
-                    type="submit" 
-                    loading-auto 
+                <UButton
+                    type="submit"
+                    :loading="submitting"
+                    :disabled="submitting"
                     class="bg-green-500 text-white hover:bg-green-600"
 
                 >
@@ -232,27 +277,33 @@ onMounted(async () => {
       </div>
       <!-- 真的沒有任務是正常狀態，不是還在載入，不該一直顯示 Skeleton -->
       <div
-        v-else-if="all_tasks.length === 0"
+        v-else-if="schedulableTasks.length === 0"
         class="text-center text-sm text-gray-500 dark:text-gray-400 py-6"
       >
         目前沒有任務，點擊右上角的編輯圖示新增一個吧
       </div>
       <div v-else class="grid grid-cols-1 gap-4">
         <UCard
-          v-for="task in all_tasks"
+          v-for="task in displayedTasks"
           :key="task.id"
           :ui="{
-            root: 'cursor-pointer hover:shadow-lg transition-transform duration-300 ease-in-out transform scale-100 hover:scale-105',
+            root: task.source === 'manual'
+              ? 'cursor-pointer hover:shadow-lg transition-transform duration-300 ease-in-out transform scale-100 hover:scale-105'
+              : 'hover:shadow-lg transition-transform duration-300 ease-in-out transform scale-100 hover:scale-105',
           }"
+          @click="task.source === 'manual' ? undefined : openSchedulableTask(task)"
         >
           <template #header>
             <div class="flex justify-between items-center w-full">
-              <div class="flex text-sm font-semibold truncate items-center">{{ task.title }}</div>
-              <div class="flex flex-wrap items-center">
-                <UBadge class="mx-1" :color="getPriorityColor(task.priority)" variant="soft" size="sm">
+              <div class="flex items-center gap-1.5 min-w-0">
+                <UIcon :name="sourceIcon[task.source]" class="w-4 h-4 flex-shrink-0 text-gray-400" />
+                <span class="text-sm font-semibold truncate">{{ task.title }}</span>
+              </div>
+              <div class="flex flex-wrap items-center flex-shrink-0">
+                <UBadge v-if="task.priority" class="mx-1" :color="getPriorityColor(task.priority)" variant="soft" size="sm">
                   {{ priorityLabel(task.priority) }}
                 </UBadge>
-                <UBadge class="mx-1" color="info" variant="soft" size="sm">
+                <UBadge class="mx-1" :color="task.status === 'Done' ? 'success' : 'info'" variant="soft" size="sm">
                   {{ taskStatusLabel(task.status) }}
                 </UBadge>
               </div>
@@ -260,28 +311,46 @@ onMounted(async () => {
           </template>
 
           <div>
-            <div class="font-medium mb-2 text-gray-800 dark:text-white truncate">
+            <div v-if="task.description" class="font-medium mb-2 text-gray-800 dark:text-white truncate">
               {{ task.description }}
             </div>
-            <div class="flex items-center gap-2 mb-1">
+            <div v-if="task.due_date" class="flex items-center gap-2 mb-1">
               <UIcon name="i-lucide-calendar" class="w-4 h-4 text-gray-400" />
               <span class="text-xs text-gray-500">截止：{{ new Date(task.due_date).toLocaleString() }}</span>
             </div>
           </div>
 
           <template #footer>
-            <UButton
-              icon="i-lucide-pencil"
-              size="xs"
-              color="info"
-              variant="soft"
-              @click.stop="startEditTask(task)"
-            >
-              編輯
-            </UButton>
+            <div class="flex items-center gap-2">
+              <UButton
+                v-if="task.source === 'manual'"
+                icon="i-lucide-pencil"
+                size="xs"
+                color="info"
+                variant="soft"
+                @click.stop="startEditSchedulableTask(task)"
+              >
+                編輯
+              </UButton>
+              <UButton
+                icon="i-lucide-check"
+                size="xs"
+                :color="task.status === 'Done' ? 'neutral' : 'success'"
+                variant="soft"
+                @click.stop="toggleDone(task)"
+              >
+                {{ task.status === 'Done' ? '取消完成' : '標記完成' }}
+              </UButton>
+            </div>
           </template>
         </UCard>
       </div>
+
+      <template v-if="hasMoreTasks" #footer>
+        <NuxtLink to="/tasks" class="text-sm text-primary hover:underline">
+          查看全部（{{ schedulableTasks.length }}）
+        </NuxtLink>
+      </template>
     </UCard>
   </div>
 </template>

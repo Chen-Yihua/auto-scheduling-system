@@ -53,4 +53,20 @@ describe('GoogleCalendarEmbed.vue', () => {
     // 標題列仍在，卡片位置不變
     expect(wrapper.text()).toContain('Google 行事曆')
   })
+
+  it('reloadToken 改變時，iframe 的 src 帶上新值當 cache-busting 參數，且整個 iframe 元素重新建立', async () => {
+    const wrapper = mount(GoogleCalendarEmbed, {
+      props: { calendarIds: ['cal1'], id: 'foo', connect: true, reloadToken: 1 },
+      global: { stubs: uiStubs },
+    })
+    const firstIframe = wrapper.find('iframe').element
+    expect(wrapper.find('iframe').attributes('src')).toContain('_r=1')
+
+    await wrapper.setProps({ reloadToken: 2 })
+
+    expect(wrapper.find('iframe').attributes('src')).toContain('_r=2')
+    // :key 改變 → Vue 整個重新建立這個 DOM 節點，不是同一個 iframe 元素
+    // 沿用舊的（沿用的話瀏覽器可能不會真的重新請求）
+    expect(wrapper.find('iframe').element).not.toBe(firstIframe)
+  })
 })

@@ -84,6 +84,110 @@ async def test_get_manual_tasks_by_user_id_returns_empty_list_when_no_tasks(monk
     assert result == []
 
 
+# ---------- set_calendar_event_id ----------
+
+@pytest.mark.asyncio
+async def test_set_calendar_event_id_writes_id_and_does_not_touch_other_tasks():
+    """確認排程成功後把 calendar_event_id 寫回去，且只會動到指定的那筆任務。"""
+    collection = manual_task_crud.db.manual_tasks
+    await collection.insert_many([
+        {"id": "confirm-t1", "user_id": "alice", "title": "任務一"},
+        {"id": "confirm-t2", "user_id": "alice", "title": "任務二"},
+    ])
+    try:
+        await manual_task_crud.set_calendar_event_id("confirm-t1", "alice", "event-abc")
+
+        task1 = await collection.find_one({"id": "confirm-t1"})
+        task2 = await collection.find_one({"id": "confirm-t2"})
+        assert task1["calendar_event_id"] == "event-abc"
+        assert task2.get("calendar_event_id") is None
+    finally:
+        await collection.delete_many({"id": {"$in": ["confirm-t1", "confirm-t2"]}})
+
+
+# ---------- reorder_manual_tasks ----------
+
+def _reorder_item(task_id, priority, sort_order):
+    return {"task_id": task_id, "priority": priority, "sort_order": sort_order}
+
+
+@pytest.mark.asyncio
+async def test_reorder_manual_tasks_writes_sort_order_from_each_item():
+    """依每筆傳入的 sort_order 寫回（呼叫端指定，不是這裡自己算的——見函式內的說明）。"""
+    collection = manual_task_crud.db.manual_tasks
+    await collection.insert_many([
+        {"id": "reorder-t1", "user_id": "alice", "title": "任務一", "priority": "Medium"},
+        {"id": "reorder-t2", "user_id": "alice", "title": "任務二", "priority": "Medium"},
+        {"id": "reorder-t3", "user_id": "alice", "title": "任務三", "priority": "Medium"},
+    ])
+    try:
+        result = await manual_task_crud.reorder_manual_tasks("alice", [
+            _reorder_item("reorder-t3", "Medium", 0),
+            _reorder_item("reorder-t1", "Medium", 1),
+            _reorder_item("reorder-t2", "Medium", 2),
+        ])
+
+        by_id = {t["id"]: t["sort_order"] for t in result}
+        assert by_id == {"reorder-t3": 0, "reorder-t1": 1, "reorder-t2": 2}
+    finally:
+        await collection.delete_many({"id": {"$in": ["reorder-t1", "reorder-t2", "reorder-t3"]}})
+
+
+@pytest.mark.asyncio
+async def test_reorder_manual_tasks_writes_priority_from_which_column_task_was_dropped_in():
+    """拖到不同欄（priority）要跟著寫回去——這是三欄式拖拉排序畫面「拖去別欄＝改優先權」的核心行為。"""
+    collection = manual_task_crud.db.manual_tasks
+    await collection.insert_many([
+        {"id": "reorder-t8", "user_id": "alice", "title": "任務", "priority": "Low"},
+    ])
+    try:
+        result = await manual_task_crud.reorder_manual_tasks("alice", [
+            _reorder_item("reorder-t8", "High", 0),  # 使用者把它從 Low 欄拖到 High 欄
+        ])
+
+        assert result[0]["priority"] == "High"
+    finally:
+        await collection.delete_many({"id": "reorder-t8"})
+
+
+@pytest.mark.asyncio
+async def test_reorder_manual_tasks_rejects_id_belonging_to_another_user():
+    """傳入的 id 裡混了別人的任務 → 400，不能藉此竄改不屬於自己的任務。"""
+    collection = manual_task_crud.db.manual_tasks
+    await collection.insert_many([
+        {"id": "reorder-t4", "user_id": "alice", "title": "Alice 的任務", "priority": "Medium"},
+        {"id": "reorder-t5", "user_id": "bob", "title": "Bob 的任務", "priority": "Medium"},
+    ])
+    try:
+        with pytest.raises(HTTPException) as exc_info:
+            await manual_task_crud.reorder_manual_tasks("alice", [
+                _reorder_item("reorder-t4", "Medium", 0),
+                _reorder_item("reorder-t5", "Medium", 1),
+            ])
+        assert exc_info.value.status_code == 400
+    finally:
+        await collection.delete_many({"id": {"$in": ["reorder-t4", "reorder-t5"]}})
+
+
+@pytest.mark.asyncio
+async def test_reorder_manual_tasks_same_order_again_does_not_raise():
+    """重新提交跟現在一模一樣的順序（sort_order 沒有真的變動）→ 不能因此噴錯。"""
+    collection = manual_task_crud.db.manual_tasks
+    await collection.insert_many([
+        {"id": "reorder-t6", "user_id": "alice", "title": "任務一", "priority": "Medium", "sort_order": 0},
+        {"id": "reorder-t7", "user_id": "alice", "title": "任務二", "priority": "Medium", "sort_order": 1},
+    ])
+    try:
+        result = await manual_task_crud.reorder_manual_tasks("alice", [
+            _reorder_item("reorder-t6", "Medium", 0),
+            _reorder_item("reorder-t7", "Medium", 1),
+        ])
+        by_id = {t["id"]: t["sort_order"] for t in result}
+        assert by_id == {"reorder-t6": 0, "reorder-t7": 1}
+    finally:
+        await collection.delete_many({"id": {"$in": ["reorder-t6", "reorder-t7"]}})
+
+
 # ---------- update_manual_task_by_id ----------
 
 @pytest.mark.asyncio

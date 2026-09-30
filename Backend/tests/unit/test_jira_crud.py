@@ -109,3 +109,32 @@ async def test_fetch_jira_user_issues_transient_error_is_retryable(status_code):
 
         assert not isinstance(exc_info.value, NonRetryableError)
         assert f"Jira API failed: {status_code}" in str(exc_info.value)
+
+
+# ---------- transform_jira_item ----------
+
+def test_transform_jira_item_captures_status_category():
+    """status.statusCategory.key 是 Jira 正規化過的完成狀態（"new"／"indeterminate"／"done"），
+    跟專案自訂的 status.name 分開存，排程要用這個判斷完成與否，不是猜 status.name 的字串。"""
+    raw = {
+        "id": "1",
+        "key": "JIRA-1",
+        "fields": {
+            "summary": "已完成的任務",
+            "status": {"name": "已完成", "statusCategory": {"key": "done"}},
+        },
+    }
+
+    result = jira.transform_jira_item(raw)
+
+    assert result["status"] == "已完成"
+    assert result["status_category"] == "done"
+
+
+def test_transform_jira_item_falls_back_to_empty_status_category_when_missing():
+    """Jira 回應裡沒有 statusCategory（理論上不該發生，但資料格式不保證）→ 空字串，不噴例外。"""
+    raw = {"id": "1", "key": "JIRA-1", "fields": {"status": {"name": "To Do"}}}
+
+    result = jira.transform_jira_item(raw)
+
+    assert result["status_category"] == ""

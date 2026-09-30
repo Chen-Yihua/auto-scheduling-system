@@ -46,16 +46,19 @@ vi.stubGlobal('useJira', () => ({
   loading: ref(false),
 }))
 
+const calendarReloadTokenRef = ref(0)
 vi.stubGlobal('useGoogleCalendar', () => ({
   calendarIds: ref([]),
   primaryCalendarId: ref(''),
   fetchGoogleCalendars: fetchGoogleCalendarsSpy,
   isConnected: ref(false),
+  calendarReloadToken: calendarReloadTokenRef,
 }))
 
 // ---------- 子元件全部 shallow stub，只測這個頁面本身的邏輯 ----------
 const uiStubs = {
   TaskForm: true,
+  ScheduleSuggestion: true,
   Leetcode: true,
   News: true,
   MoodleAssignments: true,
@@ -119,7 +122,7 @@ describe('TheMain/index.vue', () => {
     expect(fetchJiraIssuesSpy).not.toHaveBeenCalled()
     expect(fetchGoogleCalendarsSpy).not.toHaveBeenCalled()
     // TaskForm、Moodle 掛載時會自己去抓資料，訪客不該讓它們掛載
-    for (const name of ['TaskForm', 'MoodleAssignments', 'GithubIssuesList', 'JiraIssuesList', 'GoogleCalendarEmbed']) {
+    for (const name of ['TaskForm', 'ScheduleSuggestion', 'MoodleAssignments', 'GithubIssuesList', 'JiraIssuesList', 'GoogleCalendarEmbed']) {
       expect(wrapper.findComponent({ name }).exists(), name).toBe(false)
     }
   })
@@ -131,7 +134,7 @@ describe('TheMain/index.vue', () => {
     await wrapper.vm.$nextTick()
 
     const titles = wrapper.findAll('.ucard span').map((el) => el.text())
-    expect(titles).toEqual(['任務列表', 'Moodle 作業', 'GitHub 參與項目', 'Jira 指派任務', 'Google 行事曆'])
+    expect(titles).toEqual(['任務列表', '排程建議', 'Moodle 作業', 'GitHub 參與項目', 'Jira 指派任務', 'Google 行事曆'])
     expect(wrapper.text()).toContain('登入後即可查看與新增你的任務')
     expect(wrapper.text()).toContain('登入後即可查看 Google 行事曆')
     expect(wrapper.findComponent({ name: 'News' }).exists()).toBe(true)
@@ -150,7 +153,7 @@ describe('TheMain/index.vue', () => {
     activeWrapper = signedIn
     await signedIn.vm.$nextTick()
 
-    expect(guestSizes).toEqual([4, 1, 2])
+    expect(guestSizes).toEqual([5, 1, 2])
     expect(columnSizes(signedIn)).toEqual(guestSizes)
     const rightColumn = signedIn.findAll('.grid > div')[2]!
     expect(rightColumn.findComponent({ name: 'News' }).exists()).toBe(true)
@@ -168,6 +171,7 @@ describe('TheMain/index.vue', () => {
     expect(fetchGoogleCalendarsSpy).toHaveBeenCalledTimes(1)
     expect(wrapper.text()).not.toContain('登入後即可')
     expect(wrapper.findComponent({ name: 'TaskForm' }).exists()).toBe(true)
+    expect(wrapper.findComponent({ name: 'ScheduleSuggestion' }).exists()).toBe(true)
   })
 
   it('Google 授權在背景進行時，只有行事曆卡片收到「連接中」，其他卡片照常掛載', async () => {
@@ -178,12 +182,15 @@ describe('TheMain/index.vue', () => {
 
     const calendar = wrapper.findComponent({ name: 'GoogleCalendarEmbed' })
     expect(calendar.props('connecting')).toBe(false)
+    // 確認排程寫入 Calendar 後 useGoogleCalendar 會 bump 這個 token，
+    // 要真的傳給 GoogleCalendarEmbed 它才能拿去強制重新整理 iframe
+    expect(calendar.props('reloadToken')).toBe(calendarReloadTokenRef.value)
 
     stateStore.get('googleCalendarConnecting')!.value = true
     await wrapper.vm.$nextTick()
 
     expect(calendar.props('connecting')).toBe(true)
-    for (const name of ['TaskForm', 'MoodleAssignments', 'GithubIssuesList', 'JiraIssuesList', 'News', 'Leetcode']) {
+    for (const name of ['TaskForm', 'ScheduleSuggestion', 'MoodleAssignments', 'GithubIssuesList', 'JiraIssuesList', 'News', 'Leetcode']) {
       expect(wrapper.findComponent({ name }).exists(), name).toBe(true)
     }
   })

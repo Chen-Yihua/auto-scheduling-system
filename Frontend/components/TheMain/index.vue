@@ -8,12 +8,13 @@ import Leetcode from './Leetcode.vue'
 import JiraIssuesList from './JiraIssuesList.vue'
 import News from './News.vue'
 import TaskForm from './TaskForm.vue'
+import ScheduleSuggestion from './ScheduleSuggestion.vue'
 import GoogleCalendarEmbed from './GoogleCalendarEmbed.vue';
 import MoodleAssignments from './MoodleAssignments.vue'
 
 const { issues: githubIssues, fetchGithubIssues, isStale: githubStale, syncedAt: githubSyncedAt, authError: githubAuthError, notLinked: githubNotLinked, loading: githubLoading } = useGithub();
 const { issues: jiraIssues, fetchJiraIssues, domain, isStale: jiraStale, syncedAt: jiraSyncedAt, authError: jiraAuthError, notLinked: jiraNotLinked, loading: jiraLoading } = useJira();
-const { calendarIds, primaryCalendarId, fetchGoogleCalendars, isConnected } = useGoogleCalendar();
+const { calendarIds, primaryCalendarId, fetchGoogleCalendars, isConnected, calendarReloadToken } = useGoogleCalendar();
 const { isSignedIn } = useUser();
 const { connecting: googleConnecting, connectedCount: googleConnectedCount } = useGoogleCalendarAuth();
 
@@ -52,13 +53,15 @@ watch(googleConnectedCount, () => {
     >
       <div class="space-y-6">
         <template v-if="isSignedIn">
-          <TaskForm />
-          <MoodleAssignments />
-          <GithubIssuesList :issues="githubIssues" :loading="githubLoading" :is-stale="githubStale" :synced-at="githubSyncedAt" :auth-error="githubAuthError" :not-linked="githubNotLinked" />
-          <JiraIssuesList :issues="jiraIssues" :loading="jiraLoading" :domain="domain" :is-stale="jiraStale" :synced-at="jiraSyncedAt" :auth-error="jiraAuthError" :not-linked="jiraNotLinked" />
+          <TaskForm :limit="5" />
+          <ScheduleSuggestion />
+          <MoodleAssignments :limit="5" />
+          <GithubIssuesList :issues="githubIssues" :loading="githubLoading" :is-stale="githubStale" :synced-at="githubSyncedAt" :auth-error="githubAuthError" :not-linked="githubNotLinked" :limit="5" />
+          <JiraIssuesList :issues="jiraIssues" :loading="jiraLoading" :domain="domain" :is-stale="jiraStale" :synced-at="jiraSyncedAt" :auth-error="jiraAuthError" :not-linked="jiraNotLinked" :limit="5" />
         </template>
         <template v-else>
           <LoginRequiredCard title="任務列表" icon="i-lucide-list-todo" message="登入後即可查看與新增你的任務" />
+          <LoginRequiredCard title="排程建議" icon="i-lucide-calendar-clock" message="登入後即可查看排程建議" />
           <LoginRequiredCard title="Moodle 作業" icon="custom:moodle" message="登入後即可查看 Moodle 作業" />
           <LoginRequiredCard title="GitHub 參與項目" icon="mdi:github" message="登入後即可查看 GitHub 參與項目" />
           <LoginRequiredCard title="Jira 指派任務" icon="mdi:jira" icon-class="text-blue-500" message="登入後即可查看 Jira 指派任務" />
@@ -72,6 +75,7 @@ watch(googleConnectedCount, () => {
           :calendar-ids="calendarIds"
           :connect="isConnected"
           :connecting="googleConnecting"
+          :reload-token="calendarReloadToken"
         />
         <LoginRequiredCard v-else title="Google 行事曆" icon="i-lucide-calendar" message="登入後即可查看 Google 行事曆" />
       </div>

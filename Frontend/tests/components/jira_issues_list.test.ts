@@ -26,6 +26,7 @@ const uiStubs = {
   UCard: UCardStub,
   UAlert: true,
   UIcon: true,
+  NuxtLink: { template: '<a><slot /></a>' },
 }
 
 const openSpy = vi.fn()
@@ -95,5 +96,30 @@ describe('JiraIssuesList.vue', () => {
       'https://my-team.atlassian.net/browse/ISSUE-1',
       '_blank',
     )
+  })
+
+  it('沒帶 limit 時顯示全部 issues，不顯示「查看全部」連結', () => {
+    const issues = [baseIssue, { ...baseIssue, id: '2', key: 'ISSUE-2' }]
+    const wrapper = mount(JiraIssuesList, {
+      props: { issues, loading: false },
+      global: { stubs: uiStubs },
+    })
+
+    expect(wrapper.text()).toContain('ISSUE-1')
+    expect(wrapper.text()).toContain('ISSUE-2')
+    expect(wrapper.text()).not.toContain('查看全部')
+  })
+
+  it('帶 limit 且 issues 超過限制時，只顯示前 limit 筆，並顯示「查看全部」連結', () => {
+    const issues = [baseIssue, { ...baseIssue, id: '2', key: 'ISSUE-2' }, { ...baseIssue, id: '3', key: 'ISSUE-3' }]
+    const wrapper = mount(JiraIssuesList, {
+      props: { issues, loading: false, limit: 2 },
+      global: { stubs: uiStubs },
+    })
+
+    expect(wrapper.text()).toContain('ISSUE-1')
+    expect(wrapper.text()).toContain('ISSUE-2')
+    expect(wrapper.text()).not.toContain('ISSUE-3')
+    expect(wrapper.text()).toContain('查看全部（3）')
   })
 })

@@ -1,9 +1,17 @@
 <script setup lang="ts">
 import { useMoodleAssignments } from '~/composables/useMoodleAssignments';
-import { onMounted } from 'vue'
+import { onMounted, computed } from 'vue'
 import StaleDataBanner from './StaleDataBanner.vue'
+// 不給就顯示全部——dashboard 卡片用小數字避免無限拉長，
+// /moodle 這個完整清單頁面則不傳
+const props = defineProps<{ limit?: number }>()
 const { moodleAssignments, loading, fetchMoodleAssignments, openMoodleAssignments, hasAccount, isStale, syncedAt, authError } = useMoodleAssignments();
 onMounted(fetchMoodleAssignments); // 頁面載入時抓取作業資料
+
+const displayedAssignments = computed(() =>
+  props.limit ? moodleAssignments.value.slice(0, props.limit) : moodleAssignments.value
+)
+const hasMoreAssignments = computed(() => !!props.limit && moodleAssignments.value.length > props.limit)
 </script>
 
 
@@ -39,7 +47,7 @@ onMounted(fetchMoodleAssignments); // 頁面載入時抓取作業資料
 
     <div v-else class="grid grid-cols-1 gap-4">
       <UCard
-        v-for="item in moodleAssignments"
+        v-for="item in displayedAssignments"
         :key="item.url"
         class="rounded-lg bg-default ring ring-default divide-y divide-default cursor-pointer hover:shadow-lg transition-transform duration-300 ease-in-out transform scale-100 hover:scale-105"
         @click="openMoodleAssignments(item.url)"
@@ -55,6 +63,12 @@ onMounted(fetchMoodleAssignments); // 頁面載入時抓取作業資料
         </template>
       </UCard>
     </div>
+
+    <template v-if="hasMoreAssignments" #footer>
+      <NuxtLink to="/moodle" class="text-sm text-primary hover:underline">
+        查看全部（{{ moodleAssignments.length }}）
+      </NuxtLink>
+    </template>
   </UCard>
 </template>
 

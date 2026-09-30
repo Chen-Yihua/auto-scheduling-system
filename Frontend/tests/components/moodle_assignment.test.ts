@@ -52,10 +52,16 @@ const UCardStub = defineComponent({
   },
 })
 
-const uiStubs = { UCard: UCardStub, UIcon: true, UAlert: true }
+const uiStubs = {
+  UCard: UCardStub,
+  UIcon: true,
+  UAlert: true,
+  NuxtLink: { template: '<a><slot /></a>' },
+}
 //
-const render = () =>
+const render = (props: Record<string, unknown> = {}) =>
   mount(MoodleAssignments, {
+    props,
     global: { stubs: uiStubs },
   })
 
@@ -101,5 +107,22 @@ describe('MoodleAssignments.vue', () => {
 
     await cards[1].trigger('click')
     expect(openSpy).toHaveBeenCalledWith('https://moodle/hw1')
+  })
+
+  it('帶 limit 且作業數超過限制時，只顯示前 limit 筆，並顯示「查看全部」連結', () => {
+    hasAccountRef.value = true
+    loadingRef.value = false
+    assignmentsRef.value = [
+      { course_name: '課程 A', title: '作業一', due_date: '2025-07-01', url: 'https://moodle/hw1' },
+      { course_name: '課程 B', title: '作業二', due_date: '2025-07-02', url: 'https://moodle/hw2' },
+      { course_name: '課程 C', title: '作業三', due_date: '2025-07-03', url: 'https://moodle/hw3' },
+    ]
+
+    const wrapper = render({ limit: 2 })
+
+    expect(wrapper.text()).toContain('作業一')
+    expect(wrapper.text()).toContain('作業二')
+    expect(wrapper.text()).not.toContain('作業三')
+    expect(wrapper.text()).toContain('查看全部（3）')
   })
 })

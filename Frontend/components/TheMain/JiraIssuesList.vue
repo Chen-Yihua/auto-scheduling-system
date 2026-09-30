@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { JiraIssue } from '~/types/jira'
 import StaleDataBanner from './StaleDataBanner.vue'
 
@@ -10,7 +11,15 @@ const props = defineProps<{
   syncedAt?: string | null
   authError?: boolean
   notLinked?: boolean
+  // 不給就顯示全部——dashboard 卡片用小數字避免無限拉長，
+  // /jira 這個完整清單頁面則不傳
+  limit?: number
 }>()
+
+const displayedIssues = computed(() =>
+  props.limit ? props.issues.slice(0, props.limit) : props.issues
+)
+const hasMoreIssues = computed(() => !!props.limit && props.issues.length > props.limit)
 
 const openJiraIssue = (key: string) => {
   const domain = props.domain || 'nccu-software-development.atlassian.net'
@@ -48,7 +57,7 @@ const openJiraIssue = (key: string) => {
 
     <div v-else-if="issues.length" class="grid grid-cols-1 gap-4">
       <UCard
-        v-for="issue in issues"
+        v-for="issue in displayedIssues"
         :key="issue.id"
         :ui="{
           root: 'cursor-pointer hover:shadow-lg transition-transform duration-300 ease-in-out transform scale-100 hover:scale-105',
@@ -90,5 +99,11 @@ const openJiraIssue = (key: string) => {
     >
       尚無資料
     </div>
+
+    <template v-if="hasMoreIssues" #footer>
+      <NuxtLink to="/jira" class="text-sm text-primary hover:underline">
+        查看全部（{{ issues.length }}）
+      </NuxtLink>
+    </template>
   </UCard>
 </template>

@@ -4,7 +4,7 @@ import { useSchedulableTasks } from '~/composables/useSchedulableTasks'
 import { onMounted, computed } from 'vue'
 import type { FormSubmitEvent } from '@nuxt/ui'
 import type { SchedulableTask } from '~/types/schedulableTask'
-import { priorityLabel, taskStatusLabel } from '~/utils/labels'
+import { priorityLabel } from '~/utils/labels'
 
 // limit 不給就顯示全部——dashboard 卡片用小數字避免無限拉長，
 // /tasks 這個完整清單頁面則不傳，直接看到全部任務
@@ -17,6 +17,7 @@ const {
   modelValue,
   minDate,
   displayDate,
+  clearDueDate,
   priorityItems,
   validate,
   submitting,
@@ -71,6 +72,13 @@ const getPriorityColor = (priority: string | null | undefined) => {
     default:
       return 'neutral'
   }
+}
+
+// 任務列表緊湊顯示用：只留月/日 時:分，完整日期時間只在編輯表單裡看得到
+function compactDueDate(dueDate: string): string {
+  const d = new Date(dueDate)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getMonth() + 1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
 
@@ -145,7 +153,20 @@ onMounted(async () => {
               {{ isEditMode ? '編輯任務' : '新增任務' }}
             </h2>
 
-            <UInput 
+            <!-- 說明這個表單裡 AI 能幫上什麼忙：優先級、預估時長都可以留空，
+            AI 會根據標題/描述自動幫你評估；也可以在下面「給 AI 的提醒」補充
+            標題描述看不出來的細節，讓 AI 判斷更準。不特別解釋的話，不熟悉
+            AI 工具的使用者容易搞不懂「提醒」欄位是要寫什麼、為什麼要寫 -->
+            <div class="flex items-start gap-2 rounded-lg bg-blue-50 text-blue-800 text-sm px-4 py-3">
+              <UIcon name="i-lucide-sparkles" class="w-4 h-4 flex-shrink-0 mt-0.5" />
+              <p>
+                「優先級」「預估時長」不確定的話都可以先留空，AI 會依照標題和描述自動幫你判斷。
+                如果有標題、描述講不清楚、但會影響判斷的細節（例如這份報告的老師改得特別嚴格），
+                可以寫在下面的「給 AI 的提醒」欄位，AI 判斷時會一併參考。
+              </p>
+            </div>
+
+            <UInput
               v-model="state.title"
               name="Title" 
               :placeholder="isEditMode ? '編輯代辦事項' : '新增代辦事項'"
@@ -154,13 +175,12 @@ onMounted(async () => {
               class="w-full bg-transparent"
             />
 
-            <UTextarea 
+            <UTextarea
               v-model="state.description"
-              name="Description" 
-              :placeholder="isEditMode ? '編輯附註' : '新增附註'"
+              name="Description"
+              :placeholder="isEditMode ? '編輯附註（選填）' : '新增附註（選填）'"
               size="xl"
-              required
-              class="w-full" 
+              class="w-full"
             />
 
             <div class="flex flex-nowrap items-center mb-4 text-m gap-x-6">
@@ -168,10 +188,10 @@ onMounted(async () => {
               <UFormField
                 name="Priority"
                 size="lg"
-                required
+                hint="不確定可留空，AI 會幫你評估"
                 class="flex-1"
               >
-                <USelect v-model="state.priority" placeholder="選擇優先級" :items="priorityItems" />
+                <USelect v-model="state.priority" placeholder="留空讓 AI 評估" :items="priorityItems" />
               </UFormField>
 
               <label class="w-26 whitespace-nowrap text-gray-700">截止日期</label>
@@ -187,7 +207,19 @@ onMounted(async () => {
                     <!-- Nuxt UI 3.1.0 的 slot 型別寫法跟新版 Vue 型別檢查不相容（誤報，執行時正常）；升級 @nuxt/ui 後若檢查不再報錯，vue-tsc 會提示可以移除下面這行 -->
                     <!-- @vue-expect-error -->
                     <template #content>
-                        <UCalendar v-model="modelValue" :min-value="minDate" class="p-2" />
+                        <div class="p-2">
+                            <UCalendar v-model="modelValue" :min-value="minDate" />
+                            <UButton
+                                block
+                                variant="ghost"
+                                color="neutral"
+                                size="sm"
+                                class="mt-1"
+                                @click="clearDueDate"
+                            >
+                                無期限
+                            </UButton>
+                        </div>
                     </template>
                 </UPopover>
               </UFormField>
@@ -214,12 +246,12 @@ onMounted(async () => {
               <label class="w-26 whitespace-nowrap text-gray-700 mt-2">給 AI 的提醒</label>
               <UFormField
                 size="lg"
-                hint="優先權/時長留空讓 AI 評估時，這裡可以補充你知道、但標題描述看不出來的資訊，例如「這比想像中難」"
+                hint="優先權/時長留空讓 AI 評估時，這裡可以補充你知道、但標題描述看不出來的資訊，例如「老師改得特別嚴格」"
                 class="flex-1"
               >
                 <UTextarea
                   v-model="state.inference_hint"
-                  placeholder="選填，例如：這個作業其實蠻花時間的"
+                  placeholder="選填，例如：這份報告的老師改得特別嚴格，需要多留一點準備時間"
                   :rows="2"
                   class="w-full"
                 />
@@ -282,52 +314,37 @@ onMounted(async () => {
       >
         目前沒有任務，點擊右上角的編輯圖示新增一個吧
       </div>
-      <div v-else class="grid grid-cols-1 gap-4">
-        <UCard
+      <!-- 每筆任務一行緊湊顯示：只留標題、優先級、截止日期跟操作按鈕——
+      描述跟完成狀態徽章（目前實際上只有「待辦／已完成」兩種，已完成已經
+      反映在下面按鈕文字跟顏色上）不是掃過清單時真正需要的資訊，點「編輯」
+      還是看得到完整內容，不用整張卡片攤開才看得完 -->
+      <div v-else class="space-y-2">
+        <div
           v-for="task in displayedTasks"
           :key="task.id"
-          :ui="{
-            root: task.source === 'manual'
-              ? 'cursor-pointer hover:shadow-lg transition-transform duration-300 ease-in-out transform scale-100 hover:scale-105'
-              : 'hover:shadow-lg transition-transform duration-300 ease-in-out transform scale-100 hover:scale-105',
-          }"
+          class="task-row rounded-lg border border-default px-3 py-2"
+          :class="task.source !== 'manual' ? 'cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800' : ''"
           @click="task.source === 'manual' ? undefined : openSchedulableTask(task)"
         >
-          <template #header>
-            <div class="flex justify-between items-center w-full">
-              <div class="flex items-center gap-1.5 min-w-0">
-                <UIcon :name="sourceIcon[task.source]" class="w-4 h-4 flex-shrink-0 text-gray-400" />
-                <span class="text-sm font-semibold truncate">{{ task.title }}</span>
-              </div>
-              <div class="flex flex-wrap items-center flex-shrink-0">
-                <UBadge v-if="task.priority" class="mx-1" :color="getPriorityColor(task.priority)" variant="soft" size="sm">
-                  {{ priorityLabel(task.priority) }}
-                </UBadge>
-                <UBadge class="mx-1" :color="task.status === 'Done' ? 'success' : 'info'" variant="soft" size="sm">
-                  {{ taskStatusLabel(task.status) }}
-                </UBadge>
-              </div>
-            </div>
-          </template>
-
-          <div>
-            <div v-if="task.description" class="font-medium mb-2 text-gray-800 dark:text-white truncate">
-              {{ task.description }}
-            </div>
-            <div v-if="task.due_date" class="flex items-center gap-2 mb-1">
-              <UIcon name="i-lucide-calendar" class="w-4 h-4 text-gray-400" />
-              <span class="text-xs text-gray-500">截止：{{ new Date(task.due_date).toLocaleString() }}</span>
-            </div>
+          <div class="flex items-center gap-1.5 min-w-0">
+            <UIcon :name="sourceIcon[task.source]" class="w-4 h-4 flex-shrink-0 text-gray-400" />
+            <span class="text-sm font-semibold truncate flex-1">{{ task.title }}</span>
+            <UBadge v-if="task.priority" :color="getPriorityColor(task.priority)" variant="soft" size="sm">
+              {{ priorityLabel(task.priority) }}
+            </UBadge>
           </div>
-
-          <template #footer>
-            <div class="flex items-center gap-2">
+          <div class="flex items-center justify-between gap-2 mt-1">
+            <span v-if="task.due_date" class="text-xs text-gray-500 truncate">
+              截止：{{ compactDueDate(task.due_date) }}
+            </span>
+            <span v-else class="text-xs text-gray-400">無期限</span>
+            <div class="flex items-center gap-1 flex-shrink-0">
               <UButton
                 v-if="task.source === 'manual'"
                 icon="i-lucide-pencil"
                 size="xs"
                 color="info"
-                variant="soft"
+                variant="ghost"
                 @click.stop="startEditSchedulableTask(task)"
               >
                 編輯
@@ -336,14 +353,14 @@ onMounted(async () => {
                 icon="i-lucide-check"
                 size="xs"
                 :color="task.status === 'Done' ? 'neutral' : 'success'"
-                variant="soft"
+                variant="ghost"
                 @click.stop="toggleDone(task)"
               >
                 {{ task.status === 'Done' ? '取消完成' : '標記完成' }}
               </UButton>
             </div>
-          </template>
-        </UCard>
+          </div>
+        </div>
       </div>
 
       <template v-if="hasMoreTasks" #footer>

@@ -155,6 +155,21 @@ describe('TaskForm.vue (render)', () => {
     expect(wrapper.find('u-skeleton-stub').exists()).toBe(false)
   })
 
+  it('任務列表只顯示緊湊資訊：不顯示描述，沒有截止日期時顯示「無期限」', async () => {
+    const task = {
+      id: 'manual:t0', source: 'manual', title: '任務0', description: '這段描述不該出現在列表上',
+      status: 'To Do', priority: 'Low', duration: null, due_date: null,
+      sort_order: null, calendar_event_id: null, url: null,
+    }
+    mockFetchByUrl({ '/manual_tasks/me': [], '/schedule/tasks': [task] })
+
+    const wrapper = shallowMount(TaskForm, { global: { stubs: uiStubs } })
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain('這段描述不該出現在列表上')
+    expect(wrapper.text()).toContain('無期限')
+  })
+
   it('新增任務按鈕移到 Header，跟 TaskForm 共用同一份 showEditModal 狀態', async () => {
     // 按鈕本身現在畫在 TheHeader/index.vue，這裡改成模擬「header 那邊按下按鈕」
     // 的效果：直接透過共用的 useTaskForm() 把 showEditModal 設成 true，
@@ -215,9 +230,9 @@ describe('TaskForm.vue (render)', () => {
     expect(wrapper.text()).toContain('GitHub Issue')
     expect(wrapper.text()).not.toContain('編輯')
 
-    // index 0 是外層任務清單卡片，index 1 才是這筆 GitHub 項目自己的卡片
-    const taskCard = wrapper.findAll('.u-card-stub')[1]
-    await taskCard!.trigger('click')
+    // 每筆任務現在是緊湊的一行（.task-row），不是獨立的 UCard
+    const taskRow = wrapper.find('.task-row')
+    await taskRow.trigger('click')
 
     expect(openSpy).toHaveBeenCalledWith('https://github.com/x/y/issues/42', '_blank')
   })

@@ -36,15 +36,20 @@ function useTaskFormImpl() {
     const today = fromDate(new Date(), timeZone)
     // UCalendar 的 v-model 可能給 CalendarDate、CalendarDateTime 或 ZonedDateTime
     // 這三種其中一種（使用者選日期的當下不一定跟 today 的型別一樣），
-    // 要轉成 Date 物件時得先用 toZoned 統一成 ZonedDateTime 再呼叫沒有參數的 toDate()
-    const modelValue = shallowRef<DateValue>(today)
+    // 要轉成 Date 物件時得先用 toZoned 統一成 ZonedDateTime 再呼叫沒有參數的 toDate()。
+    // null 代表使用者選了「無期限」——後端 due_date 本來就是 Optional，
+    // 這裡要能明確送出 null，不是每次都硬塞一個日期進去
+    const modelValue = shallowRef<DateValue | null>(today)
     const minDate = today
     const toJsDate = (value: DateValue) => toZoned(value, timeZone).toDate()
     const displayDate = computed(() =>
         modelValue.value
             ? df.format(toJsDate(modelValue.value))
-            : 'Select a date'
+            : '無期限'
     )
+    function clearDueDate() {
+        modelValue.value = null
+    }
 
     // 是否正在抓取任務列表——跟「目前沒有任務」是兩回事，不能都用
     // all_tasks.length === 0 判斷，不然使用者真的沒有任務時，畫面會卡在
@@ -76,12 +81,12 @@ function useTaskFormImpl() {
         inference_hint: '', // 給 AI 評估 priority/duration 時參考的提醒，選填
     })
 
-    // 驗證表單是否填寫完成
+    // 驗證表單是否填寫完成。只有標題是真正必填——description/priority/
+    // duration 都留空讓 AI 幫忙評估，不該因此擋住送出（見 payload 組裝那裡
+    // 把空字串轉成 null，後端 infer_missing_task_fields 才會真的去推斷）
     const validate = (s: typeof state): FormError[] => {
         const errors: FormError[] = []
         if (!s.title) errors.push({ name: 'title', message: 'Required' })
-        if (!s.description) errors.push({ name: 'description', message: 'Required' })
-        if (!s.priority) errors.push({ name: 'priority', message: 'Required' })
         return errors
     }
 
@@ -162,7 +167,7 @@ function useTaskFormImpl() {
             state.due_date = task.due_date
             state.duration = task.duration ?? ''
             state.inference_hint = task.inference_hint ?? ''
-            modelValue.value = fromDate(new Date(task.due_date), timeZone)
+            modelValue.value = task.due_date ? fromDate(new Date(task.due_date), timeZone) : null
         } else { // 如果沒有傳入任務，則重置表單
             editing_task.value = null
             resetForm()
@@ -182,12 +187,12 @@ function useTaskFormImpl() {
         submitting.value = true
         try {
             const token = await getToken.value()
-            const dueDate = toJsDate(modelValue.value).toISOString()
+            const dueDate = modelValue.value ? toJsDate(modelValue.value).toISOString() : null
             const payload = {
                 user_id: state.user_id,
                 title: state.title,
                 description: state.description,
-                priority: state.priority,
+                priority: state.priority || null,
                 due_date: dueDate,
                 status: state.status,
                 duration: parseDuration(state.duration),
@@ -231,12 +236,12 @@ function useTaskFormImpl() {
         submitting.value = true
         try {
             const token = await getToken.value()
-            const dueDate = toJsDate(modelValue.value).toISOString()
+            const dueDate = modelValue.value ? toJsDate(modelValue.value).toISOString() : null
             const payload = {
                 user_id: state.user_id,
                 title: state.title,
                 description: state.description,
-                priority: state.priority,
+                priority: state.priority || null,
                 due_date: dueDate,
                 status: state.status,
                 duration: parseDuration(state.duration),
@@ -293,6 +298,7 @@ function useTaskFormImpl() {
         modelValue,
         minDate,
         displayDate,
+        clearDueDate,
         priorityItems,
         validate,
         loading,

@@ -61,6 +61,40 @@ describe('useTaskForm', () => {
     expect(ctx.showEditModal.value).toBe(true)
   })
 
+  it('validate 只要求 title——description/priority 都留給 AI 評估也能送出', () => {
+    const ctx = useTaskForm()
+    ctx.state.title = '標題'
+    ctx.state.description = ''
+    ctx.state.priority = ''
+
+    expect(ctx.validate(ctx.state)).toEqual([])
+  })
+
+  it('validate 標題沒填時擋下來', () => {
+    const ctx = useTaskForm()
+    ctx.state.title = ''
+
+    expect(ctx.validate(ctx.state)).toEqual([{ name: 'title', message: 'Required' }])
+  })
+
+  it('clearDueDate 把 modelValue 設成 null，displayDate 顯示「無期限」', () => {
+    const ctx = useTaskForm()
+    ctx.modelValue.value = fromDate(new Date('2025-07-01T00:00:00Z'), getLocalTimeZone())
+
+    ctx.clearDueDate()
+
+    expect(ctx.modelValue.value).toBe(null)
+    expect(ctx.displayDate.value).toBe('無期限')
+  })
+
+  it('startEditTask 遇到 due_date 是 null 的任務時，modelValue 設成 null 而不是噴例外', () => {
+    const ctx = useTaskForm()
+    const t = { ...fakeTask(), due_date: null }
+
+    expect(() => ctx.startEditTask(t)).not.toThrow()
+    expect(ctx.modelValue.value).toBe(null)
+  })
+
   it('startEditTask 會把既有的 duration/inference_hint 帶進表單', () => {
     const ctx = useTaskForm()
     const t = fakeTask()
@@ -147,6 +181,22 @@ describe('useTaskForm', () => {
     expect(postCalls).toHaveLength(1)
   })
 
+  it('onSubmit 沒填 priority 時，送給後端的是 null（不是空字串）——留給 AI 評估', async () => {
+    const ctx = useTaskForm()
+    ctx.state.title       = '新任務'
+    ctx.state.description = '內容'
+    ctx.state.priority    = ''
+    ctx.modelValue.value  = fromDate(new Date('2025-07-01T00:00:00Z'), getLocalTimeZone())
+
+    await submitAndFlushTimers(() => ctx.onSubmit(submitEvent(ctx.state)))
+
+    expect(fetchSpy).toHaveBeenNthCalledWith(
+      1,
+      'http://localhost:8000/manual_tasks/',
+      expect.objectContaining({ body: expect.objectContaining({ priority: null }) }),
+    )
+  })
+
   it('onSubmit 沒填 duration 時，送給後端的是 null（不是空字串）', async () => {
     const ctx = useTaskForm()
     ctx.state.title       = '新任務'
@@ -161,6 +211,22 @@ describe('useTaskForm', () => {
       1,
       'http://localhost:8000/manual_tasks/',
       expect.objectContaining({ body: expect.objectContaining({ duration: null }) }),
+    )
+  })
+
+  it('onSubmit 選了「無期限」時，送給後端的 due_date 是 null', async () => {
+    const ctx = useTaskForm()
+    ctx.state.title       = '新任務'
+    ctx.state.description = ''
+    ctx.state.priority    = 'Medium'
+    ctx.clearDueDate()
+
+    await submitAndFlushTimers(() => ctx.onSubmit(submitEvent(ctx.state)))
+
+    expect(fetchSpy).toHaveBeenNthCalledWith(
+      1,
+      'http://localhost:8000/manual_tasks/',
+      expect.objectContaining({ body: expect.objectContaining({ due_date: null }) }),
     )
   })
 

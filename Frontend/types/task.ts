@@ -5,7 +5,7 @@ export interface Task {
     description: string
     priority: 'Low' | 'Medium' | 'High'
     status: string
-    due_date: string
+    due_date: string | null
     duration?: number
     inferred_fields?: string[]
     inference_reason?: string | null

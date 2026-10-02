@@ -7,6 +7,7 @@ import os
 import requests
 from google import genai
 from constants.webhook_prompt import GEMINI_PR_SUMMARY_PROMPT
+from crud.github import GITHUB_API_VERSION
 from schemas.review import ReviewSummary
 from rate_limit import limiter
 
@@ -70,6 +71,7 @@ async def github_webhook(
     headers = {
         "Authorization": f"Bearer {GITHUB_BOT_TOKEN}",
         "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": GITHUB_API_VERSION,
     }
 
     if action == "opened":

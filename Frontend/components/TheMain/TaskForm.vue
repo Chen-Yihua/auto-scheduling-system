@@ -114,14 +114,10 @@ async function handleDelete() {
   await fetchSchedulableTasks()
 }
 
+// fetchTasks／fetchSchedulableTasks 各自會處理錯誤（記錄、跳 toast），這裡不用再包 try/catch
 onMounted(async () => {
-  try {
-    await waitForUser(user)
-    await Promise.all([fetchTasks(), fetchSchedulableTasks()])
-  } catch (err) {
-    // 可以根據 err 處理 403 或顯示提示
-    console.error('❌ 載入任務失敗', err)
-  }
+  await waitForUser(user)
+  await Promise.all([fetchTasks(), fetchSchedulableTasks()])
 })
 </script>
 

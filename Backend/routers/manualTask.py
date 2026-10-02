@@ -10,7 +10,7 @@ from rate_limit import limiter
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/manual_tasks", tags=["manual_tasks"])
+router = APIRouter(prefix="/manual-tasks", tags=["manual-tasks"])
 
 # 建立任務
 # 沒填 priority/duration 時會呼叫 Gemini（見 crud/task_inference.py），

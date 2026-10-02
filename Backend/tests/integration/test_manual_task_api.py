@@ -58,11 +58,11 @@ def fake_task_out_updated():
 @patch("routers.manualTask.infer_missing_task_fields", new_callable=AsyncMock)
 @patch("crud.manualTask.create_manual_task", new_callable=AsyncMock)
 async def test_create_manual_task_success(mock_create_manual_task, mock_infer, fake_task_input, fake_task_out, logged_in_user):
-    """POST /manual_tasks/：建立任務成功；priority 和 duration 都填了，就不該去問 LLM 推斷。"""
+    """POST /manual-tasks/：建立任務成功；priority 和 duration 都填了，就不該去問 LLM 推斷。"""
     mock_create_manual_task.return_value = fake_task_out
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        response = await ac.post("/manual_tasks/", json=fake_task_input.model_dump())
+        response = await ac.post("/manual-tasks/", json=fake_task_input.model_dump())
 
     assert response.status_code == 200
     assert response.json()["id"] == "task_id"
@@ -79,7 +79,7 @@ async def test_create_manual_task_ignores_client_supplied_user_id(mock_create_ma
     payload["user_id"] = "someone_else"  # 冒充別人
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        response = await ac.post("/manual_tasks/", json=payload)
+        response = await ac.post("/manual-tasks/", json=payload)
 
     assert response.status_code == 200
     saved_task = mock_create_manual_task.call_args[0][0]
@@ -90,7 +90,7 @@ async def test_create_manual_task_ignores_client_supplied_user_id(mock_create_ma
 async def test_create_manual_task_invalid_input(logged_in_user):
     """請求內容缺必填欄位 → 回 422。"""
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        response = await ac.post("/manual_tasks/", json={})
+        response = await ac.post("/manual-tasks/", json={})
     assert response.status_code == 422  # FastAPI 的預設驗證
 
 
@@ -100,11 +100,11 @@ async def test_create_manual_task_invalid_input(logged_in_user):
 @pytest.mark.asyncio
 @patch("crud.manualTask.get_manual_tasks_by_user_id", new_callable=AsyncMock)
 async def test_get_user_tasks_success(mock_get_tasks, fake_task_out, logged_in_user):
-    """GET /manual_tasks/me：回傳目前使用者的所有任務。"""
+    """GET /manual-tasks/me：回傳目前使用者的所有任務。"""
     mock_get_tasks.return_value = [fake_task_out, fake_task_out]
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        response = await ac.get("/manual_tasks/me")
+        response = await ac.get("/manual-tasks/me")
     assert response.status_code == 200
     tasks = response.json()
     assert len(tasks) == 2
@@ -117,7 +117,7 @@ async def test_get_user_tasks_empty(mock_get_tasks, logged_in_user):
     mock_get_tasks.return_value = []
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        response = await ac.get("/manual_tasks/me")
+        response = await ac.get("/manual-tasks/me")
     assert response.status_code == 200
     assert response.json() == []
 
@@ -128,12 +128,12 @@ async def test_get_user_tasks_empty(mock_get_tasks, logged_in_user):
 @pytest.mark.asyncio
 @patch("crud.manualTask.get_manual_task_by_id", new_callable=AsyncMock)
 async def test_get_manual_task_success(mock_get_task, fake_task_out, logged_in_user):
-    """GET /manual_tasks/{id}：查到任務就回傳它。"""
+    """GET /manual-tasks/{id}：查到任務就回傳它。"""
     mock_get_task.return_value = fake_task_out
 
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        response = await ac.get("/manual_tasks/task-id")
+        response = await ac.get("/manual-tasks/task-id")
 
     assert response.status_code == 200
     task = response.json()
@@ -146,7 +146,7 @@ async def test_get_manual_task_not_found(mock_get_task, logged_in_user):
     mock_get_task.side_effect = HTTPException(status_code=404, detail="Task not found")
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        response = await ac.get("/manual_tasks/does-not-exist")
+        response = await ac.get("/manual-tasks/does-not-exist")
 
     assert response.status_code == 404
     assert response.json()["detail"] == "Task not found"
@@ -159,12 +159,12 @@ async def test_get_manual_task_not_found(mock_get_task, logged_in_user):
 @patch("crud.manualTask.get_manual_task_by_id", new_callable=AsyncMock)
 @patch("crud.manualTask.update_manual_task_by_id", new_callable=AsyncMock)
 async def test_update_manual_task_success(mock_update_task, mock_get_task, fake_task_out, fake_task_out_updated, logged_in_user):
-    """PUT /manual_tasks/{id}：更新成功，回傳更新後的任務（description、updated 都是新值）。"""
+    """PUT /manual-tasks/{id}：更新成功，回傳更新後的任務（description、updated 都是新值）。"""
     mock_get_task.return_value = fake_task_out.model_dump()
     mock_update_task.return_value = fake_task_out_updated.model_dump()
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        response = await ac.put("/manual_tasks/task-id", json=fake_task_out.model_dump(mode="json"))
+        response = await ac.put("/manual-tasks/task-id", json=fake_task_out.model_dump(mode="json"))
 
     assert response.status_code == 200
     task = response.json()
@@ -178,7 +178,7 @@ async def test_update_manual_task_not_found(mock_get_task, fake_task_out, logged
     mock_get_task.side_effect = HTTPException(status_code=404, detail="Task not found")
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        response = await ac.put("/manual_tasks/does-not-exist", json=fake_task_out.model_dump(mode="json"))
+        response = await ac.put("/manual-tasks/does-not-exist", json=fake_task_out.model_dump(mode="json"))
 
     assert response.status_code == 404
     assert response.json()["detail"] == "Task not found"
@@ -191,12 +191,12 @@ async def test_update_manual_task_not_found(mock_get_task, fake_task_out, logged
 @patch("crud.manualTask.get_manual_task_by_id", new_callable=AsyncMock)
 @patch("crud.manualTask.delete_manual_task_by_id", new_callable=AsyncMock)
 async def test_delete_manual_task_success(mock_delete_task, mock_get_task, fake_task_out, logged_in_user):
-    """DELETE /manual_tasks/{id}：刪除成功，回傳被刪的任務 ID 和 deleted 為 True。"""
+    """DELETE /manual-tasks/{id}：刪除成功，回傳被刪的任務 ID 和 deleted 為 True。"""
     mock_get_task.return_value = fake_task_out.model_dump()
     mock_delete_task.return_value = True
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        response = await ac.delete("/manual_tasks/task-id")
+        response = await ac.delete("/manual-tasks/task-id")
 
     assert response.status_code == 200
     assert response.json() == {"task ID": "task-id", "deleted": True}
@@ -208,7 +208,7 @@ async def test_delete_manual_task_not_found(mock_get_task, logged_in_user):
     mock_get_task.side_effect = HTTPException(status_code=404, detail="Task not found")
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        response = await ac.delete("/manual_tasks/task-999")
+        response = await ac.delete("/manual-tasks/task-999")
 
     assert response.status_code == 404
     assert response.json()["detail"] == "Task not found"
@@ -222,6 +222,6 @@ async def test_get_user_tasks_requires_login():
     """沒帶登入 token → 被擋在門外（401/403），不能進到函式裡。"""
     # 這個測試刻意不用 logged_in_user，所以請求是沒登入的
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        response = await ac.get("/manual_tasks/me")
+        response = await ac.get("/manual-tasks/me")
 
     assert response.status_code in (401, 403)

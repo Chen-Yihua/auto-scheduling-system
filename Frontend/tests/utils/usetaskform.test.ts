@@ -110,7 +110,7 @@ describe('useTaskForm', () => {
     const ctx = useTaskForm()
     await ctx.fetchTasks()
     expect(fetchSpy).toHaveBeenCalledWith(
-      'http://localhost:8000/manual_tasks/me',
+      'http://localhost:8000/manual-tasks/me',
       expect.objectContaining({
         method: 'GET',
         headers: { Authorization: 'Bearer dummy-token' },
@@ -145,13 +145,13 @@ describe('useTaskForm', () => {
     // 第一次呼叫：POST
     expect(fetchSpy).toHaveBeenNthCalledWith(
       1,
-      'http://localhost:8000/manual_tasks/',
+      'http://localhost:8000/manual-tasks/',
       expect.objectContaining({ method: 'POST' }),
     )
     // 第二次呼叫：GET (由 fetchTasks)
     expect(fetchSpy).toHaveBeenNthCalledWith(
       2,
-      'http://localhost:8000/manual_tasks/me',
+      'http://localhost:8000/manual-tasks/me',
       expect.objectContaining({ method: 'GET' }),
     )
     // Toast 成功訊息
@@ -192,7 +192,7 @@ describe('useTaskForm', () => {
 
     expect(fetchSpy).toHaveBeenNthCalledWith(
       1,
-      'http://localhost:8000/manual_tasks/',
+      'http://localhost:8000/manual-tasks/',
       expect.objectContaining({ body: expect.objectContaining({ priority: null }) }),
     )
   })
@@ -209,7 +209,7 @@ describe('useTaskForm', () => {
 
     expect(fetchSpy).toHaveBeenNthCalledWith(
       1,
-      'http://localhost:8000/manual_tasks/',
+      'http://localhost:8000/manual-tasks/',
       expect.objectContaining({ body: expect.objectContaining({ duration: null }) }),
     )
   })
@@ -225,7 +225,7 @@ describe('useTaskForm', () => {
 
     expect(fetchSpy).toHaveBeenNthCalledWith(
       1,
-      'http://localhost:8000/manual_tasks/',
+      'http://localhost:8000/manual-tasks/',
       expect.objectContaining({ body: expect.objectContaining({ due_date: null }) }),
     )
   })
@@ -243,7 +243,7 @@ describe('useTaskForm', () => {
 
     expect(fetchSpy).toHaveBeenNthCalledWith(
       1,
-      'http://localhost:8000/manual_tasks/',
+      'http://localhost:8000/manual-tasks/',
       expect.objectContaining({
         body: expect.objectContaining({ inference_hint: '這比想像中難，可能要抓長一點' }),
       }),
@@ -263,7 +263,7 @@ describe('useTaskForm', () => {
 
     expect(fetchSpy).toHaveBeenNthCalledWith(
       1,
-      'http://localhost:8000/manual_tasks/',
+      'http://localhost:8000/manual-tasks/',
       expect.objectContaining({ body: expect.objectContaining({ inference_hint: null }) }),
     )
   })
@@ -280,7 +280,7 @@ describe('useTaskForm', () => {
 
     expect(fetchSpy).toHaveBeenNthCalledWith(
       1,
-      'http://localhost:8000/manual_tasks/',
+      'http://localhost:8000/manual-tasks/',
       expect.objectContaining({ body: expect.objectContaining({ duration: 90 }) }),
     )
   })
@@ -349,12 +349,12 @@ describe('useTaskForm', () => {
 
     expect(fetchSpy).toHaveBeenNthCalledWith(
       1,
-      `http://localhost:8000/manual_tasks/${t.id}`,
+      `http://localhost:8000/manual-tasks/${t.id}`,
       expect.objectContaining({ method: 'PUT' }),
     )
     expect(fetchSpy).toHaveBeenNthCalledWith(
       2,
-      'http://localhost:8000/manual_tasks/me',
+      'http://localhost:8000/manual-tasks/me',
       expect.objectContaining({ method: 'GET' }),
     )
     expect(toastSpy.add).toHaveBeenCalledWith(
@@ -378,13 +378,13 @@ describe('useTaskForm', () => {
 
     expect(fetchSpy).toHaveBeenNthCalledWith(
       1,
-      `http://localhost:8000/manual_tasks/${t.id}`,
+      `http://localhost:8000/manual-tasks/${t.id}`,
       expect.objectContaining({ method: 'DELETE' }),
     )
     await vi.runAllTimersAsync()
     expect(fetchSpy).toHaveBeenNthCalledWith(
       2,
-      'http://localhost:8000/manual_tasks/me',
+      'http://localhost:8000/manual-tasks/me',
       expect.objectContaining({ method: 'GET' }),
     )
     expect(toastSpy.add).toHaveBeenCalledWith(

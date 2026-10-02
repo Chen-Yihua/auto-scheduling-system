@@ -85,7 +85,7 @@ const uiStubs: Record<string, boolean | Component> = {
 }
 
 // ---------- 4. 假任務工具 ----------
-// 舊的 Task 格式（/manual_tasks/me）——目前只用來讓「編輯」按鈕找得到完整資料，
+// 舊的 Task 格式（/manual-tasks/me）——目前只用來讓「編輯」按鈕找得到完整資料，
 // 畫面顯示改用下面的 fakeSchedulableTasks（/schedule/tasks 的統一格式）
 const fakeTasks = (n = 1) =>
   Array.from({ length: n }, (_, i) => ({
@@ -113,7 +113,7 @@ const fakeSchedulableTasks = (n = 1) =>
     url: null,
   }))
 
-// $fetch 現在會被兩支 composable 打到不同的路徑（/manual_tasks/me、
+// $fetch 現在會被兩支 composable 打到不同的路徑（/manual-tasks/me、
 // /schedule/tasks），依 URL 分別回傳對應的假資料，不依賴呼叫順序
 function mockFetchByUrl(responses: Record<string, unknown>) {
   fetchSpy.mockImplementation(async (url: string) => {
@@ -131,7 +131,7 @@ describe('TaskForm.vue (render)', () => {
   })
 
   it('沒有任務時顯示提示文字，抓取完成後不該一直卡在 Skeleton', async () => {
-    mockFetchByUrl({ '/manual_tasks/me': [], '/schedule/tasks': [] })
+    mockFetchByUrl({ '/manual-tasks/me': [], '/schedule/tasks': [] })
 
     const wrapper = shallowMount(TaskForm, { global: { stubs: uiStubs } })
     await flushPromises()
@@ -144,7 +144,7 @@ describe('TaskForm.vue (render)', () => {
 
   it('有任務時顯示卡片並含正確標題', async () => {
     const tasks = fakeSchedulableTasks(2)
-    mockFetchByUrl({ '/manual_tasks/me': [], '/schedule/tasks': tasks })
+    mockFetchByUrl({ '/manual-tasks/me': [], '/schedule/tasks': tasks })
 
     const wrapper = shallowMount(TaskForm, { global: { stubs: uiStubs } })
     await flushPromises()
@@ -161,7 +161,7 @@ describe('TaskForm.vue (render)', () => {
       status: 'To Do', priority: 'Low', duration: null, due_date: null,
       sort_order: null, calendar_event_id: null, url: null,
     }
-    mockFetchByUrl({ '/manual_tasks/me': [], '/schedule/tasks': [task] })
+    mockFetchByUrl({ '/manual-tasks/me': [], '/schedule/tasks': [task] })
 
     const wrapper = shallowMount(TaskForm, { global: { stubs: uiStubs } })
     await flushPromises()
@@ -174,7 +174,7 @@ describe('TaskForm.vue (render)', () => {
     // 按鈕本身現在畫在 TheHeader/index.vue，這裡改成模擬「header 那邊按下按鈕」
     // 的效果：直接透過共用的 useTaskForm() 把 showEditModal 設成 true，
     // 驗證 TaskForm 自己的 Modal 真的會反應到同一份狀態上
-    mockFetchByUrl({ '/manual_tasks/me': [], '/schedule/tasks': [] })
+    mockFetchByUrl({ '/manual-tasks/me': [], '/schedule/tasks': [] })
 
     const wrapper = shallowMount(TaskForm, { global: { stubs: uiStubs } })
     await flushPromises()
@@ -192,7 +192,7 @@ describe('TaskForm.vue (render)', () => {
 
   it('帶 limit 且任務數超過限制時，只顯示前 limit 筆，並顯示「查看全部」連結', async () => {
     const tasks = fakeSchedulableTasks(3)
-    mockFetchByUrl({ '/manual_tasks/me': [], '/schedule/tasks': tasks })
+    mockFetchByUrl({ '/manual-tasks/me': [], '/schedule/tasks': tasks })
 
     const wrapper = shallowMount(TaskForm, { props: { limit: 2 }, global: { stubs: uiStubs } })
     await flushPromises()
@@ -205,7 +205,7 @@ describe('TaskForm.vue (render)', () => {
 
   it('沒帶 limit 時顯示全部任務，不顯示「查看全部」連結', async () => {
     const tasks = fakeSchedulableTasks(3)
-    mockFetchByUrl({ '/manual_tasks/me': [], '/schedule/tasks': tasks })
+    mockFetchByUrl({ '/manual-tasks/me': [], '/schedule/tasks': tasks })
 
     const wrapper = shallowMount(TaskForm, { global: { stubs: uiStubs } })
     await flushPromises()
@@ -220,7 +220,7 @@ describe('TaskForm.vue (render)', () => {
       status: 'To Do', priority: null, duration: null, due_date: null,
       sort_order: null, calendar_event_id: null, url: 'https://github.com/x/y/issues/42',
     }
-    mockFetchByUrl({ '/manual_tasks/me': [], '/schedule/tasks': [githubTask] })
+    mockFetchByUrl({ '/manual-tasks/me': [], '/schedule/tasks': [githubTask] })
     const openSpy = vi.fn()
     vi.stubGlobal('open', openSpy)
 
@@ -237,9 +237,9 @@ describe('TaskForm.vue (render)', () => {
     expect(openSpy).toHaveBeenCalledWith('https://github.com/x/y/issues/42', '_blank')
   })
 
-  it('按下「標記完成」會呼叫 PUT /schedule/tasks/done', async () => {
+  it('按下「標記完成」會呼叫 PATCH /schedule/tasks/done', async () => {
     const task = fakeSchedulableTasks(1)[0]
-    mockFetchByUrl({ '/manual_tasks/me': [], '/schedule/tasks': [task] })
+    mockFetchByUrl({ '/manual-tasks/me': [], '/schedule/tasks': [task] })
 
     const wrapper = shallowMount(TaskForm, { global: { stubs: uiStubs } })
     await flushPromises()
@@ -250,16 +250,16 @@ describe('TaskForm.vue (render)', () => {
 
     expect(fetchSpy).toHaveBeenCalledWith(
       'http://localhost:8000/schedule/tasks/done',
-      expect.objectContaining({ method: 'PUT', body: { task_id: 'manual:t0', done: true } }),
+      expect.objectContaining({ method: 'PATCH', body: { task_id: 'manual:t0', done: true } }),
     )
   })
 
-  it('手動任務按「編輯」會用組合 id 去掉 "manual:" 前綴，找到 /manual_tasks/me 裡完整的任務資料並打開 Modal', async () => {
+  it('手動任務按「編輯」會用組合 id 去掉 "manual:" 前綴，找到 /manual-tasks/me 裡完整的任務資料並打開 Modal', async () => {
     // 統一清單（/schedule/tasks）只有標題等精簡欄位，編輯表單需要的
-    // description/duration/inference_hint 要從 /manual_tasks/me 的完整資料找
+    // description/duration/inference_hint 要從 /manual-tasks/me 的完整資料找
     const fullTasks = fakeTasks(1)
     const schedulableTasks = fakeSchedulableTasks(1)
-    mockFetchByUrl({ '/manual_tasks/me': fullTasks, '/schedule/tasks': schedulableTasks })
+    mockFetchByUrl({ '/manual-tasks/me': fullTasks, '/schedule/tasks': schedulableTasks })
 
     const wrapper = shallowMount(TaskForm, { global: { stubs: uiStubs } })
     await flushPromises()

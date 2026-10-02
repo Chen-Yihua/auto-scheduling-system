@@ -39,7 +39,7 @@ async def test_manual_task_full_lifecycle():
         # 1. 建立任務（priority/duration 都有填，不會觸發 AI 推斷，
         #    避免這個情境測試還要額外去 mock Gemini）
         create_res = await ac.post(
-            "/manual_tasks/",
+            "/manual-tasks/",
             json={
                 "user_id": SCENARIO_USER["sub"],
                 "title": "情境測試：期末報告",
@@ -57,19 +57,19 @@ async def test_manual_task_full_lifecycle():
         assert created["inferred_fields"] == []  # 都有填，不該有任何欄位是 AI 推斷的
 
         # 2. 列表裡看得到剛建立的任務
-        list_res = await ac.get("/manual_tasks/me")
+        list_res = await ac.get("/manual-tasks/me")
         assert list_res.status_code == status.HTTP_200_OK
         titles = [t["title"] for t in list_res.json()]
         assert "情境測試：期末報告" in titles
 
         # 3. 用 id 單獨查詢，資料要跟建立時一致
-        get_res = await ac.get(f"/manual_tasks/{task_id}")
+        get_res = await ac.get(f"/manual-tasks/{task_id}")
         assert get_res.status_code == status.HTTP_200_OK
         assert get_res.json()["priority"] == "Medium"
 
         # 4. 編輯：改標題跟優先度
         update_res = await ac.put(
-            f"/manual_tasks/{task_id}",
+            f"/manual-tasks/{task_id}",
             json={
                 "user_id": SCENARIO_USER["sub"],
                 "title": "情境測試：期末報告（已延期）",
@@ -85,23 +85,23 @@ async def test_manual_task_full_lifecycle():
         assert update_res.json()["priority"] == "High"
 
         # 5. 更新有真的落地：列表裡看到的是新標題，不是舊的
-        list_after_update = await ac.get("/manual_tasks/me")
+        list_after_update = await ac.get("/manual-tasks/me")
         titles_after_update = [t["title"] for t in list_after_update.json()]
         assert "情境測試：期末報告（已延期）" in titles_after_update
         assert "情境測試：期末報告" not in titles_after_update
 
         # 6. 刪除
-        delete_res = await ac.delete(f"/manual_tasks/{task_id}")
+        delete_res = await ac.delete(f"/manual-tasks/{task_id}")
         assert delete_res.status_code == status.HTTP_200_OK
         assert delete_res.json()["deleted"] is True
 
         # 7. 刪除後查不到了（單筆查詢回 404）
-        get_after_delete = await ac.get(f"/manual_tasks/{task_id}")
+        get_after_delete = await ac.get(f"/manual-tasks/{task_id}")
         assert get_after_delete.status_code == status.HTTP_404_NOT_FOUND
 
         # 8. 這個使用者名下已經沒有任何任務 -> 是正常狀態，列表 endpoint 回 200 + 空陣列，
         # 不是 404（404 代表資源路徑不存在，這裡路徑一直都存在，只是內容剛好是空的）
-        list_after_delete = await ac.get("/manual_tasks/me")
+        list_after_delete = await ac.get("/manual-tasks/me")
         assert list_after_delete.status_code == status.HTTP_200_OK
         assert list_after_delete.json() == []
 
@@ -123,7 +123,7 @@ async def test_manual_task_ai_inference_fills_missing_fields_and_survives_full_l
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as ac:
             create_res = await ac.post(
-                "/manual_tasks/",
+                "/manual-tasks/",
                 json={
                     "user_id": SCENARIO_USER["sub"],
                     "title": "情境測試：AI 推斷任務",
@@ -140,9 +140,9 @@ async def test_manual_task_ai_inference_fills_missing_fields_and_survives_full_l
             assert set(created["inferred_fields"]) == {"priority", "duration"}
 
             # 推斷出來的值要真的存進去、查得到，不是只有建立當下的回應裡有
-            get_res = await ac.get(f"/manual_tasks/{task_id}")
+            get_res = await ac.get(f"/manual-tasks/{task_id}")
             assert get_res.json()["priority"] == "Low"
             assert get_res.json()["duration"] == 30
 
             # 清理，避免留在 mongomock 裡影響其他測試
-            await ac.delete(f"/manual_tasks/{task_id}")
+            await ac.delete(f"/manual-tasks/{task_id}")

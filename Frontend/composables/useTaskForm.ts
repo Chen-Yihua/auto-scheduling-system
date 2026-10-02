@@ -142,7 +142,7 @@ function useTaskFormImpl() {
             if (!token) {
                 throw new Error('JWT token is missing or invalid');
             }
-            const res = await $fetch<Task[]>(`${BASE_URL}/manual_tasks/me`, {
+            const res = await $fetch<Task[]>(`${BASE_URL}/manual-tasks/me`, {
                 method: 'GET',
                 headers: { Authorization: `Bearer ${token}`}
             })
@@ -198,7 +198,7 @@ function useTaskFormImpl() {
                 duration: parseDuration(state.duration),
                 inference_hint: state.inference_hint || null,
             }
-            const result = await $fetch<Task>(`${BASE_URL}/manual_tasks/`, {
+            const result = await $fetch<Task>(`${BASE_URL}/manual-tasks/`, {
                 method: 'POST',
                 body: payload,
                 headers: { Authorization: `Bearer ${token}` }
@@ -247,7 +247,7 @@ function useTaskFormImpl() {
                 duration: parseDuration(state.duration),
                 inference_hint: state.inference_hint || null,
             }
-            await $fetch(`${BASE_URL}/manual_tasks/${editing_task.value?.id}`, {
+            await $fetch(`${BASE_URL}/manual-tasks/${editing_task.value?.id}`, {
                 method: 'PUT',
                 body: payload,
                 headers: { Authorization: `Bearer ${token}` }
@@ -272,7 +272,7 @@ function useTaskFormImpl() {
 
         try {
             const token = await getToken.value()
-            await $fetch(`${BASE_URL}/manual_tasks/${editing_task.value.id}`, {
+            await $fetch(`${BASE_URL}/manual-tasks/${editing_task.value.id}`, {
                 method: 'DELETE',
                 headers: { Authorization: `Bearer ${token}` }
             })

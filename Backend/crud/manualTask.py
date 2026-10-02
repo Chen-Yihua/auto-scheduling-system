@@ -84,7 +84,7 @@ async def reorder_manual_tasks(user_id: str, items: list[dict]):
 async def set_calendar_event_id(task_id: str, user_id: str, calendar_event_id: str):
     """
     只有 crud/oauth.py 的 create_calendar_events_for_scheduled_tasks（使用者
-    「確認排程」時）會呼叫，不透過一般的 PUT /manual_tasks/{id} 更新流程——
+    「確認排程」時）會呼叫，不透過一般的 PUT /manual-tasks/{id} 更新流程——
     calendar_event_id 不該讓 client 透過一般更新請求自己填，那樣等於能無中生有
     「假裝」一筆任務已經鎖定，跳過真正建立 Google Calendar 事件那一步。
     """

@@ -46,8 +46,8 @@ class _FailingCursor:
 # (路徑, 讓該 endpoint 第一次碰資料庫就出錯的設定方式)
 ENDPOINTS = {
     "users": ("/users/me", lambda mp, err: mp.setattr(db.users, "find_one", _failing(err))),
-    "manual_tasks": ("/manual_tasks/me", lambda mp, err: mp.setattr(db.manual_tasks, "find", lambda q: _FailingCursor(err))),
-    "linked_accounts": ("/user/linked-accounts/me", lambda mp, err: mp.setattr(db.linkedAccounts, "find", lambda q: _FailingCursor(err))),
+    "manual_tasks": ("/manual-tasks/me", lambda mp, err: mp.setattr(db.manual_tasks, "find", lambda q: _FailingCursor(err))),
+    "linked_accounts": ("/users/me/linked-accounts/", lambda mp, err: mp.setattr(db.linkedAccounts, "find", lambda q: _FailingCursor(err))),
     "github": ("/github/issues", lambda mp, err: mp.setattr(db.linkedAccounts, "find_one", _failing(err))),
     "jira": ("/jira/issues", lambda mp, err: mp.setattr(db.linkedAccounts, "find_one", _failing(err))),
     "moodle": ("/moodle/assignments", lambda mp, err: mp.setattr(db.linkedAccounts, "find_one", _failing(err))),

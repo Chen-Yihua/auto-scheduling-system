@@ -21,8 +21,9 @@ vi.mock('~/composables/useTaskForm', () => ({
   useTaskForm: () => ({ showEditModal }),
 }))
 
+const ensureUserRecordSpy = vi.fn()
 vi.mock('~/composables/useUserSync', () => ({
-  useUserSync: () => ({ ensureUserRecord: vi.fn() }),
+  useUserSync: () => ({ ensureUserRecord: ensureUserRecordSpy }),
 }))
 
 // 假的 UButton：把 disabled／aria-label／title 畫成真的 button 屬性
@@ -59,6 +60,7 @@ describe('TheHeader/index.vue', () => {
     showEditModal.value = false
     userRef.value = null
     isSignedInRef.value = false
+    ensureUserRecordSpy.mockClear()
   })
 
   afterEach(() => {
@@ -92,4 +94,19 @@ describe('TheHeader/index.vue', () => {
     expect(showEditModal.value).toBe(true)
     expect(wrapper.text()).toContain('陳小明')
   })
+
+  it('使用者登入（user 從 null 變成有值）時，確認後端有這個使用者；登出不會呼叫', async () => {
+    wrapper = mount(TheHeader, { global: { stubs } })
+    const user = { id: 'user_1', fullName: '陳小明', firstName: '小明', lastName: '陳' }
+
+    userRef.value = user
+    await wrapper.vm.$nextTick()
+    expect(ensureUserRecordSpy).toHaveBeenCalledWith(user)
+
+    ensureUserRecordSpy.mockClear()
+    userRef.value = null
+    await wrapper.vm.$nextTick()
+    expect(ensureUserRecordSpy).not.toHaveBeenCalled()
+  })
+
 })

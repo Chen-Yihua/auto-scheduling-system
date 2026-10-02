@@ -119,4 +119,19 @@ describe('useGoogleCalendar composable', () => {
     expect(ctx.isConnected.value).toBe(false)
     expect(toastSpy.add).not.toHaveBeenCalled()
   })
+
+  it('授權失效（401）時，提示使用者重新連接 Google Calendar，而不是「稍後再試」', async () => {
+    fetchSpy.mockResolvedValueOnce({ connected: true })
+    fetchSpy.mockRejectedValueOnce({ response: { status: 401 } })
+
+    const ctx = useGoogleCalendar()
+    await ctx.fetchGoogleCalendars()
+
+    expect(toastSpy.add).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'Google Calendar 授權已失效',
+        description: expect.stringContaining('重新點擊「連接 Google Calendar」'),
+      }),
+    )
+  })
 })

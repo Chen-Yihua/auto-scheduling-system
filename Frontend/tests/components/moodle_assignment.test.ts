@@ -125,4 +125,15 @@ describe('MoodleAssignments.vue', () => {
     expect(wrapper.text()).not.toContain('作業三')
     expect(wrapper.text()).toContain('查看全部（3）')
   })
+
+  it('已綁定、載入完成但沒有作業時，顯示「目前沒有未繳作業」', () => {
+    hasAccountRef.value = true
+    loadingRef.value = false
+    assignmentsRef.value = []
+
+    const wrapper = render()
+
+    expect(wrapper.text()).toContain('目前沒有未繳作業')
+    expect(wrapper.findAll('.u-card-stub').length).toBe(1)
+  })
 })

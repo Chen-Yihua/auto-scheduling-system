@@ -307,4 +307,18 @@ describe('useScheduleWizard composable', () => {
       expect.objectContaining({ title: '更新任務失敗', color: 'error' }),
     )
   })
+
+  it('initWizard 欄內排序：有 sort_order 的排前面；都沒有就照截止日，沒有截止日的排最後', () => {
+    const ctx = useScheduleWizard()
+    ctx.initWizard([
+      fakeTask({ id: 'no-order-no-due' }),
+      fakeTask({ id: 'no-order-late', due_date: '2026-12-01T00:00:00Z' }),
+      fakeTask({ id: 'ordered', sort_order: 5 }),
+      fakeTask({ id: 'no-order-early', due_date: '2026-10-01T00:00:00Z' }),
+    ])
+
+    expect(ctx.columns.Medium.map((t) => t.id)).toEqual([
+      'ordered', 'no-order-early', 'no-order-late', 'no-order-no-due',
+    ])
+  })
 })

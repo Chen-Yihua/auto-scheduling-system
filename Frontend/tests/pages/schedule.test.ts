@@ -272,6 +272,32 @@ describe('pages/schedule.vue', () => {
       expect(preferencesRef.value.buffer_minutes).toBe(20)
     })
   })
+
+  it('step 1：拖到某一欄的空白處 → 放到那一欄的最後面', async () => {
+    columnsRef.Low = [fakeTask({ id: 'low1' })]
+    columnsRef.High = [fakeTask({ id: 'high1' }), fakeTask({ id: 'high2' })]
+
+    const wrapper = render()
+    await wrapper.findAll('.cursor-move')[0]!.trigger('dragstart') // low1
+    // 三欄依 Low／Medium／High 排列，欄位容器是帶 min-h 的那層
+    const columns = wrapper.findAll('[class*="min-h-"]')
+    await columns[2]!.trigger('drop')
+
+    expect(moveTaskSpy).toHaveBeenCalledWith('Low', 0, 'High', 2)
+  })
+
+  it('step 2：清空截止日或所需時長時，送出的是 null，不是空字串或 NaN', async () => {
+    stepRef.value = 2
+    columnsRef.Medium = [fakeTask({ id: 'a', due_date: '2026-10-01T09:00:00Z', duration: 30 })]
+    const wrapper = render()
+
+    await wrapper.find('input[type="datetime-local"]').setValue('')
+    expect(updateDueDateSpy).toHaveBeenCalledWith('a', null)
+
+    await wrapper.findAll('input[type="number"]')[2]!.setValue('')
+    expect(updateDurationSpy).toHaveBeenCalledWith('a', null)
+  })
+
 })
 
 function flushMicrotasks() {

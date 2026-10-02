@@ -107,4 +107,15 @@ describe('useSchedulableTasks composable', () => {
       expect.objectContaining({ title: '更新完成狀態失敗', color: 'error' }),
     )
   })
+
+  it('toggleDone 對已完成的任務會取消完成（done: false）', async () => {
+    fetchSpy.mockResolvedValueOnce(undefined)
+    const ctx = useSchedulableTasks()
+    const task = fakeTask({ status: 'Done' })
+
+    await ctx.toggleDone(task)
+
+    expect(fetchSpy.mock.calls[0][1].body).toEqual({ task_id: task.id, done: false })
+    expect(task.status).toBe('To Do')
+  })
 })

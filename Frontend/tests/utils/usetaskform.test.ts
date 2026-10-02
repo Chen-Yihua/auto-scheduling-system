@@ -392,4 +392,132 @@ describe('useTaskForm', () => {
     )
     vi.useRealTimers()
   })
+  // ---------- 顯示、表單開關 ----------
+  it('startEditTask(null) 切換成新增模式並清空表單，但一樣打開 Modal', () => {
+    const ctx = useTaskForm()
+    ctx.startEditTask(fakeTask())
+    ctx.state.title = '舊的標題'
+
+    ctx.startEditTask(null)
+
+    expect(ctx.editing_task.value).toBe(null)
+    expect(ctx.isEditMode.value).toBe(false)
+    expect(ctx.state.title).toBe('')
+    expect(ctx.showEditModal.value).toBe(true)
+  })
+
+  it('onCancel 清空表單、離開編輯模式並關閉 Modal', () => {
+    const ctx = useTaskForm()
+    ctx.startEditTask(fakeTask())
+
+    ctx.onCancel()
+
+    expect(ctx.showEditModal.value).toBe(false)
+    expect(ctx.editing_task.value).toBe(null)
+    expect(ctx.state.title).toBe('')
+  })
+
+  // ---------- 載入任務失敗 ----------
+  it('fetchTasks API 失敗時保留原本的清單，loading 一樣會結束', async () => {
+    const ctx = useTaskForm()
+    ctx.all_tasks.value = [fakeTask('keep')]
+    fetchSpy.mockRejectedValueOnce(new Error('boom'))
+    vi.spyOn(console, 'error').mockImplementationOnce(() => {})
+
+    await ctx.fetchTasks()
+
+    expect(ctx.all_tasks.value.map((t) => t.id)).toEqual(['keep'])
+    expect(ctx.loading.value).toBe(false)
+  })
+
+  // ---------- 新增任務：邊界情況 ----------
+  it('onSubmit：duration 不是數字時送 null，不能送 NaN 給後端', async () => {
+    const ctx = useTaskForm()
+    ctx.startEditTask(null)
+    ctx.state.title = '任務'
+    ctx.state.duration = 'abc'
+    fetchSpy.mockResolvedValueOnce({ id: 't1' })
+
+    await submitAndFlushTimers(() => ctx.onSubmit(submitEvent(ctx.state)))
+
+    expect(fetchSpy.mock.calls[0][1].body.duration).toBe(null)
+  })
+
+  it('onSubmit 失敗時顯示錯誤、Modal 保持開著讓使用者重試，送出狀態要恢復', async () => {
+    const ctx = useTaskForm()
+    ctx.startEditTask(null)
+    ctx.state.title = '任務'
+    fetchSpy.mockRejectedValueOnce(new Error('boom'))
+    vi.spyOn(console, 'error').mockImplementationOnce(() => {})
+
+    await ctx.onSubmit(submitEvent(ctx.state))
+
+    expect(toastSpy.add).toHaveBeenCalledWith(expect.objectContaining({ title: '儲存失敗', color: 'error' }))
+    expect(ctx.showEditModal.value).toBe(true)
+    expect(ctx.state.title).toBe('任務') // 使用者填的內容不能被清掉
+    expect(ctx.submitting.value).toBe(false)
+  })
+
+  // ---------- 編輯任務：邊界情況 ----------
+  it('送出期間重複呼叫 onEdit 會被擋下來，不會送出第二次請求', async () => {
+    const ctx = useTaskForm()
+    ctx.startEditTask(fakeTask('t2'))
+
+    await submitAndFlushTimers(async () => {
+      const first = ctx.onEdit(submitEvent(ctx.state))
+      const second = ctx.onEdit(submitEvent(ctx.state))
+      await Promise.all([first, second])
+    })
+
+    const putCalls = fetchSpy.mock.calls.filter(([, opts]) => opts?.method === 'PUT')
+    expect(putCalls).toHaveLength(1)
+  })
+
+  it('onEdit 改成「無期限」時，送給後端的 due_date 是 null', async () => {
+    const ctx = useTaskForm()
+    ctx.startEditTask(fakeTask('t2'))
+    ctx.clearDueDate()
+
+    await submitAndFlushTimers(() => ctx.onEdit(submitEvent(ctx.state)))
+
+    expect(fetchSpy.mock.calls[0][1].body.due_date).toBe(null)
+  })
+
+  it('onEdit 失敗時顯示錯誤，Modal 保持開著', async () => {
+    const ctx = useTaskForm()
+    ctx.startEditTask(fakeTask('t2'))
+    fetchSpy.mockRejectedValueOnce(new Error('boom'))
+    vi.spyOn(console, 'error').mockImplementationOnce(() => {})
+
+    await ctx.onEdit(submitEvent(ctx.state))
+
+    expect(toastSpy.add).toHaveBeenCalledWith(expect.objectContaining({ title: '儲存失敗', color: 'error' }))
+    expect(ctx.showEditModal.value).toBe(true)
+    expect(ctx.submitting.value).toBe(false)
+  })
+
+  // ---------- 刪除任務：邊界情況 ----------
+  it('onDelete 使用者在確認框按取消時不刪除', async () => {
+    const ctx = useTaskForm()
+    ctx.startEditTask(fakeTask('t3'))
+    vi.stubGlobal('window', Object.assign({}, globalThis.window, { confirm: () => false }))
+
+    await ctx.onDelete()
+
+    expect(fetchSpy).not.toHaveBeenCalled()
+    expect(ctx.showEditModal.value).toBe(true)
+  })
+
+  it('onDelete 失敗時顯示錯誤，Modal 保持開著', async () => {
+    const ctx = useTaskForm()
+    ctx.startEditTask(fakeTask('t3'))
+    vi.stubGlobal('window', Object.assign({}, globalThis.window, { confirm: () => true }))
+    fetchSpy.mockRejectedValueOnce(new Error('boom'))
+    vi.spyOn(console, 'error').mockImplementationOnce(() => {})
+
+    await ctx.onDelete()
+
+    expect(toastSpy.add).toHaveBeenCalledWith(expect.objectContaining({ title: '刪除失敗', color: 'error' }))
+    expect(ctx.showEditModal.value).toBe(true)
+  })
 })

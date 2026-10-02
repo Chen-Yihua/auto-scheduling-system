@@ -132,4 +132,35 @@ describe('useMoodleAssignments', () => {
       }),
     )
   })
+
+  it.each([
+    ['有 Moodle 但缺密碼', [{ platform: 'moodle', username: 'u' }]],
+    ['有 Moodle 但缺帳號', [{ platform: 'moodle', password: 'p' }]],
+  ])('%s 視為尚未綁定，不觸發爬蟲', async (_label, accounts) => {
+    fetchSpy.mockResolvedValueOnce(accounts)
+
+    const ctx = (await loadComposable())()
+    await ctx.fetchMoodleAssignments()
+
+    expect(ctx.hasAccount.value).toBe(false)
+    expect(fetchRawSpy).not.toHaveBeenCalled()
+  })
+
+  it('暫時性錯誤（例如 500）時，顯示「稍後再試」而不是要使用者重新輸入帳密', async () => {
+    fetchSpy.mockResolvedValueOnce(linked(true))
+    fetchRawSpy.mockRejectedValueOnce({ response: { status: 500 } })
+    vi.spyOn(console, 'error').mockImplementationOnce(() => {})
+
+    const ctx = (await loadComposable())()
+    await ctx.fetchMoodleAssignments()
+
+    expect(ctx.authError.value).toBe(false)
+    expect(toastSpy.add).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'Moodle 資料暫時無法取得',
+        description: expect.stringContaining('稍後再試'),
+        color: 'error',
+      }),
+    )
+  })
 })

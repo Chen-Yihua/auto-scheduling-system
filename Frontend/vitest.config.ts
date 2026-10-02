@@ -15,6 +15,10 @@ export default defineConfig({
     coverage: {
       reporter: ['text', 'lcov', 'html'], // CLI 印出 + 產出 lcov.info + HTML 報表
       reportsDirectory: './coverage',     // 可省略，預設就是 coverage/
+      // 只統計自己寫的程式碼。沒列進來的：設定檔（nuxt/vitest config）、只有型別宣告的
+      // types/（編譯後是空檔案）、app.vue（只有 <UApp><NuxtPage/></UApp> 的框架接線），
+      // 以及 coverage/ 報表自己產生的 JS——之前全部算進分母，把整體數字拉低到失真
+      include: ['components/**', 'composables/**', 'pages/**', 'utils/**', 'server/**'],
       exclude: ['**/node_modules/**', '**/.nuxt/**', '**/tests/**'],
     },
   },

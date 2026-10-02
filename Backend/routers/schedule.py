@@ -49,7 +49,7 @@ async def reorder_schedule_tasks(
     return await get_all_schedulable_items(clerk_user["sub"])
 
 
-@router.put("/tasks/fields")
+@router.patch("/tasks/fields")
 async def update_schedule_task_fields(
     body: ScheduleTaskFieldsUpdate,
     clerk_user: dict = Depends(get_current_clerk_user),
@@ -61,7 +61,7 @@ async def update_schedule_task_fields(
     return {"task_id": body.task_id, "updated": True}
 
 
-@router.put("/tasks/done")
+@router.patch("/tasks/done")
 async def update_schedule_task_done(
     body: ScheduleTaskDoneUpdate,
     clerk_user: dict = Depends(get_current_clerk_user),

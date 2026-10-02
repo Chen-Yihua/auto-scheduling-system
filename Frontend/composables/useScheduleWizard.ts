@@ -152,7 +152,7 @@ function useScheduleWizardImpl() {
     if (task) task.duration = duration
   }
 
-  // 完成：把每筆項目目前的 due_date／duration 存回去（PUT /schedule/tasks/fields，
+  // 完成：把每筆項目目前的 due_date／duration 存回去（PATCH /schedule/tasks/fields，
   // task_id 放 body——Moodle 的組合 id 是完整網址，放 URL 路徑會被誤判成路徑
   // 分隔或查詢字串），再交給呼叫端（排程建議頁）產生正式的排程建議
   async function finish(onDone: () => void | Promise<void>) {
@@ -167,7 +167,7 @@ function useScheduleWizardImpl() {
           if (task.due_date) body.due_date = task.due_date
           if (task.duration != null) body.duration = task.duration
           return $fetch(`${BASE_URL}/schedule/tasks/fields`, {
-            method: 'PUT',
+            method: 'PATCH',
             body,
             headers: { Authorization: `Bearer ${token}` },
           })

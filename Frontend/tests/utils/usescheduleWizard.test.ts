@@ -272,7 +272,7 @@ describe('useScheduleWizard composable', () => {
     expect(fetchSpy).toHaveBeenCalledWith(
       'http://api/schedule/tasks/fields',
       expect.objectContaining({
-        method: 'PUT',
+        method: 'PATCH',
         body: { task_id: 'a', due_date: '2026-10-01T00:00:00.000Z', duration: 30 },
         headers: { Authorization: 'Bearer jwt-token' },
       }),

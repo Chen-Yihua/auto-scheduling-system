@@ -50,7 +50,7 @@ function useSchedulableTasksImpl() {
       if (!token) throw new Error('找不到 JWT')
 
       await $fetch(`${BASE_URL}/schedule/tasks/done`, {
-        method: 'PUT',
+        method: 'PATCH',
         body: { task_id: task.id, done: nextDone },
         headers: { Authorization: `Bearer ${token}` },
       })

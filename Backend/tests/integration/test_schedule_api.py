@@ -206,7 +206,7 @@ async def test_reorder_schedule_tasks_success(monkeypatch, logged_in_user):
 
 @pytest.mark.asyncio
 async def test_update_schedule_task_fields_success(monkeypatch, logged_in_user):
-    """PUT /schedule/tasks/fields：task_id 放 body，Moodle 那種帶斜線/問號的組合 id 也不會被 URL 解析搞壞。"""
+    """PATCH /schedule/tasks/fields：task_id 放 body，Moodle 那種帶斜線/問號的組合 id 也不會被 URL 解析搞壞。"""
     captured = {}
 
     async def mock_update(user_id, task_id, data):
@@ -216,7 +216,7 @@ async def test_update_schedule_task_fields_success(monkeypatch, logged_in_user):
     monkeypatch.setattr(schedule_router, "update_scheduling_fields", mock_update)
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        res = await ac.put(
+        res = await ac.patch(
             "/schedule/tasks/fields",
             json={"task_id": "moodle:https://moodle.nccu.edu.tw/mod/assign/view.php?id=1", "duration": 60},
         )
@@ -228,7 +228,7 @@ async def test_update_schedule_task_fields_success(monkeypatch, logged_in_user):
 
 @pytest.mark.asyncio
 async def test_update_schedule_task_done_success(monkeypatch, logged_in_user):
-    """PUT /schedule/tasks/done：使用者手動標記完成／取消完成。"""
+    """PATCH /schedule/tasks/done：使用者手動標記完成／取消完成。"""
     captured = {}
 
     async def mock_set_done(user_id, task_id, done):
@@ -238,7 +238,7 @@ async def test_update_schedule_task_done_success(monkeypatch, logged_in_user):
     monkeypatch.setattr(schedule_router, "set_done", mock_set_done)
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        res = await ac.put("/schedule/tasks/done", json={"task_id": "github:42", "done": True})
+        res = await ac.patch("/schedule/tasks/done", json={"task_id": "github:42", "done": True})
 
     assert res.status_code == status.HTTP_200_OK
     assert captured == {"task_id": "github:42", "done": True}

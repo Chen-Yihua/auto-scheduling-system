@@ -63,7 +63,7 @@ describe('useSchedulableTasks composable', () => {
     )
   })
 
-  it('toggleDone 成功：樂觀更新狀態，並呼叫 PUT /schedule/tasks/done', async () => {
+  it('toggleDone 成功：樂觀更新狀態，並呼叫 PATCH /schedule/tasks/done', async () => {
     fetchSpy.mockResolvedValueOnce(undefined)
     const ctx = useSchedulableTasks()
     const task = fakeTask({ id: 'github:42', status: 'To Do' })
@@ -74,7 +74,7 @@ describe('useSchedulableTasks composable', () => {
     expect(fetchSpy).toHaveBeenCalledWith(
       'http://api/schedule/tasks/done',
       expect.objectContaining({
-        method: 'PUT',
+        method: 'PATCH',
         body: { task_id: 'github:42', done: true },
         headers: { Authorization: 'Bearer jwt-token' },
       }),

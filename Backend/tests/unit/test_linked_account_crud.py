@@ -236,7 +236,7 @@ async def test_update_github_account_with_token(monkeypatch):
     monkeypatch.setattr(linked_mod, "fetch_github_userinfo", mock_fetch_github_userinfo)
 
     result = await update_linked_account_by_clerk_id(
-        "uid123", "github", {"payload": {"apiKey": "token"}}
+        "uid123", "github", {"apiKey": "token"}
     )
     assert result is True
     assert updated["username"] == "updated_user"
@@ -245,19 +245,11 @@ async def test_update_github_account_with_token(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_update_linked_account_no_valid_fields():
-    """payload 裡沒有任何合法欄位（例如只有 foo）→ 回傳 False（router 會轉成 404）。"""
+    """要更新的欄位裡沒有任何合法欄位（例如只有 foo）→ 回傳 False（router 會轉成 404）。"""
     result = await update_linked_account_by_clerk_id(
-        "uid123", "github", {"payload": {"foo": "bar"}}
+        "uid123", "github", {"foo": "bar"}
     )
     assert result is False
-
-
-@pytest.mark.asyncio
-async def test_update_linked_account_invalid_payload_raises_400():
-    """payload 不是 dict → 400。"""
-    with pytest.raises(HTTPException) as exc_info:
-        await update_linked_account_by_clerk_id("uid123", "github", {"payload": "not-a-dict"})
-    assert exc_info.value.status_code == 400
 
 
 @pytest.mark.asyncio
@@ -268,7 +260,7 @@ async def test_update_github_account_basic(monkeypatch):
 
     monkeypatch.setattr(linked_mod.db.linkedAccounts, "update_one", mock_update_one)
     result = await update_linked_account_by_clerk_id(
-        "uid123", "github", {"payload": {"status": "connected"}}
+        "uid123", "github", {"status": "connected"}
     )
     assert result is True
 
@@ -290,7 +282,7 @@ async def test_update_jira_account_with_domain_reverifies(monkeypatch):
     monkeypatch.setattr(linked_mod, "fetch_jira_userinfo", mock_fetch_jira_userinfo)
 
     result = await update_linked_account_by_clerk_id(
-        "uid123", "jira", {"payload": {"apiKey": "newkey", "domain": "foo.atlassian.net"}}
+        "uid123", "jira", {"apiKey": "newkey", "domain": "foo.atlassian.net"}
     )
     assert result is True
     assert updated["username"] == "jira_user"
@@ -321,7 +313,7 @@ async def test_update_jira_apikey_only_reverifies_with_existing_domain(monkeypat
     monkeypatch.setattr(linked_mod, "fetch_jira_userinfo", mock_fetch_jira_userinfo)
 
     result = await update_linked_account_by_clerk_id(
-        "uid123", "jira", {"payload": {"apiKey": "newkey"}}
+        "uid123", "jira", {"apiKey": "newkey"}
     )
     assert result is True
     assert verify_calls == [("newkey", "existing.atlassian.net")]
@@ -354,7 +346,7 @@ async def test_update_jira_domain_only_reverifies_with_existing_apikey(monkeypat
     monkeypatch.setattr(linked_mod, "fetch_jira_userinfo", mock_fetch_jira_userinfo)
 
     result = await update_linked_account_by_clerk_id(
-        "uid123", "jira", {"payload": {"domain": "new-instance.atlassian.net"}}
+        "uid123", "jira", {"domain": "new-instance.atlassian.net"}
     )
     assert result is True
     assert verify_calls == [("existingkey", "new-instance.atlassian.net")]
@@ -385,7 +377,7 @@ async def test_update_moodle_password_reverifies_with_existing_username(monkeypa
     monkeypatch.setattr(linked_mod, "verify_moodle_login", mock_verify)
 
     result = await update_linked_account_by_clerk_id(
-        "uid123", "moodle", {"payload": {"password": "newpass"}}
+        "uid123", "moodle", {"password": "newpass"}
     )
     assert result is True
     assert verify_calls == [("stu001", "newpass")]
@@ -417,7 +409,7 @@ async def test_update_moodle_username_only_reverifies_with_existing_password(mon
     monkeypatch.setattr(linked_mod, "verify_moodle_login", mock_verify)
 
     result = await update_linked_account_by_clerk_id(
-        "uid123", "moodle", {"payload": {"username": "stu002"}}
+        "uid123", "moodle", {"username": "stu002"}
     )
     assert result is True
     assert verify_calls == [("stu002", "oldpass")]
@@ -440,7 +432,7 @@ async def test_update_moodle_wrong_password_raises_401(monkeypatch):
 
     with pytest.raises(HTTPException) as exc_info:
         await update_linked_account_by_clerk_id(
-            "uid123", "moodle", {"payload": {"password": "wrong"}}
+            "uid123", "moodle", {"password": "wrong"}
         )
     assert exc_info.value.status_code == 401
 

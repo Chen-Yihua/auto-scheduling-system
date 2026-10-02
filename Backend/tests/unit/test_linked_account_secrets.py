@@ -120,7 +120,7 @@ async def test_update_moodle_password_encrypts_before_save(monkeypatch):
     monkeypatch.setattr(linked_mod.db.linkedAccounts, "find_one", mock_find_one)
 
     result = await update_linked_account_by_clerk_id(
-        "uid123", "moodle", {"payload": {"password": "new-password"}}
+        "uid123", "moodle", {"password": "new-password"}
     )
 
     assert result is True
@@ -135,7 +135,7 @@ async def test_update_jira_apikey_without_domain_still_encrypted(monkeypatch):
     monkeypatch.setattr(linked_mod.db.linkedAccounts, "update_one", _mock_update_one(stored))
 
     result = await update_linked_account_by_clerk_id(
-        "uid123", "jira", {"payload": {"apiKey": "new-jira-token"}}
+        "uid123", "jira", {"apiKey": "new-jira-token"}
     )
 
     assert result is True

@@ -48,7 +48,7 @@ async def test_github_linked_account_full_lifecycle(monkeypatch):
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         # 1. 連結 GitHub 帳號
         create_res = await ac.post(
-            "/user/linked-accounts/create",
+            "/users/me/linked-accounts/",
             json={
                 "platform": "github",
                 "status": "connected",
@@ -60,7 +60,7 @@ async def test_github_linked_account_full_lifecycle(monkeypatch):
         assert create_res.json()["linkedAccounts"]["github"]["username"] == "mock_user_v1"
 
         # 2. 列表裡看得到，而且金鑰是遮罩過的，不是明文
-        list_res = await ac.get("/user/linked-accounts/me")
+        list_res = await ac.get("/users/me/linked-accounts/")
         assert list_res.status_code == status.HTTP_200_OK
         accounts = list_res.json()
         assert len(accounts) == 1
@@ -70,29 +70,26 @@ async def test_github_linked_account_full_lifecycle(monkeypatch):
         assert github_account["apiKey"] != "token-v1"  # 絕不回傳明文
         assert github_account["apiKey"].endswith("v1")  # mask_secret 保留最後幾碼
 
-        # 3. 更新金鑰（前端實際送出的形狀：{"platform", "data": {"payload": {...}}}）
-        update_res = await ac.put(
-            "/user/linked-accounts/",
-            json={
-                "platform": "github",
-                "data": {"payload": {"apiKey": "token-v2"}},
-            },
+        # 3. 更新金鑰（PATCH，body 直接放要改的欄位）
+        update_res = await ac.patch(
+            "/users/me/linked-accounts/github",
+            json={"apiKey": "token-v2"},
         )
         assert update_res.status_code == status.HTTP_200_OK, update_res.text
         assert update_res.json()["success"] is True
         assert call_count["n"] == 2  # 更新有重新驗證一次新 token
 
         # 4. 更新有真的落地：使用者名稱反映的是第二次驗證拿到的新值
-        list_after_update = await ac.get("/user/linked-accounts/me")
+        list_after_update = await ac.get("/users/me/linked-accounts/")
         assert list_after_update.json()[0]["username"] == "mock_user_v2"
 
         # 5. 刪除
-        delete_res = await ac.delete("/user/linked-accounts/github")
+        delete_res = await ac.delete("/users/me/linked-accounts/github")
         assert delete_res.status_code == status.HTTP_200_OK
         assert delete_res.json()["deleted"] is True
 
         # 6. 刪除後沒有任何連結帳號 -> 是正常狀態，回 200 + 空陣列，不是 404
-        list_after_delete = await ac.get("/user/linked-accounts/me")
+        list_after_delete = await ac.get("/users/me/linked-accounts/")
         assert list_after_delete.status_code == status.HTTP_200_OK
         assert list_after_delete.json() == []
 
@@ -115,7 +112,7 @@ async def test_moodle_linked_account_rejects_wrong_password_and_leaves_nothing_b
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         create_res = await ac.post(
-            "/user/linked-accounts/create",
+            "/users/me/linked-accounts/",
             json={
                 "platform": "moodle",
                 "status": "connected",
@@ -126,6 +123,6 @@ async def test_moodle_linked_account_rejects_wrong_password_and_leaves_nothing_b
         assert create_res.status_code == status.HTTP_401_UNAUTHORIZED
 
         # 驗證失敗不該留下任何殘影資料——沒有任何連結帳號，回 200 + 空陣列，不是 404
-        list_res = await ac.get("/user/linked-accounts/me")
+        list_res = await ac.get("/users/me/linked-accounts/")
         assert list_res.status_code == status.HTTP_200_OK
         assert list_res.json() == []

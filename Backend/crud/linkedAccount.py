@@ -216,9 +216,6 @@ async def get_linked_accounts_by_clerk_id(clerk_id: str):
 # 更新 Linked Account
 async def update_linked_account_by_clerk_id(clerk_id: str, platform: str, data: dict):
     composite_id = f"{clerk_id}_{platform}"
-    data = data.get("payload")
-    if not isinstance(data, dict):
-        raise HTTPException(status_code=400, detail="Missing or invalid 'payload' field")
     # 過濾掉允許更新的欄位
     filtered_data: LinkedAccountDoc = {k: v for k, v in data.items() if k in ALLOWED_UPDATE_FIELDS}
     if not filtered_data:

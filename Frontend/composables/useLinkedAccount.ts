@@ -27,12 +27,12 @@ export interface LinkedAccountKey {
   _originalDomain?: string;
 }
 
-// POST /user/linked-accounts/create 的回傳
+// POST /users/me/linked-accounts/ 的回傳
 interface CreateLinkedAccountResponse {
   linkedAccounts: Record<string, { avatar_url?: string }>;
 }
 
-// PUT/POST 存檔送給後端的 body，欄位依平台不同而有無
+// PATCH/POST 存檔送給後端的 body，欄位依平台不同而有無
 interface LinkedAccountPayload {
   platform: string;
   status: string;
@@ -97,7 +97,7 @@ export const useLinkedAccount = () => {
   const fetchKeys = async () => {
     await until(isLoaded).toBe(true);
     const token = await getToken.value();
-    const list = await $fetch<LinkedAccountRecord[]>(`${BASE_URL}/user/linked-accounts/me`, {
+    const list = await $fetch<LinkedAccountRecord[]>(`${BASE_URL}/users/me/linked-accounts/`, {
       headers: { Authorization: `Bearer ${token}` },
     });
 
@@ -175,7 +175,7 @@ export const useLinkedAccount = () => {
 
       if (isNew) {
         const res = await $fetch<CreateLinkedAccountResponse>(
-          `${BASE_URL}/user/linked-accounts/create`,
+          `${BASE_URL}/users/me/linked-accounts/`,
           {
             method: 'POST',
             headers: { Authorization: `Bearer ${token}` },
@@ -184,15 +184,11 @@ export const useLinkedAccount = () => {
         );
         avatarUrl = res?.linkedAccounts?.[keyItem.platform]?.avatar_url;
       } else {
-        await $fetch(`${BASE_URL}/user/linked-accounts/`, {
-          method: 'PUT',
+        // 部分更新：body 直接放要改的欄位，平台放在路徑上
+        await $fetch(`${BASE_URL}/users/me/linked-accounts/${keyItem.platform}`, {
+          method: 'PATCH',
           headers: { Authorization: `Bearer ${token}` },
-          body: {
-            platform: keyItem.platform,
-            data: {
-              payload,
-            },
-          },
+          body: payload,
         });
       }
 
@@ -247,7 +243,7 @@ export const useLinkedAccount = () => {
   const deleteKey = async (keyItem: LinkedAccountKey) => {
     try {
       const token = await getToken.value();
-      await $fetch(`${BASE_URL}/user/linked-accounts/${keyItem.platform}`, {
+      await $fetch(`${BASE_URL}/users/me/linked-accounts/${keyItem.platform}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
         body: {

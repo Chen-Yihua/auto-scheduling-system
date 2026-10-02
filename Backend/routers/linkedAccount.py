@@ -5,10 +5,11 @@ from schemas.linkedAccount import LinkedAccountCreate, LinkedAccountOut
 from db.security import get_current_clerk_user
 from rate_limit import limiter
 
-router = APIRouter(prefix="/user/linked-accounts", tags=["linked-accounts"])
+# 綁定帳號是「目前登入者」底下的資源，掛在 /users/me 底下，跟 routers/user.py 的 /users/me 一致
+router = APIRouter(prefix="/users/me/linked-accounts", tags=["linked-accounts"])
 
 # 查詢目前登入者綁定帳號
-@router.get("/me", response_model=List[LinkedAccountOut])
+@router.get("/", response_model=List[LinkedAccountOut])
 async def get_current_linked_accounts(
     clerk_user: dict = Depends(get_current_clerk_user)
 ):
@@ -19,7 +20,7 @@ async def get_current_linked_accounts(
 # 註冊（新增）綁定帳號
 # 平台是 GitHub/Jira 會真的打一次驗證 API，平台是 Moodle 會真的開一次 Selenium
 # 登入驗證——成本跟 /moodle/assignments 同一個等級，一起限流。
-@router.post("/create")
+@router.post("/")
 @limiter.limit("10/minute")
 async def create_linked_account(
     request: Request,
@@ -35,12 +36,13 @@ async def create_linked_account(
     return new_account_response
 
 
-# 更新（更新 Moodle 密碼一樣會觸發 Selenium 驗證）
-@router.put("/")
+# 部分更新（只送要改的欄位，例如 {"apiKey": "..."}），所以是 PATCH；
+# 更新 Moodle 密碼一樣會觸發 Selenium 驗證
+@router.patch("/{platform}")
 @limiter.limit("10/minute")
 async def update_linked_account(
     request: Request,
-    platform: str = Body(..., embed=True),
+    platform: str,
     data: dict = Body(...),
     clerk_user: dict = Depends(get_current_clerk_user)
 ):

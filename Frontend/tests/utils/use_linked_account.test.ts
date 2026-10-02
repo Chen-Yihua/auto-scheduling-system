@@ -98,7 +98,7 @@ describe('useLinkedAccount', () => {
     await saveKey(git)
 
     expect(fetchSpy).toHaveBeenCalledWith(
-      'http://api/user/linked-accounts/create',
+      'http://api/users/me/linked-accounts/',
       expect.objectContaining({ method: 'POST' }),
     )
     expect(git.value).toBe('NEWKEY')
@@ -118,13 +118,14 @@ describe('useLinkedAccount', () => {
     openEdit(jira)
     jira.domain = 'new-domain.atlassian.net' // 只改 domain，apiKey 欄位留空
 
-    fetchSpy.mockResolvedValueOnce(undefined) // PUT 不用回傳
+    fetchSpy.mockResolvedValueOnce(undefined) // PATCH 不用回傳
 
     await saveKey(jira)
 
-    const putCall = fetchSpy.mock.calls.find(([url]) => url === 'http://api/user/linked-accounts/')
-    expect(putCall).toBeTruthy()
-    const sentPayload = putCall![1].body.data.payload
+    const patchCall = fetchSpy.mock.calls.find(([url]) => url === 'http://api/users/me/linked-accounts/jira')
+    expect(patchCall).toBeTruthy()
+    expect(patchCall![1].method).toBe('PATCH')
+    const sentPayload = patchCall![1].body
     expect(sentPayload.domain).toBe('new-domain.atlassian.net')
     expect(sentPayload).not.toHaveProperty('apiKey') // 沒改 apiKey 就不該送出這個 key
 
@@ -144,7 +145,7 @@ describe('useLinkedAccount', () => {
     await deleteKey(jira)
 
     expect(fetchSpy).toHaveBeenCalledWith(
-      'http://api/user/linked-accounts/jira',
+      'http://api/users/me/linked-accounts/jira',
       expect.objectContaining({ method: 'DELETE' }),
     )
     expect(jira.value).toBe('')

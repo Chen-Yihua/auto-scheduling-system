@@ -1,4 +1,4 @@
-// 對應後端 GET /user/linked-accounts/me 回傳的單筆資料
+// 對應後端 GET /users/me/linked-accounts/ 回傳的單筆資料
 export interface LinkedAccountRecord {
   platform: string
   apiKey?: string

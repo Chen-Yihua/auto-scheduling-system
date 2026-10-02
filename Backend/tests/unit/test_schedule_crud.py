@@ -15,6 +15,12 @@ def _slot(start_iso, end_iso):
     return {"start": start_iso, "end": end_iso}
 
 
+# 測試裡的空檔、截止日都是寫死的日期，判斷「24 小時內到期」的基準時間也要寫死，
+# 不然結果會隨著實際跑測試的日期改變。這個時間點比測試裡所有截止日都早很多，
+# 不會把它們誤判成緊急任務——只測一般排序規則的測試都用這個
+NOW = datetime(2026, 8, 1, tzinfo=timezone.utc)
+
+
 def test_high_priority_scheduled_before_low_when_only_one_slot_fits_one_task():
     """優先度高的先排：只有一個空檔、只夠排一個任務時，High 排進去，Low 進 unscheduled 並附上原因。"""
     tasks = [
@@ -67,12 +73,12 @@ def test_tasks_without_sort_order_fall_back_to_due_date_and_are_sorted_after_one
     """同一個 priority 內，沒有 sort_order 的任務（例如排完序後才新建的）退回 due_date 排序，
     但一律排在同 priority 內有 sort_order 的任務後面——手動排過序的結果優先。"""
     tasks = [
-        _task("t1", "同為 Low，沒排過序", "Low", sort_order=None, due_date=datetime(2026, 9, 1)),
+        _task("t1", "同為 Low，沒排過序", "Low", sort_order=None, due_date=datetime(2026, 9, 15)),
         _task("t2", "同為 Low，排過序 sort_order=0", "Low", sort_order=0, due_date=datetime(2026, 12, 1)),
     ]
     free_slots = [_slot("2026-09-10T09:00:00Z", "2026-09-10T10:00:00Z")]
 
-    result = build_schedule_suggestion(tasks, free_slots)
+    result = build_schedule_suggestion(tasks, free_slots, now=NOW)
 
     assert result["scheduled"][0]["task_id"] == "t2"
     assert result["unscheduled"][0]["task_id"] == "t1"
@@ -102,7 +108,7 @@ def test_same_priority_sorted_by_due_date_earliest_first():
     ]
     free_slots = [_slot("2026-09-10T09:00:00Z", "2026-09-10T10:00:00Z")]
 
-    result = build_schedule_suggestion(tasks, free_slots)
+    result = build_schedule_suggestion(tasks, free_slots, now=NOW)
 
     assert len(result["scheduled"]) == 1
     assert result["scheduled"][0]["task_id"] == "t2"
@@ -116,7 +122,7 @@ def test_task_without_due_date_sorted_after_ones_with_due_date_in_same_priority(
     ]
     free_slots = [_slot("2026-09-10T09:00:00Z", "2026-09-10T10:00:00Z")]
 
-    result = build_schedule_suggestion(tasks, free_slots)
+    result = build_schedule_suggestion(tasks, free_slots, now=NOW)
 
     assert result["scheduled"][0]["task_id"] == "t2"
     assert result["unscheduled"][0]["task_id"] == "t1"
@@ -223,7 +229,7 @@ def test_small_task_can_still_use_a_slot_too_small_for_an_earlier_big_task():
 不能因為處理大任務時「跳過」了 20 分鐘的空檔，就害小任務沒地方去。"""
     tasks = [
         # 兩個都是 High，用 due_date 確保「大任務」先被處理（早 deadline 先排）
-        _task("big", "大任務", "High", duration=90, due_date=datetime(2026, 9, 10)),
+        _task("big", "大任務", "High", duration=90, due_date=datetime(2026, 9, 15)),
         _task("small", "小任務", "High", duration=15, due_date=datetime(2026, 9, 20)),
     ]
     free_slots = [
@@ -231,7 +237,7 @@ def test_small_task_can_still_use_a_slot_too_small_for_an_earlier_big_task():
         _slot("2026-09-10T10:00:00Z", "2026-09-10T11:30:00Z"),  # 90 分鐘
     ]
 
-    result = build_schedule_suggestion(tasks, free_slots)
+    result = build_schedule_suggestion(tasks, free_slots, now=NOW)
 
     assert result["unscheduled"] == []
     by_id = {s["task_id"]: s for s in result["scheduled"]}
@@ -363,6 +369,100 @@ def test_daily_max_minutes_none_means_no_cap():
 
 
 # ---------- apply_blocked_periods ----------
+
+
+# ---------- 緊急任務（24 小時內到期）與截止日檢查 ----------
+
+def test_urgent_low_priority_task_is_scheduled_before_non_urgent_high_priority_task():
+    """今晚就要交的 Low 任務，要排在下週才到期的 High 任務前面——
+    不能只看 priority，讓緊急的任務被擠到截止日之後。"""
+    now = datetime(2026, 9, 10, 18, 0, tzinfo=timezone.utc)
+    tasks = [
+        _task("report", "下週要交的報告", "High", duration=120, due_date=datetime(2026, 9, 17, tzinfo=timezone.utc)),
+        _task("homework", "今晚要交的作業", "Low", duration=60, due_date=datetime(2026, 9, 10, 23, 59, tzinfo=timezone.utc)),
+    ]
+    free_slots = [
+        _slot("2026-09-10T19:00:00Z", "2026-09-10T21:00:00Z"),  # 今晚只剩這段
+        _slot("2026-09-11T09:00:00Z", "2026-09-11T12:00:00Z"),
+    ]
+
+    result = build_schedule_suggestion(tasks, free_slots, now=now)
+
+    by_id = {s["task_id"]: s for s in result["scheduled"]}
+    assert by_id["homework"]["start"] == datetime(2026, 9, 10, 19, 0, tzinfo=timezone.utc)
+    assert by_id["report"]["start"] == datetime(2026, 9, 11, 9, 0, tzinfo=timezone.utc)
+    assert result["unscheduled"] == []
+
+
+def test_multiple_urgent_tasks_are_ordered_by_due_date_regardless_of_priority():
+    """緊急任務之間依截止日早到晚（EDF），priority 不影響——都快到期了，先到期的先做。"""
+    now = datetime(2026, 9, 10, 8, 0, tzinfo=timezone.utc)
+    tasks = [
+        _task("high_later", "High，晚上到期", "High", due_date=datetime(2026, 9, 10, 22, 0, tzinfo=timezone.utc)),
+        _task("low_sooner", "Low，中午到期", "Low", due_date=datetime(2026, 9, 10, 12, 0, tzinfo=timezone.utc)),
+    ]
+    free_slots = [_slot("2026-09-10T09:00:00Z", "2026-09-10T11:00:00Z")]
+
+    result = build_schedule_suggestion(tasks, free_slots, now=now)
+
+    assert [s["task_id"] for s in result["scheduled"]] == ["low_sooner", "high_later"]
+
+
+def test_task_is_not_placed_after_its_deadline():
+    """唯一放得下的空檔在截止日之後 → 不能排進去還顯示成「已排入」，
+    要列進 unscheduled，並說明是截止日前排不進去。"""
+    now = datetime(2026, 9, 1, tzinfo=timezone.utc)
+    tasks = [_task("t1", "9/10 中午前要交", "High", duration=60, due_date=datetime(2026, 9, 10, 12, 0, tzinfo=timezone.utc))]
+    free_slots = [_slot("2026-09-10T13:00:00Z", "2026-09-10T15:00:00Z")]
+
+    result = build_schedule_suggestion(tasks, free_slots, now=now)
+
+    assert result["scheduled"] == []
+    assert result["unscheduled"][0]["reason"] == "截止日前沒有足夠的空檔"
+
+
+def test_task_skips_too_small_early_slot_but_still_fits_before_deadline():
+    """最早的空檔太小，下一個空檔還在截止日前 → 照樣排進去；截止日只擋「排在截止日之後」，
+    不會因為第一個空檔放不下就誤判成趕不上。"""
+    now = datetime(2026, 9, 1, tzinfo=timezone.utc)
+    tasks = [_task("t1", "任務", "High", duration=60, due_date=datetime(2026, 9, 10, 12, 0, tzinfo=timezone.utc))]
+    free_slots = [
+        _slot("2026-09-10T08:00:00Z", "2026-09-10T08:30:00Z"),  # 30 分鐘，太小
+        _slot("2026-09-10T10:00:00Z", "2026-09-10T11:30:00Z"),
+    ]
+
+    result = build_schedule_suggestion(tasks, free_slots, now=now)
+
+    assert result["scheduled"][0]["start"] == datetime(2026, 9, 10, 10, 0, tzinfo=timezone.utc)
+
+
+def test_overdue_task_is_still_scheduled_as_soon_as_possible():
+    """已經過期的任務沒有「趕得上」的可能，不套用截止日檢查（不然永遠排不進去），
+    而是當成緊急任務，排在一般 High 任務前面、盡早補做。"""
+    now = datetime(2026, 9, 10, 8, 0, tzinfo=timezone.utc)
+    tasks = [
+        _task("high", "一般 High", "High"),
+        _task("overdue", "昨天就該交了", "Low", due_date=datetime(2026, 9, 9, tzinfo=timezone.utc)),
+    ]
+    free_slots = [_slot("2026-09-10T09:00:00Z", "2026-09-10T10:00:00Z")]
+
+    result = build_schedule_suggestion(tasks, free_slots, now=now)
+
+    assert result["scheduled"][0]["task_id"] == "overdue"
+    assert result["unscheduled"][0]["task_id"] == "high"
+
+
+def test_deadline_with_non_utc_timezone_is_compared_at_the_same_instant():
+    """截止日帶台灣時區（+08:00）時，要換算成同一個時刻跟 UTC 的空檔比較：
+    台灣時間 18:00 = UTC 10:00，09:00–10:00Z 的空檔剛好趕得上。"""
+    now = datetime(2026, 9, 1, tzinfo=timezone.utc)
+    taipei = timezone(timedelta(hours=8))
+    tasks = [_task("t1", "台灣時間 18:00 截止", "High", duration=60, due_date=datetime(2026, 9, 10, 18, 0, tzinfo=taipei))]
+    free_slots = [_slot("2026-09-10T09:00:00Z", "2026-09-10T10:00:00Z")]
+
+    result = build_schedule_suggestion(tasks, free_slots, now=now)
+
+    assert result["scheduled"][0]["task_id"] == "t1"
 
 def test_apply_blocked_periods_returns_input_unchanged_when_no_rules():
     free_slots = [_slot("2026-09-10T09:00:00Z", "2026-09-10T17:00:00Z")]

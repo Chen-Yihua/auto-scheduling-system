@@ -9,6 +9,10 @@ DEFAULT_TASK_DURATION_MINUTES = 60
 
 PRIORITY_ORDER = {"High": 0, "Medium": 1, "Low": 2}
 
+# 截止日在這段時間內（含已經過期）的任務算「緊急」，不管 priority 一律先排——
+# 不然一個今晚就要交的 Low 任務，會被一堆下個月才到期的 High 任務擠到後面
+URGENT_WINDOW = timedelta(hours=24)
+
 
 def _parse_iso(value) -> datetime:
     if isinstance(value, datetime):
@@ -27,6 +31,20 @@ def _sortable_due_date(due) -> datetime:
     if due.tzinfo is not None:
         return due.replace(tzinfo=None)
     return due
+
+
+def _due_as_utc(due) -> datetime | None:
+    """
+    把 due_date 統一成 aware 的 UTC datetime，才能跟 free_slots（UTC）比較先後。
+    pymongo 讀回來的 datetime 預設是不含時區的 UTC，所以 naive 一律當成 UTC。
+    """
+    if due is None:
+        return None
+    if isinstance(due, str):
+        due = _parse_iso(due)
+    if due.tzinfo is None:
+        return due.replace(tzinfo=timezone.utc)
+    return due.astimezone(timezone.utc)
 
 
 def _parse_hhmm(value: str) -> time:
@@ -153,15 +171,21 @@ def build_schedule_suggestion(
     task_duration_minutes: int = DEFAULT_TASK_DURATION_MINUTES,
     buffer_minutes: int = 0,
     daily_max_minutes: int | None = None,
+    now: datetime | None = None,
 ) -> dict:
     """
-    規則式排程建議：不寫回 Google Calendar，只回傳一份建議清單。
+    規則式排程建議（貪婪 First-Fit）：不寫回 Google Calendar，只回傳一份建議清單。
 
     已經「確認排程」過、寫進 Google Calendar 的任務（有 calendar_event_id，
     見 POST /schedule/confirm）會被排除，不會再被拿來重新排程——那些時段
     已經是既成事實，要改只能直接去 Google Calendar 改。
 
-    排序規則：priority（High > Medium > Low）永遠是主要依據——排程精靈的
+    緊急任務優先：截止日在 URGENT_WINDOW（24 小時）內、或已經過期的任務，
+    不管 priority 一律排在最前面，彼此之間依截止日早到晚（EDF）。不然一個
+    今晚就要交的 Low 任務，會被一堆下個月才到期的 High 任務擠到後面。
+    now 是判斷「24 小時內」的基準時間，預設是當下，測試可以傳固定時間進來。
+
+    其餘任務的排序規則：priority（High > Medium > Low）是主要依據——排程精靈的
     拖拉排序畫面現在是低/中/高三欄，拖去別欄當場就是在改 priority
     （見 PUT /schedule/reorder），不是另外一套獨立的排序機制。
     同一個 priority 內，才看 sort_order（使用者在畫面上同一欄內排的上下
@@ -174,6 +198,9 @@ def build_schedule_suggestion(
     只要找到一個容量夠的空檔就塞進去、消耗掉那段時間。
     因為每個任務時長可能不同，這裡故意不做「空檔用完就跳過」的捷徑——
     前面任務太大塞不下的空檔，仍要留給後面時長較短的任務用。
+    截止日還沒到的任務，必須在截止日前完成（end <= due_date），寧可列進
+    unscheduled 讓使用者知道，也不能排在截止日之後還顯示成「已排入」。
+    已經過期的任務沒有「趕得上」的可能，不套用這條限制，盡早排進去就好。
     塞不進任何空檔的任務，放進 unscheduled 並附上原因。
 
     buffer_minutes：每排完一個任務，消耗掉的時間多加這一段當緩衝
@@ -181,15 +208,19 @@ def build_schedule_suggestion(
     daily_max_minutes：同一天已經排的時長加起來到這個上限後，當天剩下的
     空檔就先跳過、留給後面的任務找別天的空檔（不會因此整段消耗掉）。
     """
+    now = now or datetime.now(timezone.utc)
     pending = [t for t in tasks if t.get("status") != "Done" and not t.get("calendar_event_id")]
 
     def sort_key(t):
+        due = _due_as_utc(t.get("due_date"))
+        if due is not None and due <= now + URGENT_WINDOW:
+            return (0, due)
         priority_rank = PRIORITY_ORDER.get(t.get("priority"), len(PRIORITY_ORDER))
         sort_order = t.get("sort_order")
         if sort_order is not None:
-            return (priority_rank, 0, sort_order)
+            return (1, priority_rank, 0, sort_order)
         due_sort = _sortable_due_date(t.get("due_date"))
-        return (priority_rank, 1, due_sort)
+        return (1, priority_rank, 1, due_sort)
 
     pending_sorted = sorted(pending, key=sort_key)
 
@@ -222,7 +253,10 @@ def build_schedule_suggestion(
     for task in valid_tasks:
         task_minutes = task.get("duration") or task_duration_minutes
         duration = timedelta(minutes=task_minutes)
+        due = _due_as_utc(task.get("due_date"))
+        deadline = due if due is not None and due > now else None
         placed = False
+        missed_deadline = False
         for slot in slots:
             if slot["end"] - slot["start"] < duration:
                 continue
@@ -231,6 +265,10 @@ def build_schedule_suggestion(
                 remaining_today = daily_max_minutes - daily_used_minutes.get(day, 0)
                 if remaining_today < task_minutes:
                     continue
+            if deadline is not None and slot["start"] + duration > deadline:
+                # slots 依開始時間排序，這個放不進截止日前，後面的只會更晚，不用再找
+                missed_deadline = True
+                break
             start = slot["start"]
             end = start + duration
             scheduled.append({
@@ -251,7 +289,7 @@ def build_schedule_suggestion(
                 "task_id": task["id"],
                 "title": task["title"],
                 "priority": task["priority"],
-                "reason": "沒有足夠的空檔可以安排",
+                "reason": "截止日前沒有足夠的空檔" if missed_deadline else "沒有足夠的空檔可以安排",
             })
 
     return {"scheduled": scheduled, "unscheduled": unscheduled}

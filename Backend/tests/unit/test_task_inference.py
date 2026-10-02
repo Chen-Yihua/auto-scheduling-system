@@ -137,3 +137,17 @@ async def test_infer_missing_task_fields_falls_back_on_api_exception(monkeypatch
     assert result["priority"] == task_inference.DEFAULT_PRIORITY
     assert result["duration"] == task_inference.DEFAULT_DURATION_MINUTES
     assert result["reason"] == task_inference.DEFAULT_REASON
+
+
+@pytest.mark.asyncio
+async def test_infer_missing_task_fields_keeps_valid_fields_when_reason_is_not_text(monkeypatch):
+    """reason 不是字串（例如回了物件）→ 理由清空，但合法的優先度和時長照樣採用，不整組退回預設值。"""
+    monkeypatch.setattr(
+        task_inference.client.models,
+        "generate_content",
+        lambda **kwargs: _mock_response({"priority": "High", "duration_minutes": 90, "reason": {"text": "..."}}),
+    )
+
+    result = await task_inference.infer_missing_task_fields("期末報告", "整理資料並簡報")
+
+    assert result == {"priority": "High", "duration": 90, "reason": ""}

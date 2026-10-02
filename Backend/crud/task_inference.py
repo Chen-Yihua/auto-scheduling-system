@@ -6,6 +6,7 @@ from fastapi.concurrency import run_in_threadpool
 from google import genai
 
 from constants.task_inference_prompt import TASK_FIELD_INFERENCE_PROMPT
+from schemas.task_inference import TaskFieldInference
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +19,9 @@ DEFAULT_REASON = "AI 無法判斷，套用預設值"
 MIN_DURATION_MINUTES = 15
 MAX_DURATION_MINUTES = 480
 VALID_PRIORITIES = {"High", "Medium", "Low"}
+
+# 建立任務的請求會等這個呼叫回來，Gemini 卡住時不能讓使用者一直等，超時就退回預設值
+LLM_TIMEOUT_MS = 10_000
 
 
 async def infer_missing_task_fields(title: str, description: str, hint: str | None = None) -> dict:
@@ -40,13 +44,17 @@ async def infer_missing_task_fields(title: str, description: str, hint: str | No
             client.models.generate_content,
             model="gemini-2.0-flash",
             contents=prompt,
-            config={"response_mime_type": "application/json"},
+            config={
+                "response_mime_type": "application/json",
+                "response_schema": TaskFieldInference,
+                "http_options": {"timeout": LLM_TIMEOUT_MS},
+            },
         )
         parsed = json.loads(response.text)
 
         priority = parsed.get("priority")
         duration = parsed.get("duration_minutes")
-        reason = parsed.get("reason") or ""
+        reason = parsed.get("reason")
 
         if priority not in VALID_PRIORITIES:
             raise ValueError(f"LLM 回傳不合法的 priority: {priority!r}")
@@ -54,6 +62,9 @@ async def infer_missing_task_fields(title: str, description: str, hint: str | No
             raise ValueError(f"LLM 回傳不合法的 duration_minutes: {duration!r}")
         if not (MIN_DURATION_MINUTES <= duration <= MAX_DURATION_MINUTES):
             raise ValueError(f"LLM 回傳的 duration_minutes 超出合理範圍: {duration!r}")
+        # reason 只是給使用者看的說明，格式不對不值得丟掉整組合法的 priority/duration
+        if not isinstance(reason, str):
+            reason = ""
 
         return {"priority": priority, "duration": int(duration), "reason": reason}
 

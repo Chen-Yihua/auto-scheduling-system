@@ -4,6 +4,7 @@ from db.mongodb import db
 from db.crypto import encrypt_secret, decrypt_secret, mask_secret
 from schemas.linkedAccount import LinkedAccountCreate
 from crud.moodle import verify_moodle_login
+from crud.github import GITHUB_API_VERSION
 from crud.errors import NonRetryableError
 from pymongo.errors import DuplicateKeyError
 from selenium.common.exceptions import WebDriverException
@@ -249,6 +250,7 @@ async def fetch_github_userinfo(token: str) -> PlatformUserInfo:
                 headers={
                     "Authorization": f"Bearer {token}",
                     "Accept": "application/vnd.github+json",
+                    "X-GitHub-Api-Version": GITHUB_API_VERSION,
                 }
             )
     except httpx.RequestError as e:

@@ -6,27 +6,35 @@ from crud.external_sync import sync_platform_items
 # 客戶端錯誤：帳密/token 問題、資源不存在——重試也不會變成功
 NON_RETRYABLE_STATUS_CODES = {400, 401, 403, 404}
 
-# 安全上限，避免 Jira 回傳的 total 異常（或一直回傳非空但 total 對不上）時無限迴圈
+# 安全上限，避免 Jira 一直回傳 nextPageToken（或 isLast 永遠是 false）時無限迴圈
 JIRA_MAX_PAGES = 10
 
-# 用 startAt/total 分頁抓完使用者所有相關的 issue，避免超過一頁就被漏掉
+# 新版搜尋端點（/search/jql）預設只回傳 issue id，要的欄位得明確列出來；
+# 這裡列的就是 transform_jira_item 會用到的欄位，要多顯示什麼欄位時兩邊要一起改
+JIRA_ISSUE_FIELDS = "summary,status,updated,assignee,issuetype"
+
+# 用 nextPageToken 分頁抓完使用者所有相關的 issue，避免超過一頁就被漏掉。
+# 舊的 /rest/api/3/search（用 startAt/total 分頁）已被 Atlassian 淘汰，
+# 新端點不再回傳 total，只能看有沒有 nextPageToken／isLast 判斷是不是最後一頁
 async def fetch_jira_user_issues(api_key: str, domain: str, max_results: int = 100) -> list:
-    url = f"https://{domain.replace('https://','')}/rest/api/3/search"
+    url = f"https://{domain.replace('https://','')}/rest/api/3/search/jql"
     headers = {
         "Authorization": f"Basic {api_key}",
         "Accept": "application/json"
     }
 
     all_issues = []
-    start_at = 0
+    next_page_token = None
 
     async with httpx.AsyncClient() as client:
         for _ in range(JIRA_MAX_PAGES):
             params = {
                 "jql": "assignee=currentUser() ORDER BY updated DESC",
                 "maxResults": max_results,
-                "startAt": start_at,
+                "fields": JIRA_ISSUE_FIELDS,
             }
+            if next_page_token:
+                params["nextPageToken"] = next_page_token
             response = await client.get(url, headers=headers, params=params)
 
             if response.status_code != 200:
@@ -36,18 +44,13 @@ async def fetch_jira_user_issues(api_key: str, domain: str, max_results: int = 1
                 raise Exception(message)
 
             data = response.json()
-            issues = data.get("issues", [])
-            all_issues.extend(issues)
+            all_issues.extend(data.get("issues", []))
 
-            if not issues:
-                break
-            start_at += len(issues)
-            total = data.get("total", start_at)
-            if start_at >= total:
+            next_page_token = data.get("nextPageToken")
+            if not next_page_token or data.get("isLast"):
                 break
 
     return all_issues
-
 
 # 將 raw 資料轉換成 JiraIssue 格式（見 schemas/jira.py）——直接拉平成單層，
 # 不留 Jira 原始 API 那種多層巢狀（一堆用不到的自訂欄位、changelog、self 連結等

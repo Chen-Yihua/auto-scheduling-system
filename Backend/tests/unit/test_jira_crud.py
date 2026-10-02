@@ -23,17 +23,41 @@ async def test_fetch_jira_user_issues_success():
 
 
 @pytest.mark.asyncio
+async def test_fetch_jira_user_issues_uses_enhanced_search_endpoint_with_explicit_fields():
+    """要打新版的 /rest/api/3/search/jql（舊的 /search 已被淘汰），而且要明確指定 fields——
+    新端點預設只回傳 issue id，沒指定的話 transform_jira_item 會拿到一堆空欄位。"""
+    from unittest.mock import AsyncMock, MagicMock
+
+    page = MagicMock()
+    page.status_code = 200
+    page.json.return_value = {"issues": [], "isLast": True}
+
+    with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
+        mock_get.return_value = page
+
+        await jira.fetch_jira_user_issues("key", "https://fake.atlassian.net")
+
+        url = mock_get.call_args.args[0]
+        params = mock_get.call_args.kwargs["params"]
+        assert url == "https://fake.atlassian.net/rest/api/3/search/jql"
+        assert params["fields"] == jira.JIRA_ISSUE_FIELDS
+        # 第一頁不能帶 nextPageToken，也不該再出現舊端點的 startAt
+        assert "nextPageToken" not in params
+        assert "startAt" not in params
+
+
+@pytest.mark.asyncio
 async def test_fetch_jira_user_issues_paginates_across_multiple_pages():
-    """一頁抓不完（共 3 筆、第一頁只有 2 筆）要繼續抓下一頁、把 issue 收齊；下一頁要從已抓到的筆數之後開始，不能每次都從頭抓。"""
+    """一頁抓不完（第一頁回傳 nextPageToken）要繼續抓下一頁、把 issue 收齊；下一頁要帶上一頁給的 nextPageToken，不能每次都從頭抓。"""
     from unittest.mock import AsyncMock, MagicMock
 
     first_page = MagicMock()
     first_page.status_code = 200
-    first_page.json.return_value = {"issues": [{"id": "1"}, {"id": "2"}], "total": 3}
+    first_page.json.return_value = {"issues": [{"id": "1"}, {"id": "2"}], "nextPageToken": "tok-2", "isLast": False}
 
     second_page = MagicMock()
     second_page.status_code = 200
-    second_page.json.return_value = {"issues": [{"id": "3"}], "total": 3}
+    second_page.json.return_value = {"issues": [{"id": "3"}], "isLast": True}
 
     with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
         mock_get.side_effect = [first_page, second_page]
@@ -42,37 +66,53 @@ async def test_fetch_jira_user_issues_paginates_across_multiple_pages():
 
         assert [i["id"] for i in issues] == ["1", "2", "3"]
         assert mock_get.call_count == 2
-        # 第二次呼叫的 startAt 該是第一頁已經拿到的筆數，不能每次都從 0 開始重抓
-        assert mock_get.call_args_list[1].kwargs["params"]["startAt"] == 2
+        # 第二次呼叫要帶第一頁給的 nextPageToken，不能每次都從第一頁重抓
+        assert mock_get.call_args_list[1].kwargs["params"]["nextPageToken"] == "tok-2"
 
 
 @pytest.mark.asyncio
-async def test_fetch_jira_user_issues_stops_early_when_page_returns_no_issues():
-    """某一頁完全沒有 issue 就要停止翻頁：就算 total 欄位缺漏或對不上，也不能繼續翻下去。"""
+async def test_fetch_jira_user_issues_stops_when_no_next_page_token():
+    """回應裡沒有 nextPageToken 就要停止翻頁：就算 isLast 欄位缺漏，也不能繼續翻下去。"""
     from unittest.mock import AsyncMock, MagicMock
 
     page = MagicMock()
     page.status_code = 200
-    page.json.return_value = {"issues": []}  # 沒有 total 欄位，也沒有任何 issue
+    page.json.return_value = {"issues": [{"id": "1"}]}  # 沒有 nextPageToken，也沒有 isLast
 
     with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
         mock_get.return_value = page
 
         issues = await jira.fetch_jira_user_issues("key", "domain")
 
-        assert issues == []
+        assert [i["id"] for i in issues] == ["1"]
         assert mock_get.call_count == 1  # 第一頁就停了，不會繼續翻頁
 
 
 @pytest.mark.asyncio
-async def test_fetch_jira_user_issues_stops_at_max_pages_safety_cap():
-    """就算 total 一直說還有（999999 筆）、每頁也都回滿，也要在 JIRA_MAX_PAGES 停下來，不能無限翻頁。"""
+async def test_fetch_jira_user_issues_stops_when_is_last_even_with_token():
+    """isLast=True 就是最後一頁，就算回應裡還附了 nextPageToken 也要停。"""
     from unittest.mock import AsyncMock, MagicMock
 
     page = MagicMock()
     page.status_code = 200
-    # total 遠大於實際能拿到的，且每頁都回滿，理論上會一直翻下去
-    page.json.return_value = {"issues": [{"id": "x"}], "total": 999999}
+    page.json.return_value = {"issues": [{"id": "1"}], "nextPageToken": "tok", "isLast": True}
+
+    with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
+        mock_get.return_value = page
+
+        await jira.fetch_jira_user_issues("key", "domain")
+
+        assert mock_get.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_fetch_jira_user_issues_stops_at_max_pages_safety_cap():
+    """就算 Jira 一直回傳 nextPageToken、isLast 永遠是 false，也要在 JIRA_MAX_PAGES 停下來，不能無限翻頁。"""
+    from unittest.mock import AsyncMock, MagicMock
+
+    page = MagicMock()
+    page.status_code = 200
+    page.json.return_value = {"issues": [{"id": "x"}], "nextPageToken": "again", "isLast": False}
 
     with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
         mock_get.return_value = page

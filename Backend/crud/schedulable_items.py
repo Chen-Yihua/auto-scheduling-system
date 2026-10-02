@@ -4,7 +4,7 @@
 同仁地排序、塞空檔，不用自己認識四種不同的資料庫 schema。
 
 每個項目的 id 統一加上來源前綴（"manual:<id>"／"github:<id>"／"jira:<id>"／
-"moodle:<id>"），因為 GitHub 的 issue number 跟 Jira 的 issue id 完全有可能
+"moodle:<id>"），因為 GitHub 的 issue id 跟 Jira 的 issue id 完全有可能
 撞號；這個前綴同時也讓 reorder／confirm 這些跨來源的操作知道要寫回哪個 collection。
 """
 from datetime import datetime, timezone
@@ -18,7 +18,7 @@ SOURCE_MOODLE = "moodle"
 
 # 每個外部平台：collection、同步時用的 id 欄位名稱跟型別。手動任務不在這裡——
 # 它有自己一整套 crud（crud/manualTask.py），這裡只處理三個外部平台共通的部分。
-# id_type 很重要：GitHub 的 issue number 在資料庫裡存的是 int（raw["number"]），
+# id_type 很重要：GitHub 的 issue id 在資料庫裡存的是 int（raw["id"]），
 # 但組合 id 組回字串之後就沒有型別資訊了，parse_composite_id 拆出來一律是字串，
 # 用字串去查 int 欄位在 Mongo 裡完全比對不到、悄悄查不到任何資料，要查詢前轉型別轉回來
 _EXTERNAL_SOURCES = {

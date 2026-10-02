@@ -1,9 +1,12 @@
 import pytest
+import pytest_asyncio
+from datetime import datetime, timezone
 from pydantic import ValidationError
 
 from fastapi import HTTPException
 
 import routers.schedule as schedule_router
+from cache import cache_get, cache_set, cache_delete
 from schemas.schedule import (
     ScheduleReorderInput,
     ScheduleTaskFieldsUpdate,
@@ -158,22 +161,110 @@ def test_schedule_preferences_rejects_unknown_timezone():
 
 # ---------- confirm_schedule ----------
 
+def _snapshot_item(task_id, title, start, end):
+    return {"task_id": task_id, "title": title, "priority": "High", "start": start, "end": end}
+
+
+@pytest_asyncio.fixture
+async def clean_snapshot():
+    """每個確認排程的測試都從「沒有快照」開始，不受其他測試留下的快取影響。"""
+    await cache_delete(schedule_router._suggestion_snapshot_key(mock_user["sub"]))
+    yield
+    await cache_delete(schedule_router._suggestion_snapshot_key(mock_user["sub"]))
+
+
 @pytest.mark.asyncio
-async def test_confirm_schedule_recomputes_suggestion_and_delegates_to_calendar_creation(monkeypatch):
-    """確認排程時重新計算一次排程建議（不吃前端傳來的結果），把 scheduled 清單交給
-    create_calendar_events_for_scheduled_tasks 寫進 Google Calendar。"""
+async def test_suggest_schedule_saves_what_the_user_sees_as_a_snapshot(monkeypatch, clean_snapshot):
+    """產生排程建議時，把回傳給使用者的那份 scheduled 存起來，確認時才能照這份寫入。"""
     async def mock_get_tasks(user_id):
         return [{"id": "t1", "title": "任務一", "priority": "High", "status": "To Do", "due_date": None}]
 
     async def mock_get_free_slots(user_id):
-        return [{"start": "2026-09-10T09:00:00Z", "end": "2026-09-10T10:00:00Z"}]
+        return [{"start": "2030-01-01T09:00:00Z", "end": "2030-01-01T10:00:00Z"}]
+
+    monkeypatch.setattr(schedule_router, "get_all_schedulable_items", mock_get_tasks)
+    monkeypatch.setattr(schedule_router, "get_free_slots_for_user", mock_get_free_slots)
+
+    await schedule_router.suggest_schedule(preferences=SchedulePreferences(), clerk_user=mock_user)
+
+    snapshot = await cache_get(schedule_router._suggestion_snapshot_key(mock_user["sub"]))
+    assert [item["task_id"] for item in snapshot] == ["t1"]
+    assert snapshot[0]["start"] == "2030-01-01T09:00:00+00:00"
+
+
+@pytest.mark.asyncio
+async def test_confirm_schedule_writes_the_snapshot_without_recomputing(monkeypatch, clean_snapshot):
+    """確認時寫入的是使用者看到的那份快照，不重新計算——看到建議之後才新增的任務
+    不會被寫進去，時間也跟畫面上一樣。寫入前要用「此刻」的行事曆檢查（不用快取），
+    確認完快照就刪掉，同一份建議不能確認兩次。"""
+    await cache_set(
+        schedule_router._suggestion_snapshot_key(mock_user["sub"]),
+        [_snapshot_item("manual:t1", "任務一", "2030-01-01T09:00:00+00:00", "2030-01-01T10:00:00+00:00")],
+        60,
+    )
+
+    async def mock_get_tasks(user_id):
+        return [
+            {"id": "manual:t1", "title": "任務一", "status": "To Do", "calendar_event_id": None},
+            {"id": "manual:new", "title": "看到建議之後才新增的", "status": "To Do", "calendar_event_id": None},
+        ]
+
+    free_slots_calls = []
+
+    async def mock_get_free_slots(user_id, use_cache=True):
+        free_slots_calls.append(use_cache)
+        return [{"start": "2030-01-01T08:00:00Z", "end": "2030-01-01T12:00:00Z"}]
+
+    def fail_if_recomputed(*args, **kwargs):
+        raise AssertionError("確認排程不該重新計算")
 
     captured = {}
 
     async def mock_create_events(user_id, scheduled):
-        captured["user_id"] = user_id
         captured["scheduled"] = scheduled
-        return {"confirmed": [{"task_id": "t1", "title": "任務一", "calendar_event_id": "event-1"}], "failed": []}
+        return {"confirmed": [{"task_id": "manual:t1", "title": "任務一", "calendar_event_id": "event-1"}], "failed": []}
+
+    monkeypatch.setattr(schedule_router, "get_all_schedulable_items", mock_get_tasks)
+    monkeypatch.setattr(schedule_router, "get_free_slots_for_user", mock_get_free_slots)
+    monkeypatch.setattr(schedule_router, "build_schedule_suggestion", fail_if_recomputed)
+    monkeypatch.setattr(schedule_router, "create_calendar_events_for_scheduled_tasks", mock_create_events)
+
+    result = await schedule_router.confirm_schedule(clerk_user=mock_user)
+
+    assert [item["task_id"] for item in captured["scheduled"]] == ["manual:t1"]
+    assert captured["scheduled"][0]["start"] == datetime(2030, 1, 1, 9, 0, tzinfo=timezone.utc)
+    assert free_slots_calls == [False]
+    assert result == {"confirmed": [{"task_id": "manual:t1", "title": "任務一", "calendar_event_id": "event-1"}], "failed": []}
+    assert await cache_get(schedule_router._suggestion_snapshot_key(mock_user["sub"])) is None
+
+
+@pytest.mark.asyncio
+async def test_confirm_schedule_reports_items_that_can_no_longer_be_written(monkeypatch, clean_snapshot):
+    """快照裡有一筆的時段已經被新行程占用 → 不寫入、列進 failed 說明原因，其餘照寫；
+    寫入 Google Calendar 本身失敗的也一起回報。"""
+    await cache_set(
+        schedule_router._suggestion_snapshot_key(mock_user["sub"]),
+        [
+            _snapshot_item("manual:ok", "還空著", "2030-01-01T09:00:00+00:00", "2030-01-01T10:00:00+00:00"),
+            _snapshot_item("manual:busy", "被占用了", "2030-01-01T14:00:00+00:00", "2030-01-01T15:00:00+00:00"),
+        ],
+        60,
+    )
+
+    async def mock_get_tasks(user_id):
+        return [
+            {"id": "manual:ok", "title": "還空著", "status": "To Do", "calendar_event_id": None},
+            {"id": "manual:busy", "title": "被占用了", "status": "To Do", "calendar_event_id": None},
+        ]
+
+    async def mock_get_free_slots(user_id, use_cache=True):
+        return [{"start": "2030-01-01T08:00:00Z", "end": "2030-01-01T12:00:00Z"}]  # 下午被新行程占掉了
+
+    captured = {}
+
+    async def mock_create_events(user_id, scheduled):
+        captured["scheduled"] = scheduled
+        return {"confirmed": [], "failed": [{"task_id": "manual:ok", "title": "還空著", "reason": "Google 寫入失敗"}]}
 
     monkeypatch.setattr(schedule_router, "get_all_schedulable_items", mock_get_tasks)
     monkeypatch.setattr(schedule_router, "get_free_slots_for_user", mock_get_free_slots)
@@ -181,31 +272,27 @@ async def test_confirm_schedule_recomputes_suggestion_and_delegates_to_calendar_
 
     result = await schedule_router.confirm_schedule(clerk_user=mock_user)
 
-    assert captured["user_id"] == "test_user_123"
-    assert captured["scheduled"][0]["task_id"] == "t1"
-    assert result == {"confirmed": [{"task_id": "t1", "title": "任務一", "calendar_event_id": "event-1"}], "failed": []}
+    assert [item["task_id"] for item in captured["scheduled"]] == ["manual:ok"]
+    assert {f["task_id"]: f["reason"] for f in result["failed"]} == {
+        "manual:busy": "這個時段已被其他行程占用，請重新產生排程",
+        "manual:ok": "Google 寫入失敗",
+    }
 
 
 @pytest.mark.asyncio
-async def test_confirm_schedule_returns_clean_500_when_build_suggestion_fails(monkeypatch):
-    """重新計算排程建議這一步意外出錯 → 回 500，不會漏接例外變成沒有說明的錯誤。"""
-    async def mock_get_tasks(user_id):
-        return [{"id": "t1", "title": "任務一", "priority": "High", "status": "To Do", "due_date": None}]
+async def test_confirm_schedule_returns_409_when_suggestion_expired(monkeypatch, clean_snapshot):
+    """沒有快照（超過 30 分鐘過期、或已經確認過一次）→ 409，請使用者重新產生，
+    不能什麼都不寫卻回成功。"""
+    async def fail(*args, **kwargs):
+        raise AssertionError("沒有快照就不該往下做")
 
-    async def mock_get_free_slots(user_id):
-        return [{"start": "2026-09-10T09:00:00Z", "end": "2026-09-10T10:00:00Z"}]
-
-    def mock_build_schedule_suggestion(tasks, free_slots, **kwargs):
-        raise KeyError("unexpected")
-
-    monkeypatch.setattr(schedule_router, "get_all_schedulable_items", mock_get_tasks)
-    monkeypatch.setattr(schedule_router, "get_free_slots_for_user", mock_get_free_slots)
-    monkeypatch.setattr(schedule_router, "build_schedule_suggestion", mock_build_schedule_suggestion)
+    monkeypatch.setattr(schedule_router, "create_calendar_events_for_scheduled_tasks", fail)
 
     with pytest.raises(HTTPException) as exc_info:
         await schedule_router.confirm_schedule(clerk_user=mock_user)
 
-    assert exc_info.value.status_code == 500
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.detail == "排程建議已過期，請重新產生"
 
 
 # ---------- list_schedulable_tasks ----------

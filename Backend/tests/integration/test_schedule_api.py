@@ -115,28 +115,40 @@ async def test_get_schedule_suggestion_requires_login():
 
 
 @pytest.mark.asyncio
-async def test_confirm_schedule_success(monkeypatch, logged_in_user):
-    """POST /schedule/confirm 成功：200，回傳 confirmed／failed 兩份清單。"""
+async def test_suggest_then_confirm_writes_exactly_what_the_user_saw(monkeypatch, logged_in_user):
+    """完整流程：先產生排程建議，再確認 → 寫進行事曆的就是剛才看到的那幾筆、同樣的時間；
+    同一份建議再確認一次 → 409，不會重複建立行事曆事件。"""
     async def mock_get_tasks(user_id):
-        return [{"id": "t1", "title": "任務一", "priority": "High", "status": "To Do", "due_date": None}]
+        return [{"id": "manual:t1", "title": "任務一", "priority": "High", "status": "To Do",
+                 "due_date": None, "calendar_event_id": None}]
 
-    async def mock_get_free_slots(user_id):
-        return [{"start": "2026-09-10T09:00:00Z", "end": "2026-09-10T10:00:00Z"}]
+    async def mock_get_free_slots(user_id, use_cache=True):
+        return [{"start": "2030-01-01T09:00:00Z", "end": "2030-01-01T10:00:00Z"}]
+
+    written = []
 
     async def mock_create_events(user_id, scheduled):
-        return {"confirmed": [{"task_id": "t1", "title": "任務一", "calendar_event_id": "event-1"}], "failed": []}
+        written.extend(scheduled)
+        return {"confirmed": [{"task_id": "manual:t1", "title": "任務一", "calendar_event_id": "event-1"}], "failed": []}
 
     monkeypatch.setattr(schedule_router, "get_all_schedulable_items", mock_get_tasks)
     monkeypatch.setattr(schedule_router, "get_free_slots_for_user", mock_get_free_slots)
     monkeypatch.setattr(schedule_router, "create_calendar_events_for_scheduled_tasks", mock_create_events)
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        res = await ac.post("/schedule/confirm", json={})
+        suggest_res = await ac.post("/schedule/suggest", json={})
+        confirm_res = await ac.post("/schedule/confirm")
+        confirm_again_res = await ac.post("/schedule/confirm")
 
-    assert res.status_code == status.HTTP_200_OK
-    body = res.json()
-    assert body["confirmed"] == [{"task_id": "t1", "title": "任務一", "calendar_event_id": "event-1"}]
-    assert body["failed"] == []
+    assert suggest_res.status_code == status.HTTP_200_OK
+    shown = suggest_res.json()["scheduled"]
+
+    assert confirm_res.status_code == status.HTTP_200_OK
+    assert confirm_res.json() == {"confirmed": [{"task_id": "manual:t1", "title": "任務一", "calendar_event_id": "event-1"}], "failed": []}
+    assert [(w["task_id"], w["start"].isoformat().replace("+00:00", "Z")) for w in written] == \
+        [(s["task_id"], s["start"]) for s in shown]
+
+    assert confirm_again_res.status_code == status.HTTP_409_CONFLICT
 
 
 @pytest.mark.asyncio

@@ -2,7 +2,7 @@ import { useAuth } from '@clerk/vue'
 import { createSharedComposable } from '@vueuse/core'
 import type { ScheduleSuggestion, ScheduledTask, UnscheduledTask, ScheduleConfirmResult, SchedulePreferences } from '@/types/schedule'
 import { defaultSchedulePreferences } from '@/types/schedule'
-import { getFriendlyErrorTitle, isAuthError, isNotLinkedError } from '@/utils/errorMessages'
+import { getFriendlyErrorTitle, isAuthError, isNotLinkedError, isSuggestionExpiredError } from '@/utils/errorMessages'
 import { useGoogleCalendar } from '@/composables/useGoogleCalendar'
 
 // createSharedComposable：排程精靈現在是獨立頁面（pages/schedule.vue），完成後
@@ -31,9 +31,9 @@ function useScheduleImpl() {
 
   // 排程精靈填的「不工作時段」「做事風格」不存資料庫，每次都要重新帶給後端
   // （見 types/schedule.ts 的 SchedulePreferences）。這裡記住「產生這份建議時
-  // 用的是哪一份 preferences」，確認排程時原封不動送回去——確認排程的按鈕在
-  // ScheduleSuggestion.vue，跟填 preferences 的精靈頁不是同一個元件，沒有
-  // 這份記憶的話使用者按「確認排程」時就沒有 preferences 可送
+  // 用的是哪一份 preferences」，確認排程後、或建議過期要重新產生時，用同一份
+  // 再抓一次——那些地方在 ScheduleSuggestion.vue，跟填 preferences 的精靈頁
+  // 不是同一個元件，沒有這份記憶就只能退回預設值
   const lastPreferences = ref<SchedulePreferences>(defaultSchedulePreferences())
 
   const fetchScheduleSuggestion = async (preferences?: SchedulePreferences) => {
@@ -76,11 +76,12 @@ function useScheduleImpl() {
     }
   }
 
-  // 使用者按下「確認排程並寫入 Calendar」時呼叫。後端會重新算一次排程建議
-  // （不吃這裡手上的 scheduled，避免用可能過期的資料建立事件），把「已排入
-  // 時段」的任務逐一寫進 Google Calendar，成功的會被鎖定、之後不會再出現在
-  // 排程建議或拖拉排序精靈裡——所以無論成功幾筆，結束後都要重新抓一次排程
-  // 建議，畫面上的 scheduled 清單才會反映「已鎖定的任務不見了」這個最新狀態。
+  // 使用者按下「確認排程並寫入 Calendar」時呼叫。後端寫入的是產生建議時存下來的
+  // 那一份（使用者畫面上看到的），所以這裡不用送任何內容，只送「確認」這個動作。
+  // 成功的任務會被鎖定、之後不會再出現在排程建議或拖拉排序精靈裡——所以無論
+  // 成功幾筆，結束後都要重新抓一次排程建議，畫面才會反映最新狀態。
+  // 建議放太久（超過 30 分鐘）後端會回 409，這時直接幫使用者重新產生一份，
+  // 讓他看過新的建議再確認，而不是只丟一個錯誤訊息。
   const confirmSchedule = async () => {
     confirming.value = true
     try {
@@ -89,7 +90,6 @@ function useScheduleImpl() {
 
       const res = await $fetch<ScheduleConfirmResult>(`${BASE_URL}/schedule/confirm`, {
         method: 'POST',
-        body: lastPreferences.value,
         headers: { Authorization: `Bearer ${token}` },
       })
 
@@ -117,6 +117,16 @@ function useScheduleImpl() {
 
       await fetchScheduleSuggestion()
     } catch (error) {
+      if (isSuggestionExpiredError(error)) {
+        toast.add({
+          title: '排程建議已過期',
+          description: '已重新產生排程建議，請確認後再按一次確認排程',
+          color: 'warning',
+          icon: 'i-lucide-refresh-cw',
+        })
+        await fetchScheduleSuggestion()
+        return
+      }
       toast.add({
         title: getFriendlyErrorTitle(error, '確認排程失敗'),
         description: '伺服器暫時發生錯誤，請稍後再試一次',

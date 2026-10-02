@@ -45,3 +45,10 @@ async def cache_set(key: str, value: Any, ttl_seconds: int) -> None:
         await _redis_client.set(key, payload, ex=ttl_seconds)
         return
     _memory_store[key] = (time.time() + ttl_seconds, payload)
+
+
+async def cache_delete(key: str) -> None:
+    if _redis_client:
+        await _redis_client.delete(key)
+        return
+    _memory_store.pop(key, None)

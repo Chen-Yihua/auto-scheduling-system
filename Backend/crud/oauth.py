@@ -144,7 +144,7 @@ async def _get_access_token_and_primary_calendar_id(clerk_id: str) -> tuple[str,
     return access_token, primary["id"]
 
 
-async def get_free_slots_for_user(clerk_id: str) -> list[dict]:
+async def get_free_slots_for_user(clerk_id: str, use_cache: bool = True) -> list[dict]:
     """
     取得使用者 primary calendar 未來 7 天的空閒時段（UTC ISO 字串）。
     被 /oauth/available 跟排程建議（crud/schedule.py）共用，
@@ -153,11 +153,15 @@ async def get_free_slots_for_user(clerk_id: str) -> list[dict]:
     這裡是單純的效能快取（見 cache.py），不是失敗時的退路——跟
     crud/external_sync.py 那套「live-first + 失敗才退回 DB」是不同用途：
     這裡只要快取沒過期就直接用，減少重複打 Google API 的次數。
+
+    use_cache=False：確認排程寫入前，要用「此刻」真正的行事曆檢查時段是否
+    還空著，不能用最多 60 秒前的快取——那 60 秒內新增的行程會檢查不到。
     """
     cache_key = f"free_slots:{clerk_id}"
-    cached = await cache_get(cache_key)
-    if cached is not None:
-        return cached
+    if use_cache:
+        cached = await cache_get(cache_key)
+        if cached is not None:
+            return cached
 
     access_token, primary_calendar_id = await _get_access_token_and_primary_calendar_id(clerk_id)
 

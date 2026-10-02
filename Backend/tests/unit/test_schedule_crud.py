@@ -1,6 +1,8 @@
 from datetime import date, datetime, timedelta, timezone
 
-from crud.schedule import build_schedule_suggestion, apply_blocked_periods, _parse_iso, _sortable_due_date
+import pytest
+
+from crud.schedule import build_schedule_suggestion, apply_blocked_periods, check_suggestion_still_valid, _parse_iso, _sortable_due_date
 
 
 def _task(id, title, priority, status="To Do", due_date=None, duration=None, sort_order=None, calendar_event_id=None):
@@ -618,3 +620,50 @@ def test_daily_max_minutes_counts_days_in_user_local_time():
 
     assert len(result["scheduled"]) == 2
     assert result["unscheduled"] == []
+
+
+
+# ---------- check_suggestion_still_valid：確認排程前檢查快照還能不能照寫 ----------
+
+CHECK_NOW = datetime(2026, 9, 10, 8, 0, tzinfo=timezone.utc)
+
+
+def _scheduled_item(task_id, start_hour, end_hour):
+    return {
+        "task_id": task_id, "title": task_id, "priority": "High",
+        "start": datetime(2026, 9, 10, start_hour, 0, tzinfo=timezone.utc),
+        "end": datetime(2026, 9, 10, end_hour, 0, tzinfo=timezone.utc),
+    }
+
+
+def _current_task(task_id, status="To Do", calendar_event_id=None):
+    return {"id": task_id, "title": task_id, "status": status, "calendar_event_id": calendar_event_id}
+
+
+def test_check_suggestion_keeps_items_whose_task_and_slot_are_still_valid():
+    """任務還在、還沒完成或鎖定、時段也還空著 → 照原本的時間寫入。"""
+    item = _scheduled_item("t1", 9, 10)
+    free_slots = [_slot("2026-09-10T08:00:00Z", "2026-09-10T12:00:00Z")]
+
+    to_write, failed = check_suggestion_still_valid([item], [_current_task("t1")], free_slots, now=CHECK_NOW)
+
+    assert to_write == [item]
+    assert failed == []
+
+
+@pytest.mark.parametrize("current_tasks, start_hour, free_slot, reason", [
+    ([], 9, ("08:00", "12:00"), "任務已不存在"),
+    ([_current_task("t1", status="Done")], 9, ("08:00", "12:00"), "任務已經完成"),
+    ([_current_task("t1", calendar_event_id="event-1")], 9, ("08:00", "12:00"), "任務已經排入行事曆"),
+    ([_current_task("t1")], 7, ("06:00", "12:00"), "這個時段已經過了，請重新產生排程"),
+    ([_current_task("t1")], 9, ("09:30", "12:00"), "這個時段已被其他行程占用，請重新產生排程"),
+])
+def test_check_suggestion_rejects_items_that_changed_since_the_user_saw_them(current_tasks, start_hour, free_slot, reason):
+    """看到建議到按下確認之間，任務或行事曆變了 → 這筆不寫入，附上使用者看得懂的原因。"""
+    item = _scheduled_item("t1", start_hour, start_hour + 1)
+    free_slots = [_slot(f"2026-09-10T{free_slot[0]}:00Z", f"2026-09-10T{free_slot[1]}:00Z")]
+
+    to_write, failed = check_suggestion_still_valid([item], current_tasks, free_slots, now=CHECK_NOW)
+
+    assert to_write == []
+    assert failed == [{"task_id": "t1", "title": "t1", "reason": reason}]

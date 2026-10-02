@@ -44,3 +44,9 @@ export function isAuthError(error: unknown): boolean {
 export function isNotLinkedError(error: unknown): boolean {
   return getErrorStatus(error) === 400
 }
+
+// 確認排程時，後端存的那份排程建議已經過期（超過 30 分鐘，或已經確認過一次）會回 409——
+// 要請使用者重新產生建議，不是一般的「稍後再試」
+export function isSuggestionExpiredError(error: unknown): boolean {
+  return getErrorStatus(error) === 409
+}

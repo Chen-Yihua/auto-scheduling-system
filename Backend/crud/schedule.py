@@ -317,3 +317,44 @@ def build_schedule_suggestion(
             })
 
     return {"scheduled": scheduled, "unscheduled": unscheduled}
+
+
+def check_suggestion_still_valid(
+    scheduled: list[dict],
+    current_tasks: list[dict],
+    free_slots: list[dict],
+    now: datetime | None = None,
+) -> tuple[list[dict], list[dict]]:
+    """
+    確認排程時，檢查使用者當初看到的那份排程建議（存在快取裡的快照）現在還能不能
+    照原樣寫進 Google Calendar——使用者確認什麼，就寫入什麼，不重新計算；但看到
+    建議到按下確認之間，任務或行事曆可能已經變了，有問題的那幾筆要擋下來說明原因，
+    其餘照寫。
+
+    回傳 (可以寫入的項目, 不能寫入的項目＋原因)。free_slots 要是「此刻」的行事曆
+    空檔（不套用不工作時段——這裡只檢查有沒有跟行程撞期）。純函式，不碰資料庫或 API。
+    """
+    now = now or datetime.now(timezone.utc)
+    tasks_by_id = {t["id"]: t for t in current_tasks}
+    slots = [(_parse_iso(s["start"]), _parse_iso(s["end"])) for s in free_slots if s.get("start") and s.get("end")]
+
+    to_write = []
+    failed = []
+    for item in scheduled:
+        task = tasks_by_id.get(item["task_id"])
+        if task is None:
+            reason = "任務已不存在"
+        elif task.get("status") == "Done":
+            reason = "任務已經完成"
+        elif task.get("calendar_event_id"):
+            reason = "任務已經排入行事曆"
+        elif item["start"] < now:
+            reason = "這個時段已經過了，請重新產生排程"
+        elif not any(s_start <= item["start"] and item["end"] <= s_end for s_start, s_end in slots):
+            reason = "這個時段已被其他行程占用，請重新產生排程"
+        else:
+            to_write.append(item)
+            continue
+        failed.append({"task_id": item["task_id"], "title": item["title"], "reason": reason})
+
+    return to_write, failed

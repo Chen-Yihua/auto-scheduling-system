@@ -129,7 +129,7 @@ describe('useSchedule composable', () => {
   })
 
   describe('confirmSchedule', () => {
-    it('body 帶上一次 fetchScheduleSuggestion 用過的 preferences（同一份，不用使用者重填）', async () => {
+    it('確認時不送任何內容（後端寫入的是它存下來的那份建議），之後用同一份 preferences 重新產生建議', async () => {
       const preferences = {
         blocked_recurring: [], blocked_exceptions: [], buffer_minutes: 30, daily_max_minutes: null,
         timezone: 'Asia/Taipei',
@@ -142,11 +142,28 @@ describe('useSchedule composable', () => {
       fetchSpy.mockResolvedValueOnce({ scheduled: [], unscheduled: [] })
       await ctx.confirmSchedule()
 
+      const [confirmUrl, confirmOptions] = fetchSpy.mock.calls[1]
+      expect(confirmUrl).toBe('http://api/schedule/confirm')
+      expect(confirmOptions).not.toHaveProperty('body')
       expect(fetchSpy).toHaveBeenNthCalledWith(
-        2,
-        'http://api/schedule/confirm',
-        expect.objectContaining({ method: 'POST', body: preferences }),
+        3,
+        'http://api/schedule/suggest',
+        expect.objectContaining({ body: preferences }),
       )
+    })
+
+    it('排程建議已過期（409）→ 提示使用者，並自動重新產生一份建議讓他重新確認', async () => {
+      fetchSpy.mockRejectedValueOnce({ response: { status: 409 } })
+      fetchSpy.mockResolvedValueOnce({ scheduled: [], unscheduled: [] })
+
+      const ctx = useSchedule()
+      await ctx.confirmSchedule()
+
+      expect(toastSpy.add).toHaveBeenCalledWith(
+        expect.objectContaining({ title: '排程建議已過期', color: 'warning' }),
+      )
+      expect(fetchSpy).toHaveBeenNthCalledWith(2, 'http://api/schedule/suggest', expect.anything())
+      expect(ctx.confirming.value).toBe(false)
     })
 
     it('呼叫 POST /schedule/confirm，全部成功時跳出成功 toast，並重新抓一次排程建議', async () => {

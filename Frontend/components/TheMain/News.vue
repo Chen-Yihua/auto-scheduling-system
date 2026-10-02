@@ -2,7 +2,6 @@
 import { computed, ref } from 'vue'
 
 const { data: stories, error, status } = await useLazyAsyncData('hackerNews', async () => {
-  await new Promise(resolve => setTimeout(resolve, 2000))
   const ids = await $fetch<number[]>('https://hacker-news.firebaseio.com/v0/topstories.json')
   const top10 = ids.slice(0, 10)
   const items = await Promise.all(

@@ -3,6 +3,11 @@ from db.mongodb import db
 from crud.errors import NonRetryableError
 from crud.external_sync import sync_platform_items
 
+# GitHub 官方建議每個 REST 請求都帶 X-GitHub-Api-Version，鎖定在這個版本的行為；
+# 沒帶的話 GitHub 會用預設版本，哪天預設版本換了，回傳格式就可能悄悄改變。
+# 專案裡所有打 api.github.com 的地方（linkedAccount、webhook）都共用這個常數
+GITHUB_API_VERSION = "2022-11-28"
+
 # 客戶端錯誤：帳密/token 問題、資源不存在——重試也不會變成功
 NON_RETRYABLE_STATUS_CODES = {400, 401, 403, 404}
 
@@ -16,7 +21,8 @@ async def fetch_github_user_issues(token: str, per_page: int = 100) -> list:
     url = "https://api.github.com/search/issues"
     headers = {
         "Authorization": f"Bearer {token}",
-        "Accept": "application/vnd.github+json"
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": GITHUB_API_VERSION,
     }
 
     queries = [

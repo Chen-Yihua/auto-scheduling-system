@@ -40,6 +40,33 @@ async def test_fetch_github_user_issues(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_fetch_github_user_issues_pins_api_version_header(monkeypatch):
+    """每個請求都要帶 X-GitHub-Api-Version（GitHub 官方建議），鎖定回傳格式，
+    不會因為 GitHub 換了預設版本就悄悄改變。"""
+    sent_headers = []
+
+    class MockResponse:
+        status_code = 200
+
+        def json(self):
+            return {"items": []}
+
+    class MockClient:
+        async def __aenter__(self): return self
+        async def __aexit__(self, *args): pass
+        async def get(self, url, headers, params):
+            sent_headers.append(headers)
+            return MockResponse()
+
+    monkeypatch.setattr("httpx.AsyncClient", lambda: MockClient())
+
+    await github_mod.fetch_github_user_issues("fake_token")
+
+    assert sent_headers  # 確實有發出請求
+    assert all(h["X-GitHub-Api-Version"] == github_mod.GITHUB_API_VERSION for h in sent_headers)
+
+
+@pytest.mark.asyncio
 async def test_fetch_github_user_issues_paginates_full_pages(monkeypatch):
     """一頁抓滿代表可能還有下一頁，要繼續抓，不能只抓第一頁。"""
     calls = []

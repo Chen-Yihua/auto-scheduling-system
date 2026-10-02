@@ -243,18 +243,11 @@ export const useLinkedAccount = () => {
   const deleteKey = async (keyItem: LinkedAccountKey) => {
     try {
       const token = await getToken.value();
+      // 平台已經在路徑上，後端不讀 body——不要帶任何東西，尤其不能把
+      // 輸入框裡的 API Key／密碼明文送出去
       await $fetch(`${BASE_URL}/users/me/linked-accounts/${keyItem.platform}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
-        body: {
-          platform: keyItem.platform,
-          status: 'connected',
-          username: currentUserName.value,
-          apiKey: keyItem.inputValue,
-          ...(keyItem.platform === 'github' && { apiKey: keyItem.inputValue }),
-          ...(keyItem.platform === 'jira' && { apiKey: keyItem.inputValue, domain: keyItem.domain }),
-          ...(keyItem.platform === 'moodle' && { apiKey: keyItem.inputValue, password: keyItem.password }),
-        },
       });
       keyItem.value = '';
       keyItem.inputValue = '';

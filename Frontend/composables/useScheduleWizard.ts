@@ -100,8 +100,8 @@ function useScheduleWizardImpl() {
   function moveTask(fromColumn: PriorityKey, fromIndex: number, toColumn: PriorityKey, toIndex: number) {
     const source = columns[fromColumn]
     if (fromIndex < 0 || fromIndex >= source.length) return
-    const [moved] = source.splice(fromIndex, 1)
-    if (!moved) return
+    // 上一行已經確認 fromIndex 在範圍內，splice 一定拿得到一筆
+    const [moved] = source.splice(fromIndex, 1) as [SchedulableTask]
     moved.priority = toColumn
     const target = columns[toColumn]
     const clampedIndex = Math.max(0, Math.min(toIndex, target.length))

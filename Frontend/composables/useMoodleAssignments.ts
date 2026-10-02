@@ -22,7 +22,7 @@ export const useMoodleAssignments = () => {
   // 檢查帳密
   const checkMoodleAccount = async (): Promise<boolean> => {
     const token = await getToken.value();
-    const linkedAccounts = await $fetch<LinkedAccountRecord[]>(`${BASE_URL}/user/linked-accounts/me`, {
+    const linkedAccounts = await $fetch<LinkedAccountRecord[]>(`${BASE_URL}/users/me/linked-accounts/`, {
         method: 'GET',
         headers: { Authorization: `Bearer ${token}` },
     });

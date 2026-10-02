@@ -76,7 +76,6 @@ function useTaskFormImpl() {
         description: '',
         status: 'To Do',
         priority: '',
-        due_date: '',
         duration: '' as string | number, // 不確定可以留空，後端會用 AI 幫忙評估
         inference_hint: '', // 給 AI 評估 priority/duration 時參考的提醒，選填
     })
@@ -95,7 +94,6 @@ function useTaskFormImpl() {
         state.title = ''
         state.description = ''
         state.priority = ''
-        state.due_date = ''
         state.duration = ''
         state.inference_hint = ''
         modelValue.value = today
@@ -164,7 +162,6 @@ function useTaskFormImpl() {
             state.description = task.description
             state.priority = task.priority
             state.status = task.status
-            state.due_date = task.due_date
             state.duration = task.duration ?? ''
             state.inference_hint = task.inference_hint ?? ''
             modelValue.value = task.due_date ? fromDate(new Date(task.due_date), timeZone) : null

@@ -31,6 +31,29 @@ GITHUB_BOT_TOKEN = os.getenv("GITHUB_BOT_TOKEN")
 # 簽章結果放在 X-Hub-Signature-256 header，用來確認請求真的是 GitHub 發的。
 GITHUB_WEBHOOK_SECRET = os.getenv("GITHUB_WEBHOOK_SECRET")
 
+LLM_TIMEOUT_MS = 30_000
+
+# Discord embed 的長度上限：超過的話 Discord 會整筆拒收（回 400），不是自動截斷
+DISCORD_DESCRIPTION_LIMIT = 4096
+DISCORD_FIELD_LIMIT = 1024
+DISCORD_TIMEOUT_SECONDS = 10
+
+
+def _truncate(text: str, limit: int) -> str:
+    return text if len(text) <= limit else text[: limit - 1] + "…"
+
+
+def _send_discord(url: str, message: dict) -> None:
+    """
+    Discord 通知只是附加功能，失敗不影響 webhook 其餘流程，但一定要留下 log——
+    之前沒檢查回應，Discord 回 400 時會完全無聲地失敗。
+    """
+    try:
+        res = requests.post(url, json=message, timeout=DISCORD_TIMEOUT_SECONDS)
+        res.raise_for_status()
+    except requests.RequestException:
+        logger.exception("Failed to send Discord notification")
+
 
 def _verify_github_signature(raw_body: bytes, signature: str | None) -> None:
     """
@@ -92,6 +115,7 @@ async def github_webhook(
             file_tree=file_tree
         )
 
+        summary = None
         try:
             response = client.models.generate_content(
                 contents=prompt,
@@ -99,42 +123,45 @@ async def github_webhook(
                 config={
                     "response_mime_type": "application/json",
                     "response_schema": ReviewSummary,
+                    "http_options": {"timeout": LLM_TIMEOUT_MS},
                 }
             )
-            parsed = json.loads(response.text)
-
-            body = f"""
-### 摘要：
-{parsed.get('summary', '（無法取得摘要）')}
-
-### 🧩 前端改動：
-{parsed.get('frontend', '（無）')}
-
-### 🧠 後端改動：
-{parsed.get('backend', '（無）')}
-
-### 🧹 重構建議：
-{parsed.get('refactor', '（無）')}
-            """
-
-             # === 發送 Discord Embed ===
-            embed = {
-                "title": f"Pull Request #{pr_number} 摘要",
-                "description": parsed.get("summary", "（無法取得摘要）"),
-                "fields": [
-                    {"name": "🧩 前端建議", "value": parsed.get("frontend") or "（無）", "inline": False},
-                    {"name": "🧠 後端建議", "value": parsed.get("backend") or "（無）", "inline": False},
-                    {"name": "🧹 重構建議", "value": parsed.get("refactor") or "（無）", "inline": False},
-                ],
-                "color": 0x1E90FF,
-            }
-            if DISCORD_WEBHOOK_URL:
-                requests.post(DISCORD_WEBHOOK_URL, json={"embeds": [embed]})
-
+            # 用 ReviewSummary 再驗證一次：少了 summary、欄位型別不對都會在這裡拋例外
+            summary = ReviewSummary.model_validate_json(response.text)
         except Exception:
             # 例外細節（可能含內部路徑、API 回應內容）只寫進 log，絕不貼到公開的 PR 留言
             logger.exception("Gemini PR summary generation failed for repo=%s pr_number=%s", repo, pr_number)
+
+        if summary is None:
             body = "⚠️ 自動摘要產生失敗，請人工確認此次變更內容。"
+        else:
+            body = f"""
+### 摘要：
+{summary.summary or '（無法取得摘要）'}
+
+### 🧩 前端改動：
+{summary.frontend or '（無）'}
+
+### 🧠 後端改動：
+{summary.backend or '（無）'}
+
+### 🧹 重構建議：
+{summary.refactor or '（無）'}
+            """
+
+            # Discord 發送失敗只影響 Discord 通知，不能連帶讓 PR 留言變成「摘要產生失敗」
+            if DISCORD_WEBHOOK_URL:
+                embed = {
+                    "title": f"Pull Request #{pr_number} 摘要",
+                    "description": _truncate(summary.summary or "（無法取得摘要）", DISCORD_DESCRIPTION_LIMIT),
+                    "fields": [
+                        {"name": "🧩 前端建議", "value": _truncate(summary.frontend or "（無）", DISCORD_FIELD_LIMIT), "inline": False},
+                        {"name": "🧠 後端建議", "value": _truncate(summary.backend or "（無）", DISCORD_FIELD_LIMIT), "inline": False},
+                        {"name": "🧹 重構建議", "value": _truncate(summary.refactor or "（無）", DISCORD_FIELD_LIMIT), "inline": False},
+                    ],
+                    "color": 0x1E90FF,
+                }
+                _send_discord(DISCORD_WEBHOOK_URL, {"embeds": [embed]})
 
         comment_url = f"https://api.github.com/repos/{repo}/issues/{pr_number}/comments"
         requests.post(
@@ -163,8 +190,7 @@ async def github_webhook(
             "footer": {"text": "Gemini Bot - 自動合併通知"}
         }
 
-        message = {"embeds": [embed]}
         if MAIN_WEBHOOK_URL:
-            requests.post(MAIN_WEBHOOK_URL, json=message)
+            _send_discord(MAIN_WEBHOOK_URL, {"embeds": [embed]})
 
     return {"status": "ok"}

@@ -68,7 +68,7 @@ async def test_open_pr_posts_to_configured_mr_webhook(monkeypatch):
 
     posted_urls = []
     monkeypatch.setattr(webhook_router.requests, "get", lambda *a, **k: MagicMock(json=lambda: [{"filename": "app.py"}]))
-    monkeypatch.setattr(webhook_router.requests, "post", lambda url, **k: posted_urls.append(url))
+    monkeypatch.setattr(webhook_router.requests, "post", lambda url, **k: posted_urls.append(url) or MagicMock())
     _mock_gemini_response(monkeypatch)
 
     await _call_webhook(monkeypatch, _pr_payload("opened"))
@@ -89,7 +89,7 @@ async def test_open_pr_falls_back_when_fetching_changed_files_fails(monkeypatch)
     monkeypatch.setattr(webhook_router.requests, "get", raise_error)
 
     posted = []
-    monkeypatch.setattr(webhook_router.requests, "post", lambda url, **k: posted.append((url, k)))
+    monkeypatch.setattr(webhook_router.requests, "post", lambda url, **k: posted.append((url, k)) or MagicMock())
 
     captured_prompt = {}
 
@@ -119,7 +119,7 @@ async def test_open_pr_skips_discord_when_webhook_not_configured(monkeypatch):
 
     posted_urls = []
     monkeypatch.setattr(webhook_router.requests, "get", lambda *a, **k: MagicMock(json=lambda: [{"filename": "app.py"}]))
-    monkeypatch.setattr(webhook_router.requests, "post", lambda url, **k: posted_urls.append(url))
+    monkeypatch.setattr(webhook_router.requests, "post", lambda url, **k: posted_urls.append(url) or MagicMock())
     _mock_gemini_response(monkeypatch)
 
     await _call_webhook(monkeypatch, _pr_payload("opened"))
@@ -137,7 +137,7 @@ async def test_merge_to_main_posts_to_configured_main_webhook(monkeypatch):
     monkeypatch.setattr(webhook_router, "MAIN_WEBHOOK_URL", "https://discord.com/api/webhooks/test/main")
 
     posted = []
-    monkeypatch.setattr(webhook_router.requests, "post", lambda url, **k: posted.append((url, k)))
+    monkeypatch.setattr(webhook_router.requests, "post", lambda url, **k: posted.append((url, k)) or MagicMock())
 
     await _call_webhook(monkeypatch, _pr_payload("closed", merged=True, base_ref="main"))
 
@@ -152,7 +152,7 @@ async def test_merge_to_main_skips_discord_when_webhook_not_configured(monkeypat
     monkeypatch.setattr(webhook_router, "MAIN_WEBHOOK_URL", None)
 
     posted = []
-    monkeypatch.setattr(webhook_router.requests, "post", lambda url, **k: posted.append(url))
+    monkeypatch.setattr(webhook_router.requests, "post", lambda url, **k: posted.append(url) or MagicMock())
 
     await _call_webhook(monkeypatch, _pr_payload("closed", merged=True, base_ref="main"))
 
@@ -166,7 +166,7 @@ async def test_closed_but_not_merged_does_not_post_merge_notification(monkeypatc
     monkeypatch.setattr(webhook_router, "MAIN_WEBHOOK_URL", "https://discord.com/api/webhooks/test/main")
 
     posted = []
-    monkeypatch.setattr(webhook_router.requests, "post", lambda url, **k: posted.append(url))
+    monkeypatch.setattr(webhook_router.requests, "post", lambda url, **k: posted.append(url) or MagicMock())
 
     # PR 被關掉但沒有 merge
     await _call_webhook(monkeypatch, _pr_payload("closed", merged=False, base_ref="main"))
@@ -273,3 +273,82 @@ async def test_webhook_accepts_correct_signature(monkeypatch):
     result = await _call_webhook(monkeypatch, {"zen": "Keep it logically awesome."}, event="ping")
 
     assert result == {"status": "ok"}
+
+
+# ========== Gemini 格式錯誤、Discord 失敗時的處理 ==========
+
+def _setup_open_pr(monkeypatch, gemini_payload, discord_post):
+    """open PR 情境的共用設定：回傳一個 list，收集貼到 GitHub PR 的留言內容。"""
+    monkeypatch.setattr(webhook_router, "DISCORD_WEBHOOK_URL", "https://discord.com/api/webhooks/test/mr")
+    monkeypatch.setattr(webhook_router, "MAIN_WEBHOOK_URL", None)
+    monkeypatch.setattr(webhook_router.requests, "get", lambda *a, **k: MagicMock(json=lambda: [{"filename": "app.py"}]))
+    monkeypatch.setattr(
+        webhook_router.client.models,
+        "generate_content",
+        lambda **kwargs: MagicMock(text=json.dumps(gemini_payload)),
+    )
+
+    github_comments = []
+
+    def fake_post(url, **k):
+        if "discord.com" in url:
+            return discord_post(url, **k)
+        github_comments.append(k["json"]["body"])
+        return MagicMock()
+
+    monkeypatch.setattr(webhook_router.requests, "post", fake_post)
+    return github_comments
+
+
+@pytest.mark.asyncio
+async def test_open_pr_keeps_summary_comment_when_discord_fails(monkeypatch):
+    """Discord 連不上 → 只影響 Discord 通知，PR 留言照樣貼出摘要，不能被換成「摘要產生失敗」。"""
+    def discord_down(url, **k):
+        raise webhook_router.requests.ConnectionError("Discord 連不上")
+
+    github_comments = _setup_open_pr(
+        monkeypatch,
+        {"summary": "修正登入 bug", "frontend": None, "backend": None, "refactor": None},
+        discord_down,
+    )
+
+    await _call_webhook(monkeypatch, _pr_payload("opened"))
+
+    assert len(github_comments) == 1
+    assert "修正登入 bug" in github_comments[0]
+    assert "自動摘要產生失敗" not in github_comments[0]
+
+
+@pytest.mark.asyncio
+async def test_open_pr_reports_failure_when_gemini_omits_summary(monkeypatch):
+    """Gemini 回傳的 JSON 少了必填的 summary → PR 留言改成「摘要產生失敗」，也不發 Discord。"""
+    discord_calls = []
+    github_comments = _setup_open_pr(
+        monkeypatch,
+        {"frontend": "改了按鈕"},
+        lambda url, **k: discord_calls.append(url) or MagicMock(),
+    )
+
+    await _call_webhook(monkeypatch, _pr_payload("opened"))
+
+    assert "自動摘要產生失敗" in github_comments[0]
+    assert discord_calls == []
+
+
+@pytest.mark.asyncio
+async def test_open_pr_truncates_long_summary_to_discord_limits(monkeypatch):
+    """Gemini 回很長的內容 → 截斷到 Discord 上限，否則 Discord 會整筆拒收；PR 留言則保留完整內容。"""
+    sent = []
+    long_text = "很長的建議" * 500
+    github_comments = _setup_open_pr(
+        monkeypatch,
+        {"summary": long_text, "frontend": long_text, "backend": None, "refactor": None},
+        lambda url, **k: sent.append(k["json"]) or MagicMock(),
+    )
+
+    await _call_webhook(monkeypatch, _pr_payload("opened"))
+
+    embed = sent[0]["embeds"][0]
+    assert len(embed["description"]) <= webhook_router.DISCORD_DESCRIPTION_LIMIT
+    assert all(len(f["value"]) <= webhook_router.DISCORD_FIELD_LIMIT for f in embed["fields"])
+    assert long_text in github_comments[0]

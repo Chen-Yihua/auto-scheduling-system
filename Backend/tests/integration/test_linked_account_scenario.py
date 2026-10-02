@@ -126,3 +126,39 @@ async def test_moodle_linked_account_rejects_wrong_password_and_leaves_nothing_b
         list_res = await ac.get("/users/me/linked-accounts/")
         assert list_res.status_code == status.HTTP_200_OK
         assert list_res.json() == []
+
+
+@pytest.mark.asyncio
+async def test_update_linked_account_with_unchanged_values_still_succeeds(monkeypatch):
+    """打開編輯沒改任何東西就按儲存（送出的值跟資料庫一樣）→ 200，不能因為「沒有欄位被改到」
+    就回 404 讓前端顯示儲存失敗。"""
+    async def mock_fetch_github_userinfo(token):
+        return {"username": "mock_user", "avatar_url": "https://mock.avatar"}
+
+    monkeypatch.setattr(linked_mod, "fetch_github_userinfo", mock_fetch_github_userinfo)
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        create_res = await ac.post(
+            "/users/me/linked-accounts/",
+            json={"platform": "github", "status": "connected", "username": "", "apiKey": "token"},
+        )
+        assert create_res.status_code == status.HTTP_200_OK, create_res.text
+
+        update_res = await ac.patch("/users/me/linked-accounts/github", json={"status": "connected"})
+        assert update_res.status_code == status.HTTP_200_OK, update_res.text
+
+        await ac.delete("/users/me/linked-accounts/github")
+
+
+@pytest.mark.asyncio
+async def test_update_nonexistent_linked_account_returns_404_without_creating_record():
+    """更新一個根本沒連結過的平台 → 404，而且不能順手建立一筆只有部分欄位的紀錄
+    （之前用 upsert，會留下一筆沒有金鑰、看起來像已連結的殘影資料）。"""
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        update_res = await ac.patch("/users/me/linked-accounts/jira", json={"domain": "foo.atlassian.net"})
+        assert update_res.status_code == status.HTTP_404_NOT_FOUND
+
+        list_res = await ac.get("/users/me/linked-accounts/")
+        assert list_res.json() == []

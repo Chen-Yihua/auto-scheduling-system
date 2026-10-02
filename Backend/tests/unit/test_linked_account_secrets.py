@@ -14,7 +14,7 @@ def _mock_update_one(stored: dict):
     async def _update_one(filter, update, upsert=False):
         stored.clear()
         stored.update(update["$set"])
-        return type("Mock", (), {"modified_count": 1, "upserted_id": None})()
+        return type("Mock", (), {"matched_count": 1, "modified_count": 1, "upserted_id": None})()
     return _update_one
 
 

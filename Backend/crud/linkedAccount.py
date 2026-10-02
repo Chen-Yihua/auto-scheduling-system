@@ -225,8 +225,11 @@ async def update_linked_account_by_clerk_id(clerk_id: str, platform: str, data: 
     if provider and provider.needs_reverify(filtered_data):
         filtered_data = await provider.apply_update(filtered_data, composite_id)
 
-    result = await db.linkedAccounts.update_one({"_id": composite_id}, {"$set": filtered_data}, upsert=True)
-    return result.modified_count > 0
+    # 不能 upsert：這是「更新既有帳號」，帳號不存在時要回 404，不能偷偷建立一筆只有部分欄位的紀錄。
+    # 用 matched_count 判斷「帳號存在」，不能用 modified_count——送出的值跟資料庫一樣時
+    # （例如打開編輯沒改就按儲存）modified_count 是 0，但這不是失敗
+    result = await db.linkedAccounts.update_one({"_id": composite_id}, {"$set": filtered_data})
+    return result.matched_count > 0
 
 
 

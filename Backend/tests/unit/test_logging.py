@@ -63,7 +63,7 @@ def test_no_print_left_in_converted_modules():
 async def test_create_linked_account_logs_debug(monkeypatch, caplog):
     """建立綁定帳號時要留下 debug log（記錄是哪個平台）。"""
     async def mock_update_one(*args, **kwargs):
-        return type("Mock", (), {"modified_count": 1, "upserted_id": None})()
+        return type("Mock", (), {"matched_count": 1, "modified_count": 1, "upserted_id": None})()
 
     monkeypatch.setattr(linked_mod.db.linkedAccounts, "update_one", mock_update_one)
     monkeypatch.setattr(linked_mod, "verify_moodle_login", lambda username, password: True)

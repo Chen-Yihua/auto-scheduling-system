@@ -230,7 +230,7 @@ async def test_update_github_account_with_token(monkeypatch):
     async def mock_update_one(filter, update, upsert=False):
         nonlocal updated
         updated = update["$set"]
-        return type("Mock", (), {"modified_count": 1})()
+        return type("Mock", (), {"matched_count": 1})()
 
     monkeypatch.setattr(linked_mod.db.linkedAccounts, "update_one", mock_update_one)
     monkeypatch.setattr(linked_mod, "fetch_github_userinfo", mock_fetch_github_userinfo)
@@ -256,7 +256,7 @@ async def test_update_linked_account_no_valid_fields():
 async def test_update_github_account_basic(monkeypatch):
     """只更新 status 這類不需要重新驗證的欄位 → 直接更新，回傳 True。"""
     async def mock_update_one(*args, **kwargs):
-        return type("Mock", (), {"modified_count": 1})()
+        return type("Mock", (), {"matched_count": 1})()
 
     monkeypatch.setattr(linked_mod.db.linkedAccounts, "update_one", mock_update_one)
     result = await update_linked_account_by_clerk_id(
@@ -276,7 +276,7 @@ async def test_update_jira_account_with_domain_reverifies(monkeypatch):
     async def mock_update_one(filter, update, upsert=False):
         nonlocal updated
         updated = update["$set"]
-        return type("Mock", (), {"modified_count": 1})()
+        return type("Mock", (), {"matched_count": 1})()
 
     monkeypatch.setattr(linked_mod.db.linkedAccounts, "update_one", mock_update_one)
     monkeypatch.setattr(linked_mod, "fetch_jira_userinfo", mock_fetch_jira_userinfo)
@@ -306,7 +306,7 @@ async def test_update_jira_apikey_only_reverifies_with_existing_domain(monkeypat
     async def mock_update_one(filter, update, upsert=False):
         nonlocal updated
         updated = update["$set"]
-        return type("Mock", (), {"modified_count": 1})()
+        return type("Mock", (), {"matched_count": 1})()
 
     monkeypatch.setattr(linked_mod.db.linkedAccounts, "find_one", mock_find_one)
     monkeypatch.setattr(linked_mod.db.linkedAccounts, "update_one", mock_update_one)
@@ -339,7 +339,7 @@ async def test_update_jira_domain_only_reverifies_with_existing_apikey(monkeypat
     async def mock_update_one(filter, update, upsert=False):
         nonlocal updated
         updated = update["$set"]
-        return type("Mock", (), {"modified_count": 1})()
+        return type("Mock", (), {"matched_count": 1})()
 
     monkeypatch.setattr(linked_mod.db.linkedAccounts, "find_one", mock_find_one)
     monkeypatch.setattr(linked_mod.db.linkedAccounts, "update_one", mock_update_one)
@@ -370,7 +370,7 @@ async def test_update_moodle_password_reverifies_with_existing_username(monkeypa
     async def mock_update_one(filter, update, upsert=False):
         nonlocal updated
         updated = update["$set"]
-        return type("Mock", (), {"modified_count": 1})()
+        return type("Mock", (), {"matched_count": 1})()
 
     monkeypatch.setattr(linked_mod.db.linkedAccounts, "find_one", mock_find_one)
     monkeypatch.setattr(linked_mod.db.linkedAccounts, "update_one", mock_update_one)
@@ -402,7 +402,7 @@ async def test_update_moodle_username_only_reverifies_with_existing_password(mon
     async def mock_update_one(filter, update, upsert=False):
         nonlocal updated
         updated = update["$set"]
-        return type("Mock", (), {"modified_count": 1})()
+        return type("Mock", (), {"matched_count": 1})()
 
     monkeypatch.setattr(linked_mod.db.linkedAccounts, "find_one", mock_find_one)
     monkeypatch.setattr(linked_mod.db.linkedAccounts, "update_one", mock_update_one)

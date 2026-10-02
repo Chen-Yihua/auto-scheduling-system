@@ -50,7 +50,7 @@ def test_priority_still_wins_over_sort_order_across_different_priorities():
 
 def test_sort_order_breaks_ties_within_the_same_priority():
     """同一個 priority 內，sort_order 小的先排——這是使用者在拖拉排序精靈同一欄
-    內排的上下順序（見 PUT /manual_tasks/reorder）。"""
+    內排的上下順序（見 PUT /schedule/reorder）。"""
     tasks = [
         _task("t1", "同為 High，排序在後面", "High", sort_order=1),
         _task("t2", "同為 High，排序在前面", "High", sort_order=0),

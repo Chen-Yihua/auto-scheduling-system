@@ -163,7 +163,7 @@ def build_schedule_suggestion(
 
     排序規則：priority（High > Medium > Low）永遠是主要依據——排程精靈的
     拖拉排序畫面現在是低/中/高三欄，拖去別欄當場就是在改 priority
-    （見 PUT /manual_tasks/reorder），不是另外一套獨立的排序機制。
+    （見 PUT /schedule/reorder），不是另外一套獨立的排序機制。
     同一個 priority 內，才看 sort_order（使用者在畫面上同一欄內排的上下
     順序）決定誰先誰後；沒有 sort_order 的任務（例如排完序後才新建的）
     退回舊規則，依 due_date 早到晚排序、沒有 due_date 的排在最後面，

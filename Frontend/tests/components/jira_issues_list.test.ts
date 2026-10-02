@@ -98,6 +98,18 @@ describe('JiraIssuesList.vue', () => {
     )
   })
 
+  it('沒有 domain 時點擊不開任何網址，不能退回寫死的網域把使用者帶到別人的 Jira', async () => {
+    openSpy.mockClear()
+    const wrapper = mount(JiraIssuesList, {
+      props: { issues: [baseIssue], loading: false, domain: '' },
+      global: { stubs: uiStubs },
+    })
+
+    await wrapper.findAll('.u-card-stub')[1].trigger('click')
+
+    expect(openSpy).not.toHaveBeenCalled()
+  })
+
   it('沒帶 limit 時顯示全部 issues，不顯示「查看全部」連結', () => {
     const issues = [baseIssue, { ...baseIssue, id: '2', key: 'ISSUE-2' }]
     const wrapper = mount(JiraIssuesList, {

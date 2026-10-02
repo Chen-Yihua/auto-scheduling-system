@@ -22,8 +22,10 @@ const displayedIssues = computed(() =>
 const hasMoreIssues = computed(() => !!props.limit && props.issues.length > props.limit)
 
 const openJiraIssue = (key: string) => {
-  const domain = props.domain || 'nccu-software-development.atlassian.net'
-  window.open(`https://${domain}/browse/${key}`, '_blank')
+  // 沒有 domain 就不知道 issue 在哪個 Jira 站台，不能退回任何寫死的網域——
+  // 那會把使用者帶到別人的 Jira
+  if (!props.domain) return
+  window.open(`https://${props.domain}/browse/${key}`, '_blank')
 }
 </script>
 

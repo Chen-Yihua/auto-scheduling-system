@@ -25,6 +25,7 @@ async def test_get_github_issues_success(monkeypatch):
         fetch_calls.append(token)
         return [
             {
+                "id": 9000999,
                 "number": 999,
                 "title": "Fix bug",
                 "state": "open",
@@ -50,7 +51,8 @@ async def test_get_github_issues_success(monkeypatch):
 
     assert result == [
         {
-            "id": 999,
+            "id": 9000999,
+            "number": 999,
             "title": "Fix bug",
             "status": "open",
             "created_at": "2024-01-01T00:00:00Z",

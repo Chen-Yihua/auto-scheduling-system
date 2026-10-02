@@ -9,7 +9,8 @@ class GitHubAuthor(BaseModel):
     avatar: Optional[str]
 
 class GitHubIssue(BaseModel):
-    id: int
+    id: int  # GitHub 全域唯一 id
+    number: int  # repo 內的編號，顯示用的 "#123"
     title: str
     status: str
     created_at: datetime

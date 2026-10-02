@@ -20,6 +20,7 @@ async def test_get_github_issues(monkeypatch, logged_in_user):
     async def mock_fetch(token):
         return [
             {
+                "id": 9000999,
                 "number": 999,
                 "title": "Fix bug",
                 "state": "open",
@@ -50,6 +51,9 @@ async def test_get_github_issues(monkeypatch, logged_in_user):
 
         async def delete_many(self, *args, **kwargs):
             return MockUpdateResult()
+
+        async def count_documents(self, *args, **kwargs):
+            return 0  # 沒有舊版（用 number 當 id）的資料要搬移
 
     monkeypatch.setattr(github_router.db, "linkedAccounts", MockCollection())
     monkeypatch.setattr(github_router.db, "github_issues", MockCollection())

@@ -4,7 +4,8 @@ export interface GitHubAuthor {
   }
   
   export interface GitHubIssue {
-    id: number
+    id: number  // GitHub 全域唯一 id（列表 key 用）
+    number: number  // repo 內的編號，顯示用的 "#123"
     title: string
     status: string
     created_at: string

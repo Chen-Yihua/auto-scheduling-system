@@ -64,7 +64,7 @@ const openIssue = (url: string) => {
       >
         <template #header>
           <div class="flex items-center justify-between">
-            <div class="text-sm font-semibold">#{{ issue.id }}</div>
+            <div class="text-sm font-semibold">#{{ issue.number }}</div>
             <UBadge :color="issue.isPR ? 'info' : 'success'" variant="subtle" size="sm">
               {{ issue.isPR ? 'PR' : 'Issue' }}
             </UBadge>

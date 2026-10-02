@@ -143,8 +143,10 @@ async def test_fetch_github_user_issues_transient_error_is_retryable(monkeypatch
 
 
 def test_transform_github_item_issue():
-    """一般 issue：GitHub 原始欄位要正確對應到統一格式的每個欄位（id、status、url、author、labels…），isPR 為 False。"""
+    """一般 issue：GitHub 原始欄位要正確對應到統一格式的每個欄位（id、number、status、url、author、labels…），isPR 為 False。
+    id 要用 GitHub 全域唯一的 id，不能用 repo 內的 number——不同 repo 都有 #1，會互相覆蓋。"""
     raw = {
+        "id": 9000123,
         "number": 123,
         "title": "Test issue",
         "state": "open",
@@ -158,7 +160,8 @@ def test_transform_github_item_issue():
 
     result = github_mod.transform_github_item(raw)
 
-    assert result["id"] == 123
+    assert result["id"] == 9000123
+    assert result["number"] == 123
     assert result["title"] == "Test issue"
     assert result["status"] == "open"
     assert result["created_at"] == "2024-01-01T00:00:00Z"
@@ -174,6 +177,7 @@ def test_transform_github_item_issue():
 def test_transform_github_item_pr():
     """有 pull_request 欄位代表是 PR → isPR 為 True；沒有任何 label 時要是空清單。"""
     raw = {
+        "id": 9000456,
         "number": 456,
         "title": "Add feature",
         "state": "open",
@@ -188,7 +192,8 @@ def test_transform_github_item_pr():
 
     result = github_mod.transform_github_item(raw)
 
-    assert result["id"] == 456
+    assert result["id"] == 9000456
+    assert result["number"] == 456
     assert result["isPR"] is True
     assert result["labels"] == []  # 沒有任何 label 是正常狀態，該回空清單，不是 None 或例外
 
@@ -196,6 +201,7 @@ def test_transform_github_item_pr():
 def test_transform_github_item_tolerates_missing_optional_fields():
     """只帶必要欄位時也不能出錯：選填欄位（updated_at、user、labels、comments）缺了就退回 None 或空清單。"""
     raw = {
+        "id": 9000789,
         "number": 789,
         "title": "Minimal item",
         "state": "closed",
@@ -205,9 +211,72 @@ def test_transform_github_item_tolerates_missing_optional_fields():
 
     result = github_mod.transform_github_item(raw)
 
-    assert result["id"] == 789
+    assert result["id"] == 9000789
+    assert result["number"] == 789
     assert result["updated_at"] is None
     assert result["author"] == {"username": None, "avatar": None}
     assert result["labels"] == []
     assert result["comments"] is None
     assert result["isPR"] is False
+
+
+# ---------- sync_github_issues：舊資料（用 number 當 id）搬移 ----------
+
+class _FakeGithubIssues:
+    """只模擬搬移邏輯用到的 count_documents／update_one，記錄 update_one 收到的參數。"""
+    def __init__(self, legacy_count):
+        self.legacy_count = legacy_count
+        self.updates = []
+
+    async def count_documents(self, query):
+        return self.legacy_count
+
+    async def update_one(self, query, update):
+        self.updates.append((query, update))
+
+
+@pytest.mark.asyncio
+async def test_sync_github_issues_migrates_legacy_ids_by_url(monkeypatch):
+    """DB 裡還有舊版用 number 當 id 的資料（沒有 number 欄位）→ 用 url 對到新抓回來的項目，
+    把 id 改成全域 id、補上 number，使用者設定的排程欄位才不會在這次同步被當成過期資料刪掉。
+    搬移要在 sync_platform_items 寫入／清除舊資料之前完成。"""
+    fake = _FakeGithubIssues(legacy_count=1)
+    monkeypatch.setattr(github_mod.db, "github_issues", fake)
+    items = [{"id": 9000001, "number": 1, "url": "https://github.com/a/repo/issues/1"}]
+
+    async def fake_sync_platform_items(collection, user_id, id_field, fetch_fn):
+        result = await fetch_fn()
+        assert fake.updates, "搬移要在 fetch_fn 回傳前做完，sync_platform_items 才不會先刪掉舊資料"
+        return result, False, None, False
+
+    monkeypatch.setattr(github_mod, "sync_platform_items", fake_sync_platform_items)
+
+    async def fetch():
+        return items
+
+    result, *_ = await github_mod.sync_github_issues("user_1", fetch)
+
+    assert result == items
+    assert fake.updates == [(
+        {"user_id": "user_1", "number": {"$exists": False}, "url": "https://github.com/a/repo/issues/1"},
+        {"$set": {"id": 9000001, "number": 1}},
+    )]
+
+
+@pytest.mark.asyncio
+async def test_sync_github_issues_skips_migration_when_no_legacy_docs(monkeypatch):
+    """已經沒有舊資料 → 只多一次 count 查詢，不能每次同步都對每個項目跑一次 update。"""
+    fake = _FakeGithubIssues(legacy_count=0)
+    monkeypatch.setattr(github_mod.db, "github_issues", fake)
+
+    async def fake_sync_platform_items(collection, user_id, id_field, fetch_fn):
+        return await fetch_fn(), False, None, False
+
+    monkeypatch.setattr(github_mod, "sync_platform_items", fake_sync_platform_items)
+
+    async def fetch():
+        return [{"id": 9000001, "number": 1, "url": "https://github.com/a/repo/issues/1"}]
+
+    await github_mod.sync_github_issues("user_1", fetch)
+
+    assert fake.updates == []

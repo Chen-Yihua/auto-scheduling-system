@@ -53,7 +53,10 @@ async def fetch_github_user_issues(token: str, per_page: int = 100) -> list:
 # 2. 將 raw 資料轉換成 GitHubIssue 格式（前端也用這格式）
 def transform_github_item(raw: dict) -> dict:
     return {
-        "id": raw["number"], # GitHub 用 number 代表這個 repo 內的編號
+        # id 用 GitHub 全域唯一的 id，不能用 number——number 只是 repo 內的編號，
+        # 不同 repo 都有 #1，拿來當 id 會互相覆蓋（同步時 upsert 撞在同一筆、前端列表 key 重複）
+        "id": raw["id"],
+        "number": raw["number"],  # 顯示用的 "#123"
         "title": raw["title"],
         "status": raw["state"],
         "created_at": raw["created_at"],
@@ -69,12 +72,34 @@ def transform_github_item(raw: dict) -> dict:
     }
 
 
+# 舊版用 issue number 當 id（見 transform_github_item），改用全域 id 之後，DB 裡的舊資料
+# 如果不處理，會在這次同步被當成「已經不存在」刪掉，連帶把使用者設定的排程欄位
+# （priority、duration、done、calendar_event_id 等）一起丟掉。這裡用 url（全域唯一）
+# 把舊資料對到新抓回來的項目，直接把 id 改成新值，排程欄位就跟著保留下來。
+# 舊資料的特徵是沒有 number 欄位；搬過一次之後就不會再有，之後每次同步只多一次 count 查詢
+async def _migrate_legacy_github_ids(user_id: str, items: list[dict]) -> None:
+    legacy_filter = {"user_id": user_id, "number": {"$exists": False}}
+    if not await db.github_issues.count_documents(legacy_filter):
+        return
+    for item in items:
+        await db.github_issues.update_one(
+            {**legacy_filter, "url": item["url"]},
+            {"$set": {"id": item["id"], "number": item["number"]}},
+        )
+
+
 # 包一層 sync_platform_items，把「用哪個 collection」這個細節封裝在這裡，
 # router 就不用自己 import db、知道 collection 叫 github_issues
 async def sync_github_issues(user_id: str, fetch_fn):
+    # 搬移要在 sync_platform_items upsert／刪除舊項目之前做，所以包在 fetch 裡面
+    async def fetch_and_migrate():
+        items = await fetch_fn()
+        await _migrate_legacy_github_ids(user_id, items)
+        return items
+
     return await sync_platform_items(
         collection=db.github_issues,
         user_id=user_id,
         id_field="id",
-        fetch_fn=fetch_fn,
+        fetch_fn=fetch_and_migrate,
     )

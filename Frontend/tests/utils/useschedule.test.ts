@@ -39,7 +39,7 @@ describe('useSchedule composable', () => {
     expect(ctx.hasFetched.value).toBe(false)
   })
 
-  it('呼叫 /schedule/suggest 取得排程建議，preferences 沒帶時用預設值（都不限制）', async () => {
+  it('呼叫 /schedule/suggest 取得排程建議，preferences 沒帶時用預設值（都不限制，時區用瀏覽器的）', async () => {
     fetchSpy.mockResolvedValueOnce({ scheduled: [], unscheduled: [] })
 
     const ctx = useSchedule()
@@ -49,7 +49,10 @@ describe('useSchedule composable', () => {
       'http://api/schedule/suggest',
       expect.objectContaining({
         method: 'POST',
-        body: { blocked_recurring: [], blocked_exceptions: [], buffer_minutes: 0, daily_max_minutes: null },
+        body: {
+          blocked_recurring: [], blocked_exceptions: [], buffer_minutes: 0, daily_max_minutes: null,
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        },
         headers: { Authorization: 'Bearer jwt-token' },
       }),
     )
@@ -62,6 +65,7 @@ describe('useSchedule composable', () => {
       blocked_exceptions: [],
       buffer_minutes: 15,
       daily_max_minutes: 240,
+      timezone: 'Asia/Taipei',
     }
 
     const ctx = useSchedule()
@@ -128,6 +132,7 @@ describe('useSchedule composable', () => {
     it('body 帶上一次 fetchScheduleSuggestion 用過的 preferences（同一份，不用使用者重填）', async () => {
       const preferences = {
         blocked_recurring: [], blocked_exceptions: [], buffer_minutes: 30, daily_max_minutes: null,
+        timezone: 'Asia/Taipei',
       }
       fetchSpy.mockResolvedValueOnce({ scheduled: [], unscheduled: [] }) // 產生建議時用掉的那一次
       const ctx = useSchedule()

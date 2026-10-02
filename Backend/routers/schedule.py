@@ -89,11 +89,13 @@ async def _compute_suggestion(user_id: str, preferences: SchedulePreferences, er
             free_slots,
             [r.model_dump() for r in preferences.blocked_recurring],
             [e.model_dump() for e in preferences.blocked_exceptions],
+            tz_name=preferences.timezone,
         )
         return build_schedule_suggestion(
             tasks, free_slots,
             buffer_minutes=preferences.buffer_minutes,
             daily_max_minutes=preferences.daily_max_minutes,
+            tz_name=preferences.timezone,
         )
     except Exception:
         logger.exception("計算排程建議失敗 user_id=%s", user_id)

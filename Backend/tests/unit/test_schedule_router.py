@@ -1,4 +1,5 @@
 import pytest
+from pydantic import ValidationError
 
 from fastapi import HTTPException
 
@@ -104,7 +105,8 @@ async def test_suggest_schedule_returns_clean_500_when_apply_blocked_periods_fai
 @pytest.mark.asyncio
 async def test_suggest_schedule_passes_preferences_through_to_blocking_and_build(monkeypatch):
     """preferences 的 buffer_minutes／daily_max_minutes 要原封不動轉給 build_schedule_suggestion，
-    blocked_recurring／blocked_exceptions 要轉成 dict 交給 apply_blocked_periods。"""
+    blocked_recurring／blocked_exceptions 要轉成 dict 交給 apply_blocked_periods，
+    使用者的時區兩邊都要拿到（不工作時段、每日上限都是用當地時間算的）。"""
     async def mock_get_tasks(user_id):
         return [{"id": "t1", "title": "任務一", "priority": "High", "status": "To Do", "due_date": None}]
 
@@ -113,14 +115,16 @@ async def test_suggest_schedule_passes_preferences_through_to_blocking_and_build
 
     captured = {}
 
-    def mock_apply_blocked_periods(free_slots, blocked_recurring, blocked_exceptions):
+    def mock_apply_blocked_periods(free_slots, blocked_recurring, blocked_exceptions, tz_name):
         captured["blocked_recurring"] = blocked_recurring
         captured["blocked_exceptions"] = blocked_exceptions
+        captured["blocking_tz"] = tz_name
         return free_slots
 
     def mock_build_schedule_suggestion(tasks, free_slots, **kwargs):
         captured["buffer_minutes"] = kwargs.get("buffer_minutes")
         captured["daily_max_minutes"] = kwargs.get("daily_max_minutes")
+        captured["build_tz"] = kwargs.get("tz_name")
         return {"scheduled": [], "unscheduled": []}
 
     monkeypatch.setattr(schedule_router, "get_all_schedulable_items", mock_get_tasks)
@@ -132,6 +136,7 @@ async def test_suggest_schedule_passes_preferences_through_to_blocking_and_build
         blocked_recurring=[BlockedRecurringRule(days_of_week=[5, 6], all_day=True)],
         buffer_minutes=15,
         daily_max_minutes=240,
+        timezone="Asia/Taipei",
     )
     await schedule_router.suggest_schedule(preferences=preferences, clerk_user=mock_user)
 
@@ -139,7 +144,17 @@ async def test_suggest_schedule_passes_preferences_through_to_blocking_and_build
     assert captured["blocked_exceptions"] == []
     assert captured["buffer_minutes"] == 15
     assert captured["daily_max_minutes"] == 240
+    assert captured["blocking_tz"] == "Asia/Taipei"
+    assert captured["build_tz"] == "Asia/Taipei"
 
+
+
+def test_schedule_preferences_rejects_unknown_timezone():
+    """前端送來不認得的時區名稱 → 驗證時就擋下（422），不能等到排程計算時才噴 500。"""
+    with pytest.raises(ValidationError):
+        SchedulePreferences(timezone="Mars/Olympus_Mons")
+
+    assert SchedulePreferences().timezone == "UTC"  # 舊版前端沒帶時區時，維持原本的行為
 
 # ---------- confirm_schedule ----------
 

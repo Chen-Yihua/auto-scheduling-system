@@ -1,5 +1,6 @@
 import logging
 from datetime import datetime, time, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +46,22 @@ def _due_as_utc(due) -> datetime | None:
     if due.tzinfo is None:
         return due.replace(tzinfo=timezone.utc)
     return due.astimezone(timezone.utc)
+
+
+def _to_local_wall_time(value: datetime, zone: ZoneInfo) -> datetime:
+    """
+    換算成使用者當地的「牆上時鐘時間」（不含時區），才能跟使用者填的
+    「22:00」這種當地時間直接比較。沒有時區的 datetime 一律當成 UTC。
+    """
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.astimezone(zone).replace(tzinfo=None)
+
+
+def _local_wall_time_to_utc_iso(value: datetime, zone: ZoneInfo) -> str:
+    """_to_local_wall_time 的反向：當地牆上時間 → UTC ISO 字串（帶 Z）。"""
+    utc = value.replace(tzinfo=zone).astimezone(timezone.utc)
+    return utc.isoformat().replace("+00:00", "Z")
 
 
 def _parse_hhmm(value: str) -> time:
@@ -116,30 +133,33 @@ def apply_blocked_periods(
     free_slots: list[dict],
     blocked_recurring: list[dict] | None = None,
     blocked_exceptions: list[dict] | None = None,
+    tz_name: str = "UTC",
 ) -> list[dict]:
     """
     從 Google Calendar 算出的空檔（free_slots）裡，再挖掉使用者這一輪在
     排程精靈填的「不工作時段」——每週固定規律 + 這次額外加的一次性例外。
 
-    這裡「比較」的時候刻意把時間當成不含時區的牆上時鐘時間處理（跟
-    _sortable_due_date 同樣的取捨：容許時區誤差，換取不用另外儲存/推斷
-    使用者所在時區的複雜度），所以 Google 回來的 UTC ISO 字串跟使用者在
-    畫面上填的「22:00」不是嚴格對齊的同一個時刻，但差距通常只有幾小時，
-    不影響排程建議的實用性。
+    使用者填的「22:00」是他所在時區（tz_name）的當地時間，Google 回來的空檔
+    卻是 UTC，所以先把空檔、例外時段都換算成當地的牆上時鐘時間，在當地時間
+    上挖掉不工作時段，最後再換回 UTC。不換算的話，台灣使用者（UTC+8）設定的
+    「每天 22:00-08:00」會變成擋掉台灣時間 06:00-16:00，半夜反而沒擋到。
 
-    但「輸出」一定要補回 UTC 時區標記（Z）——free_slots 本來就是 UTC，
-    少了這個標記，前端 new Date(...) 會把它當成瀏覽器所在時區的本地時間
-    解讀，讓排程建議看起來排到過去的時間（例如已經是晚上，卻顯示排在
-    「今天早上」）。
+    「輸出」一定要帶 UTC 時區標記（Z）——少了這個標記，前端 new Date(...)
+    會把它當成瀏覽器所在時區的本地時間解讀，讓排程建議看起來排到過去的時間
+    （例如已經是晚上，卻顯示排在「今天早上」）。
     """
     if not blocked_recurring and not blocked_exceptions:
         return free_slots
 
+    zone = ZoneInfo(tz_name)
     parsed = []
     for s in free_slots:
         if not s.get("start") or not s.get("end"):
             continue
-        parsed.append((_parse_iso(s["start"]).replace(tzinfo=None), _parse_iso(s["end"]).replace(tzinfo=None)))
+        parsed.append((
+            _to_local_wall_time(_parse_iso(s["start"]), zone),
+            _to_local_wall_time(_parse_iso(s["end"]), zone),
+        ))
     if not parsed:
         return []
 
@@ -153,14 +173,14 @@ def apply_blocked_periods(
         for e in blocked_exceptions:
             if not e.get("start") or not e.get("end"):
                 continue
-            blocks.append((_parse_iso(e["start"]).replace(tzinfo=None), _parse_iso(e["end"]).replace(tzinfo=None)))
+            blocks.append((
+                _to_local_wall_time(_parse_iso(e["start"]), zone),
+                _to_local_wall_time(_parse_iso(e["end"]), zone),
+            ))
 
     remaining = sorted(_subtract_intervals(parsed, blocks), key=lambda t: t[0])
     return [
-        {
-            "start": s.replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z"),
-            "end": e.replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z"),
-        }
+        {"start": _local_wall_time_to_utc_iso(s, zone), "end": _local_wall_time_to_utc_iso(e, zone)}
         for s, e in remaining
     ]
 
@@ -172,6 +192,7 @@ def build_schedule_suggestion(
     buffer_minutes: int = 0,
     daily_max_minutes: int | None = None,
     now: datetime | None = None,
+    tz_name: str = "UTC",
 ) -> dict:
     """
     規則式排程建議（貪婪 First-Fit）：不寫回 Google Calendar，只回傳一份建議清單。
@@ -207,8 +228,11 @@ def build_schedule_suggestion(
     （不算進下一個任務可用），0 就是目前預設的「完全貼著排」。
     daily_max_minutes：同一天已經排的時長加起來到這個上限後，當天剩下的
     空檔就先跳過、留給後面的任務找別天的空檔（不會因此整段消耗掉）。
+    「同一天」是使用者當地（tz_name）的日曆日，不是 UTC 的——不然台灣使用者
+    的「一天」會在早上 8 點（UTC 午夜）才切換。
     """
     now = now or datetime.now(timezone.utc)
+    zone = ZoneInfo(tz_name)
     pending = [t for t in tasks if t.get("status") != "Done" and not t.get("calendar_event_id")]
 
     def sort_key(t):
@@ -261,7 +285,7 @@ def build_schedule_suggestion(
             if slot["end"] - slot["start"] < duration:
                 continue
             if daily_max_minutes is not None:
-                day = slot["start"].date()
+                day = slot["start"].astimezone(zone).date()
                 remaining_today = daily_max_minutes - daily_used_minutes.get(day, 0)
                 if remaining_today < task_minutes:
                     continue
@@ -279,7 +303,7 @@ def build_schedule_suggestion(
                 "end": end,
             })
             if daily_max_minutes is not None:
-                day = start.date()
+                day = start.astimezone(zone).date()
                 daily_used_minutes[day] = daily_used_minutes.get(day, 0) + task_minutes
             slot["start"] = end + timedelta(minutes=buffer_minutes)
             placed = True

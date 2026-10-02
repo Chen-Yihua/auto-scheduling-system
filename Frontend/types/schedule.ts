@@ -58,6 +58,10 @@ export interface SchedulePreferences {
   blocked_exceptions: BlockedException[]
   buffer_minutes: number
   daily_max_minutes: number | null
+  // 使用者所在的 IANA 時區（例如 "Asia/Taipei"）。上面的 "22:00" 這類時間、
+  // 每日上限的「一天」都是當地時間，後端要靠這個換算成 UTC 才能跟
+  // Google Calendar 的空檔比較
+  timezone: string
 }
 
 export function defaultSchedulePreferences(): SchedulePreferences {
@@ -66,5 +70,6 @@ export function defaultSchedulePreferences(): SchedulePreferences {
     blocked_exceptions: [],
     buffer_minutes: 0,
     daily_max_minutes: null,
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
   }
 }

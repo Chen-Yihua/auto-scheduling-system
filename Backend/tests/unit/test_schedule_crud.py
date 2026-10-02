@@ -568,3 +568,53 @@ def test_apply_blocked_periods_skips_recurring_rule_missing_start_or_end_time():
     result = apply_blocked_periods(free_slots, blocked_recurring=[rule])
 
     assert result == [{"start": "2026-09-10T09:00:00Z", "end": "2026-09-10T17:00:00Z"}]
+
+
+# ---------- 使用者時區：不工作時段、每日上限都要用當地時間算 ----------
+
+EVERY_DAY = [0, 1, 2, 3, 4, 5, 6]
+
+
+def test_apply_blocked_periods_uses_user_local_time_not_utc():
+    """台灣使用者（UTC+8）設定「每天 22:00-08:00 不工作」，擋掉的要是台灣時間的半夜，
+    也就是 UTC 14:00 到隔天 00:00——之前直接拿 UTC 比，擋成了台灣時間 06:00-16:00。"""
+    # 台灣時間 9/10 08:00 ~ 9/11 07:59
+    free_slots = [_slot("2026-09-10T00:00:00Z", "2026-09-10T23:59:00Z")]
+    rule = {"days_of_week": EVERY_DAY, "all_day": False, "start_time": "22:00", "end_time": "08:00"}
+
+    result = apply_blocked_periods(free_slots, blocked_recurring=[rule], tz_name="Asia/Taipei")
+
+    # 剩下台灣時間 08:00-22:00，換回 UTC 就是 00:00-14:00
+    assert result == [_slot("2026-09-10T00:00:00Z", "2026-09-10T14:00:00Z")]
+
+
+def test_apply_blocked_periods_exception_is_an_exact_instant_regardless_of_timezone():
+    """單次例外時段前端送的是 UTC 時刻（toISOString），不管使用者在哪個時區，
+    擋掉的都要是那個確切的時刻。"""
+    free_slots = [_slot("2026-09-10T00:00:00Z", "2026-09-10T06:00:00Z")]
+    exception = {"start": "2026-09-10T02:00:00Z", "end": "2026-09-10T03:00:00Z"}
+
+    result = apply_blocked_periods(free_slots, blocked_exceptions=[exception], tz_name="Asia/Taipei")
+
+    assert result == [
+        _slot("2026-09-10T00:00:00Z", "2026-09-10T02:00:00Z"),
+        _slot("2026-09-10T03:00:00Z", "2026-09-10T06:00:00Z"),
+    ]
+
+
+def test_daily_max_minutes_counts_days_in_user_local_time():
+    """每日上限的「一天」是使用者當地的日曆日：UTC 9/10 15:00 和 17:00 是同一個 UTC 日，
+    但在台灣分別是 9/10 23:00 和 9/11 01:00，屬於不同的兩天，各自都還有額度。"""
+    tasks = [
+        _task("t1", "任務一", "High", duration=60),
+        _task("t2", "任務二", "High", duration=60),
+    ]
+    free_slots = [
+        _slot("2026-09-10T15:00:00Z", "2026-09-10T16:00:00Z"),  # 台灣 9/10 23:00
+        _slot("2026-09-10T17:00:00Z", "2026-09-10T18:00:00Z"),  # 台灣 9/11 01:00
+    ]
+
+    result = build_schedule_suggestion(tasks, free_slots, daily_max_minutes=60, now=NOW, tz_name="Asia/Taipei")
+
+    assert len(result["scheduled"]) == 2
+    assert result["unscheduled"] == []

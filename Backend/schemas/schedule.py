@@ -1,4 +1,5 @@
-from pydantic import BaseModel
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+from pydantic import BaseModel, field_validator
 from typing import Optional
 from datetime import datetime
 from schemas.manualTask import PriorityEnum
@@ -114,3 +115,17 @@ class SchedulePreferences(BaseModel):
     blocked_exceptions: list[BlockedException] = []
     buffer_minutes: int = 0
     daily_max_minutes: Optional[int] = None
+    # 使用者所在的 IANA 時區（例如 "Asia/Taipei"），由前端瀏覽器提供。
+    # 「每天 22:00-08:00 不工作」的 22:00、每日上限的「一天」都是使用者當地的
+    # 時間，要先換算才能跟 Google Calendar 回來的 UTC 空檔比較——不換算的話，
+    # 台灣使用者設定的 22:00-08:00 會變成擋掉台灣時間 06:00-16:00
+    timezone: str = "UTC"
+
+    @field_validator("timezone")
+    @classmethod
+    def _must_be_valid_timezone(cls, value: str) -> str:
+        try:
+            ZoneInfo(value)
+        except (ZoneInfoNotFoundError, ValueError):
+            raise ValueError(f"不認得的時區：{value}")
+        return value

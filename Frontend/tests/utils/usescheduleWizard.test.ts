@@ -83,6 +83,7 @@ describe('useScheduleWizard composable', () => {
 
     expect(ctx.preferences.value).toEqual({
       blocked_recurring: [], blocked_exceptions: [], buffer_minutes: 0, daily_max_minutes: null,
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     })
   })
 

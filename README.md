@@ -9,15 +9,17 @@
 ## 架構
 
 ```
-├── Backend/   # FastAPI + MongoDB，以 Docker 部署到 Google Cloud Run
-└── Frontend/  # Nuxt 3 + TypeScript，部署到 Vercel
+├── backend/   # FastAPI + MongoDB，以 Docker 部署到 Google Cloud Run
+├── frontend/  # Nuxt 3 + TypeScript，部署到 Vercel
+├── docs/      # 系統架構圖（architecture.drawio，用 draw.io 開啟）
+└── .github/workflows/deploy.yml  # CI/CD：測試通過後自動部署前後端
 ```
 
 - **身分驗證**：前後端都使用 [Clerk](https://clerk.com/)。前端不會經手使用者密碼；後端以 Clerk 公開的金鑰（JWKS）驗證每個請求附帶的 JWT。
 - **資料庫**：MongoDB 負責持久化資料。Redis 為選用，用於限流計數與短期快取；未設定 `REDIS_URL` 時，改用應用程式本身的記憶體（重啟後會清空）。
 - **CI/CD**：使用 GitHub Actions（`.github/workflows/deploy.yml`）。前端與後端各自執行測試，測試通過後才會執行對應的部署。
 
-各端的安裝與設定方式，請見 [`Backend/README.md`](Backend/README.md) 與 [`Frontend/README.md`](Frontend/README.md)。
+各端的安裝與設定方式，請見 [`backend/README.md`](backend/README.md) 與 [`frontend/README.md`](frontend/README.md)。
 
 ---
 
@@ -57,7 +59,7 @@
     - **API 測試**：逐一驗證每個端點的路由、身分驗證、回應格式與狀態碼。
     - **情境測試**：以記憶體資料庫（`mongomock-motor`）串接多次呼叫，找出單一端點 mock 看不出的問題（例如「更新是否真的寫入、下一次讀取能否看到」）。
 
-  詳見 [`Backend/tests/README.md`](Backend/tests/README.md)。
+  詳見 [`backend/tests/README.md`](backend/tests/README.md)。
 - **前端**：
   - 元件與 composable 測試在 jsdom 中執行，Nuxt 的 auto-import 以 mock 取代。
   - 另有獨立的 **E2E 測試**：實際 build 並啟動 Nuxt 應用，再以真實的 headless 瀏覽器（Playwright）操作。涵蓋未登入的畫面；若 CI 有設定 Clerk 測試使用者，也會涵蓋真實的登入流程（以該使用者 email 對應的一次性 Clerk 登入 ticket 登入）。
@@ -66,11 +68,11 @@
 
 ```bash
 # 後端
-cd Backend && pytest                   # 全部
-cd Backend && pytest tests/unit        # 單元測試，速度快，不經過 HTTP
-cd Backend && pytest tests/integration # 整合測試，經過 HTTP
+cd backend && pytest                   # 全部
+cd backend && pytest tests/unit        # 單元測試，速度快，不經過 HTTP
+cd backend && pytest tests/integration # 整合測試，經過 HTTP
 
 # 前端
-cd Frontend && npm run test       # 單元 / 元件測試
-cd Frontend && npm run test:e2e   # 真實瀏覽器 E2E（前置條件見 Frontend/README.md）
+cd frontend && npm run test       # 單元 / 元件測試
+cd frontend && npm run test:e2e   # 真實瀏覽器 E2E（前置條件見 frontend/README.md）
 ```

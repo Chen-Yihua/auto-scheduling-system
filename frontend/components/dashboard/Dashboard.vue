@@ -1,0 +1,93 @@
+<script setup lang="ts">
+import { reactive } from 'vue'
+import { usePlatformItems } from '@/composables/usePlatformItems'
+import { useUser } from '@clerk/vue'
+import { useGoogleCalendarAuth } from '@/composables/useGoogleCalendarAuth'
+import GithubIssuesList from '~/components/platforms/GithubIssuesList.vue'
+import LoginRequiredCard from '~/components/LoginRequiredCard.vue'
+import Leetcode from '~/components/dashboard/Leetcode.vue'
+import JiraIssuesList from '~/components/platforms/JiraIssuesList.vue'
+import News from '~/components/dashboard/News.vue'
+import TaskForm from '~/components/tasks/TaskForm.vue'
+import ScheduleSuggestion from '~/components/tasks/ScheduleSuggestion.vue'
+import GoogleCalendarEmbed from '~/components/dashboard/GoogleCalendarEmbed.vue'
+import MoodleAssignmentsList from '~/components/platforms/MoodleAssignmentsList.vue'
+
+// reactive 包起來，template 裡可以直接寫 github.items，不用一個個欄位改名解構
+const github = reactive(usePlatformItems('github'));
+const jira = reactive(usePlatformItems('jira'));
+const moodle = reactive(usePlatformItems('moodle'));
+const { calendarIds, primaryCalendarId, fetchGoogleCalendars, isConnected, calendarReloadToken } = useGoogleCalendar();
+const { isSignedIn } = useUser();
+const { connecting: googleConnecting, connectedCount: googleConnectedCount } = useGoogleCalendarAuth();
+
+// 各自獨立抓取、互不影響——任何一個失敗都不該卡住其他的
+// （之前串成一條 await 鏈，其中一個丟出例外就會讓後面的都卡在 loading 動不了）
+function loadDashboardData() {
+  fetchGoogleCalendars();
+  github.fetchItems();
+  jira.fetchItems();
+  moodle.fetchItems();
+}
+
+// 這幾個都是需要授權才能查的個人資料，還沒登入時打了只會是 401，
+// 不該讓訪客一進頁面就看到一排「抓取失敗」的錯誤提示
+watch(isSignedIn, (signedIn) => {
+  if (signedIn === undefined) return; // Clerk 還在初始化，先不動作
+  if (signedIn) {
+    loadDashboardData();
+  }
+}, { immediate: true });
+
+// Google 授權是回到首頁之後才在背景完成的，完成時要重新查一次，卡片才會從「連接中」換成行事曆
+watch(googleConnectedCount, () => {
+  fetchGoogleCalendars();
+});
+</script>
+
+<template>
+  <div class="p-4">
+    <!-- Clerk 還在初始化（isSignedIn 是 undefined）時先不畫，避免登入的人一進來先閃一下「請先登入」 -->
+    <!-- 三欄式版面：左 待辦事項＋第三方平台任務、中 行事曆、右 動態消息／LeetCode。
+    登入前後版面完全一樣：需要登入的卡片，訪客只看到標題加一句提示（LoginRequiredCard），
+    位置不變；Hacker News／LeetCode 不需要登入，兩邊都照常顯示 -->
+    <div
+      v-if="isSignedIn !== undefined"
+      class="grid grid-cols-1 lg:grid-cols-[320px_1fr_320px] gap-6 mt-4 items-start"
+    >
+      <div class="space-y-6">
+        <template v-if="isSignedIn">
+          <TaskForm :limit="5" />
+          <ScheduleSuggestion />
+          <MoodleAssignmentsList :assignments="moodle.items" :loading="moodle.loading" :is-stale="moodle.isStale" :synced-at="moodle.syncedAt" :auth-error="moodle.authError" :not-linked="moodle.notLinked" :limit="5" />
+          <GithubIssuesList :issues="github.items" :loading="github.loading" :is-stale="github.isStale" :synced-at="github.syncedAt" :auth-error="github.authError" :not-linked="github.notLinked" :limit="5" />
+          <JiraIssuesList :issues="jira.items" :loading="jira.loading" :domain="jira.account?.domain" :is-stale="jira.isStale" :synced-at="jira.syncedAt" :auth-error="jira.authError" :not-linked="jira.notLinked" :limit="5" />
+        </template>
+        <template v-else>
+          <LoginRequiredCard title="任務列表" icon="i-lucide-list-todo" message="登入後即可查看與新增你的任務" />
+          <LoginRequiredCard title="排程建議" icon="i-lucide-calendar-clock" message="登入後即可查看排程建議" />
+          <LoginRequiredCard title="Moodle 作業" icon="custom:moodle" message="登入後即可查看 Moodle 作業" />
+          <LoginRequiredCard title="GitHub 參與項目" icon="mdi:github" message="登入後即可查看 GitHub 參與項目" />
+          <LoginRequiredCard title="Jira 指派任務" icon="mdi:jira" icon-class="text-blue-500" message="登入後即可查看 Jira 指派任務" />
+        </template>
+      </div>
+
+      <div>
+        <GoogleCalendarEmbed
+          v-if="isSignedIn"
+          :id="primaryCalendarId"
+          :calendar-ids="calendarIds"
+          :connect="isConnected"
+          :connecting="googleConnecting"
+          :reload-token="calendarReloadToken"
+        />
+        <LoginRequiredCard v-else title="Google 行事曆" icon="i-lucide-calendar" message="登入後即可查看 Google 行事曆" />
+      </div>
+
+      <div class="space-y-6">
+        <News />
+        <Leetcode />
+      </div>
+    </div>
+  </div>
+</template>

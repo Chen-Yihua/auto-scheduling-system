@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: Backend
+        working-directory: backend
     env:
       CLERK_ISSUER: ${{ secrets.CLERK_ISSUER }}
       CLERK_JWKS_URL: ${{ secrets.CLERK_JWKS_URL }}
@@ -28,7 +28,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: Frontend
+        working-directory: frontend
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -47,7 +47,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: Frontend
+        working-directory: frontend
     env:
       NUXT_PUBLIC_API_BASE_URL: ${{ secrets.NUXT_PUBLIC_API_BASE_URL }}
       NUXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NUXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
@@ -81,7 +81,7 @@ jobs:
           credentials_json: ${{ secrets.GCP_SA_KEY_JSON }}
       - uses: google-github-actions/setup-gcloud@v2
       - name: Build and push image
-        working-directory: Backend
+        working-directory: backend
         run: |
           gcloud builds submit --tag "asia-east1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/autoscheduling/backend-server:${{ github.sha }}" .
       - name: Deploy to Cloud Run
@@ -101,7 +101,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: Frontend
+        working-directory: frontend
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

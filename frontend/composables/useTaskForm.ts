@@ -1,0 +1,317 @@
+import type { FormError, FormSubmitEvent } from '@nuxt/ui'
+import { DateFormatter, getLocalTimeZone, fromDate, toZoned, type DateValue } from '@internationalized/date'
+import { ref, computed, reactive, shallowRef } from 'vue'
+import { createSharedComposable } from '@vueuse/core'
+import type { Task } from '~/types/manualTask'
+import { getFriendlyErrorTitle } from '@/utils/errorMessages'
+
+// 用 createSharedComposable 讓 AppHeader（新增任務按鈕）跟 TaskForm（實際的
+// Modal／任務列表）共用同一份狀態——header 按下「+」時，才能真的打開
+// TaskForm 裡定義的那個 Modal，而不是各自獨立、互不相干的兩份 state。
+function useTaskFormImpl() {
+    // 控制 Modal 開關
+    const showEditModal = ref(false)
+
+    // 取得使用者資訊
+    const { getToken } = useAuth()
+    const { user } = useUser()
+    const currentUserId = computed(() => user.value?.id ?? '')
+    const toast = useToast()
+
+    // 取得 API Base URL
+    const config = useRuntimeConfig()
+    const BASE_URL = config.public.apiBaseUrl
+
+    // 優先度
+    // label 是畫面上看到的中文，value 是實際送給後端的值（必須是 High / Medium / Low）
+    const priorityItems = ref([
+      { label: '高', value: 'High' },
+      { label: '中', value: 'Medium' },
+      { label: '低', value: 'Low' },
+    ])
+
+    // 日期設定
+    const df = new DateFormatter('zh-TW', { dateStyle: 'medium' })
+    const timeZone = getLocalTimeZone()
+    const today = fromDate(new Date(), timeZone)
+    // UCalendar 的 v-model 可能給 CalendarDate、CalendarDateTime 或 ZonedDateTime
+    // 這三種其中一種（使用者選日期的當下不一定跟 today 的型別一樣），
+    // 要轉成 Date 物件時得先用 toZoned 統一成 ZonedDateTime 再呼叫沒有參數的 toDate()。
+    // null 代表使用者選了「無期限」——後端 due_date 本來就是 Optional，
+    // 這裡要能明確送出 null，不是每次都硬塞一個日期進去
+    const modelValue = shallowRef<DateValue | null>(today)
+    const minDate = today
+    const toJsDate = (value: DateValue) => toZoned(value, timeZone).toDate()
+    const displayDate = computed(() =>
+        modelValue.value
+            ? df.format(toJsDate(modelValue.value))
+            : '無期限'
+    )
+    function clearDueDate() {
+        modelValue.value = null
+    }
+
+    // 是否正在抓取任務列表——跟「目前沒有任務」是兩回事，不能都用
+    // all_tasks.length === 0 判斷，不然使用者真的沒有任務時，畫面會卡在
+    // Skeleton 動畫，看起來像資料壞掉
+    const loading = ref(true)
+    // **所有任務**
+    const all_tasks = ref<Task[]>([])
+    // **目前編輯的任務**
+    const editing_task = ref<Task | null>(null)
+    // 判斷是否編輯模式
+    const isEditMode = computed(() => editing_task.value !== null)
+
+    // 是否正在送出表單。原本只靠 UButton 的 loading-auto，但 TaskForm.vue 的
+    // handleSubmit 沒有 await/回傳 onSubmit/onEdit 的 promise，loading-auto
+    // 追蹤不到真正的非同步流程，按鈕全程都可以按——加上這個 API 回應本身有
+    // 延遲、成功後又刻意等 300ms 才關閉 Modal，使用者連續點擊「提交」就會
+    // 建出好幾筆重複的任務。這裡自己擋重入，不依賴 loading-auto 猜得準不準。
+    const submitting = ref(false)
+
+    // 表單狀態
+    const state = reactive({
+        user_id: currentUserId.value,
+        title: '',
+        description: '',
+        status: 'To Do',
+        priority: '',
+        duration: '' as string | number, // 不確定可以留空，後端會用 AI 幫忙評估
+        inference_hint: '', // 給 AI 評估 priority/duration 時參考的提醒，選填
+    })
+
+    // 驗證表單是否填寫完成。只有標題是真正必填——description/priority/
+    // duration 都留空讓 AI 幫忙評估，不該因此擋住送出（見 payload 組裝那裡
+    // 把空字串轉成 null，後端 infer_missing_task_fields 才會真的去推斷）
+    const validate = (s: typeof state): FormError[] => {
+        const errors: FormError[] = []
+        if (!s.title) errors.push({ name: 'title', message: 'Required' })
+        return errors
+    }
+
+    // 重置表單
+    function resetForm() {
+        state.title = ''
+        state.description = ''
+        state.priority = ''
+        state.duration = ''
+        state.inference_hint = ''
+        modelValue.value = today
+        editing_task.value = null
+    }
+
+    // 使用者沒填 duration（留空讓 AI 猜）時，送給後端的值要是 null，
+    // 不能送空字串——Optional[int] 收到 "" 會驗證失敗
+    function parseDuration(value: string | number): number | null {
+        if (value === '' || value === null || value === undefined) return null
+        const n = Number(value)
+        return Number.isFinite(n) ? n : null
+    }
+
+    // 把後端回傳「這次哪些欄位是 AI 猜的」組成一句人看得懂的話
+    function buildInferenceSummary(result: Task): { title: string; description?: string } | null {
+        const inferredFields: string[] = result?.inferred_fields ?? []
+        if (!inferredFields.length) return null
+
+        const labelMap: Record<string, string> = {
+            priority: `優先權：${result.priority}`,
+            duration: `預估時長：${result.duration} 分鐘`,
+        }
+        const parts = inferredFields.map((f) => labelMap[f] ?? f)
+
+        return {
+            title: `已建立，AI 幫你補上 ${parts.join('、')}`,
+            description: result?.inference_reason ?? undefined,
+        }
+    }
+
+    // 重置表單 並 關閉 Modal
+    function resetAndClose() {
+        resetForm()
+        showEditModal.value = false
+    }
+
+
+    // 1. 載入所有任務
+    async function fetchTasks() {
+        loading.value = true
+        try{
+            const token = await getToken.value()
+            if (!token) {
+                throw new Error('JWT token is missing or invalid');
+            }
+            const res = await $fetch<Task[]>(`${BASE_URL}/manual-tasks/me`, {
+                method: 'GET',
+                headers: { Authorization: `Bearer ${token}`}
+            })
+            all_tasks.value = res
+        } catch (err) {
+            console.error(err)
+        } finally {
+            loading.value = false
+        }
+    }
+ 
+
+    // 進入 "編輯" 模式
+    function startEditTask(task: Task | null) {
+        if (task) {
+            editing_task.value = task
+            state.user_id = task.user_id
+            state.title = task.title
+            state.description = task.description
+            state.priority = task.priority
+            state.status = task.status
+            state.duration = task.duration ?? ''
+            state.inference_hint = task.inference_hint ?? ''
+            modelValue.value = task.due_date ? fromDate(new Date(task.due_date), timeZone) : null
+        } else { // 如果沒有傳入任務，則重置表單
+            editing_task.value = null
+            resetForm()
+        }
+        showEditModal.value = true
+    }
+
+    function delay(ms: number) {
+        return new Promise((resolve) => setTimeout(resolve, ms))
+    }
+
+    // 2. 新增任務
+    async function onSubmit(_e: FormSubmitEvent<typeof state>) {
+        // 擋重入：API 回應本身有延遲，使用者在按鈕還沒變成不能按之前多點幾下
+        // 提交，不擋的話會建出好幾筆一模一樣的任務
+        if (submitting.value) return
+        submitting.value = true
+        try {
+            const token = await getToken.value()
+            const dueDate = modelValue.value ? toJsDate(modelValue.value).toISOString() : null
+            const payload = {
+                user_id: state.user_id,
+                title: state.title,
+                description: state.description,
+                priority: state.priority || null,
+                due_date: dueDate,
+                status: state.status,
+                duration: parseDuration(state.duration),
+                inference_hint: state.inference_hint || null,
+            }
+            const result = await $fetch<Task>(`${BASE_URL}/manual-tasks/`, {
+                method: 'POST',
+                body: payload,
+                headers: { Authorization: `Bearer ${token}` }
+            })
+
+            const inferenceSummary = buildInferenceSummary(result)
+            if (inferenceSummary) {
+                toast.add({
+                    title: inferenceSummary.title,
+                    description: inferenceSummary.description,
+                    color: 'info',
+                    icon: 'i-lucide-sparkles',
+                })
+            } else {
+                toast.add({ title: '儲存成功', color: 'success', icon: 'i-lucide-check' })
+            }
+
+            // 讓使用者看得到剛剛那個 toast 再關 Modal，不是失敗退路，
+            // 所以刻意 await，讓 submitting 涵蓋這段等待，按鈕全程保持不能按
+            await delay(300)
+            await fetchTasks()
+            resetAndClose()
+        } catch (err) {
+            console.error(err)
+            toast.add({ title: getFriendlyErrorTitle(err, '儲存失敗'), color: 'error', icon: 'i-lucide-x' })
+        } finally {
+            submitting.value = false
+        }
+    }
+
+    // 3. 編輯任務
+    async function onEdit(_e: FormSubmitEvent<typeof state>) {
+        if( !editing_task.value ) return
+        if (submitting.value) return
+        submitting.value = true
+        try {
+            const token = await getToken.value()
+            const dueDate = modelValue.value ? toJsDate(modelValue.value).toISOString() : null
+            const payload = {
+                user_id: state.user_id,
+                title: state.title,
+                description: state.description,
+                priority: state.priority || null,
+                due_date: dueDate,
+                status: state.status,
+                duration: parseDuration(state.duration),
+                inference_hint: state.inference_hint || null,
+            }
+            await $fetch(`${BASE_URL}/manual-tasks/${editing_task.value?.id}`, {
+                method: 'PUT',
+                body: payload,
+                headers: { Authorization: `Bearer ${token}` }
+            })
+            toast.add({ title: '儲存成功', color: 'success', icon: 'i-lucide-check' })
+            await delay(300)
+            await fetchTasks()
+            resetAndClose()
+        } catch (err) {
+            console.error(err)
+            toast.add({ title: getFriendlyErrorTitle(err, '儲存失敗'), color: 'error', icon: 'i-lucide-x' })
+        } finally {
+            submitting.value = false
+        }
+    }
+
+
+    // 4. 刪除任務
+    async function onDelete() {
+        if (!editing_task.value?.id) return
+        if (!window.confirm('你確定要刪除這個任務嗎？')) return
+
+        try {
+            const token = await getToken.value()
+            await $fetch(`${BASE_URL}/manual-tasks/${editing_task.value.id}`, {
+                method: 'DELETE',
+                headers: { Authorization: `Bearer ${token}` }
+            })
+            toast.add({ title: '刪除成功', color: 'success', icon: 'i-lucide-trash-2' })
+            await fetchTasks()
+            resetAndClose()
+        } catch (err) {
+            console.error(err)
+            toast.add({ title: getFriendlyErrorTitle(err, '刪除失敗'), color: 'error', icon: 'i-lucide-x' })
+        }
+    }
+
+
+    // 關閉 Modal
+    function onCancel() {
+        resetAndClose()
+    }
+
+    return {
+        user,
+        showEditModal,
+        state,
+        modelValue,
+        minDate,
+        displayDate,
+        clearDueDate,
+        priorityItems,
+        validate,
+        loading,
+        submitting,
+        all_tasks,
+        editing_task,
+        isEditMode,
+        fetchTasks,
+        startEditTask,
+        onSubmit,
+        onEdit,
+        onDelete,
+        onCancel,
+    }
+}
+
+export const useTaskForm = createSharedComposable(useTaskFormImpl)
+
+

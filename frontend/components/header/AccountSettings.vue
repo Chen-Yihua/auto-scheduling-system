@@ -1,0 +1,239 @@
+<script setup lang="ts">
+import { useLinkedAccount } from '~/composables/useLinkedAccount';
+import { useGoogleCalendar } from '~/composables/useGoogleCalendar';
+import { useGoogleCalendarAuth } from '~/composables/useGoogleCalendarAuth';
+import { UserButton } from '@clerk/vue';
+
+const { keys, fetchKeys, openEdit, cancelEdit, saveKey, deleteKey } = useLinkedAccount();
+const { isConnected: googleCalendarConnected, fetchGoogleCalendars } = useGoogleCalendar();
+
+onMounted(fetchKeys);
+onMounted(fetchGoogleCalendars);
+
+// Google 授權是回到首頁之後才在背景完成的，完成時重新查一次，「已連接」標記才會更新
+const { connectedCount: googleConnectedCount } = useGoogleCalendarAuth();
+watch(googleConnectedCount, fetchGoogleCalendars);
+
+const copiedKey = ref<string | null>(null);
+const toast = useToast();
+
+const copyKey = (platform: string, key: string, isMasked?: boolean) => {
+  if (isMasked) {
+    // 防禦性檢查：遮罩過的值不是可用的明文，不該被複製
+    toast.add({
+      title: '此金鑰已隱藏，無法複製',
+      description: '請重新輸入以更新金鑰',
+      color: 'warning',
+    })
+    return
+  }
+  navigator.clipboard.writeText(key).then(() => {
+    copiedKey.value = platform
+    setTimeout(() => (copiedKey.value = null), 2000)
+  }).catch((err) => {
+    console.error('Failed to copy key: ', err)
+  })
+}
+
+const config = useRuntimeConfig()
+const FRONT_END_URL = config.public.frontEndUrl
+const GOOGLE_CLIENT_ID = config.public.apiGoogleClientId
+const REDIRECT_URI = `${FRONT_END_URL}/oauth/callback`
+const goToGoogleAuth = () => {
+  const params = new URLSearchParams({
+    client_id: GOOGLE_CLIENT_ID,
+    redirect_uri: REDIRECT_URI,
+    response_type: 'code',
+    // calendar.readonly 只夠列出行事曆／查 FreeBusy／讀事件——「確認排程並寫入
+    // Calendar」要真的新增事件（services/google_calendar_client.py 的 create_calendar_event，
+    // POST .../events），readonly 範圍下 Google 一律擋掉，回傳的錯誤被
+    // create_calendar_events_for_scheduled_tasks 接住變成「寫入 Google
+    // Calendar 失敗，請稍後再試」，看起來像伺服器出錯，其實是權限不夠。
+    // calendar.events 補上事件的新增/修改/刪除權限，讀的部分維持 readonly
+    // 就好，不用整個開放成 calendar 全權限。
+    scope: 'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/calendar.events',
+    access_type: 'offline',
+    prompt: 'consent',
+  })
+
+  window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
+};
+</script>
+
+
+<template>
+  <header>
+    <UserButton>
+      <UserButton.UserProfilePage label="金鑰" url="custom">
+        <template #labelIcon>
+          <Icon name="mdi:key" class="w-4 h-4" />
+        </template>
+
+        <div class="cl-header mb-4">
+          <h1 class="text-xl font-semibold">金鑰管理</h1>
+        </div>
+
+        <div
+          v-for="keyItem in keys"
+          :key="keyItem.platform"
+          class="mb-6 border border-gray-200 dark:border-gray-700 rounded-lg p-4 bg-white dark:bg-gray-800"
+        >
+          <!-- Title -->
+          <div class="flex items-center gap-2 mb-3">
+            <UIcon :name="keyItem.icon" class="w-5 h-5" />
+            <span class="font-medium text-base">{{ keyItem.label }}</span>
+          </div>
+
+          <!-- Linked Info -->
+          <template v-if="keyItem.value && !keyItem.editing">
+            <div class="flex items-center gap-2 mb-2">
+              <UAvatar v-if="keyItem.avatar" :src="keyItem.avatar" size="sm" />
+              <span v-if="keyItem.username" class="text-sm text-gray-600">{{
+                keyItem.username
+              }}</span>
+            </div>
+
+            <div class="grid grid-cols-[1fr_auto_auto] gap-x-2 items-center">
+              <div class="text-sm text-gray-400 truncate">****{{ keyItem.value.slice(-4) ?? '' }}</div>
+              <UButton
+                v-if="!keyItem.isMasked"
+                size="sm"
+                :icon="copiedKey === keyItem.platform ? 'i-lucide-check' : 'i-lucide-copy'"
+                color="neutral"
+                title="複製金鑰（僅限剛建立/更新時）"
+                @click="() => copyKey(keyItem.platform, keyItem.value ?? '', keyItem.isMasked)"
+              />
+              <span v-else class="text-xs text-gray-400 whitespace-nowrap" title="金鑰已隱藏，如需複製請重新輸入">
+                已隱藏
+              </span>
+              <UButton
+                size="sm"
+                color="primary"
+                @click="() => openEdit(keyItem)"
+                > 編輯
+              </UButton>
+            </div>
+          </template>
+
+          <!-- Input Mode -->
+          <template v-else>
+            <div class="flex flex-col gap-2">
+              <!-- Jira 需要 Domain -->
+              <UInput
+                v-if="keyItem.platform === 'jira'"
+                v-model="keyItem.domain"
+                size="sm"
+                variant="outline"
+                placeholder="請輸入 Jira Domain（例如 your-company.atlassian.net）"
+                :ui="{ base: 'w-full' }"
+              />
+
+              <!-- api key -->
+              <UInput
+                v-if="keyItem.platform != 'moodle'"
+                v-model="keyItem.inputValue"
+                :type="keyItem.showPassword ? 'text' : 'password'"
+                size="sm"
+                variant="outline"
+                :placeholder="keyItem.platform === 'jira' && keyItem.value ? '留空表示 API Key 不變' : '請輸入 API Token 或 Base64'"
+                :ui="{ trailing: 'pe-1', base: 'w-full' }"
+              >
+                <template #trailing>
+                  <UButton
+                    variant="link"
+                    size="xs"
+                    :icon="keyItem.showPassword ? 'i-lucide-eye-off' : 'i-lucide-eye'"
+                    @click="() => { keyItem.showPassword = !keyItem.showPassword }"
+                  />
+                </template>
+              </UInput>
+              <p
+                v-if="keyItem.platform === 'jira' && keyItem.value"
+                class="text-xs text-gray-400 -mt-1"
+              >
+                基於安全考量無法顯示原 API Key；留空即代表 API Key 維持不變
+              </p>
+
+              <!-- account & password -->
+              <UInput
+                v-if="keyItem.platform === 'moodle'"
+                v-model="keyItem.inputValue"
+                size="sm"
+                variant="outline"
+                placeholder="請輸入 Moodle 帳號"
+                :ui="{ base: 'w-full' }"
+              />
+              <UInput
+                v-if="keyItem.platform === 'moodle'"
+                v-model="keyItem.password"
+                :type="keyItem.showPassword ? 'text' : 'password'"
+                size="sm"
+                variant="outline"
+                :placeholder="keyItem.value ? '留空表示密碼不變' : '請輸入 Moodle 密碼'"
+                :ui="{ trailing: 'pe-1', base: 'w-full' }"
+              >
+                <template #trailing>
+                    <UButton
+                      variant="link"
+                      size="xs"
+                      :icon="keyItem.showPassword ? 'i-lucide-eye-off' : 'i-lucide-eye'"
+                      @click="() => { keyItem.showPassword = !keyItem.showPassword }"
+                    />
+                  </template>
+              </UInput>
+              <p
+                v-if="keyItem.platform === 'moodle' && keyItem.value"
+                class="text-xs text-gray-400 -mt-1"
+              >
+                基於安全考量無法顯示原密碼；留空即代表密碼維持不變
+              </p>
+
+              <div class="flex gap-2 justify-end">
+                <UButton
+                  v-if="keyItem.value"
+                  size="sm"
+                  variant="outline"
+                  color="neutral"
+                  @click="() => cancelEdit(keyItem)"
+                >
+                  取消
+                </UButton>
+                <UButton
+                  v-if="keyItem.value"
+                  size="sm"
+                  variant="outline"
+                  color="neutral"
+                  @click="() => deleteKey(keyItem)"
+                >
+                  刪除
+                </UButton>
+                <UButton
+                  size="sm"
+                  color="primary"
+                  :loading="keyItem.loading"
+                  :disabled="
+                    (keyItem.platform === 'github' && !keyItem.inputValue) ||
+                    (keyItem.platform === 'jira' && (!keyItem.domain || (!keyItem.value && !keyItem.inputValue))) ||
+                    (keyItem.platform === 'moodle' && (!keyItem.inputValue || (!keyItem.value && !keyItem.password)))
+                  "
+                  @click="() => saveKey(keyItem)"
+                >
+                  儲存
+                </UButton>
+              </div>
+            </div>
+          </template>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <UButton color="primary" icon="i-lucide-calendar" @click="goToGoogleAuth">
+            {{ googleCalendarConnected ? '重新連接 Google Calendar' : '連接 Google Calendar' }}
+          </UButton>
+          <UBadge v-if="googleCalendarConnected" color="success" variant="subtle" icon="i-lucide-check">
+            已連接
+          </UBadge>
+        </div>
+      </UserButton.UserProfilePage>
+    </UserButton>
+  </header>
+</template>

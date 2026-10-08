@@ -25,6 +25,7 @@ if not REDIS_URL:
 
 
 async def cache_get(key: str) -> Optional[Any]:
+    """從 cache 取資料"""
     if _redis_client:
         raw = await _redis_client.get(key)
         return json.loads(raw) if raw else None
@@ -40,6 +41,7 @@ async def cache_get(key: str) -> Optional[Any]:
 
 
 async def cache_set(key: str, value: Any, ttl_seconds: int) -> None:
+    """把資料存進 cache"""
     payload = json.dumps(value, default=str)
     if _redis_client:
         await _redis_client.set(key, payload, ex=ttl_seconds)
@@ -48,6 +50,7 @@ async def cache_set(key: str, value: Any, ttl_seconds: int) -> None:
 
 
 async def cache_delete(key: str) -> None:
+    """從 cache 刪資料"""
     if _redis_client:
         await _redis_client.delete(key)
         return

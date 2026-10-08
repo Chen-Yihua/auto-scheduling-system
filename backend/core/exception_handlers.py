@@ -1,22 +1,10 @@
 """
-集中處理資料庫例外：crud / router 遇到資料庫錯誤時不用各自 try/except 再轉成 HTTPException，
-直接讓例外往外丟，由這裡統一轉成回應。
+把沒在 crud / router 裡處理的例外，統一轉成給前端的錯誤回應：
+- 資料庫連不上 → 503
+- 其他資料庫錯誤 → 500
+- 其他沒被接住的例外（程式 bug）→ 500
 
-- 連線類錯誤（連不上、伺服器選擇逾時、網路逾時、主節點切換中…）是暫時性的基礎設施問題，
-  稍後可能恢復 → 503，客戶端和監控才能把它跟「程式有 bug」的 500 分開。
-- 其他資料庫錯誤（查詢寫錯、資料驗證失敗…）多半是程式問題，重試也沒用 → 500。
-
-兩種回應都只回固定的中文訊息，不把例外內容（可能含連線字串或查詢細節）回傳給前端；
-完整的例外與 traceback 記在後端 log。格式跟 HTTPException 一樣是 {"detail": "..."}，
-前端不用另外處理。
-
-這兩個 handler 註冊在 PyMongoError / ConnectionFailure 這種具體的例外類別上（不是 Exception），
-所以回應會經過 CORS middleware，瀏覽器看得到真正的狀態碼，而不是被 CORS 錯誤蓋掉。
-
-另外有一層兜底：任何沒被上面接住的例外（程式 bug）由 UnhandledExceptionMiddleware 轉成 JSON 500。
-不能只註冊 `Exception` 的 handler——那種 handler 由 Starlette 最外層的 ServerErrorMiddleware 處理，
-回應不會經過 CORS，瀏覽器只會顯示「CORS 錯誤」，看不到真正的 500。所以這裡用 middleware，
-並在 main.py 讓它放在 CORS 的內層。
+回應只帶固定的中文訊息，例外內容與 traceback 只記在 log。
 """
 import logging
 
@@ -39,8 +27,12 @@ async def database_error_handler(request: Request, exc: PyMongoError) -> JSONRes
 
 class UnhandledExceptionMiddleware:
     """
-    兜底：沒被任何 handler 接住的例外 → 記 log，回固定訊息的 JSON 500。
+    沒被任何 handler 接住的例外 → 記 log，回固定訊息的 JSON 500。
     HTTPException、資料庫例外、驗證錯誤等都會先被內層的 exception handler 處理，不會走到這裡。
+
+    用 middleware 而不是 app.add_exception_handler(Exception, ...)：後者會被放到最外層
+    （比 CORS 還外面），回應不會帶 CORS 標頭，瀏覽器只會看到 CORS 錯誤，看不到真正的 500。
+    這個 middleware 排在 CORS 內層（見 main.py），回應才會經過 CORS，加上標頭。
     """
 
     def __init__(self, app):

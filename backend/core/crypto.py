@@ -10,6 +10,7 @@ _KEY_ENV = "SECRET_ENCRYPTION_KEY"
 
 
 def _get_fernet() -> Fernet:
+    """讀取環境變數中的加密 key，並包成 Fernet 物件。"""
     key = os.getenv(_KEY_ENV)
     if not key:
         raise RuntimeError(

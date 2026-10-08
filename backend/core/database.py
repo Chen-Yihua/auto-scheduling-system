@@ -1,8 +1,5 @@
 from pymongo import AsyncMongoClient
-from dotenv import load_dotenv
 import os
-
-load_dotenv()
 
 MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017")
 DB_NAME   = os.getenv("MONGO_DB",  "auto_scheduling_db")

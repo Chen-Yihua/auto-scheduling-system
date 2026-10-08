@@ -1,9 +1,11 @@
+from dotenv import load_dotenv
+load_dotenv()
+
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends
 from routers import user, linked_account, pr_review_webhook, manual_task, google_calendar, schedule
 from platforms.router import platform_routers
 from fastapi.middleware.cors import CORSMiddleware
-from dotenv import load_dotenv
 import os
 from core.logging_config import setup_logging
 from core.database import ensure_indexes
@@ -13,8 +15,6 @@ from pymongo.errors import ConnectionFailure, PyMongoError
 from core.exception_handlers import database_unavailable_handler, database_error_handler, UnhandledExceptionMiddleware
 
 
-# 載入環境變數
-load_dotenv()
 setup_logging()
 
 

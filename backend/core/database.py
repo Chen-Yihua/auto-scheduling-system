@@ -7,7 +7,7 @@ load_dotenv()
 MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017")
 DB_NAME   = os.getenv("MONGO_DB",  "auto_scheduling_db")
 
-# PyMongo 內建的非同步 client（PyMongo 4.13 起正式釋出，取代已停止維護的 Motor）
+# PyMongo 內建的非同步 client
 client = AsyncMongoClient(MONGO_URI)
 
 # 指定使用哪個資料庫

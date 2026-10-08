@@ -70,9 +70,11 @@ jobs:
       - run: npx playwright install --with-deps chromium chromium-headless-shell
       - run: npm run test:e2e
 
+  # 暫停部署到 Cloud Run：要恢復時把下面的 if 換回
+  # github.ref == 'refs/heads/main' && github.event_name == 'push'
   deploy-backend:
     needs: backend-test
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: false
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

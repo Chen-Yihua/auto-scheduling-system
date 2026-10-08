@@ -192,10 +192,10 @@ from core.database import db
 from schemas.note import NoteCreate
 
 async def create_note(user_id: str, note: NoteCreate) -> dict:
-    doc = {"id": str(uuid4()), "user_id": user_id, **note.model_dump()}
-    await db.notes.insert_one(doc)
-    doc.pop("_id", None)  # insert_one 會把 Mongo 的 _id 塞進 doc，不要回傳出去
-    return doc
+    # 自己產生字串 id 存進 _id：唯一性由 _id 保證，也不用處理 ObjectId 的轉換
+    note_id = str(uuid4())
+    await db.notes.insert_one({"_id": note_id, "user_id": user_id, **note.model_dump()})
+    return {"id": note_id, "user_id": user_id, **note.model_dump()}
 ```
 
 資料庫連不上不用在這裡 `try/except`，見上方「錯誤處理」。

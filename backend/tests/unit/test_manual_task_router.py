@@ -150,11 +150,11 @@ async def test_update_manual_task_keeps_original_values_for_fields_not_provided(
 # ---------- 只能動自己的任務（用真的 crud 加記憶體資料庫，才測得到 router 與 crud 的串接）----------
 
 async def _insert_alice_task(task_id):
-    await db.manual_tasks.insert_one({"id": task_id, "user_id": "alice", "title": "Alice 的任務"})
+    await db.manual_tasks.insert_one({"_id": task_id, "user_id": "alice", "title": "Alice 的任務"})
 
 
 async def _remove_task(task_id):
-    await db.manual_tasks.delete_many({"id": task_id})
+    await db.manual_tasks.delete_many({"_id": task_id})
 
 
 @pytest.mark.asyncio
@@ -179,7 +179,7 @@ async def test_update_manual_task_refuses_other_users_task_and_leaves_it_unchang
                 "router-t2", ManualTaskUpdate(title="被 bob 改掉了"), clerk_user={"sub": "bob"}
             )
         assert exc_info.value.status_code == 404
-        assert (await db.manual_tasks.find_one({"id": "router-t2"}))["title"] == "Alice 的任務"
+        assert (await db.manual_tasks.find_one({"_id": "router-t2"}))["title"] == "Alice 的任務"
     finally:
         await _remove_task("router-t2")
 
@@ -192,6 +192,6 @@ async def test_delete_manual_task_refuses_other_users_task_and_keeps_it():
         with pytest.raises(HTTPException) as exc_info:
             await manual_task_router.delete_manual_task("router-t3", clerk_user={"sub": "bob"})
         assert exc_info.value.status_code == 404
-        assert await db.manual_tasks.find_one({"id": "router-t3"}) is not None
+        assert await db.manual_tasks.find_one({"_id": "router-t3"}) is not None
     finally:
         await _remove_task("router-t3")

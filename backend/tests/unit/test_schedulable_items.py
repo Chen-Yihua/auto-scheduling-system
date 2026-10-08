@@ -33,7 +33,7 @@ def test_parse_composite_id_handles_ids_that_themselves_contain_colons():
 async def test_get_all_schedulable_items_combines_all_four_sources():
     try:
         await db.manual_tasks.insert_one({
-            "id": "t1", "user_id": "sched-user", "title": "手動任務", "status": "To Do",
+            "_id": "t1", "user_id": "sched-user", "title": "手動任務", "status": "To Do",
             "priority": "High", "duration": 30, "due_date": None, "sort_order": None, "calendar_event_id": None,
         })
         await db.github_issues.insert_one({
@@ -175,7 +175,7 @@ async def test_reorder_schedulable_items_preserves_global_index_across_sources()
     """混著手動任務跟外部平台項目一起送出，sort_order 要是提交清單裡的全域索引，
     不能各自來源重新從 0 編號（否則同一欄裡兩個來源交錯的順序會被打散）。"""
     try:
-        await db.manual_tasks.insert_one({"id": "t1", "user_id": "sched-user", "title": "手動任務", "priority": "Low"})
+        await db.manual_tasks.insert_one({"_id": "t1", "user_id": "sched-user", "title": "手動任務", "priority": "Low"})
         await db.github_issues.insert_one({"id": 1, "user_id": "sched-user", "title": "GitHub", "status": "open"})
 
         await schedulable_items.reorder_schedulable_items("sched-user", [
@@ -183,7 +183,7 @@ async def test_reorder_schedulable_items_preserves_global_index_across_sources()
             {"task_id": "github:1", "priority": "High"},
         ])
 
-        manual_task = await db.manual_tasks.find_one({"id": "t1"})
+        manual_task = await db.manual_tasks.find_one({"_id": "t1"})
         github_issue = await db.github_issues.find_one({"id": 1})
         assert manual_task["sort_order"] == 0
         assert manual_task["priority"] == "High"
@@ -222,13 +222,13 @@ async def test_reorder_schedulable_items_dispatches_each_source_to_its_own_colle
 async def test_update_scheduling_fields_manual_task_goes_through_manual_task_update():
     try:
         await db.manual_tasks.insert_one({
-            "id": "t1", "user_id": "sched-user", "title": "任務", "description": "d",
+            "_id": "t1", "user_id": "sched-user", "title": "任務", "description": "d",
             "status": "To Do", "priority": "Low", "duration": 60,
         })
 
         await schedulable_items.update_scheduling_fields("sched-user", "manual:t1", {"duration": 90})
 
-        updated = await db.manual_tasks.find_one({"id": "t1"})
+        updated = await db.manual_tasks.find_one({"_id": "t1"})
         assert updated["duration"] == 90
         assert updated["title"] == "任務"  # 其他欄位不受影響
     finally:
@@ -257,13 +257,13 @@ async def test_update_scheduling_fields_external_item_sets_fields_directly():
 async def test_set_done_manual_task_sets_status():
     try:
         await db.manual_tasks.insert_one({
-            "id": "t1", "user_id": "sched-user", "title": "任務", "description": "d",
+            "_id": "t1", "user_id": "sched-user", "title": "任務", "description": "d",
             "status": "To Do", "priority": "Low", "duration": 60,
         })
 
         await schedulable_items.set_done("sched-user", "manual:t1", True)
 
-        updated = await db.manual_tasks.find_one({"id": "t1"})
+        updated = await db.manual_tasks.find_one({"_id": "t1"})
         assert updated["status"] == "Done"
     finally:
         await _cleanup()
@@ -290,11 +290,11 @@ async def test_set_done_external_item_sets_done_flag():
 @pytest.mark.asyncio
 async def test_set_calendar_event_id_for_composite_manual_task():
     try:
-        await db.manual_tasks.insert_one({"id": "t1", "user_id": "sched-user", "title": "任務"})
+        await db.manual_tasks.insert_one({"_id": "t1", "user_id": "sched-user", "title": "任務"})
 
         await schedulable_items.set_calendar_event_id_for_composite("sched-user", "manual:t1", "event-1")
 
-        updated = await db.manual_tasks.find_one({"id": "t1"})
+        updated = await db.manual_tasks.find_one({"_id": "t1"})
         assert updated["calendar_event_id"] == "event-1"
     finally:
         await _cleanup()

@@ -9,7 +9,7 @@ import main as main_mod
 
 @pytest.mark.asyncio
 async def test_ensure_indexes_creates_expected_indexes(monkeypatch):
-    """啟動時建立的索引要對：linkedAccounts 用 (clerk_id, platform)；manual_tasks 的 id 唯一、user_id 有索引；三個平台的快取集合用 (user_id, id)，且不強制 unique（避免舊資料讓建立索引失敗）。"""
+    """啟動時建立的索引要對：linkedAccounts 用 (clerk_id, platform)；manual_tasks 的 user_id 有索引；三個平台的快取集合用 (user_id, id)，且不強制 unique（避免舊資料讓建立索引失敗）。"""
     linked_accounts_mock = AsyncMock()
     manual_tasks_mock = AsyncMock()
     github_issues_mock = AsyncMock()
@@ -27,9 +27,7 @@ async def test_ensure_indexes_creates_expected_indexes(monkeypatch):
     # linkedAccounts：常用 clerk_id 單獨查，也常用 (clerk_id, platform) 一起查
     linked_accounts_mock.assert_any_call([("clerk_id", 1), ("platform", 1)])
 
-    # manual_tasks：id 是應用層自產的查詢鍵，必須唯一；user_id 是列表查詢常用欄位
-    manual_tasks_mock.assert_any_call("id", unique=True)
-    manual_tasks_mock.assert_any_call("user_id")
+    manual_tasks_mock.assert_called_once_with("user_id")
 
     # github_issues / jira_issues / moodle_assignments：sync_platform_items() upsert 用的
     # 複合鍵，三個平台一致，都不強制 unique，避免舊資料造成建立索引失敗

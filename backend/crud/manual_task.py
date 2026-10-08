@@ -6,12 +6,20 @@ from fastapi import HTTPException
 
 logger = logging.getLogger(__name__)
 
+
+# 資料庫用 _id 存任務 id，對外（API、其他模組）一律叫 id
+def _to_task(doc: dict) -> dict:
+    doc["id"] = doc.pop("_id")
+    return doc
+
+
 # 建立任務
 async def create_manual_task(task: ManualTaskOut) -> str:
     doc = task.model_dump()
+    doc["_id"] = doc.pop("id")
     await db.manual_tasks.insert_one(doc)
     return {
-        "id": doc["id"],
+        "id": doc["_id"],
         "user_id": doc.get("user_id"),
         "title": doc.get("title"),
         "description": doc.get("description"),
@@ -30,18 +38,15 @@ async def create_manual_task(task: ManualTaskOut) -> str:
 
 # 查詢指定任務
 async def get_manual_task_by_id(task_id: str, user_id: str):
-    task = await db.manual_tasks.find_one({"id": task_id, "user_id": user_id})
+    task = await db.manual_tasks.find_one({"_id": task_id, "user_id": user_id})
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
-    task.pop("_id", None)  # Mongo 自動加的 ObjectId，不是我們自己用的 id 欄位，不該再被塞回更新內容裡
-    return task
+    return _to_task(task)
 
 # 查詢 user 所有任務
 async def get_manual_tasks_by_user_id(user_id: str):
     tasks = await db.manual_tasks.find({"user_id": user_id}).to_list()
-    for task in tasks:
-        task.pop("_id", None)
-    return tasks
+    return [_to_task(task) for task in tasks]
 
 # 依拖拉排序（三欄：低/中/高，可跨欄拖動，可能跟其他來源的項目混在同一次
 # 排程精靈提交裡）後的結果，寫回 priority 和 sort_order
@@ -63,8 +68,8 @@ async def reorder_manual_tasks(user_id: str, items: list[dict]):
     if not items:
         return []
 
-    own_tasks = await db.manual_tasks.find({"user_id": user_id}).to_list()
-    own_task_ids = {task["id"] for task in own_tasks}
+    own_tasks = await db.manual_tasks.find({"user_id": user_id}, {"_id": 1}).to_list()
+    own_task_ids = {task["_id"] for task in own_tasks}
 
     unknown_ids = [item["task_id"] for item in items if item["task_id"] not in own_task_ids]
     if unknown_ids:
@@ -73,7 +78,7 @@ async def reorder_manual_tasks(user_id: str, items: list[dict]):
     now = datetime.now(timezone.utc)
     for item in items:
         await db.manual_tasks.update_one(
-            {"id": item["task_id"], "user_id": user_id},
+            {"_id": item["task_id"], "user_id": user_id},
             {"$set": {"sort_order": item["sort_order"], "priority": item["priority"], "updated": now}},
         )
 
@@ -89,20 +94,22 @@ async def set_calendar_event_id(task_id: str, user_id: str, calendar_event_id: s
     「假裝」一筆任務已經鎖定，跳過真正建立 Google Calendar 事件那一步。
     """
     await db.manual_tasks.update_one(
-        {"id": task_id, "user_id": user_id},
+        {"_id": task_id, "user_id": user_id},
         {"$set": {"calendar_event_id": calendar_event_id, "updated": datetime.now(timezone.utc)}},
     )
 
 # 更新任務
 async def update_manual_task_by_id(task_id: str, data: dict):
     logger.debug("Updating manual task %s with data=%s", task_id, data)
-    result = await db.manual_tasks.update_one({"id": task_id}, {"$set": data})
+    # id 就是 _id，不能被更新
+    fields = {key: value for key, value in data.items() if key != "id"}
+    result = await db.manual_tasks.update_one({"_id": task_id}, {"$set": fields})
     if result.modified_count == 0:
         raise HTTPException(status_code=400, detail="No valid fields to update")
-    return await db.manual_tasks.find_one({"id": task_id})
+    return _to_task(await db.manual_tasks.find_one({"_id": task_id}))
 
 # 刪除任務
 async def delete_manual_task_by_id(task_id: str):
-    result = await db.manual_tasks.delete_one({"id": task_id})
+    result = await db.manual_tasks.delete_one({"_id": task_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Task not found")

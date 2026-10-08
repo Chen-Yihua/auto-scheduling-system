@@ -49,7 +49,7 @@ class PlatformAdapter:
 
     @property
     def collection(self):
-        # 用屬性存取（db.github_issues），不用 db["github_issues"]——兩者在 Motor 裡
+        # 用屬性存取（db.github_issues），不用 db["github_issues"]——兩者在 PyMongo 裡
         # 是不同的物件，測試是把假的 collection 設成 db 的屬性來替換
         return getattr(db, self.collection_name)
 

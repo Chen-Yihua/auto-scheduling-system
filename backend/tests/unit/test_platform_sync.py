@@ -14,7 +14,7 @@ class FakeCursor:
 
 
 class FakeCollection:
-    """簡化版的 in-memory collection，模擬 Motor 的 update_one(upsert)/find().to_list() 行為。"""
+    """簡化版的 in-memory collection，模擬 PyMongo 非同步 collection 的 update_one(upsert)/find().to_list() 行為。"""
 
     def __init__(self, initial=None):
         self._docs = list(initial or [])

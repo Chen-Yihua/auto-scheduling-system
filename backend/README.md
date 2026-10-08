@@ -18,7 +18,8 @@
 ```text
 backend/
 ├── main.py                  # FastAPI app 入口（掛路由、CORS、rate limiter、錯誤處理、啟動時建索引）
-├── requirements.txt         # 套件列表
+├── requirements.txt         # 正式環境的套件（Docker image 只裝這份）
+├── requirements-dev.txt     # 本機開發與 CI 用：正式環境套件 + 測試工具（pytest、假資料庫）
 ├── .env.example             # 環境變數範本（複製成 .env 並填值）
 ├── Dockerfile               # 正式環境用的 image（Cloud Run 部署用這個 build）
 ├── core/                    # 跟業務無關的基礎設施
@@ -91,8 +92,10 @@ python -m venv .venv
 ### 2. 安裝依賴套件
 
 ```bash
-pip install -r requirements.txt
+pip install -r requirements-dev.txt
 ```
+
+本機開發要跑測試，所以裝 `requirements-dev.txt`（已包含 `requirements.txt`）。新增正式環境要用的套件時寫進 `requirements.txt`，只有測試要用的寫進 `requirements-dev.txt`。
 
 ### 3. 建立 `.env` 檔案
 

@@ -1,0 +1,9 @@
+# 本機開發與 CI 跑測試用：正式環境套件 + 測試工具（Docker image 只裝 requirements.txt）
+-r requirements.txt
+pytest
+pytest-asyncio
+pytest-cov
+trio
+mongomock
+# 測試用的假 MongoDB（支援 async/await）；它本身依賴 motor，但 motor 只會裝在測試環境
+mongomock-motor

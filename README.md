@@ -44,7 +44,7 @@
 | 類別 | 技術 |
 |---|---|
 | 前端 | Nuxt 3、Vue 3（Composition API）、TypeScript、Nuxt UI、Tailwind CSS、Clerk |
-| 後端 | FastAPI、Motor（MongoDB 非同步驅動程式）、Pydantic、slowapi（限流）、Selenium（Moodle 登入與爬取）、Google Gemini（AI 推估與 PR 摘要） |
+| 後端 | FastAPI、PyMongo Async（`AsyncMongoClient`，MongoDB 官方非同步驅動程式）、Pydantic、slowapi（限流）、Selenium（Moodle 登入與爬取）、Google Gemini（AI 推估與 PR 摘要） |
 | 資料庫 | MongoDB（持久化資料）、Redis（選用：快取、限流計數） |
 | 測試 | Pytest（單元測試、整合測試）、Vitest（元件與 composable 單元測試）、Playwright（透過 `@nuxt/test-utils` 與 `@clerk/testing` 執行真實瀏覽器的 E2E 測試） |
 | 部署 | Docker → Google Cloud Run（後端）、Vercel（前端）、GitHub Actions（CI/CD） |

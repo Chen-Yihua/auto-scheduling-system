@@ -9,7 +9,6 @@ from crud import user as user_crud
 from schemas.user import UserCreate, UserOut, UserUpdate
 from typing import Optional
 from core.security import get_current_clerk_user
-from motor.motor_asyncio import AsyncIOMotorDatabase
 
 logger = logging.getLogger(__name__)
 

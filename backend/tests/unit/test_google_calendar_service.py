@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from fastapi import HTTPException
 
 from core import cache
+from core.crypto import encrypt_secret
 import crud.google_tokens as google_tokens
 import services.google_calendar as calendar_service
 
@@ -27,7 +28,7 @@ def clear_free_slots_cache():
 async def test_get_free_slots_happy_path(monkeypatch):
     """成功流程：取 token → 找 primary 行事曆 → 查忙碌時段 → 回傳空檔（忙碌時段之前的 00:00–09:00 是第一段空檔）。"""
     async def mock_find_one(query):
-        return {"_id": "uid123", "access_token": "valid-token"}
+        return {"_id": "uid123", "access_token": encrypt_secret("valid-token")}
 
     async def mock_fetch_calendar_list(token):
         assert token == "valid-token"
@@ -56,7 +57,7 @@ async def test_get_free_slots_happy_path(monkeypatch):
 async def test_get_free_slots_refreshes_token_on_401(monkeypatch):
     """取得行事曆清單時 token 過期（401）→ 自動 refresh 換新 token 後重打一次（共 2 次），後續查忙碌時段用的是新 token。"""
     async def mock_find_one(query):
-        return {"_id": "uid123", "access_token": "expired-token", "refresh_token": "rt"}
+        return {"_id": "uid123", "access_token": encrypt_secret("expired-token"), "refresh_token": encrypt_secret("rt")}
 
     calls = {"n": 0}
 
@@ -95,7 +96,7 @@ async def test_get_free_slots_refreshes_token_on_401(monkeypatch):
 async def test_get_free_slots_raises_404_when_no_primary_calendar(monkeypatch):
     """行事曆清單裡沒有 primary → 404。"""
     async def mock_find_one(query):
-        return {"_id": "uid123", "access_token": "valid-token"}
+        return {"_id": "uid123", "access_token": encrypt_secret("valid-token")}
 
     async def mock_fetch_calendar_list(token):
         return [{"id": "some-other-cal", "primary": False}]
@@ -127,7 +128,7 @@ async def test_get_free_slots_raises_400_when_not_connected(monkeypatch):
 async def test_get_free_slots_raises_502_when_google_unreachable(monkeypatch):
     """連不上 Google（網路、DNS、逾時等）→ 502，跟「Google 有回應、但回了錯誤」的 400 分開。"""
     async def mock_find_one(query):
-        return {"_id": "uid123", "access_token": "valid-token"}
+        return {"_id": "uid123", "access_token": encrypt_secret("valid-token")}
 
     async def mock_fetch_calendar_list(token):
         raise httpx.ConnectError("Google 掛了")
@@ -148,7 +149,7 @@ async def test_get_free_slots_second_call_within_ttl_uses_cache_not_live_api(mon
     freebusy_calls = {"n": 0}
 
     async def mock_find_one(query):
-        return {"_id": "uid123", "access_token": "valid-token"}
+        return {"_id": "uid123", "access_token": encrypt_secret("valid-token")}
 
     async def mock_fetch_calendar_list(token):
         calendar_list_calls["n"] += 1
@@ -179,7 +180,7 @@ async def test_get_free_slots_second_call_within_ttl_uses_cache_not_live_api(mon
 async def test_get_free_slots_different_users_have_independent_cache(monkeypatch):
     """不同使用者的快取要各自獨立，不能共用同一份。"""
     async def mock_find_one(query):
-        return {"_id": query["_id"], "access_token": "valid-token"}
+        return {"_id": query["_id"], "access_token": encrypt_secret("valid-token")}
 
     async def mock_fetch_calendar_list(token):
         return [{"id": "primary-cal-id", "primary": True}]
@@ -209,7 +210,7 @@ async def test_get_free_slots_different_users_have_independent_cache(monkeypatch
 async def test_get_free_slots_raises_400_on_non_401_status_error(monkeypatch):
     """取得行事曆清單時 Google 回 401 以外的錯誤（例如 500）→ 400。"""
     async def mock_find_one(query):
-        return {"_id": "uid123", "access_token": "valid-token"}
+        return {"_id": "uid123", "access_token": encrypt_secret("valid-token")}
 
     async def mock_fetch_calendar_list(token):
         request = httpx.Request("GET", "https://example.com")
@@ -229,7 +230,7 @@ async def test_get_free_slots_raises_400_on_non_401_status_error(monkeypatch):
 async def test_get_free_slots_raises_502_when_freebusy_unreachable(monkeypatch):
     """查忙碌時段時連不上 Google → 502。"""
     async def mock_find_one(query):
-        return {"_id": "uid123", "access_token": "valid-token"}
+        return {"_id": "uid123", "access_token": encrypt_secret("valid-token")}
 
     async def mock_fetch_calendar_list(token):
         return [{"id": "primary-cal-id", "primary": True}]
@@ -255,7 +256,7 @@ async def test_list_calendars_returns_all_calendars_not_only_primary(monkeypatch
     calendars = [{"id": "primary-cal-id", "primary": True}, {"id": "work-cal-id"}]
 
     async def mock_find_one(query):
-        return {"_id": "uid123", "access_token": "valid-token"}
+        return {"_id": "uid123", "access_token": encrypt_secret("valid-token")}
 
     async def mock_fetch_calendar_list(token):
         assert token == "valid-token"
@@ -281,7 +282,7 @@ def _scheduled_task(task_id, title="任務", start=None, end=None):
 
 def _mock_token_and_primary_calendar(monkeypatch, calendar_id="primary-cal-id"):
     async def mock_find_one(query):
-        return {"_id": "uid123", "access_token": "valid-token"}
+        return {"_id": "uid123", "access_token": encrypt_secret("valid-token")}
 
     async def mock_fetch_calendar_list(token):
         return [{"id": calendar_id, "primary": True}]

@@ -15,6 +15,7 @@ import httpx
 import pytest
 
 import crud.google_tokens as google_tokens
+from core.crypto import encrypt_secret
 import routers.google_calendar as google_calendar_router
 import services.google_calendar_client as gcal
 
@@ -84,7 +85,7 @@ async def test_refresh_google_calendar_token_uses_relaxed_timeout(monkeypatch):
     timeouts = _record_timeouts(monkeypatch, lambda req: httpx.Response(200, json={"access_token": "new-access"}))
 
     async def mock_find_one(query):
-        return {"_id": "uid123", "refresh_token": "rt"}
+        return {"_id": "uid123", "refresh_token": encrypt_secret("rt")}
 
     async def mock_update_one(*a, **k):
         pass

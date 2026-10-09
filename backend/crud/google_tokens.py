@@ -38,6 +38,14 @@ async def get_google_calendar_token(clerk_id: str) -> str:
         raise HTTPException(status_code=400, detail="尚未連接 Google Calendar")
     return decrypt_secret(doc["access_token"])
 
+def _google_error_code(res: httpx.Response) -> str | None:
+    """取出 Google OAuth 錯誤回應裡的 error 欄位，例如 invalid_grant。"""
+    try:
+        body = res.json()
+    except ValueError:
+        return None
+    return body.get("error") if isinstance(body, dict) else None
+
 async def refresh_google_calendar_token(clerk_id: str) -> str:
     """
     用存在 DB 的 refresh_token 去 Google 換新 access_token，
@@ -69,14 +77,22 @@ async def refresh_google_calendar_token(clerk_id: str) -> str:
         logger.error("連線 Google Token Endpoint 失敗: %s", e)
         raise HTTPException(status_code=502, detail="無法連線至 Google，請稍後再試")
     except httpx.HTTPStatusError as e:
-        # 若 Google 拒絕這個 refresh_token 本身時，清掉讓 /oauth/status
-        # 回報「尚未連接」，讓使用者重新連接
-        logger.warning("Google refresh token 已失效: %s", e.response.text)
-        try:
-            await db.googleCalendarTokens.delete_one({"_id": clerk_id})
-        except PyMongoError:
-            logger.exception("清除失效的 Google Calendar token 失敗")
-        raise HTTPException(status_code=401, detail="Google 授權已失效，請重新連接 Google Calendar")
+        error_code = _google_error_code(e.response)
+        if error_code == "invalid_grant":
+            # Google 拒絕這個 refresh_token 本身時，清掉讓 /oauth/status
+            # 回報「尚未連接」，讓使用者重新連接
+            logger.warning("Google refresh token 已失效: %s", e.response.text)
+            try:
+                await db.googleCalendarTokens.delete_one({"_id": clerk_id})
+            except PyMongoError:
+                logger.exception("清除失效的 Google Calendar token 失敗")
+            raise HTTPException(status_code=401, detail="Google 授權已失效，請重新連接 Google Calendar")
+        if error_code == "invalid_client":
+            # 是伺服器的 client id/secret 設定錯誤，使用者的 token 沒壞，不能刪
+            logger.error("Google 拒絕 OAuth client 設定: %s", e.response.text)
+            raise HTTPException(status_code=500, detail="伺服器設定錯誤，請聯絡管理員")
+        # 429、5xx 等暫時性錯誤，token 可能還有效，不能刪
+        raise HTTPException(status_code=502, detail="Google 暫時無法處理請求，請稍後再試")
 
     # 取新的 access_token（與可能新的 refresh_token）
     access_token  = token_data.get("access_token")

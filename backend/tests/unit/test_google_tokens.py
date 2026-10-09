@@ -297,3 +297,54 @@ async def test_refresh_google_calendar_token_raises_400_when_google_response_mis
         await google_tokens.refresh_google_calendar_token("uid123")
 
     assert exc_info.value.status_code == 400
+
+
+def _mock_token_endpoint(monkeypatch, status_code, text):
+    """Google token endpoint 回指定的狀態碼與內容；回傳一個 list 記錄 delete_one 被呼叫幾次。"""
+    async def mock_find_one(query):
+        return {"_id": "uid123", "refresh_token": encrypt_secret("valid-rt")}
+
+    deleted = []
+
+    async def mock_delete_one(query):
+        deleted.append(query)
+
+    async def mock_update_one(*a, **k):
+        pass
+
+    def handler(request):
+        return httpx.Response(status_code, text=text)
+
+    real_client = httpx.AsyncClient
+    monkeypatch.setattr(google_tokens.db.googleCalendarTokens, "find_one", mock_find_one)
+    monkeypatch.setattr(google_tokens.db.googleCalendarTokens, "delete_one", mock_delete_one)
+    monkeypatch.setattr(google_tokens.db.googleCalendarTokens, "update_one", mock_update_one)
+    monkeypatch.setattr(
+        google_tokens.httpx, "AsyncClient",
+        lambda *a, **k: real_client(transport=httpx.MockTransport(handler)),
+    )
+    return deleted
+
+
+@pytest.mark.asyncio
+async def test_refresh_google_calendar_token_keeps_token_when_google_has_server_error(monkeypatch):
+    """Google 自己暫時故障（5xx）→ 回 502 請使用者稍後再試，不能把還有效的 token 刪掉。"""
+    deleted = _mock_token_endpoint(monkeypatch, 503, "Service Unavailable")
+
+    with pytest.raises(HTTPException) as exc_info:
+        await google_tokens.refresh_google_calendar_token("uid123")
+
+    assert exc_info.value.status_code == 502
+    assert deleted == []
+
+
+@pytest.mark.asyncio
+async def test_refresh_google_calendar_token_keeps_token_when_client_config_is_wrong(monkeypatch):
+    """伺服器的 GOOGLE_CLIENT_ID/SECRET 設錯（invalid_client）→ 回 500，不是使用者的錯，不能刪 token。"""
+    deleted = _mock_token_endpoint(monkeypatch, 401, '{"error": "invalid_client"}')
+
+    with pytest.raises(HTTPException) as exc_info:
+        await google_tokens.refresh_google_calendar_token("uid123")
+
+    assert exc_info.value.status_code == 500
+    assert deleted == []

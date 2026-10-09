@@ -9,7 +9,6 @@ cryptography
 python-jose
 PyJWT
 httpx
-requests
 google-genai==2.22.0
 tzdata
 selenium

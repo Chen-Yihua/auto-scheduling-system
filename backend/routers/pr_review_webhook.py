@@ -4,7 +4,7 @@ import json
 import logging
 from fastapi import APIRouter, Header, HTTPException, Request
 import os
-import requests
+import httpx
 from google import genai
 from prompts.pr_review import GEMINI_PR_SUMMARY_PROMPT
 from platforms.github import GITHUB_API_VERSION
@@ -37,21 +37,23 @@ LLM_TIMEOUT_MS = 30_000
 DISCORD_DESCRIPTION_LIMIT = 4096
 DISCORD_FIELD_LIMIT = 1024
 DISCORD_TIMEOUT_SECONDS = 10
+GITHUB_TIMEOUT_SECONDS = 10
 
 
 def _truncate(text: str, limit: int) -> str:
     return text if len(text) <= limit else text[: limit - 1] + "…"
 
 
-def _send_discord(url: str, message: dict) -> None:
+async def _send_discord(url: str, message: dict) -> None:
     """
     Discord 通知只是附加功能，失敗不影響 webhook 其餘流程，但一定要留下 log——
     之前沒檢查回應，Discord 回 400 時會完全無聲地失敗。
     """
     try:
-        res = requests.post(url, json=message, timeout=DISCORD_TIMEOUT_SECONDS)
+        async with httpx.AsyncClient(timeout=DISCORD_TIMEOUT_SECONDS) as http:
+            res = await http.post(url, json=message)
         res.raise_for_status()
-    except requests.RequestException:
+    except httpx.HTTPError:
         logger.exception("Failed to send Discord notification")
 
 
@@ -103,7 +105,9 @@ async def github_webhook(
 
         try:
             files_url = f"https://api.github.com/repos/{repo}/pulls/{pr_number}/files"
-            res = requests.get(files_url, headers=headers)
+            async with httpx.AsyncClient(timeout=GITHUB_TIMEOUT_SECONDS) as http:
+                res = await http.get(files_url, headers=headers)
+            res.raise_for_status()
             files = res.json()
             file_tree = "\n".join(f"- {f['filename']}" for f in files)
         except Exception:
@@ -117,7 +121,7 @@ async def github_webhook(
 
         summary = None
         try:
-            response = client.models.generate_content(
+            response = await client.aio.models.generate_content(
                 contents=prompt,
                 model="gemini-2.0-flash",
                 config={
@@ -161,14 +165,15 @@ async def github_webhook(
                     ],
                     "color": 0x1E90FF,
                 }
-                _send_discord(DISCORD_WEBHOOK_URL, {"embeds": [embed]})
+                await _send_discord(DISCORD_WEBHOOK_URL, {"embeds": [embed]})
 
         comment_url = f"https://api.github.com/repos/{repo}/issues/{pr_number}/comments"
-        requests.post(
-            comment_url,
-            headers=headers,
-            json={"body": body}
-        )
+        async with httpx.AsyncClient(timeout=GITHUB_TIMEOUT_SECONDS) as http:
+            await http.post(
+                comment_url,
+                headers=headers,
+                json={"body": body}
+            )
 
     if action == "closed" and pr.get("merged") and pr["base"]["ref"] == "main":
         pr_title = pr["title"]
@@ -191,6 +196,6 @@ async def github_webhook(
         }
 
         if MAIN_WEBHOOK_URL:
-            _send_discord(MAIN_WEBHOOK_URL, {"embeds": [embed]})
+            await _send_discord(MAIN_WEBHOOK_URL, {"embeds": [embed]})
 
     return {"status": "ok"}

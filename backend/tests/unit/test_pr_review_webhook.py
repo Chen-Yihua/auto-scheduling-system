@@ -1,6 +1,7 @@
 import hashlib
 import hmac
 import json
+import httpx
 import pytest
 from fastapi import HTTPException
 from unittest.mock import MagicMock
@@ -15,6 +16,40 @@ class FakeRequest:
 
     async def body(self):
         return self._raw
+
+
+class FakeAsyncClient:
+    """取代 httpx.AsyncClient：get/post 轉給測試設定的同步函式，並記下建立時帶的參數。"""
+    created = []
+    get_handler = staticmethod(lambda url, **k: MagicMock(json=lambda: [{"filename": "app.py"}]))
+    post_handler = staticmethod(lambda url, **k: MagicMock())
+
+    def __init__(self, *a, **kwargs):
+        FakeAsyncClient.created.append(kwargs)
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *a):
+        pass
+
+    async def get(self, url, **k):
+        return self.get_handler(url, **k)
+
+    async def post(self, url, **k):
+        return self.post_handler(url, **k)
+
+
+def _patch_http(monkeypatch, method, handler):
+    monkeypatch.setattr(FakeAsyncClient, f"{method}_handler", staticmethod(handler))
+    monkeypatch.setattr(webhook_router.httpx, "AsyncClient", FakeAsyncClient)
+
+
+def _patch_gemini(monkeypatch, fake):
+    """把 client.aio.models.generate_content 換成假的；fake 是同步函式，這裡包成 async。"""
+    async def fake_async(**kwargs):
+        return fake(**kwargs)
+    monkeypatch.setattr(webhook_router.client.aio.models, "generate_content", fake_async)
 
 
 def _sign(secret: str, raw_body: bytes) -> str:
@@ -44,7 +79,7 @@ def _mock_gemini_response(monkeypatch):
     fake_response.text = json.dumps(
         {"summary": "摘要", "frontend": None, "backend": None, "refactor": None}
     )
-    monkeypatch.setattr(webhook_router.client.models, "generate_content", lambda **kwargs: fake_response)
+    _patch_gemini(monkeypatch, lambda **kwargs: fake_response)
 
 
 async def _call_webhook(monkeypatch, payload, secret="test-secret", event="pull_request"):
@@ -67,8 +102,8 @@ async def test_open_pr_posts_to_configured_mr_webhook(monkeypatch):
     monkeypatch.setenv("GITHUB_BOT_TOKEN", "dummy")
 
     posted_urls = []
-    monkeypatch.setattr(webhook_router.requests, "get", lambda *a, **k: MagicMock(json=lambda: [{"filename": "app.py"}]))
-    monkeypatch.setattr(webhook_router.requests, "post", lambda url, **k: posted_urls.append(url) or MagicMock())
+    _patch_http(monkeypatch, "get", lambda *a, **k: MagicMock(json=lambda: [{"filename": "app.py"}]))
+    _patch_http(monkeypatch, "post", lambda url, **k: posted_urls.append(url) or MagicMock())
     _mock_gemini_response(monkeypatch)
 
     await _call_webhook(monkeypatch, _pr_payload("opened"))
@@ -86,10 +121,10 @@ async def test_open_pr_falls_back_when_fetching_changed_files_fails(monkeypatch)
     def raise_error(*a, **k):
         raise ConnectionError("GitHub API 連不上")
 
-    monkeypatch.setattr(webhook_router.requests, "get", raise_error)
+    _patch_http(monkeypatch, "get", raise_error)
 
     posted = []
-    monkeypatch.setattr(webhook_router.requests, "post", lambda url, **k: posted.append((url, k)) or MagicMock())
+    _patch_http(monkeypatch, "post", lambda url, **k: posted.append((url, k)) or MagicMock())
 
     captured_prompt = {}
 
@@ -101,9 +136,9 @@ async def test_open_pr_falls_back_when_fetching_changed_files_fails(monkeypatch)
         )
         return fake_response
 
-    monkeypatch.setattr(webhook_router.client.models, "generate_content", fake_generate_content)
+    _patch_gemini(monkeypatch, fake_generate_content)
 
-    # 不會因為 requests.get 出錯而讓整支處理當掉
+    # 不會因為抓變更檔案出錯而讓整支處理當掉
     await _call_webhook(monkeypatch, _pr_payload("opened"))
 
     assert "https://discord.com/api/webhooks/test/mr" in [url for url, _ in posted]
@@ -118,8 +153,8 @@ async def test_open_pr_skips_discord_when_webhook_not_configured(monkeypatch):
     monkeypatch.setenv("GITHUB_BOT_TOKEN", "dummy")
 
     posted_urls = []
-    monkeypatch.setattr(webhook_router.requests, "get", lambda *a, **k: MagicMock(json=lambda: [{"filename": "app.py"}]))
-    monkeypatch.setattr(webhook_router.requests, "post", lambda url, **k: posted_urls.append(url) or MagicMock())
+    _patch_http(monkeypatch, "get", lambda *a, **k: MagicMock(json=lambda: [{"filename": "app.py"}]))
+    _patch_http(monkeypatch, "post", lambda url, **k: posted_urls.append(url) or MagicMock())
     _mock_gemini_response(monkeypatch)
 
     await _call_webhook(monkeypatch, _pr_payload("opened"))
@@ -137,7 +172,7 @@ async def test_merge_to_main_posts_to_configured_main_webhook(monkeypatch):
     monkeypatch.setattr(webhook_router, "MAIN_WEBHOOK_URL", "https://discord.com/api/webhooks/test/main")
 
     posted = []
-    monkeypatch.setattr(webhook_router.requests, "post", lambda url, **k: posted.append((url, k)) or MagicMock())
+    _patch_http(monkeypatch, "post", lambda url, **k: posted.append((url, k)) or MagicMock())
 
     await _call_webhook(monkeypatch, _pr_payload("closed", merged=True, base_ref="main"))
 
@@ -152,7 +187,7 @@ async def test_merge_to_main_skips_discord_when_webhook_not_configured(monkeypat
     monkeypatch.setattr(webhook_router, "MAIN_WEBHOOK_URL", None)
 
     posted = []
-    monkeypatch.setattr(webhook_router.requests, "post", lambda url, **k: posted.append(url) or MagicMock())
+    _patch_http(monkeypatch, "post", lambda url, **k: posted.append(url) or MagicMock())
 
     await _call_webhook(monkeypatch, _pr_payload("closed", merged=True, base_ref="main"))
 
@@ -166,7 +201,7 @@ async def test_closed_but_not_merged_does_not_post_merge_notification(monkeypatc
     monkeypatch.setattr(webhook_router, "MAIN_WEBHOOK_URL", "https://discord.com/api/webhooks/test/main")
 
     posted = []
-    monkeypatch.setattr(webhook_router.requests, "post", lambda url, **k: posted.append(url) or MagicMock())
+    _patch_http(monkeypatch, "post", lambda url, **k: posted.append(url) or MagicMock())
 
     # PR 被關掉但沒有 merge
     await _call_webhook(monkeypatch, _pr_payload("closed", merged=False, base_ref="main"))
@@ -191,7 +226,7 @@ async def test_gemini_failure_does_not_leak_exception_detail_to_public_comment(m
     monkeypatch.setattr(webhook_router, "MAIN_WEBHOOK_URL", None)
     monkeypatch.setenv("GITHUB_BOT_TOKEN", "dummy")
 
-    monkeypatch.setattr(webhook_router.requests, "get", lambda *a, **k: MagicMock(json=lambda: [{"filename": "app.py"}]))
+    _patch_http(monkeypatch, "get", lambda *a, **k: MagicMock(json=lambda: [{"filename": "app.py"}]))
 
     posted_comments = []
 
@@ -200,14 +235,14 @@ async def test_gemini_failure_does_not_leak_exception_detail_to_public_comment(m
             posted_comments.append(kwargs.get("json", {}).get("body", ""))
         return MagicMock()
 
-    monkeypatch.setattr(webhook_router.requests, "post", fake_post)
+    _patch_http(monkeypatch, "post", fake_post)
 
     secret_detail = "internal database connection string leaked: mongodb://user:pass@10.0.0.5"
 
     def fake_generate_content(**kwargs):
         raise Exception(secret_detail)
 
-    monkeypatch.setattr(webhook_router.client.models, "generate_content", fake_generate_content)
+    _patch_gemini(monkeypatch, fake_generate_content)
 
     import logging
     with caplog.at_level(logging.ERROR, logger="routers.pr_review_webhook"):
@@ -281,12 +316,8 @@ def _setup_open_pr(monkeypatch, gemini_payload, discord_post):
     """open PR 情境的共用設定：回傳一個 list，收集貼到 GitHub PR 的留言內容。"""
     monkeypatch.setattr(webhook_router, "DISCORD_WEBHOOK_URL", "https://discord.com/api/webhooks/test/mr")
     monkeypatch.setattr(webhook_router, "MAIN_WEBHOOK_URL", None)
-    monkeypatch.setattr(webhook_router.requests, "get", lambda *a, **k: MagicMock(json=lambda: [{"filename": "app.py"}]))
-    monkeypatch.setattr(
-        webhook_router.client.models,
-        "generate_content",
-        lambda **kwargs: MagicMock(text=json.dumps(gemini_payload)),
-    )
+    _patch_http(monkeypatch, "get", lambda *a, **k: MagicMock(json=lambda: [{"filename": "app.py"}]))
+    _patch_gemini(monkeypatch, lambda **kwargs: MagicMock(text=json.dumps(gemini_payload)))
 
     github_comments = []
 
@@ -296,7 +327,7 @@ def _setup_open_pr(monkeypatch, gemini_payload, discord_post):
         github_comments.append(k["json"]["body"])
         return MagicMock()
 
-    monkeypatch.setattr(webhook_router.requests, "post", fake_post)
+    _patch_http(monkeypatch, "post", fake_post)
     return github_comments
 
 
@@ -304,7 +335,7 @@ def _setup_open_pr(monkeypatch, gemini_payload, discord_post):
 async def test_open_pr_keeps_summary_comment_when_discord_fails(monkeypatch):
     """Discord 連不上 → 只影響 Discord 通知，PR 留言照樣貼出摘要，不能被換成「摘要產生失敗」。"""
     def discord_down(url, **k):
-        raise webhook_router.requests.ConnectionError("Discord 連不上")
+        raise httpx.ConnectError("Discord 連不上")
 
     github_comments = _setup_open_pr(
         monkeypatch,
@@ -352,3 +383,20 @@ async def test_open_pr_truncates_long_summary_to_discord_limits(monkeypatch):
     assert len(embed["description"]) <= webhook_router.DISCORD_DESCRIPTION_LIMIT
     assert all(len(f["value"]) <= webhook_router.DISCORD_FIELD_LIMIT for f in embed["fields"])
     assert long_text in github_comments[0]
+
+
+@pytest.mark.asyncio
+async def test_open_pr_outbound_http_calls_all_set_timeout(monkeypatch):
+    """打 GitHub、Discord 都要設 timeout，對方不回應時才不會一直卡住。"""
+    monkeypatch.setattr(FakeAsyncClient, "created", [])
+    _setup_open_pr(
+        monkeypatch,
+        {"summary": "摘要", "frontend": None, "backend": None, "refactor": None},
+        lambda url, **k: MagicMock(),
+    )
+
+    await _call_webhook(monkeypatch, _pr_payload("opened"))
+
+    # 抓變更檔案、Discord、PR 留言
+    assert len(FakeAsyncClient.created) == 3
+    assert all(kwargs.get("timeout") for kwargs in FakeAsyncClient.created)

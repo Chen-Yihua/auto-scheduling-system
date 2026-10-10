@@ -7,17 +7,12 @@ logger = logging.getLogger(__name__)
 
 
 class NonRetryableError(Exception):
-    """
-    代表「重試也沒用」的失敗，例如帳密/token 錯誤、找不到資源這類客戶端錯誤——
-    再打一次還是同樣的結果。跟一般 Exception（視為暫時性失敗，例如 5xx、
-    rate limit、逾時、網路抖動）分開，讓下面 sync_platform_items 的重試邏輯
-    可以判斷要不要浪費時間重試，還是直接放棄、退回快取。
-    """
+    """重試也沒用的失敗（憑證錯誤、找不到資源），不重試直接退回快取。"""
     pass
 
 
 class UpstreamError(Exception):
-    """外部平台暫時性失敗（5xx、限流、連不上），跟我們自己的 bug 區分，router 回 502。"""
+    """外部平台暫時性失敗（5xx、限流、連不上），router 回 502。"""
     pass
 
 
@@ -30,19 +25,13 @@ async def sync_platform_items(
     retry_delay_seconds: float = 1.0,
 ) -> tuple[list[dict], bool, Optional[datetime], bool]:
     """
-    GitHub / Jira / Moodle 共用的「即時優先、重試、DB 當最終退路」讀取邏輯：
-    - 即時抓資料成功 -> upsert 進 collection，回傳最新資料（stale=False, auth_error=False）
-    - 即時抓資料失敗，且判斷為暫時性失敗（見上面的 NonRetryableError）
-      -> 用指數退避重試最多 max_attempts 次（預設抓不到只重試 1 次，總共 2 次嘗試）
-    - 即時抓資料失敗，且判斷為 NonRetryableError（帳密/token 錯誤等一定會再次
-      失敗的狀況）-> 不浪費時間重試，立刻放棄
-    - 重試全部失敗，或遇到 NonRetryableError -> 退回 collection 裡該使用者
-      最後一次成功的快照（stale=True）；如果是 NonRetryableError 導致的退回快取，
-      auth_error 會是 True，讓呼叫端知道「這不是暫時性問題，使用者的憑證可能已經失效」，
-      不是單純的網路抖動
-    - 兩者都沒有（沒有快取可退）-> 讓最後一次的例外往外拋，由呼叫端決定要回什麼錯誤
+    即時抓資料，失敗就以指數退避重試（NonRetryableError 不重試），
+    最後仍失敗則退回 DB 裡上次成功的資料；沒有舊資料就把最後的例外往外拋。
+
+    回傳 (items, stale, synced_at, auth_error)：
+    stale 表示是退回的舊資料；auth_error 表示是憑證失效造成的退回。
     """
-    last_exc: Optional[Exception] = None
+    last_exc: Optional[Exception] = None # 上一次發生的異常
     items: Optional[list[dict]] = None
 
     for attempt in range(max_attempts):
@@ -95,9 +84,7 @@ async def sync_platform_items(
             upsert=True,
         )
 
-    # 把這次即時抓資料裡已經不存在的舊項目清掉（例如第三方平台上的 issue 被關掉、
-    # 作業被刪除）——不然它們會一直留在 DB 裡，等哪天即時抓資料失敗、退回快取時，
-    # 使用者就會看到「其實在第三方平台上早就不存在」的幽靈資料。
+    # 清掉平台上已不存在的項目，否則退回舊資料時會出現早就被刪掉的項目
     current_ids = [item[id_field] for item in items]
     await collection.delete_many({
         "user_id": user_id,

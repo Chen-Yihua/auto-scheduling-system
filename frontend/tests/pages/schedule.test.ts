@@ -201,8 +201,7 @@ describe('pages/schedule.vue', () => {
 
     expect(wrapper.text()).toContain('任務 A')
 
-    // 前面兩個 number input 是排程偏好設定（緩衝時間／每天上限），任務自己的
-    // 所需時長輸入框排第三個
+    // 前兩個 number input 是偏好設定，第三個才是任務時長
     const durationInput = wrapper.findAll('input[type="number"]')[2]
     await durationInput!.setValue('60')
     expect(updateDurationSpy).toHaveBeenCalledWith('a', 60)

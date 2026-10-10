@@ -1,7 +1,4 @@
-# 透過 HTTP 測試 /oauth 這組 API：路由有註冊、登入驗證有掛上、
-# 回傳的 JSON 格式跟錯誤狀態碼真的送得出去。
-# 跟 Google 換 token、refresh、算空檔等細節由 test_oauth_router.py、
-# test_oauth_free_slots.py、test_google_calendar_service.py 負責，這裡不重複測。
+# 透過 HTTP 確認路由、登入驗證、回應格式和錯誤狀態碼；細部邏輯由 unit 測試負責
 import pytest
 from fastapi import HTTPException, status
 from httpx import AsyncClient
@@ -14,7 +11,7 @@ import services.google_calendar as calendar_service
 
 @pytest.mark.asyncio
 async def test_get_google_calendar_status(monkeypatch, logged_in_user):
-    """GET /oauth/status：回報使用者有沒有連接過 Google Calendar（{"connected": true/false}），只查資料庫、不打 Google API。"""
+    """GET /oauth/status：回報是否已連接 Google Calendar，只查資料庫。"""
     async def mock_is_connected(clerk_id):
         return True
 

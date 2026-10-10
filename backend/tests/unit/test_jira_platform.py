@@ -22,8 +22,7 @@ async def test_fetch_jira_user_issues_success():
 
 @pytest.mark.asyncio
 async def test_fetch_jira_user_issues_uses_enhanced_search_endpoint_with_explicit_fields():
-    """要打新版的 /rest/api/3/search/jql（舊的 /search 已被淘汰），而且要明確指定 fields——
-    新端點預設只回傳 issue id，沒指定的話 transform_jira_item 會拿到一堆空欄位。"""
+    """呼叫 /rest/api/3/search/jql 並明確指定 fields。"""
     from unittest.mock import AsyncMock, MagicMock
 
     page = MagicMock()
@@ -46,7 +45,7 @@ async def test_fetch_jira_user_issues_uses_enhanced_search_endpoint_with_explici
 
 @pytest.mark.asyncio
 async def test_fetch_jira_user_issues_paginates_across_multiple_pages():
-    """一頁抓不完（第一頁回傳 nextPageToken）要繼續抓下一頁、把 issue 收齊；下一頁要帶上一頁給的 nextPageToken，不能每次都從頭抓。"""
+    """有 nextPageToken 時帶著它抓下一頁，收齊所有 issue。"""
     from unittest.mock import AsyncMock, MagicMock
 
     first_page = MagicMock()
@@ -105,7 +104,7 @@ async def test_fetch_jira_user_issues_stops_when_is_last_even_with_token():
 
 @pytest.mark.asyncio
 async def test_fetch_jira_user_issues_stops_at_max_pages_safety_cap():
-    """就算 Jira 一直回傳 nextPageToken、isLast 永遠是 false，也要在 JIRA_MAX_PAGES 停下來，不能無限翻頁。"""
+    """Jira 一直回傳 nextPageToken 時，在 JIRA_MAX_PAGES 停止。"""
     from unittest.mock import AsyncMock, MagicMock
 
     page = MagicMock()
@@ -123,7 +122,7 @@ async def test_fetch_jira_user_issues_stops_at_max_pages_safety_cap():
 @pytest.mark.asyncio
 @pytest.mark.parametrize("status_code", [400, 401, 403, 404])
 async def test_fetch_jira_user_issues_client_error_is_non_retryable(status_code):
-    """400/401/403/404 是客戶端錯誤（token 過期、沒權限、請求不對、資源不存在），重試也沒用 → 要丟 NonRetryableError。"""
+    """400/401/403/404 重試也沒用 → NonRetryableError。"""
     with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
         mock_get.return_value.status_code = status_code
         mock_get.return_value.text = "error"
@@ -152,8 +151,7 @@ async def test_fetch_jira_user_issues_transient_error_is_retryable(status_code):
 # ---------- transform_jira_item ----------
 
 def test_transform_jira_item_captures_status_category():
-    """status.statusCategory.key 是 Jira 正規化過的完成狀態（"new"／"indeterminate"／"done"），
-    跟專案自訂的 status.name 分開存，排程要用這個判斷完成與否，不是猜 status.name 的字串。"""
+    """statusCategory.key 和自訂的 status.name 分開存，完成判斷用前者。"""
     raw = {
         "id": "1",
         "key": "JIRA-1",

@@ -1,12 +1,10 @@
-// TaskForm.vue 本身的接線邏輯：表單送出／刪除後要重抓統一清單、等使用者載入完才抓資料。
-// useTaskForm／useSchedulableTasks 本身的行為
-// 各有自己的測試，這裡整個換成 mock，只驗證元件怎麼呼叫它們。
+// TaskForm.vue 怎麼呼叫 composable（composable 全部 mock）
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { shallowMount, flushPromises, enableAutoUnmount } from '@vue/test-utils'
 import { ref, computed, reactive, watch, defineComponent, h } from 'vue'
 import type { SchedulableTask } from '~/types/schedulableTask'
 
-// vi.mock 會被 Vitest 提到所有 import 之前執行，所以元件寫在最上面一樣會拿到 mock 過的 composable
+// vi.mock 會被提升到 import 之前執行
 import TaskForm from '~/components/tasks/TaskForm.vue'
 
 vi.stubGlobal('watch', watch)

@@ -1,11 +1,4 @@
-"""
-services/google_calendar_client.py——真正打 Google Calendar API 的 client 函式，
-先前完全沒有專屬測試（都是被其他測試 monkeypatch 掉，函式本體從沒被執行過）。
-
-用 httpx.MockTransport 讓這裡測到的是「真正的」httpx.AsyncClient 行為
-（URL 組成、header、raise_for_status()、json() 解析），只是把底層的網路
-請求換成假的 transport，不用真的連上 Google。
-"""
+"""用 httpx.MockTransport 測試 Google Calendar client，不實際連線。"""
 import pytest
 import httpx
 
@@ -13,9 +6,7 @@ import services.google_calendar_client as gcal
 
 
 def _mock_client(monkeypatch, handler):
-    # gcal.httpx 跟這裡的 httpx 是同一個模組物件，要先把原本的 AsyncClient
-    # 存起來再 patch，不然 lambda 裡面的 httpx.AsyncClient 會變成呼叫到
-    # 剛剛才 patch 上去的自己，無限遞迴
+    # 先存下原本的 AsyncClient，否則 patch 後 lambda 會呼叫到自己而無限遞迴
     transport = httpx.MockTransport(handler)
     real_async_client = httpx.AsyncClient
     monkeypatch.setattr(gcal.httpx, "AsyncClient", lambda **kw: real_async_client(transport=transport, **kw))
@@ -25,7 +16,7 @@ def _mock_client(monkeypatch, handler):
 
 @pytest.mark.asyncio
 async def test_fetch_google_calendar_list_returns_items_with_bearer_auth(monkeypatch):
-    """取得行事曆清單：要帶 Authorization: Bearer <token>、打 calendarList 這個 URL，並回傳 items。"""
+    """取得行事曆清單：帶 Bearer token 呼叫 calendarList，回傳 items。"""
     captured = {}
 
     def handler(request):
@@ -93,7 +84,7 @@ async def test_fetch_freebusy_raises_http_status_error_on_failure(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_create_calendar_event_posts_summary_and_start_end_with_bearer_auth(monkeypatch):
-    """建立事件：要帶 Authorization、打對行事曆的 events 端點，body 帶 summary/start/end，回傳建立好的事件。"""
+    """建立事件：呼叫 events 端點，body 帶 summary/start/end，回傳建立的事件。"""
     captured = {}
 
     def handler(request):

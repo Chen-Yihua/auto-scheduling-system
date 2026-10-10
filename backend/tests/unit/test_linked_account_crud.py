@@ -21,7 +21,7 @@ import httpx
 
 @pytest.mark.asyncio
 async def test_create_github_account_success(monkeypatch):
-    """建立 GitHub 綁定帳號成功：用 GitHub 回傳的使用者資訊填 username / avatar，apiKey 存進資料庫前要加密。"""
+    """建立 GitHub 帳號：username、avatar 來自 GitHub，apiKey 加密後存入。"""
     updated_doc = {}
 
     async def mock_insert_one(doc):
@@ -75,8 +75,7 @@ async def test_create_moodle_missing_password():
 @pytest.mark.asyncio
 async def test_create_moodle_wrong_password_rejected(monkeypatch):
     """Moodle 帳密驗證失敗（NonRetryableError）→ 401。"""
-    # verify_moodle_login 本身是同步函式（真正的實作用 Selenium），
-    # create_linked_account 用 run_in_threadpool 呼叫它——mock 也要是同步的
+    # 原函式是同步的（透過 run_in_threadpool 呼叫），mock 也要是同步的
     def mock_verify_fails(username, password):
         raise NonRetryableError(f"Moodle 登入失敗，使用者：{username}")
 
@@ -321,7 +320,7 @@ async def test_update_jira_apikey_only_reverifies_with_existing_domain(monkeypat
 
 @pytest.mark.asyncio
 async def test_update_jira_domain_only_reverifies_with_existing_apikey(monkeypatch):
-    """只改 domain、沒帶 apiKey → 要去查現有的 apiKey（解密後）一起驗證新 domain，而且不能把 apiKey 塞進要更新的欄位。"""
+    """只改 domain → 用現有的 apiKey 驗證新 domain，且不把 apiKey 寫進更新欄位。"""
     from core.crypto import encrypt_secret
 
     verify_calls = []

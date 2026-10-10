@@ -1,11 +1,9 @@
 import { useAuth } from '@clerk/vue';
 import { createSharedComposable } from '@vueuse/core';
-import type { CalendarListEntry } from '@/types/google'; // 你可以自行定義這型別
+import type { CalendarListEntry } from '@/types/google';
 import { getFriendlyErrorTitle, isAuthError, isNotLinkedError } from '@/utils/errorMessages';
 
-// createSharedComposable：確認排程（useSchedule.ts 的 confirmSchedule）寫入
-// Google Calendar 成功後，要能讓首頁的 GoogleCalendarEmbed 知道該重新整理
-// iframe——兩邊要共用同一份 reloadToken，不是各自獨立的狀態
+// 共用狀態：確認排程後要讓 GoogleCalendarEmbed 重新整理 iframe
 const useGoogleCalendarImpl = () => {
   const toast = useToast();
   const config = useRuntimeConfig();
@@ -19,10 +17,7 @@ const useGoogleCalendarImpl = () => {
   const calendarIds = computed(() => calendars.value.map((c) => c.id));
   const calendarNames = computed(() => calendars.value.map((c) => c.summary));
 
-  // Google 行事曆的嵌入 iframe 是直接嵌 calendar.google.com 的頁面，不是我們
-  // 自己打 API 畫出來的——props 不變瀏覽器不會重新請求，新寫入的事件不會
-  // 自動出現，要重刷頁面才看得到。這裡給一個會被 bump 的計數器，GoogleCalendarEmbed
-  // 拿去當 iframe 的 :key／URL 上的 cache-busting 參數，逼瀏覽器真的重新請求一次
+  // 遞增後當作 iframe 的 key，強制重新載入嵌入的行事曆
   const calendarReloadToken = ref(0);
   const triggerCalendarReload = () => {
     calendarReloadToken.value++;
@@ -35,11 +30,7 @@ const useGoogleCalendarImpl = () => {
       const token = await getToken.value();
       if (!token) throw new Error('找不到 JWT');
 
-      // 先查有沒有做過 Google OAuth 授權，還沒授權就不用真的打 Google Calendar API，
-      // 省一次注定會失敗的請求，也不會讓使用者看到「抓取失敗」的錯覺。
-      // 這個檢查本身如果失敗（網路／認證問題），也不跳 toast——這只是背景
-      // 資料的其中一項，失敗了安靜降級成「未連接」的畫面就好，不用打斷使用者，
-      // 重新整理或等連線恢復自然會抓到正確狀態
+      // 先確認是否已授權，避免呼叫注定失敗的 API；這個檢查失敗時不跳 toast，顯示成未連接
       let status: { connected: boolean };
       try {
         status = await $fetch<{ connected: boolean }>(`${BASE_URL}/oauth/status`, {
@@ -54,8 +45,6 @@ const useGoogleCalendarImpl = () => {
       }
 
       if (!status.connected) {
-        // 還沒做過 OAuth 授權是正常狀態，畫面上本來就有一顆隨時看得到的
-        // 「連接 Google Calendar」按鈕，不用打行事曆 API，也不用跳通知
         isConnected.value = false;
         calendars.value = [];
         return;
@@ -77,12 +66,9 @@ const useGoogleCalendarImpl = () => {
       isConnected.value = false;
       calendars.value = [];
 
-      // 保險起見：萬一 /oauth/status 跟實際呼叫之間狀態剛好變化，
-      // 還是可能拿到「尚未連接」的 400，這種情況也不用跳錯誤通知
+      // 檢查後到呼叫前授權可能剛好被移除
       if (isNotLinkedError(error)) return;
 
-      // 走到這裡是真正的錯誤——訊息要講清楚：是授權失效要重新連接，
-      // 還是暫時性問題等等重試就好
       const authFailed = isAuthError(error);
       toast.add({
         title: authFailed ? 'Google Calendar 授權已失效' : getFriendlyErrorTitle(error, 'Google Calendar 資料暫時無法取得'),

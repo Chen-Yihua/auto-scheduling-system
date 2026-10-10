@@ -23,23 +23,21 @@ logger = logging.getLogger(__name__)
 
 def _login_to_moodle(username, password):
     """
-    開一個 headless Chrome、跑完 SSO 登入流程，回傳已登入狀態的 driver。
-    帳密錯誤（登入後沒被導向 my/ 首頁）視為 NonRetryableError——重試也沒用。
-    呼叫端用完記得自己 driver.quit()。
+    用 headless Chrome 完成 SSO 登入，回傳已登入的 driver，呼叫端要自己 quit()。
+    帳密錯誤（登入後沒導向 my/）丟 NonRetryableError。
     """
     opts = Options()
-    opts.binary_location = "/usr/bin/chromium"   # Debian 的 chromium 可執行檔
+    opts.binary_location = "/usr/bin/chromium"
     opts.add_argument("--headless=new")
     opts.add_argument("--no-sandbox")
     opts.add_argument("--disable-dev-shm-usage")
 
-    service = Service("/usr/bin/chromedriver")   # arm64 driver 的真實路徑
+    service = Service("/usr/bin/chromedriver")
     driver = webdriver.Chrome(service=service, options=opts)
     try:
         driver.get("https://i.nccu.edu.tw/Login.aspx?ReturnUrl=%2fsso_app%2fMoodleSSO2.aspx")
 
         wait = WebDriverWait(driver, 10)
-        # 模擬登入流程
         username_input = wait.until(EC.element_to_be_clickable((By.ID, "captcha_Login1_UserName")))
         username_input.send_keys(username)
 
@@ -49,26 +47,21 @@ def _login_to_moodle(username, password):
         login_button = wait.until(EC.element_to_be_clickable((By.ID, "captcha_Login1_LoginButton")))
         login_button.click()
 
-        time.sleep(4)  # 等待頁面加載
+        time.sleep(4)  # 等待登入後的導向
 
-        # 確認登錄是否成功
         current_url = driver.current_url
         if current_url != 'https://moodle.nccu.edu.tw/my/':
             raise NonRetryableError(f"Moodle 登入失敗，使用者：{username}")
 
         return driver
     except Exception:
-        # 不管是帳密錯誤、逾時還是 WebDriver 本身出包，都不能讓 Chrome 進程留著
+        # 任何失敗都要關掉 Chrome，否則進程會留著
         driver.quit()
         raise
 
 
 def verify_moodle_login(username, password) -> bool:
-    """
-    只驗證帳密能不能登入，不爬課程/作業——給連結帳號當下的驗證用，
-    比 fetch_assignments() 輕量很多（不用開課程頁一個個爬）。
-    帳密錯誤會拋 NonRetryableError，呼叫端接住轉成使用者看得懂的錯誤訊息。
-    """
+    """只驗證能不能登入、不爬作業，連結帳號時用。帳密錯誤丟 NonRetryableError。"""
     driver = _login_to_moodle(username, password)
     driver.quit()
     return True
@@ -77,15 +70,12 @@ def verify_moodle_login(username, password) -> bool:
 def fetch_assignments(username, password):
     driver = _login_to_moodle(username, password)
     try:
-        # 找到包住所有課程的主容器
         semester_div = driver.find_element(By.ID, "SemesterItem_1")
 
-        # 抓出所有課程連結（<a>）
         course_links = semester_div.find_elements(By.TAG_NAME, "a")
 
         all_data = []
         assignments_links = []
-        # 建立存放課程資訊的清單
         courses = []
         logger.debug("Found %d course links", len(course_links))
         for link in course_links:
@@ -137,7 +127,7 @@ def fetch_assignments(username, password):
                 due_date = "無截止日期"
 
             all_data.append({
-                "id": url,  # url 對每筆作業唯一，直接拿來當同步用的 id
+                "id": url,  # 每筆作業的網址唯一
                 "course_name": name,
                 "title": title,
                 "url": url,
@@ -154,8 +144,7 @@ class MoodlePlatform(PlatformAdapter):
 
     route_path = "/moodle/assignments"
     response_model = MoodleAssignment
-    # 每次抓資料都是真的開一個 headless Chrome、跑好幾秒，成本比一般 API 呼叫高很多：
-    # 限流限得比較嚴，結果也快取久一點——作業內容通常一天頂多變一次
+    # 每次抓取都要開 Chrome 跑好幾秒，所以限流較嚴、快取較久
     rate_limit = "5/minute"
     cache_ttl_seconds = 15 * 60
 
@@ -164,7 +153,7 @@ class MoodlePlatform(PlatformAdapter):
     fetch_failed_detail = "無法取得 Moodle 資料，請稍後再試"
 
     collection_name = "moodle_assignments"
-    id_type = str  # 作業網址
+    id_type = str
 
     required_create_fields = ("username", "password")
     secret_field = "password"
@@ -172,18 +161,16 @@ class MoodlePlatform(PlatformAdapter):
     def credentials_from_account(self, account, decrypt):
         if not account.get("username") or not account.get("password"):
             return None
-        # 密碼只在這裡（伺服器內部、準備拿去登入 Moodle 的當下）解密，
-        # 絕不印出來、絕不回傳給呼叫端以外的地方
         return {"username": account["username"], "password": decrypt(account["password"])}
 
     async def fetch_items(self, credentials):
-        # Selenium 是同步、會阻塞的，丟到 thread pool 跑，不卡住其他請求
+        # Selenium 是同步阻塞的，放到 thread pool 才不會卡住 event loop
         try:
             return await run_in_threadpool(fetch_assignments, credentials["username"], credentials["password"])
         except WebDriverException as e:
             raise UpstreamError(f"Moodle 爬取失敗: {e}") from e
 
-    # Moodle 爬蟲拿不到提交狀態，沒有自動判斷依據，只能靠使用者手動標記完成（沿用預設的 is_done）
+    # 爬不到提交狀態，沿用預設的 is_done，只靠使用者手動標記完成
 
     async def _verify(self, username: str, password: str) -> None:
         try:
@@ -199,12 +186,10 @@ class MoodlePlatform(PlatformAdapter):
         return {"avatar_url": "", "status": "connected"}
 
     def needs_reverify(self, changes):
-        # 帳號、密碼只要改其中一個都要重新驗證
         return "username" in changes or "password" in changes
 
     async def apply_update(self, changes, composite_id):
-        # 帳號、密碼改其中一個，另一個沒帶的話就用現有值湊成完整一組再驗證，
-        # 確保不管改哪一個欄位，存進資料庫前都真的登入驗證過一次
+        # 只改其中一個時，另一個用現有值補齊再驗證
         username = changes.get("username")
         password = changes.get("password")
 

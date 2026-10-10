@@ -12,9 +12,7 @@ REDIS_URL = os.getenv("REDIS_URL")
 
 _redis_client = redis.from_url(REDIS_URL, decode_responses=True) if REDIS_URL else None
 
-# REDIS_URL 沒設定時的退路：存在這個 process 自己的記憶體裡。
-# 跟 core/rate_limit.py 一樣的取捨——多個 Cloud Run instance 各自快取、不是全域共用，
-# 但至少同一個 instance 內重複請求不用每次都真的打外部 API。
+# 沒設定 REDIS_URL 時用記憶體，多個 instance 之間不共用
 _memory_store: dict[str, tuple[float, str]] = {}
 
 if not REDIS_URL:
@@ -25,7 +23,6 @@ if not REDIS_URL:
 
 
 async def cache_get(key: str) -> Optional[Any]:
-    """從 cache 取資料"""
     if _redis_client:
         raw = await _redis_client.get(key)
         return json.loads(raw) if raw else None
@@ -41,7 +38,6 @@ async def cache_get(key: str) -> Optional[Any]:
 
 
 async def cache_set(key: str, value: Any, ttl_seconds: int) -> None:
-    """把資料存進 cache"""
     payload = json.dumps(value, default=str)
     if _redis_client:
         await _redis_client.set(key, payload, ex=ttl_seconds)
@@ -50,7 +46,6 @@ async def cache_set(key: str, value: Any, ttl_seconds: int) -> None:
 
 
 async def cache_delete(key: str) -> None:
-    """從 cache 刪資料"""
     if _redis_client:
         await _redis_client.delete(key)
         return

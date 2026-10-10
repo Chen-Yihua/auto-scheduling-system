@@ -113,7 +113,7 @@ async def test_open_pr_posts_to_configured_mr_webhook(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_open_pr_falls_back_when_fetching_changed_files_fails(monkeypatch):
-    """抓 PR 變更檔案清單失敗（GitHub API 逾時或出錯）不該讓整支 webhook 中斷：改用「無法取得變更檔案」的預設文字頂替，繼續產生摘要。"""
+    """抓變更檔案失敗 → 用「無法取得變更檔案」代替，繼續產生摘要。"""
     monkeypatch.setattr(webhook_router, "DISCORD_WEBHOOK_URL", "https://discord.com/api/webhooks/test/mr")
     monkeypatch.setattr(webhook_router, "MAIN_WEBHOOK_URL", None)
     monkeypatch.setenv("GITHUB_BOT_TOKEN", "dummy")
@@ -221,7 +221,7 @@ async def test_no_hardcoded_discord_url_left_in_source():
 
 @pytest.mark.asyncio
 async def test_gemini_failure_does_not_leak_exception_detail_to_public_comment(monkeypatch, caplog):
-    """Gemini 產生摘要失敗 → 公開的 PR 留言只能是「無法…」之類的通用訊息，不能外洩例外內容（例如連線字串）；完整例外要留在後端 log 供事後排查。"""
+    """Gemini 失敗 → PR 留言只有通用訊息，例外內容只記在 log。"""
     monkeypatch.setattr(webhook_router, "DISCORD_WEBHOOK_URL", None)
     monkeypatch.setattr(webhook_router, "MAIN_WEBHOOK_URL", None)
     monkeypatch.setenv("GITHUB_BOT_TOKEN", "dummy")

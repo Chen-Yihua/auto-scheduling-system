@@ -13,11 +13,8 @@ logger = logging.getLogger(__name__)
 
 def rate_limit_key(request: Request) -> str:
     """
-    優先用 Authorization header 當限流的 key——同一個使用者（同一個 token）
-    算同一組配額，不管他從哪個 IP 打進來。沒有帶 token 的請求（例如 /webhook，
-    GitHub 不會登入）才退回用來源 IP。
-
-    Header 內容雜湊過才拿去當 key，不把明文 token 存進 Redis。
+    有 Authorization header 就以使用者為單位限流，否則（例如 webhook）用來源 IP。
+    header 先雜湊，避免明文 token 存進 Redis。
     """
     auth_header = request.headers.get("Authorization")
     if auth_header:
@@ -33,18 +30,14 @@ if not REDIS_URL:
         "（多個 Cloud Run instance 各自算配額，不是全域共用，僅供本機開發/尚未接 Redis 時使用）"
     )
 
-# 測試環境把這個關掉，避免同一支測試檔在短時間內重複打同個 endpoint 時
-# 互相干擾、被自己的限流誤傷。正式環境不會設這個變數，預設是開啟的。
+# 測試環境關閉，避免測試短時間內重複呼叫而被限流
 _enabled = os.getenv("DISABLE_RATE_LIMIT", "false").lower() != "true"
 
 limiter = Limiter(key_func=rate_limit_key, storage_uri=_storage_uri, enabled=_enabled)
 
 
 async def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded) -> JSONResponse:
-    """
-    自訂 429 回應內容（不用 slowapi 預設的純文字格式），讓前端可以明確判斷
-    「這次失敗是流量限制」，顯示對使用者友善的訊息，而不是當成隨機錯誤處理。
-    """
+    """回 JSON 和 error_code，讓前端能辨識是被限流。"""
     return JSONResponse(
         status_code=429,
         content={"detail": "請求太頻繁，請稍後再試", "error_code": "RATE_LIMITED"},

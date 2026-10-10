@@ -2,13 +2,11 @@
 import { computed } from 'vue';
 
 const props = defineProps<{
-  calendarIds: string[]; // 所有calendar ID
+  calendarIds: string[];
   id: string;
-  connect: boolean; // 是否已連接Google Calendar
-  connecting?: boolean; // 正在跟後端完成 Google 授權（授權完成後的幾秒內）
-  // 確認排程寫入 Calendar 後會被 bump，用來強制這個 iframe 重新載入
-  // （見下方 calendarUrl／:key）——這個 iframe 是嵌入 Google 自己 host 的
-  // 網頁，props 不變的話瀏覽器不會主動重新請求，新寫入的事件不會自動出現
+  connect: boolean;
+  connecting?: boolean; // 後端正在完成授權
+  // 遞增時強制 iframe 重新載入，否則看不到新寫入的事件
   reloadToken?: number;
 }>();
 
@@ -28,7 +26,6 @@ const calendarUrl = computed(() => {
       </div>
     </template>
 
-    <!-- 授權剛完成、後端還在換 token：只有這張卡片顯示「連接中」，其他區塊照常顯示 -->
     <div v-if="connecting" class="flex justify-center items-center py-6">
       <UIcon name="i-lucide-loader" class="animate-spin w-6 h-6 text-primary" />
       <span class="ml-2 text-primary">正在連接 Google Calendar，請稍候…</span>

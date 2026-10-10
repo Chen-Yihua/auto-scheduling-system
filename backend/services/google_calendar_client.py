@@ -1,14 +1,9 @@
 from datetime import datetime, timedelta, timezone
 import httpx
 
-# 呼叫 Google 的逾時時間。httpx 預設只有 5 秒（連線階段包含 DNS 查詢），
-# 在 DNS 偶爾卡住 5 秒的網路環境（例如本機 WSL 開發環境）第一次呼叫就會剛好逾時、
-# 回 502，下一次 DNS 有快取又成功，使用者看到的就是「先失敗、過幾秒又成功」。
-# 放寬成 15 秒，讓這種偶發的慢一點也能成功；真的連不上 Google 時，
-# 各處仍會照樣回 502，只是最多多等 15 秒。
+# httpx 預設 5 秒（含 DNS 查詢），DNS 偶爾較慢時第一次呼叫會逾時，所以放寬
 GOOGLE_HTTP_TIMEOUT = httpx.Timeout(15.0)
 
-# 取得所有行事曆列表
 async def fetch_google_calendar_list(access_token: str) -> list:
     url = "https://www.googleapis.com/calendar/v3/users/me/calendarList"
     headers = {"Authorization": f"Bearer {access_token}"}
@@ -18,9 +13,7 @@ async def fetch_google_calendar_list(access_token: str) -> list:
         return res.json().get("items", [])
 
 async def fetch_freebusy(access_token: str, calendar_id: str) -> dict:
-    """
-    使用 Google Calendar FreeBusy API 取得未來 7 天該行事曆的忙碌時間區段
-    """
+    """取得該行事曆未來 7 天的忙碌時段。"""
     now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     next_week = (datetime.now(timezone.utc) + timedelta(days=7)).isoformat().replace("+00:00", "Z")
     url = "https://www.googleapis.com/calendar/v3/freeBusy"
@@ -38,12 +31,7 @@ async def fetch_freebusy(access_token: str, calendar_id: str) -> dict:
 
 
 async def create_calendar_event(access_token: str, calendar_id: str, summary: str, start: str, end: str) -> dict:
-    """
-    在指定行事曆建立一個事件（單一時段，不是全天事件）。
-    start/end 是 ISO 8601 UTC 字串（例如 "2026-09-10T09:00:00Z"），
-    由呼叫端（services/google_calendar.py 的 create_calendar_events_for_scheduled_tasks）
-    對應到排程建議算出來的 start/end。
-    """
+    """在指定行事曆建立事件。start/end 是 ISO 8601 UTC 字串，例如 "2026-09-10T09:00:00Z"。"""
     url = f"https://www.googleapis.com/calendar/v3/calendars/{calendar_id}/events"
     headers = {"Authorization": f"Bearer {access_token}"}
     body = {
@@ -58,17 +46,12 @@ async def create_calendar_event(access_token: str, calendar_id: str, summary: st
 
 
 def compute_free_times(busy: list[dict], window_start: str, window_end: str) -> list[dict]:
-    """
-    busy: [{ "start": "...Z", "end": "...Z" }, ...]
-    window_start/end: "...Z"
-    回傳 free intervals：[{ "start": ISO, "end": ISO }, ...]
-    """
+    """從時間窗扣掉 busy 時段，回傳空檔 [{"start", "end"}]。時間都是 ISO UTC 字串。"""
 
     fmt = lambda s: datetime.fromisoformat(s.replace("Z", "+00:00"))
     start = fmt(window_start)
     end   = fmt(window_end)
 
-    # 解析並排序 busy
     intervals = sorted([
         (fmt(i["start"]), fmt(i["end"]))
         for i in busy
@@ -77,7 +60,6 @@ def compute_free_times(busy: list[dict], window_start: str, window_end: str) -> 
     free = []
     cursor = start
 
-    # 計算 complement
     for b_start, b_end in intervals:
         if cursor < b_start:
             free.append((cursor, b_start))
@@ -85,7 +67,6 @@ def compute_free_times(busy: list[dict], window_start: str, window_end: str) -> 
     if cursor < end:
         free.append((cursor, end))
 
-    # 回傳成 ISO 字串
     return [
         { "start": s.isoformat().replace("+00:00", "Z"),
           "end":   e.isoformat().replace("+00:00", "Z") }

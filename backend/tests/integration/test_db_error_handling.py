@@ -1,6 +1,4 @@
-# 資料庫例外的集中處理（core/exception_handlers.py，註冊在 main.py）：
-# crud / router 遇到資料庫錯誤時不各自轉成 HTTPException，直接往外丟，
-# 由全域 handler 統一回應。這裡走 HTTP 確認各個模組真的都被涵蓋、回應格式正確。
+# 透過 HTTP 確認各模組的資料庫例外都由全域 handler 處理
 import logging
 
 import pytest

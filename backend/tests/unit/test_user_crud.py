@@ -1,8 +1,4 @@
-"""
-crud/user.py——先前完全沒有專屬測試（test_user_api.py 把整個 crud 層 mock 掉，
-只測 router），這裡直接測 crud 函式本身。資料庫連不上這類錯誤由全域 handler 統一處理，
-見 test_db_error_handling.py。
-"""
+"""crud/user.py 的函式。"""
 import pytest
 from pymongo.errors import DuplicateKeyError
 from fastapi import HTTPException

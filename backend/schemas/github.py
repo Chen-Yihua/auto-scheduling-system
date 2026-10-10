@@ -3,14 +3,13 @@ from typing import Optional, List
 from datetime import datetime
 from schemas.manual_task import PriorityEnum
 
-# 前端轉換後格式（GET /github/issues 的 response_model）
 class GitHubAuthor(BaseModel):
     username: Optional[str]
     avatar: Optional[str]
 
 class GitHubIssue(BaseModel):
-    id: int  # GitHub 全域唯一 id
-    number: int  # repo 內的編號，顯示用的 "#123"
+    id: int  # 全域唯一
+    number: int  # repo 內的編號，顯示用
     title: str
     status: str
     created_at: datetime
@@ -20,14 +19,11 @@ class GitHubIssue(BaseModel):
     author: Optional[GitHubAuthor]
     labels: Optional[List[str]]
     comments: Optional[int]
-    # 排程相關欄位：跟同步回來的 GitHub 原始資料無關，是使用者在排程精靈裡
-    # 額外指定的。sync_platform_items 用 $set 更新，不會動到這些欄位，
-    # 重新同步不會把它們洗掉。見 crud/schedulable_items.py
+    # 以下是使用者設定的排程欄位，同步時不會被覆蓋
     priority: Optional[PriorityEnum] = None
     duration: Optional[int] = None
     scheduling_due_date: Optional[datetime] = None
     sort_order: Optional[int] = None
     calendar_event_id: Optional[str] = None
-    # 使用者在 App 內手動標記完成——跟 GitHub 自己的 open/closed 狀態分開，
-    # 兩者只要有一個成立就視為已完成，不再出現在排程建議裡
+    # 使用者手動標記完成，和 GitHub 的 open/closed 分開存
     done: bool = False

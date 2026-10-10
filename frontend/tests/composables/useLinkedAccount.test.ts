@@ -90,7 +90,7 @@ describe('useLinkedAccount', () => {
     openEdit(git)
     git.inputValue = 'NEWKEY'
 
-    // 1st call => POST create, 回傳建立好的帳號（username/avatar 由後端向 GitHub 查回）
+    // POST 回傳建立的帳號
     fetchSpy.mockResolvedValueOnce({ platform: 'github', username: 'octocat', avatar_url: 'a.png' })
 
     await saveKey(git)

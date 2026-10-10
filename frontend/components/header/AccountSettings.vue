@@ -10,7 +10,7 @@ const { isConnected: googleCalendarConnected, fetchGoogleCalendars } = useGoogle
 onMounted(fetchKeys);
 onMounted(fetchGoogleCalendars);
 
-// Google 授權是回到首頁之後才在背景完成的，完成時重新查一次，「已連接」標記才會更新
+// 授權在導回首頁後才於背景完成，完成時重新查詢連接狀態
 const { connectedCount: googleConnectedCount } = useGoogleCalendarAuth();
 watch(googleConnectedCount, fetchGoogleCalendars);
 
@@ -19,7 +19,6 @@ const toast = useToast();
 
 const copyKey = (platform: string, key: string, isMasked?: boolean) => {
   if (isMasked) {
-    // 防禦性檢查：遮罩過的值不是可用的明文，不該被複製
     toast.add({
       title: '此金鑰已隱藏，無法複製',
       description: '請重新輸入以更新金鑰',
@@ -44,13 +43,7 @@ const goToGoogleAuth = () => {
     client_id: GOOGLE_CLIENT_ID,
     redirect_uri: REDIRECT_URI,
     response_type: 'code',
-    // calendar.readonly 只夠列出行事曆／查 FreeBusy／讀事件——「確認排程並寫入
-    // Calendar」要真的新增事件（services/google_calendar_client.py 的 create_calendar_event，
-    // POST .../events），readonly 範圍下 Google 一律擋掉，回傳的錯誤被
-    // create_calendar_events_for_scheduled_tasks 接住變成「寫入 Google
-    // Calendar 失敗，請稍後再試」，看起來像伺服器出錯，其實是權限不夠。
-    // calendar.events 補上事件的新增/修改/刪除權限，讀的部分維持 readonly
-    // 就好，不用整個開放成 calendar 全權限。
+    // calendar.events 用來寫入排程事件；不需要完整的 calendar 權限
     scope: 'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/calendar.events',
     access_type: 'offline',
     prompt: 'consent',
@@ -78,13 +71,11 @@ const goToGoogleAuth = () => {
           :key="keyItem.platform"
           class="mb-6 border border-gray-200 dark:border-gray-700 rounded-lg p-4 bg-white dark:bg-gray-800"
         >
-          <!-- Title -->
           <div class="flex items-center gap-2 mb-3">
             <UIcon :name="keyItem.icon" class="w-5 h-5" />
             <span class="font-medium text-base">{{ keyItem.label }}</span>
           </div>
 
-          <!-- Linked Info -->
           <template v-if="keyItem.value && !keyItem.editing">
             <div class="flex items-center gap-2 mb-2">
               <UAvatar v-if="keyItem.avatar" :src="keyItem.avatar" size="sm" />
@@ -115,7 +106,6 @@ const goToGoogleAuth = () => {
             </div>
           </template>
 
-          <!-- Input Mode -->
           <template v-else>
             <div class="flex flex-col gap-2">
               <!-- Jira 需要 Domain -->
@@ -128,7 +118,6 @@ const goToGoogleAuth = () => {
                 :ui="{ base: 'w-full' }"
               />
 
-              <!-- api key -->
               <UInput
                 v-if="keyItem.platform != 'moodle'"
                 v-model="keyItem.inputValue"
@@ -154,7 +143,6 @@ const goToGoogleAuth = () => {
                 基於安全考量無法顯示原 API Key；留空即代表 API Key 維持不變
               </p>
 
-              <!-- account & password -->
               <UInput
                 v-if="keyItem.platform === 'moodle'"
                 v-model="keyItem.inputValue"

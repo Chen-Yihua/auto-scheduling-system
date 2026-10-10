@@ -24,8 +24,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/schedule", tags=["schedule"])
 
-# 產生排程建議時，把使用者看到的那一份存起來，確認時照這份寫入（見 confirm_schedule）。
-# 30 分鐘後過期——放太久，行事曆、任務都可能已經變了很多，不如請使用者重新產生
+# 使用者看到的排程建議快照，確認時照這份寫入；過期後請使用者重新產生
 SUGGESTION_SNAPSHOT_TTL_SECONDS = 30 * 60
 
 
@@ -35,10 +34,7 @@ def _suggestion_snapshot_key(user_id: str) -> str:
 
 @router.get("/tasks", response_model=list[SchedulableTaskOut])
 async def list_schedulable_tasks(clerk_user: dict = Depends(get_current_clerk_user)):
-    """
-    給前端「任務列表」用的統一清單：手動任務 + GitHub/Jira/Moodle 項目，
-    見 crud/schedulable_items.py 的 get_all_schedulable_items。
-    """
+    """手動任務和外部平台項目的統一清單。"""
     return await get_all_schedulable_items(clerk_user["sub"])
 
 
@@ -47,12 +43,7 @@ async def reorder_schedule_tasks(
     body: ScheduleReorderInput,
     clerk_user: dict = Depends(get_current_clerk_user),
 ):
-    """
-    使用者在排程精靈的拖拉排序畫面（低/中/高三欄，可跨欄拖動，可能混著手動
-    任務跟外部平台項目）完成排序後呼叫。priority 仍是排程時的主要依據，
-    這裡的順序只在同一個 priority 內決定誰先誰後（見 services/scheduler.py 的
-    build_schedule_suggestion）。
-    """
+    """儲存拖拉排序的結果（priority 和同 priority 內的順序）。"""
     items = [item.model_dump() for item in body.items]
     await reorder_schedulable_items(clerk_user["sub"], items)
     return await get_all_schedulable_items(clerk_user["sub"])
@@ -63,7 +54,7 @@ async def update_schedule_task_fields(
     body: ScheduleTaskFieldsUpdate,
     clerk_user: dict = Depends(get_current_clerk_user),
 ):
-    """排程精靈 step 2：調整單一項目的截止日期／所需時長。"""
+    """調整單一項目的截止日期和所需時長。"""
     data = body.model_dump(exclude={"task_id"}, exclude_none=True)
     if data:
         await update_scheduling_fields(clerk_user["sub"], body.task_id, data)
@@ -75,24 +66,17 @@ async def update_schedule_task_done(
     body: ScheduleTaskDoneUpdate,
     clerk_user: dict = Depends(get_current_clerk_user),
 ):
-    """使用者在 App 內手動標記完成／取消完成（見 crud/schedulable_items.py 的 set_done）。"""
+    """手動標記完成或取消完成。"""
     await set_done(clerk_user["sub"], body.task_id, body.done)
     return {"task_id": body.task_id, "done": body.done}
 
 
 async def _compute_suggestion(user_id: str, preferences: SchedulePreferences, error_detail: str) -> dict:
-    """
-    /schedule/suggest 跟 /schedule/confirm 共用的排程建議計算：抓可排程項目 +
-    Google Calendar 空檔，先套用使用者這一輪填的「不工作時段」把空檔挖掉，
-    再依 buffer_minutes／daily_max_minutes 把任務塞進剩下的空檔裡。
-    preferences 不會存資料庫，每次呼叫都要靠前端重新帶——見 SchedulePreferences。
-    """
+    """取得可排程項目和 Google Calendar 空檔，扣掉不工作時段後計算排程建議。"""
     tasks = await get_all_schedulable_items(user_id)
     free_slots = await get_free_slots_for_user(user_id)
 
-    # apply_blocked_periods／build_schedule_suggestion 本身是純計算、不會自己丟
-    # HTTPException，這裡包起來只是為了防萬一（例如未來資料格式跟這裡假設的
-    # 不一樣），讓使用者看到清楚的中文錯誤，而不是沒有說明的原始 500
+    # 資料格式不符預期時回明確的錯誤訊息，而不是沒有說明的 500
     try:
         free_slots = apply_blocked_periods(
             free_slots,
@@ -116,12 +100,7 @@ async def suggest_schedule(
     preferences: SchedulePreferences = SchedulePreferences(),
     clerk_user: dict = Depends(get_current_clerk_user),
 ):
-    """
-    規則式排程建議：抓使用者所有可排程項目（手動任務 + GitHub/Jira/Moodle）+
-    Google Calendar 未來 7 天空檔（先扣掉 preferences 裡的不工作時段），
-    依 priority／sort_order 排序後依序塞進空檔。不寫回 Google Calendar，
-    純粹回傳一份建議清單給前端顯示。
-    """
+    """產生排程建議，不寫入 Google Calendar。建議會存成快照供確認時使用。"""
     suggestion = await _compute_suggestion(clerk_user["sub"], preferences, "產生排程建議失敗，請稍後再試")
 
     snapshot = [
@@ -142,16 +121,11 @@ async def confirm_schedule(
     clerk_user: dict = Depends(get_current_clerk_user),
 ):
     """
-    使用者確認排程建議、要正式寫進 Google Calendar 時呼叫。
+    把使用者看到的排程建議寫入 Google Calendar。
 
-    寫入的是使用者在畫面上看到、按下確認的那一份——產生建議時存在快取裡的快照
-    （見 suggest_schedule），不重新計算：重新計算的話，看到建議之後才新增的任務
-    會被直接寫進行事曆，時間也可能跟畫面上不一樣。快照存在後端，前端只送「確認」
-    這個動作，沒辦法竄改要寫入的任務或時間。
-
-    寫入前用此刻的任務跟行事曆逐筆檢查（check_suggestion_still_valid）：任務已經
-    完成／刪除、時段已經過了或被新行程占用的，不寫入、列進 failed 說明原因，其餘照寫。
-    寫入成功的任務會標記為已鎖定，之後排程建議跟拖拉排序精靈都不會再動到它們。
+    寫入的是後端存的快照，不重新計算：否則之後新增的任務也會被寫入，時間也可能
+    和畫面不同；快照存在後端也讓前端無法竄改內容。
+    寫入前逐筆檢查，已失效的項目列入 failed 並說明原因，其餘照寫。
     """
     user_id = clerk_user["sub"]
     snapshot_key = _suggestion_snapshot_key(user_id)

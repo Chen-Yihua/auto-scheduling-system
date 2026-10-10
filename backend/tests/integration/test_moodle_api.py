@@ -1,6 +1,4 @@
-# 透過 HTTP 測試 /moodle 這組 API：路由有註冊、登入驗證有掛上、
-# 回傳的 JSON 格式（response_model）跟 header 真的送得出去。
-# 爬蟲、快取、fallback 等細節由 test_moodle_crud.py、test_moodle_router.py 負責，這裡不重複測。
+# 透過 HTTP 確認路由、登入驗證、回應格式和錯誤狀態碼；細部邏輯由 unit 測試負責
 from datetime import datetime, timezone
 
 import pytest
@@ -39,7 +37,7 @@ class EmptyLinkedAccounts:
 
 @pytest.mark.asyncio
 async def test_get_moodle_assignments(monkeypatch, logged_in_user):
-    """GET /moodle/assignments 成功 → 200，回傳作業清單，並帶 X-Data-Stale（是否為舊資料）和 X-Synced-At（同步時間）標頭。"""
+    """GET /moodle/assignments 成功 → 200，回傳作業清單並帶 X-Data-Stale、X-Synced-At。"""
     assignments = [
         {
             "id": "https://moodle.nccu.edu.tw/mod/assign/view.php?id=1",
@@ -61,8 +59,7 @@ async def test_get_moodle_assignments(monkeypatch, logged_in_user):
         res = await ac.get("/moodle/assignments")
 
     assert res.status_code == status.HTTP_200_OK
-    # 排程相關欄位（priority/duration/scheduling_due_date/sort_order/calendar_event_id/done）
-    # 是 MoodleAssignment response_model 加上的，沒同步回來的原始資料一律是預設值，這裡不重複列
+    # 排程欄位都是預設值，不列出
     body = res.json()
     assert len(body) == 1
     for key, value in assignments[0].items():

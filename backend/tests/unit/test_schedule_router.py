@@ -84,8 +84,7 @@ async def test_suggest_schedule_returns_clean_500_when_build_suggestion_fails(mo
 
 @pytest.mark.asyncio
 async def test_suggest_schedule_returns_clean_500_when_apply_blocked_periods_fails(monkeypatch):
-    """套用不工作時段這一步意外出錯，也要回清楚的中文 500，不是沒接住的原始例外
-    ——這一步以前沒被包進 try/except，曾經是真的會讓使用者看到沒有說明的 500。"""
+    """套用不工作時段出錯 → 回有說明的 500。"""
     async def mock_get_tasks(user_id):
         return [{"id": "t1", "title": "任務一", "priority": "High", "status": "To Do", "due_date": None}]
 
@@ -107,9 +106,7 @@ async def test_suggest_schedule_returns_clean_500_when_apply_blocked_periods_fai
 
 @pytest.mark.asyncio
 async def test_suggest_schedule_passes_preferences_through_to_blocking_and_build(monkeypatch):
-    """preferences 的 buffer_minutes／daily_max_minutes 要原封不動轉給 build_schedule_suggestion，
-    blocked_recurring／blocked_exceptions 要轉成 dict 交給 apply_blocked_periods，
-    使用者的時區兩邊都要拿到（不工作時段、每日上限都是用當地時間算的）。"""
+    """preferences 的各欄位和時區要正確傳給 apply_blocked_periods 和 build_schedule_suggestion。"""
     async def mock_get_tasks(user_id):
         return [{"id": "t1", "title": "任務一", "priority": "High", "status": "To Do", "due_date": None}]
 
@@ -194,9 +191,10 @@ async def test_suggest_schedule_saves_what_the_user_sees_as_a_snapshot(monkeypat
 
 @pytest.mark.asyncio
 async def test_confirm_schedule_writes_the_snapshot_without_recomputing(monkeypatch, clean_snapshot):
-    """確認時寫入的是使用者看到的那份快照，不重新計算——看到建議之後才新增的任務
-    不會被寫進去，時間也跟畫面上一樣。寫入前要用「此刻」的行事曆檢查（不用快取），
-    確認完快照就刪掉，同一份建議不能確認兩次。"""
+    """
+    確認時寫入快照，不重新計算；檢查時不用快取的行事曆；
+    確認後刪除快照，同一份建議不能確認兩次。
+    """
     await cache_set(
         schedule_router._suggestion_snapshot_key(mock_user["sub"]),
         [_snapshot_item("manual:t1", "任務一", "2030-01-01T09:00:00+00:00", "2030-01-01T10:00:00+00:00")],
@@ -240,8 +238,7 @@ async def test_confirm_schedule_writes_the_snapshot_without_recomputing(monkeypa
 
 @pytest.mark.asyncio
 async def test_confirm_schedule_reports_items_that_can_no_longer_be_written(monkeypatch, clean_snapshot):
-    """快照裡有一筆的時段已經被新行程占用 → 不寫入、列進 failed 說明原因，其餘照寫；
-    寫入 Google Calendar 本身失敗的也一起回報。"""
+    """時段已被占用的項目列入 failed，其餘照寫；寫入失敗的也一併回報。"""
     await cache_set(
         schedule_router._suggestion_snapshot_key(mock_user["sub"]),
         [
@@ -281,8 +278,7 @@ async def test_confirm_schedule_reports_items_that_can_no_longer_be_written(monk
 
 @pytest.mark.asyncio
 async def test_confirm_schedule_returns_409_when_suggestion_expired(monkeypatch, clean_snapshot):
-    """沒有快照（超過 30 分鐘過期、或已經確認過一次）→ 409，請使用者重新產生，
-    不能什麼都不寫卻回成功。"""
+    """沒有快照（已過期或已確認）→ 409。"""
     async def fail(*args, **kwargs):
         raise AssertionError("沒有快照就不該往下做")
 

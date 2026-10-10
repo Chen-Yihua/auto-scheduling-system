@@ -43,14 +43,11 @@ class ScheduleConfirmResult(BaseModel):
 
 
 class SchedulableTaskOut(BaseModel):
-    """手動任務／GitHub issue／Jira issue／Moodle 作業統一後的格式，給前端的
-    任務列表、排程精靈用。id 是加了來源前綴的組合 id
-    （見 crud/schedulable_items.py），status 是 "To Do"／"In Progress"／"Done"
-    （外部平台項目只會是前後兩者其中之一，手動任務三種都可能）。"""
+    """手動任務和外部平台項目統一後的格式。id 是帶來源前綴的組合 id，例如 "github:42"。"""
     id: str
     source: str
     title: str
-    # 只有手動任務有值——外部平台項目沒有對應欄位，前端顯示時這裡會是 None
+    # 只有手動任務有值
     description: Optional[str] = None
     status: str
     priority: Optional[PriorityEnum] = None
@@ -62,39 +59,36 @@ class SchedulableTaskOut(BaseModel):
 
 
 class ScheduleReorderItem(BaseModel):
-    task_id: str  # 組合 id，例如 "manual:abc123"／"github:42"
+    task_id: str  # 組合 id
     priority: PriorityEnum
 
 
 class ScheduleReorderInput(BaseModel):
-    # 使用者拖拉排序（三欄：低/中/高，可跨欄拖動，可能混著手動任務跟外部平台
-    # 項目）後的最終結果，依序列出。每筆的索引就是它的 sort_order（0 開始）；
-    # 不同來源、不同 priority 的項目混在同一個 list 裡沒關係，sort_order 只在
-    # 同一個 priority 內比較，見 services/scheduler.py
+    # 拖拉排序後的結果，索引即 sort_order；sort_order 只在同 priority 內比較
     items: list[ScheduleReorderItem]
 
 
 class ScheduleTaskFieldsUpdate(BaseModel):
-    """排程精靈 step 2：使用者可以調整的欄位，留空就交給 LLM／保留原值。
-    task_id 故意放在 body 而不是路徑參數——Moodle 的組合 id 是完整網址，
-    本身就帶斜線和問號，直接放進 URL 路徑會被誤判成路徑分隔或查詢字串，
-    放 body 完全不用處理任何 URL escape 問題。"""
+    """
+    排程精靈中可調整的欄位，留空則保留原值。
+    task_id 放 body 而不是路徑：Moodle 的 id 是含斜線和問號的網址。
+    """
     task_id: str
     due_date: Optional[datetime] = None
     duration: Optional[int] = None
 
 
 class ScheduleTaskDoneUpdate(BaseModel):
-    """理由同 ScheduleTaskFieldsUpdate，task_id 放 body。"""
+    """task_id 放 body 的原因同 ScheduleTaskFieldsUpdate。"""
     task_id: str
     done: bool
 
 
 class BlockedRecurringRule(BaseModel):
-    """每週固定不工作時段，例如「每天 22:00-08:00」「週六、週日全天」。
-    days_of_week 用 Python datetime.weekday() 的編號：0=一...6=日。
-    all_day 為 True 時忽略 start_time/end_time；start_time/end_time 是
-    "HH:MM" 字串，end_time <= start_time 視為跨過午夜（例如 22:00-08:00）。"""
+    """
+    每週固定的不工作時段。days_of_week 是 weekday() 編號（0=週一）。
+    all_day 時忽略起訖時間；end_time <= start_time 視為跨午夜。
+    """
     days_of_week: list[int]
     all_day: bool = False
     start_time: Optional[str] = None
@@ -102,23 +96,18 @@ class BlockedRecurringRule(BaseModel):
 
 
 class BlockedException(BaseModel):
-    """這一輪排程額外加的一次性不工作時段，只影響這次的排程建議。"""
+    """一次性的不工作時段。"""
     start: datetime
     end: datetime
 
 
 class SchedulePreferences(BaseModel):
-    """使用者在排程精靈裡當場填的排程偏好，不會存進資料庫、只影響這一次
-    /schedule/suggest、/schedule/confirm 的計算結果（見 AskUserQuestion
-    紀錄：使用者選擇「每次精靈重新選」，不做成長期個人設定）。"""
+    """排程精靈中填的偏好，不存進資料庫，只影響這一次的計算。"""
     blocked_recurring: list[BlockedRecurringRule] = []
     blocked_exceptions: list[BlockedException] = []
     buffer_minutes: int = 0
     daily_max_minutes: Optional[int] = None
-    # 使用者所在的 IANA 時區（例如 "Asia/Taipei"），由前端瀏覽器提供。
-    # 「每天 22:00-08:00 不工作」的 22:00、每日上限的「一天」都是使用者當地的
-    # 時間，要先換算才能跟 Google Calendar 回來的 UTC 空檔比較——不換算的話，
-    # 台灣使用者設定的 22:00-08:00 會變成擋掉台灣時間 06:00-16:00
+    # 瀏覽器提供的 IANA 時區；不工作時段和每日上限都以當地時間計算
     timezone: str = "UTC"
 
     @field_validator("timezone")

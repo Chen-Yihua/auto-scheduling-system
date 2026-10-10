@@ -12,9 +12,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/manual-tasks", tags=["manual-tasks"])
 
-# 建立任務
-# 沒填 priority/duration 時會呼叫 Gemini（見 services/task_inference.py），
-# 限流避免有人（或壞掉的前端迴圈）連續狂建任務，把 LLM 額度燒光
+# 沒填 priority/duration 時會呼叫 Gemini，限流避免 LLM 額度被燒光
 @router.post("/", response_model=ManualTaskOut, status_code=201)
 @limiter.limit("20/minute")
 async def create_manual_task(
@@ -22,10 +20,7 @@ async def create_manual_task(
     taskInput: ManualTaskInput,
     clerk_user: dict = Depends(get_current_clerk_user)
 ):
-    """
-    建立新的任務（需驗證 JWT）。
-    使用者沒填 priority／duration（不確定）時，用 LLM 從 title/description 推斷。
-    """
+    """建立任務。沒填 priority/duration 時用 LLM 從 title/description 推斷。"""
     task_data = taskInput.model_dump()
     inferred_fields = []
     inference_reason = None
@@ -45,8 +40,8 @@ async def create_manual_task(
     now = datetime.now(timezone.utc)
     task = ManualTaskOut(
         **task_data,
-        id=str(uuid4()), # 隨機產生id
-        user_id=clerk_user["sub"], # 一律用登入者本人的 id，不接受 client 指定
+        id=str(uuid4()),
+        user_id=clerk_user["sub"],  # 不接受 client 指定
         created=now,
         updated=now,
         inferred_fields=inferred_fields,
@@ -57,59 +52,44 @@ async def create_manual_task(
     new_task = await manual_task_crud.create_manual_task(task)
     return new_task
 
-# 查詢 user 所有任務
 @router.get("/me", response_model=list[ManualTaskOut])
 async def get_user_tasks(
     clerk_user: dict = Depends(get_current_clerk_user)
 ):
-    """
-    取得目前登入者的所有任務（需驗證 JWT）。
-    沒有任何任務是正常狀態（例如新使用者、或剛好清空清單），回空陣列，不是 404——
-    404 代表資源路徑不存在，這裡的路徑本身一直都存在，只是內容剛好是空的。
-    """
+    """取得目前登入者的所有任務。沒有任務時回空陣列，不是 404。"""
     tasks = await manual_task_crud.get_manual_tasks_by_user_id(clerk_user["sub"])
     return tasks
 
-# 查詢指定任務
 @router.get("/{task_id}", response_model=ManualTaskOut)
 async def get_manual_task(
     task_id: str,
     clerk_user: dict = Depends(get_current_clerk_user)
 ):
-    """
-    取得指定的任務（需驗證 JWT）
-    """
-    return await manual_task_crud.get_manual_task_by_id(task_id, clerk_user["sub"]) # 只能查自己的task；查無此任務由 crud 直接 raise 404
+    """取得指定的任務，只能查自己的。"""
+    return await manual_task_crud.get_manual_task_by_id(task_id, clerk_user["sub"])
 
-# 更新任務
 @router.put("/{task_id}", response_model=ManualTaskOut)
 async def update_manual_task(
     task_id: str,
     taskInput: ManualTaskUpdate,
     clerk_user: dict = Depends(get_current_clerk_user)
 ):
-    """
-    更新指定的任務（需驗證 JWT）
-    """
-    task = await manual_task_crud.get_manual_task_by_id(task_id, clerk_user["sub"]) # 只能查自己的task；查無此任務由 crud 直接 raise 404
+    """更新指定的任務，只能改自己的。"""
+    task = await manual_task_crud.get_manual_task_by_id(task_id, clerk_user["sub"])
     now = datetime.now(timezone.utc)
     task.update({"updated": now})
-    # exclude_none：priority/duration 現在允許留空，若這次更新沒帶，
-    # 保留原本的值，不要被 None 覆蓋掉
+    # exclude_none：沒帶的欄位保留原值，不被 None 覆蓋
     task.update(taskInput.model_dump(exclude_none=True))
 
     updated_task = await manual_task_crud.update_manual_task_by_id(task_id, task)
     return updated_task
 
-# 刪除任務
 @router.delete("/{task_id}")
 async def delete_manual_task(
     task_id: str,
     clerk_user: dict = Depends(get_current_clerk_user)
 ):
-    """
-    刪除指定的任務（需驗證 JWT）
-    """
-    await manual_task_crud.get_manual_task_by_id(task_id, clerk_user["sub"]) # 只能刪自己的task；查無此任務由 crud 直接 raise 404
+    """刪除指定的任務，只能刪自己的。"""
+    await manual_task_crud.get_manual_task_by_id(task_id, clerk_user["sub"])  # 確認是自己的任務，不存在會 404
     await manual_task_crud.delete_manual_task_by_id(task_id)
     return {"task ID": task_id,"deleted": True}

@@ -44,8 +44,7 @@ const UCardStub = defineComponent({
   },
 })
 
-// 跟 UCard 一樣，auto-stub（true）不會渲染 slot 內容，這裡的測試要看得到按鈕文字
-// （「產生排程建議」／「重新產生」）並且能真的觸發點擊，所以用會渲染 slot 的假元件
+// 預設 stub 不渲染 slot，要看到按鈕文字並觸發點擊，所以用假元件
 const UButtonStub = defineComponent({
   name: 'UButton',
   setup(_props, { slots, attrs }) {
@@ -89,8 +88,7 @@ describe('ScheduleSuggestion.vue', () => {
     await wrapper.findComponent({ name: 'UButton' }).trigger('click')
 
     expect(pushSpy).toHaveBeenCalledWith('/schedule')
-    // 精靈自己會在完成排程精靈後才呼叫 fetchScheduleSuggestion，
-    // 按下「產生排程建議」這個當下還不會直接觸發
+    // 精靈完成後才會產生建議，按下按鈕當下不會
     expect(fetchSpy).not.toHaveBeenCalled()
   })
 

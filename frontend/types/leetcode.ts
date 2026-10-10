@@ -1,4 +1,3 @@
-// types/leetcode.ts
 export interface DailyChallengeResponse {
     data: {
       activeDailyCodingChallengeQuestion: {
@@ -17,5 +16,5 @@ export interface DailyChallengeResponse {
     };
   }
 
-// GET /api/leetcode 回傳的內容（每日一題本身，不含外層的 data）
+// GET /api/leetcode 的回傳內容
 export type DailyChallenge = DailyChallengeResponse['data']['activeDailyCodingChallengeQuestion']

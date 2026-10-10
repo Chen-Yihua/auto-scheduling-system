@@ -1,6 +1,4 @@
-# 透過 HTTP 測試 /jira 這組 API：路由有註冊、登入驗證有掛上、
-# 回傳的 JSON 格式（response_model）跟錯誤狀態碼真的送得出去。
-# 各種錯誤分支（503/500/401、header）由 test_jira_router.py 負責，這裡不重複測。
+# 透過 HTTP 確認路由、登入驗證、回應格式和錯誤狀態碼；細部邏輯由 unit 測試負責
 import pytest
 from fastapi import status
 from httpx import AsyncClient
@@ -52,8 +50,7 @@ async def test_get_jira_issues(monkeypatch, logged_in_user):
         res = await ac.get("/jira/issues")
 
     assert res.status_code == status.HTTP_200_OK
-    # 排程相關欄位（priority/duration/scheduling_due_date/sort_order/calendar_event_id/done）
-    # 是 JiraIssue response_model 加上的，沒同步回來的原始資料一律是預設值，這裡不重複列
+    # 排程欄位都是預設值，不列出
     body = res.json()
     assert len(body) == 1
     assert body[0]["id"] == issue["id"]

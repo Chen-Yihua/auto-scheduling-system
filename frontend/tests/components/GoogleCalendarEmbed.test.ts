@@ -3,8 +3,7 @@ import { mount } from '@vue/test-utils'
 import { defineComponent, h } from 'vue'
 import GoogleCalendarEmbed from '~/components/dashboard/GoogleCalendarEmbed.vue'
 
-// UCard 的預設 auto-stub（`true`）不會渲染 slot 內容，這裡改用會渲染
-// header/default slot 的 stub，元件整個區塊現在都包在 UCard 裡
+// UCard 預設的 stub 不渲染 slot，改用會渲染 slot 的假元件
 const UCardStub = defineComponent({
   name: 'UCard',
   setup(_, { slots }) {
@@ -64,8 +63,7 @@ describe('GoogleCalendarEmbed.vue', () => {
     await wrapper.setProps({ reloadToken: 2 })
 
     expect(wrapper.find('iframe').attributes('src')).toContain('_r=2')
-    // :key 改變 → Vue 整個重新建立這個 DOM 節點，不是同一個 iframe 元素
-    // 沿用舊的（沿用的話瀏覽器可能不會真的重新請求）
+    // key 改變要建立新的 iframe 元素，瀏覽器才會重新請求
     expect(wrapper.find('iframe').element).not.toBe(firstIframe)
   })
 })

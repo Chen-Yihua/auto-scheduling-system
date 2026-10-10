@@ -23,7 +23,7 @@ def _fake_request(headers: dict, client_host: str = "1.2.3.4"):
 
 
 def test_rate_limit_key_uses_hashed_authorization_header_when_present():
-    """有 Authorization header 時，限流用的 key 是 token 的雜湊（user:...），不能把明文 token 放進 key。"""
+    """有 Authorization header 時，限流 key 是 token 的雜湊，不含明文 token。"""
     req = _fake_request({"Authorization": "Bearer abc123"})
     key = rate_limit_key(req)
 

@@ -1,9 +1,4 @@
-"""
-routers/google_calendar.py 的 router 層測試：直接呼叫 router 函式（/status、/calendars、
-/callback），驗證各種錯誤分支回什麼狀態碼，包含 httpx.RequestError→502。
-不經過 HTTP，路由註冊、登入驗證、JSON 格式由 integration/test_google_calendar_api.py 負責；
-token 存取由 test_google_tokens.py、行事曆操作由 test_google_calendar_service.py 負責。
-"""
+"""直接呼叫 routers/google_calendar.py 的函式，測試各錯誤分支的狀態碼。"""
 import logging
 
 import pytest
@@ -50,8 +45,7 @@ async def test_status_returns_connected_false(monkeypatch):
 
 
 # ---------- /calendars ----------
-# token 過期自動換新、Google 回錯誤或連不上的分支，在共用的 services/google_calendar.py，
-# 由 test_google_calendar_service.py 負責
+# token 換新和錯誤分支在 test_google_calendar_service.py
 
 @pytest.mark.asyncio
 async def test_get_calendars_returns_items(monkeypatch):
@@ -71,7 +65,7 @@ async def test_get_calendars_returns_items(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_oauth_callback_happy_path_saves_token(monkeypatch):
-    """/oauth/callback：用授權碼跟 Google 換 token 成功 → 把 access / refresh token 存進資料庫，回「授權成功」。"""
+    """/oauth/callback 換 token 成功 → 存入 token，回「授權成功」。"""
     saved = {}
 
     class MockResponse:

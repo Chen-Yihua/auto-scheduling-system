@@ -20,7 +20,7 @@ const clerkUser = {
   fullName: '王小明',
 }
 
-// 假的 fetch 回應：原生 fetch 遇到 4xx / 5xx 不會丟例外，只會把狀態放在 ok / status
+// 原生 fetch 遇到 4xx/5xx 不會丟例外
 const response = (status: number) => ({ ok: status >= 200 && status < 300, status }) as Response
 
 // 依序回覆：第一次是 GET /users/me，第二次是 POST /users/

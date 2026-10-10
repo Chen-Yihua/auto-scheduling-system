@@ -35,9 +35,7 @@ export interface ScheduleConfirmResult {
   failed: FailedConfirmation[]
 }
 
-// 每週固定不工作時段，例如「每天 22:00-08:00」「週六、週日全天」。
-// days_of_week 跟後端 Python datetime.weekday() 對齊：0=一...6=日。
-// all_day 為 true 時 start_time/end_time 不需要值。
+// days_of_week：0=週一 ... 6=週日，和後端 weekday() 一致
 export interface BlockedRecurringRule {
   days_of_week: number[]
   all_day: boolean
@@ -45,22 +43,18 @@ export interface BlockedRecurringRule {
   end_time: string | null
 }
 
-// 這次排程期間內額外加的一次性不工作時段，只影響這一輪排程建議
 export interface BlockedException {
   start: string // ISO
   end: string
 }
 
-// 使用者在排程精靈裡當場填的排程偏好，不存資料庫、每次都要重新帶給後端
-// （見 AskUserQuestion 紀錄：使用者選擇「每次精靈重新選」）
+// 不存資料庫，每次請求都要帶
 export interface SchedulePreferences {
   blocked_recurring: BlockedRecurringRule[]
   blocked_exceptions: BlockedException[]
   buffer_minutes: number
   daily_max_minutes: number | null
-  // 使用者所在的 IANA 時區（例如 "Asia/Taipei"）。上面的 "22:00" 這類時間、
-  // 每日上限的「一天」都是當地時間，後端要靠這個換算成 UTC 才能跟
-  // Google Calendar 的空檔比較
+  // IANA 時區，後端用來把當地時間換算成 UTC
   timezone: string
 }
 

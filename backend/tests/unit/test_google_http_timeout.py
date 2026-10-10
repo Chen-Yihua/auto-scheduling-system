@@ -1,14 +1,4 @@
-"""
-呼叫 Google 的逾時時間。
-
-httpx 預設只等 5 秒（連線階段包含 DNS 查詢）。在 DNS 偶爾卡住 5 秒的網路環境，
-第一次呼叫剛好逾時、回 502，下一次 DNS 有快取又成功——使用者看到的就是
-「授權完先跳失敗、過幾秒又連成功」。所以每個會呼叫 Google 的地方都要放寬逾時，
-這裡對每一個呼叫點各驗一次，避免以後有人改回預設值。
-
-用 httpx.MockTransport 讓真正的 httpx.AsyncClient 建立起來（才拿得到它實際用的
-timeout 設定），只是不會真的連上 Google。
-"""
+"""每個呼叫 Google 的地方都要用放寬後的逾時，而不是 httpx 預設的 5 秒。"""
 import json
 
 import httpx

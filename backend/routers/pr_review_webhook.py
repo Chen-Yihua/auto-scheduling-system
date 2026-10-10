@@ -17,23 +17,19 @@ router = APIRouter()
 
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
-# PR 摘要用的 webhook（貼在 open PR 的當下）、merge 到 main 通知用的 webhook，
-# 兩組都不該寫死在程式碼裡——沒設定就直接跳過發送，不影響其餘邏輯。
+# 沒設定就略過對應的 Discord 通知
 DISCORD_WEBHOOK_URL = os.getenv("DISCORD_MR_WEBHOOK_URL")
 MAIN_WEBHOOK_URL = os.getenv("DISCORD_MAIN_WEBHOOK_URL")
 
-# 呼叫 GitHub REST API（讀 PR 變更檔案、貼留言）用的機器人帳號 token，
-# 跟使用者自己連結 GitHub 帳號用的 apiKey（crud/linked_account.py）是不同東西，
-# 這個是伺服器自己的、專門給這支 bot 用的 token。
+# bot 自己的 token，用來讀 PR 變更檔案和貼留言；跟使用者連結的 GitHub apiKey 無關
 GITHUB_BOT_TOKEN = os.getenv("GITHUB_BOT_TOKEN")
 
-# GitHub 呼叫 webhook 時會用這組密鑰對整個 request body 做 HMAC-SHA256 簽章，
-# 簽章結果放在 X-Hub-Signature-256 header，用來確認請求真的是 GitHub 發的。
+# 驗證 X-Hub-Signature-256（request body 的 HMAC-SHA256），確認請求來自 GitHub
 GITHUB_WEBHOOK_SECRET = os.getenv("GITHUB_WEBHOOK_SECRET")
 
 LLM_TIMEOUT_MS = 30_000
 
-# Discord embed 的長度上限：超過的話 Discord 會整筆拒收（回 400），不是自動截斷
+# Discord embed 長度上限：超過會整筆被拒收（400），不會自動截斷
 DISCORD_DESCRIPTION_LIMIT = 4096
 DISCORD_FIELD_LIMIT = 1024
 DISCORD_TIMEOUT_SECONDS = 10
@@ -45,10 +41,7 @@ def _truncate(text: str, limit: int) -> str:
 
 
 async def _send_discord(url: str, message: dict) -> None:
-    """
-    Discord 通知只是附加功能，失敗不影響 webhook 其餘流程，但一定要留下 log——
-    之前沒檢查回應，Discord 回 400 時會完全無聲地失敗。
-    """
+    """發送失敗只記 log，不影響 webhook 其餘流程。"""
     try:
         async with httpx.AsyncClient(timeout=DISCORD_TIMEOUT_SECONDS) as http:
             res = await http.post(url, json=message)
@@ -58,10 +51,7 @@ async def _send_discord(url: str, message: dict) -> None:
 
 
 def _verify_github_signature(raw_body: bytes, signature: str | None) -> None:
-    """
-    沒設定密鑰就直接全部拒絕——避免忘記設定時，變成完全沒有保護。
-    用 hmac.compare_digest 而不是 == 比對，避免 timing attack。
-    """
+    """沒設定密鑰時一律拒絕，避免漏設時完全沒有保護；用 compare_digest 防 timing attack。"""
     if not GITHUB_WEBHOOK_SECRET or not signature:
         raise HTTPException(status_code=401, detail="Invalid webhook signature")
 
@@ -72,8 +62,7 @@ def _verify_github_signature(raw_body: bytes, signature: str | None) -> None:
         raise HTTPException(status_code=401, detail="Invalid webhook signature")
 
 
-# 簽章驗證擋掉了非 GitHub 的請求，但簽章正確的請求短時間內狂送還是會一直觸發
-# Gemini 呼叫，這裡再加一層頻率限制當第二道防線
+# 簽章正確的請求大量送來仍會一直呼叫 Gemini，所以再加限流
 @router.post("/webhook")
 @limiter.limit("30/minute")
 async def github_webhook(
@@ -86,7 +75,7 @@ async def github_webhook(
     payload = json.loads(raw_body)
 
     if x_github_event != "pull_request":
-        # 不是 PR 事件（例如 GitHub 設定 webhook 當下送的 ping）就不用處理
+        # 例如設定 webhook 時 GitHub 送的 ping
         return {"status": "ok"}
 
     pr = payload["pull_request"]
@@ -132,10 +121,9 @@ async def github_webhook(
             )
             if not response.text:
                 raise ValueError("Gemini 回傳空內容")
-            # 用 ReviewSummary 再驗證一次：少了 summary、欄位型別不對都會在這裡拋例外
             summary = ReviewSummary.model_validate_json(response.text)
         except Exception:
-            # 例外細節（可能含內部路徑、API 回應內容）只寫進 log，絕不貼到公開的 PR 留言
+            # 例外細節只寫進 log，不能出現在公開的 PR 留言
             logger.exception("Gemini PR summary generation failed for repo=%s pr_number=%s", repo, pr_number)
 
         if summary is None:
@@ -155,7 +143,7 @@ async def github_webhook(
 {summary.refactor or '（無）'}
             """
 
-            # Discord 發送失敗只影響 Discord 通知，不能連帶讓 PR 留言變成「摘要產生失敗」
+            # Discord 失敗不能讓 PR 留言變成「摘要產生失敗」
             if DISCORD_WEBHOOK_URL:
                 embed = {
                     "title": f"Pull Request #{pr_number} 摘要",

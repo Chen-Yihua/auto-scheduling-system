@@ -1,4 +1,3 @@
-// server/api/leetcode.get.ts
 import type { DailyChallengeResponse } from '~/types/leetcode'
 
 export default defineEventHandler(async () => {

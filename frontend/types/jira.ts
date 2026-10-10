@@ -1,5 +1,4 @@
-// 對應後端 schemas/jira.py 的 JiraIssue——後端已經把 Jira 原始 API 的巢狀結構
-// 拉平成單層，這裡每個欄位後端都保證會給字串（抓不到就是空字串），不是 optional
+// 對應後端 JiraIssue；每個欄位都保證有值（抓不到是空字串）
 export interface JiraIssue {
     id: string
     key: string

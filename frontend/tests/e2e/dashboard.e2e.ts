@@ -1,8 +1,4 @@
-//
-// 真的 E2E 測試：起一個真的 Nuxt server、用真的（headless）瀏覽器去操作，
-// 跟 tests/utils|components 底下那些用 jsdom + mock 掉 composable 的測試不是同一類。
-// 用 `npm run test:e2e` 單獨跑（見 vitest.e2e.config.ts），不含在預設的
-// `npm run test` 裡，因為這裡會真的 build/啟動一次 Nuxt app，比一般測試慢很多。
+// 啟動 Nuxt server 並用 headless 瀏覽器操作，用 npm run test:e2e 執行
 import { fileURLToPath } from 'node:url'
 import { describe, it, expect } from 'vitest'
 import { setup, createPage, url } from '@nuxt/test-utils/e2e'
@@ -14,21 +10,11 @@ await setup({
   browser: true,
 })
 
-// 登入後的流程需要一個真的存在於 Clerk 測試環境裡的使用者——只有在維護者的 Clerk
-// dashboard 建立測試使用者、並把它的 email 存成 E2E_CLERK_TEST_EMAIL 這個 secret 之後才會有值。
-// 本機開發或是 fork 出去的 PR（GitHub Actions 不會把 secrets 帶給 fork 的 PR）
-// 沒有這個變數時，跳過這個測試，而不是讓整個 E2E 測試都紅掉。
-//
-// 用 email 登入（由後端用 secret key 發一張一次性的 sign-in ticket），不走密碼：
-// clerk.signIn 的 password 模式不會檢查登入有沒有真的成功，遇到「新裝置驗證」或
-// 「二階段驗證」時不會報錯、只是悄悄沒登入，最後只看到 waitForSelector 逾時，
-// 完全看不出原因。ticket 模式沒登入成功會直接丟出清楚的錯誤。
+// 需要 Clerk 測試環境的使用者（E2E_CLERK_TEST_EMAIL）；沒設定時（本機、fork 的 PR）跳過。
+// 用 sign-in ticket 而不是密碼：密碼模式遇到額外驗證時會悄悄失敗，ticket 模式會直接報錯。
 const hasClerkTestUser = !!process.env.E2E_CLERK_TEST_EMAIL
 
-// 金鑰設定錯誤（沒設定、公開/私密金鑰環境不同、用了正式金鑰）時，Clerk 只會報一個很籠統的
-// 「infinite redirect loop」；這裡先檢查能檢查的部分，直接指出問題出在哪個 secret。
-// 「兩把都是 test、但來自不同 Clerk 專案」沒辦法在這裡看出來，那種情況 clerk.signIn 會
-// 因為找不到使用者或 ticket 無效而丟出錯誤。
+// 金鑰設定錯誤時 Clerk 只會報 infinite redirect loop，所以先檢查並指出是哪個 secret 有問題
 function assertClerkKeysLookRight(publishableKey?: string, secretKey?: string) {
   if (!publishableKey) {
     throw new Error('沒有設定 NUXT_PUBLIC_CLERK_PUBLISHABLE_KEY（檢查 GitHub secrets 的名稱和值）')
@@ -49,9 +35,7 @@ function assertClerkKeysLookRight(publishableKey?: string, secretKey?: string) {
   console.info(`[e2e] 使用的 Clerk 專案：${domain}`)
 }
 
-// 登入後頁面卡住時，把「能安全印出來」的狀態印到 log，下次失敗才看得出卡在哪一步。
-// 只印 cookie 的名稱和網址的路徑，不印 cookie 值和網址參數（裡面會有 token），
-// 避免把憑證洩漏到公開的 CI log。
+// 除錯用；只印 cookie 名稱和網址路徑，避免 token 出現在公開的 CI log
 async function printPostSignInDiagnostics(page: Page, redirects: string[]) {
   type ClerkInBrowser = { loaded?: boolean; user?: unknown; session?: unknown }
   const clerkState = await page
@@ -79,8 +63,7 @@ describe('Dashboard（真實瀏覽器 E2E）', () => {
 
     const bodyText = await page.textContent('body')
     expect(bodyText).toContain('登入後即可查看 Google 行事曆')
-    // 「新增任務」按鈕訪客也看得到（位置跟登入後一樣），只是不能按
-    // aria-label／disabled 都是真的 HTML 屬性，可以直接用來找
+    // 訪客也看得到「新增任務」按鈕，但是 disabled
     expect(await page.locator('button[aria-label="新增任務"][disabled]').count()).toBe(1)
 
     await page.close()
@@ -111,10 +94,8 @@ describe('Dashboard（真實瀏覽器 E2E）', () => {
 
       await page.goto(url('/'))
       try {
-        // 找的是真實網頁上的按鈕（aria-label）。不能用 [icon="..."] 這種屬性選擇器：
-        // icon 是 Nuxt UI 元件的 prop，只會畫成圖示，不會出現在網頁的 HTML 屬性上
-        // （單元測試把元件換成假元件，假元件才會把 prop 印成屬性，兩邊行為不一樣）
-        // 訪客也看得到這顆按鈕（disabled），所以要等到它「可以按」才代表登入完成
+        // 用 aria-label 找：icon 是元件 prop，不會出現在 HTML 屬性上
+        // 按鈕變成可按才代表登入完成
         await page.waitForSelector('button[aria-label="新增任務"]:not([disabled])', { timeout: 30_000 })
       } catch (error) {
         await printPostSignInDiagnostics(page, redirects)

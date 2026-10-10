@@ -5,40 +5,29 @@ import { createSharedComposable } from '@vueuse/core'
 import type { Task } from '~/types/manualTask'
 import { getFriendlyErrorTitle } from '@/utils/errorMessages'
 
-// 用 createSharedComposable 讓 AppHeader（新增任務按鈕）跟 TaskForm（實際的
-// Modal／任務列表）共用同一份狀態——header 按下「+」時，才能真的打開
-// TaskForm 裡定義的那個 Modal，而不是各自獨立、互不相干的兩份 state。
+// 共用狀態：AppHeader 的「+」按鈕要能打開 TaskForm 裡的 Modal
 function useTaskFormImpl() {
-    // 控制 Modal 開關
     const showEditModal = ref(false)
 
-    // 取得使用者資訊
     const { getToken } = useAuth()
     const { user } = useUser()
     const currentUserId = computed(() => user.value?.id ?? '')
     const toast = useToast()
 
-    // 取得 API Base URL
     const config = useRuntimeConfig()
     const BASE_URL = config.public.apiBaseUrl
 
-    // 優先度
-    // label 是畫面上看到的中文，value 是實際送給後端的值（必須是 High / Medium / Low）
     const priorityItems = ref([
       { label: '高', value: 'High' },
       { label: '中', value: 'Medium' },
       { label: '低', value: 'Low' },
     ])
 
-    // 日期設定
     const df = new DateFormatter('zh-TW', { dateStyle: 'medium' })
     const timeZone = getLocalTimeZone()
     const today = fromDate(new Date(), timeZone)
-    // UCalendar 的 v-model 可能給 CalendarDate、CalendarDateTime 或 ZonedDateTime
-    // 這三種其中一種（使用者選日期的當下不一定跟 today 的型別一樣），
-    // 要轉成 Date 物件時得先用 toZoned 統一成 ZonedDateTime 再呼叫沒有參數的 toDate()。
-    // null 代表使用者選了「無期限」——後端 due_date 本來就是 Optional，
-    // 這裡要能明確送出 null，不是每次都硬塞一個日期進去
+    // null 代表「無期限」
+    // UCalendar 可能給三種 DateValue，轉 Date 前要先用 toZoned 統一
     const modelValue = shallowRef<DateValue | null>(today)
     const minDate = today
     const toJsDate = (value: DateValue) => toZoned(value, timeZone).toDate()
@@ -51,45 +40,32 @@ function useTaskFormImpl() {
         modelValue.value = null
     }
 
-    // 是否正在抓取任務列表——跟「目前沒有任務」是兩回事，不能都用
-    // all_tasks.length === 0 判斷，不然使用者真的沒有任務時，畫面會卡在
-    // Skeleton 動畫，看起來像資料壞掉
+    // 和「沒有任務」分開判斷，否則沒有任務時會一直顯示 Skeleton
     const loading = ref(true)
-    // **所有任務**
     const all_tasks = ref<Task[]>([])
-    // **目前編輯的任務**
     const editing_task = ref<Task | null>(null)
-    // 判斷是否編輯模式
     const isEditMode = computed(() => editing_task.value !== null)
 
-    // 是否正在送出表單。原本只靠 UButton 的 loading-auto，但 TaskForm.vue 的
-    // handleSubmit 沒有 await/回傳 onSubmit/onEdit 的 promise，loading-auto
-    // 追蹤不到真正的非同步流程，按鈕全程都可以按——加上這個 API 回應本身有
-    // 延遲、成功後又刻意等 300ms 才關閉 Modal，使用者連續點擊「提交」就會
-    // 建出好幾筆重複的任務。這裡自己擋重入，不依賴 loading-auto 猜得準不準。
+    // 擋重複送出，避免連點建出重複任務
     const submitting = ref(false)
 
-    // 表單狀態
     const state = reactive({
         user_id: currentUserId.value,
         title: '',
         description: '',
         status: 'To Do',
         priority: '',
-        duration: '' as string | number, // 不確定可以留空，後端會用 AI 幫忙評估
-        inference_hint: '', // 給 AI 評估 priority/duration 時參考的提醒，選填
+        duration: '' as string | number, // 留空由後端用 AI 推斷
+        inference_hint: '',
     })
 
-    // 驗證表單是否填寫完成。只有標題是真正必填——description/priority/
-    // duration 都留空讓 AI 幫忙評估，不該因此擋住送出（見 payload 組裝那裡
-    // 把空字串轉成 null，後端 infer_missing_task_fields 才會真的去推斷）
+    // 只有標題必填，其他欄位留空由 AI 推斷
     const validate = (s: typeof state): FormError[] => {
         const errors: FormError[] = []
         if (!s.title) errors.push({ name: 'title', message: 'Required' })
         return errors
     }
 
-    // 重置表單
     function resetForm() {
         state.title = ''
         state.description = ''
@@ -100,15 +76,13 @@ function useTaskFormImpl() {
         editing_task.value = null
     }
 
-    // 使用者沒填 duration（留空讓 AI 猜）時，送給後端的值要是 null，
-    // 不能送空字串——Optional[int] 收到 "" 會驗證失敗
+    // 留空要送 null，後端的 Optional[int] 收到 "" 會驗證失敗
     function parseDuration(value: string | number): number | null {
         if (value === '' || value === null || value === undefined) return null
         const n = Number(value)
         return Number.isFinite(n) ? n : null
     }
 
-    // 把後端回傳「這次哪些欄位是 AI 猜的」組成一句人看得懂的話
     function buildInferenceSummary(result: Task): { title: string; description?: string } | null {
         const inferredFields: string[] = result?.inferred_fields ?? []
         if (!inferredFields.length) return null
@@ -125,14 +99,12 @@ function useTaskFormImpl() {
         }
     }
 
-    // 重置表單 並 關閉 Modal
     function resetAndClose() {
         resetForm()
         showEditModal.value = false
     }
 
 
-    // 1. 載入所有任務
     async function fetchTasks() {
         loading.value = true
         try{
@@ -153,7 +125,6 @@ function useTaskFormImpl() {
     }
  
 
-    // 進入 "編輯" 模式
     function startEditTask(task: Task | null) {
         if (task) {
             editing_task.value = task
@@ -176,10 +147,7 @@ function useTaskFormImpl() {
         return new Promise((resolve) => setTimeout(resolve, ms))
     }
 
-    // 2. 新增任務
     async function onSubmit(_e: FormSubmitEvent<typeof state>) {
-        // 擋重入：API 回應本身有延遲，使用者在按鈕還沒變成不能按之前多點幾下
-        // 提交，不擋的話會建出好幾筆一模一樣的任務
         if (submitting.value) return
         submitting.value = true
         try {
@@ -213,8 +181,7 @@ function useTaskFormImpl() {
                 toast.add({ title: '儲存成功', color: 'success', icon: 'i-lucide-check' })
             }
 
-            // 讓使用者看得到剛剛那個 toast 再關 Modal，不是失敗退路，
-            // 所以刻意 await，讓 submitting 涵蓋這段等待，按鈕全程保持不能按
+            // 讓使用者看到 toast 再關閉 Modal，這段時間按鈕仍不能按
             await delay(300)
             await fetchTasks()
             resetAndClose()
@@ -226,7 +193,6 @@ function useTaskFormImpl() {
         }
     }
 
-    // 3. 編輯任務
     async function onEdit(_e: FormSubmitEvent<typeof state>) {
         if( !editing_task.value ) return
         if (submitting.value) return
@@ -262,7 +228,6 @@ function useTaskFormImpl() {
     }
 
 
-    // 4. 刪除任務
     async function onDelete() {
         if (!editing_task.value?.id) return
         if (!window.confirm('你確定要刪除這個任務嗎？')) return
@@ -283,7 +248,6 @@ function useTaskFormImpl() {
     }
 
 
-    // 關閉 Modal
     function onCancel() {
         resetAndClose()
     }

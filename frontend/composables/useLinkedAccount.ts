@@ -1,4 +1,3 @@
-// composables/useLinkedAccount.ts
 import { ref, computed } from 'vue';
 import { useRuntimeConfig } from '#imports';
 import { useUser, useAuth } from '@clerk/vue';
@@ -6,7 +5,7 @@ import { until } from '@vueuse/core';
 import { getFriendlyErrorTitle, isAlreadyLinkedError } from '@/utils/errorMessages';
 import type { LinkedAccountRecord } from '@/types/linkedAccount';
 
-// 畫面上一筆平台連結帳號（GitHub/Jira/Moodle 共用同一個形狀，欄位依平台各自使用）
+// 各平台共用的形狀，欄位依平台使用
 export interface LinkedAccountKey {
   platform: string;
   label: string;
@@ -20,14 +19,12 @@ export interface LinkedAccountKey {
   icon: string;
   avatar?: string;
   username?: string;
-  // true = value 來自後端遮罩過的字串，不可複製；false = 剛建立/更新，value 是這個 session 才知道的明文，可複製一次
+  // true：value 是後端遮罩過的值，不能複製；false：剛儲存的明文，可複製
   isMasked: boolean;
-  // 進入編輯模式（openEdit）當下的 domain，只有 Jira 會用到，存檔時拿來判斷
-  // 這次 domain 是否真的被改過，不是一開始就有的欄位
+  // Jira 用：進入編輯時的 domain，儲存時判斷是否有改
   _originalDomain?: string;
 }
 
-// PATCH/POST 存檔送給後端的 body，欄位依平台不同而有無
 interface LinkedAccountPayload {
   platform: string;
   status: string;
@@ -107,7 +104,6 @@ export const useLinkedAccount = () => {
         if (item.platform == 'moodle') {  // 取得遮罩過的 moodle 密碼
           item.value = ac.password ?? '';
         }
-        // 從後端拿回來的一律是遮罩值，不是完整明文，不能拿去複製
         item.isMasked = true;
       }
     });
@@ -144,22 +140,20 @@ export const useLinkedAccount = () => {
     }
     else if (keyItem.platform === 'jira') { // 若是 Jira 類型，加上 domain
       payload.domain = keyItem.domain;
-      // 編輯既有帳號時，API Key 留空代表「不修改」，不送出這個欄位；
-      // 新建帳號一定要有 API Key（Save 按鈕本身就會擋住空值，這裡一定有值）
+      // 編輯時留空代表不修改
       if (isNew || keyItem.inputValue) {
         payload.apiKey = keyItem.inputValue;
       }
     }
     else if (keyItem.platform === 'moodle') { // 若是 Moodle 類型，改成帳號和密碼
       payload.username = keyItem.inputValue;
-      // 編輯既有帳號時，密碼留空代表「不修改密碼」，不送出這個欄位；
-      // 新建帳號一定要有密碼（Save 按鈕本身就會擋住空密碼，這裡一定有值）
+      // 編輯時留空代表不修改
       if (isNew || keyItem.password) {
         payload.password = keyItem.password;
       }
     }
 
-    // 存檔前先記錄「使用者這次實際改了什麼」，存檔後這些欄位會被覆蓋掉，要先比對
+    // 儲存後欄位會被覆蓋，要先記下改了什麼
     const moodleUsernameChanged = keyItem.platform === 'moodle' && keyItem.inputValue !== keyItem.username;
     const moodlePasswordChanged = keyItem.platform === 'moodle' && !!keyItem.password;
     const jiraDomainChanged = keyItem.platform === 'jira' && keyItem.domain !== keyItem._originalDomain;
@@ -182,7 +176,6 @@ export const useLinkedAccount = () => {
         if (res.avatar_url) keyItem.avatar = res.avatar_url;
         if (res.username) keyItem.username = res.username;
       } else {
-        // 部分更新：body 直接放要改的欄位，平台放在路徑上
         await $fetch(`${BASE_URL}/users/me/linked-accounts/${keyItem.platform}`, {
           method: 'PATCH',
           headers: { Authorization: `Bearer ${token}` },
@@ -196,12 +189,10 @@ export const useLinkedAccount = () => {
       }
       keyItem.inputValue = '';
       keyItem.editing = false;
-      // 剛建立/更新，這裡的 value 是這個 session 才知道的明文，允許複製這一次
       keyItem.isMasked = false;
 
       let title = `${keyItem.label} 儲存成功`;
       if (keyItem.platform === 'moodle' && !isNew) {
-        // Moodle 帳號、密碼是分開改的，明確告知使用者這次實際改到哪個欄位
         if (moodleUsernameChanged && moodlePasswordChanged) {
           title = 'Moodle 帳號與密碼皆已更新';
         } else if (moodleUsernameChanged) {
@@ -210,7 +201,6 @@ export const useLinkedAccount = () => {
           title = 'Moodle 密碼已更新';
         }
       } else if (keyItem.platform === 'jira' && !isNew) {
-        // Jira Domain、API Key 也是分開改的，同樣明確告知這次改到哪個欄位
         if (jiraDomainChanged && jiraApiKeyChanged) {
           title = 'Jira Domain 與 API Key 皆已更新';
         } else if (jiraDomainChanged) {
@@ -243,8 +233,7 @@ export const useLinkedAccount = () => {
   const deleteKey = async (keyItem: LinkedAccountKey) => {
     try {
       const token = await getToken.value();
-      // 平台已經在路徑上，後端不讀 body——不要帶任何東西，尤其不能把
-      // 輸入框裡的 API Key／密碼明文送出去
+      // 不帶 body，避免把輸入框裡的明文送出去
       await $fetch(`${BASE_URL}/users/me/linked-accounts/${keyItem.platform}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },

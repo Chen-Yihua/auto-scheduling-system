@@ -118,11 +118,7 @@ describe('useTaskForm', () => {
     expect(ctx.loading.value).toBe(false)
   })
 
-  // onSubmit/onEdit 現在會自己 await 那段 300ms 的延遲（見 useTaskForm.ts 的
-  // submitting 擋重入邏輯），不能再像以前那樣「await 呼叫本身 → 再手動推進
-  // fake timer」，因為 await 那一行會卡住，永遠不會執行到後面推進 timer 的
-  // 程式碼。改成「先呼叫但不 await → 推進 timer 讓內部的 delay 有機會解決
-  // → 最後才 await 那個 promise」。
+  // onSubmit/onEdit 內部會等 300ms，要先呼叫、推進 fake timer，最後才 await
   async function submitAndFlushTimers(promiseFactory: () => Promise<unknown>) {
     vi.useFakeTimers()
     const promise = promiseFactory()

@@ -5,9 +5,7 @@ import { defaultSchedulePreferences } from '@/types/schedule'
 import { getFriendlyErrorTitle, isAuthError, isNotLinkedError, isSuggestionExpiredError } from '@/utils/errorMessages'
 import { useGoogleCalendar } from '@/composables/useGoogleCalendar'
 
-// createSharedComposable：排程精靈現在是獨立頁面（pages/schedule.vue），完成後
-// 導回 / 首頁時，ScheduleSuggestion.vue 會是全新掛載的元件實例——如果這裡不是
-// 共用狀態，結果會憑空消失，使用者導回來還是看到「尚未產生排程建議」。
+// 共用狀態：從精靈頁導回首頁時 ScheduleSuggestion 會重新掛載，結果不能消失
 function useScheduleImpl() {
   const toast = useToast()
   const config = useRuntimeConfig()
@@ -16,24 +14,16 @@ function useScheduleImpl() {
 
   const BASE_URL = config.public.apiBaseUrl
 
-  // 這張卡片不像其他卡片一樣進頁面就自動抓資料——排程建議是使用者主動觸發
-  // 的動作，loading 預設 false，直到使用者按下「產生排程建議」才開始抓
+  // 排程建議由使用者觸發，不會自動抓取，所以預設 false
   const loading = ref(false)
   const scheduled = ref<ScheduledTask[]>([])
   const unscheduled = ref<UnscheduledTask[]>([])
-  // 還沒連接 Google Calendar 是正常狀態（跟 useGoogleCalendar 的 isConnected 同一個
-  // 前提條件），不是排程建議本身出錯，畫面上要顯示「請先連接」而不是紅色錯誤提示
+  // 還沒連接 Google Calendar 是正常狀態，顯示提示而不是錯誤
   const notLinked = ref(false)
-  // 還沒成功產生過一次結果之前，畫面要顯示「產生排程建議」而不是「重新產生」，
-  // 不能讓使用者以為系統已經自動排過一次了
   const hasFetched = ref(false)
   const confirming = ref(false)
 
-  // 排程精靈填的「不工作時段」「做事風格」不存資料庫，每次都要重新帶給後端
-  // （見 types/schedule.ts 的 SchedulePreferences）。這裡記住「產生這份建議時
-  // 用的是哪一份 preferences」，確認排程後、或建議過期要重新產生時，用同一份
-  // 再抓一次——那些地方在 ScheduleSuggestion.vue，跟填 preferences 的精靈頁
-  // 不是同一個元件，沒有這份記憶就只能退回預設值
+  // preferences 不存資料庫，記下來供確認後或過期時重新產生使用
   const lastPreferences = ref<SchedulePreferences>(defaultSchedulePreferences())
 
   const fetchScheduleSuggestion = async (preferences?: SchedulePreferences) => {
@@ -76,12 +66,8 @@ function useScheduleImpl() {
     }
   }
 
-  // 使用者按下「確認排程並寫入 Calendar」時呼叫。後端寫入的是產生建議時存下來的
-  // 那一份（使用者畫面上看到的），所以這裡不用送任何內容，只送「確認」這個動作。
-  // 成功的任務會被鎖定、之後不會再出現在排程建議或拖拉排序精靈裡——所以無論
-  // 成功幾筆，結束後都要重新抓一次排程建議，畫面才會反映最新狀態。
-  // 建議放太久（超過 30 分鐘）後端會回 409，這時直接幫使用者重新產生一份，
-  // 讓他看過新的建議再確認，而不是只丟一個錯誤訊息。
+  // 後端寫入它存的快照，所以不用送內容。結束後重新產生建議以反映最新狀態；
+  // 建議過期（409）時直接重新產生，讓使用者看過再確認
   const confirmSchedule = async () => {
     confirming.value = true
     try {
@@ -109,8 +95,7 @@ function useScheduleImpl() {
         })
       }
 
-      // 真的有寫進 Google Calendar 才需要重新整理嵌入的行事曆 iframe，
-      // 全部失敗（res.confirmed 空）的話行事曆內容沒有變，不用刷
+      // 有寫入才需要重新整理嵌入的行事曆
       if (res.confirmed.length > 0) {
         triggerCalendarReload()
       }

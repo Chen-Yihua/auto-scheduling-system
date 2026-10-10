@@ -1,6 +1,4 @@
-// server/api/leetcode.get.ts：Nuxt server route，代替前端去打 LeetCode GraphQL
-// （瀏覽器直接打會被 CORS 擋）。defineEventHandler、$fetch 在 Nitro 裡是全域自動引入，
-// 這裡用 stubGlobal 補上，直接呼叫 handler 本身，不用真的起一個 server。
+// defineEventHandler、$fetch 在 Nitro 是全域的，用 stubGlobal 補上後直接呼叫 handler
 import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest'
 
 const fetchSpy = vi.fn()

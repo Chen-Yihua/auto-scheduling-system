@@ -1,8 +1,4 @@
-"""
-crud/manual_task.py 的邊界情境：查無資料、沒有變更、刪不到東西等。
-資料庫連不上這類錯誤不在這裡處理，crud 直接讓例外往外丟，由全域 handler 統一轉成回應，
-見 test_db_error_handling.py。
-"""
+"""crud/manual_task.py 的邊界情境：查無資料、沒有變更、刪不到等。"""
 import pytest
 from fastapi import HTTPException
 

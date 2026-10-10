@@ -1,7 +1,4 @@
-# 直接呼叫 router 函式（await manual_task_router.create_manual_task(...)）測試它自己的規則：
-# 建立時要不要問 LLM、任務的擁有者一律是登入者本人、更新時沒帶的欄位保留原值，
-# 以及「只能動自己的任務」。不經過 HTTP，所以不涉及路由註冊、登入驗證、response_model ——
-# 那些由 integration/test_manual_task_api.py 負責。
+# 直接呼叫 router 函式，測試 LLM 推斷、任務擁有者、保留原值、只能操作自己的任務等規則
 import pytest
 from datetime import datetime, timezone
 from unittest.mock import MagicMock

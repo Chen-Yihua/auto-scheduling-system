@@ -1,8 +1,4 @@
-// 畫面上顯示用的中文對照表。
-//
-// 這些欄位的「值」是後端與資料庫存的內容（例如 priority 一定是 High / Medium / Low），
-// 不能改成中文，否則送去後端會被拒絕；所以只在「顯示」的時候轉成中文，資料本身維持英文。
-// 對照表裡沒有的值（例如未來新增的狀態）會原樣顯示，不會變成空白。
+// 顯示用的中文對照。資料本身維持英文（後端只接受英文值），對照表沒有的值原樣顯示。
 
 export const priorityLabels: Record<string, string> = {
   High: '高',
@@ -16,14 +12,13 @@ export const taskStatusLabels: Record<string, string> = {
   Done: '已完成',
 }
 
-// GitHub 的 issue / PR 狀態（API 回傳小寫）
+// GitHub API 回傳小寫
 export const githubStateLabels: Record<string, string> = {
   open: '開啟中',
   closed: '已關閉',
   merged: '已合併',
 }
 
-// LeetCode 題目難度
 export const leetcodeDifficultyLabels: Record<string, string> = {
   Easy: '簡單',
   Medium: '中等',

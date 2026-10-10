@@ -1,8 +1,4 @@
-"""
-core/security.py 的 get_current_clerk_user——整個系統的驗證守門員，理論上優先度
-最高，但先前完全沒有專屬測試（模組載入當下缺環境變數會 RuntimeError 這件事，
-已經由 test_ci_env_requirements.py 用乾淨的子行程驗證過，這裡只補函式本體）。
-"""
+"""core/security.py 的 get_current_clerk_user。"""
 import pytest
 from fastapi import HTTPException
 from fastapi_clerk_auth import HTTPAuthorizationCredentials

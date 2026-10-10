@@ -14,7 +14,7 @@ SENSITIVE_FIELDS = ("apiKey", "password")
 
 
 def _to_public(account: dict) -> dict:
-    """DB 文件轉成回傳給前端的格式：敏感欄位遮罩、_id 改成 id。"""
+    """轉成回傳給前端的格式：敏感欄位遮罩、_id 改成 id。"""
     account = dict(account)
     for field in SENSITIVE_FIELDS:
         if account.get(field):

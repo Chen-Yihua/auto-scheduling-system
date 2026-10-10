@@ -31,14 +31,13 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS 設定
-# 從環境變數讀白名單，本機開發預設放行 http://localhost:3000，正式環境用逗號分隔多個網域。
+# CORS_ALLOWED_ORIGINS 以逗號分隔多個網域
 def _get_allowed_origins() -> list[str]:
     origins = os.getenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000")
     return [origin.strip() for origin in origins.split(",") if origin.strip()]
 
 
-# 兜底的 500 必須比 CORS 更內層（先註冊的在內層），回應才會帶 CORS 標頭；順序不能對調
+# 必須比 CORS 先註冊（在內層），500 回應才會帶 CORS 標頭
 app.add_middleware(UnhandledExceptionMiddleware)
 
 app.add_middleware(
@@ -49,37 +48,33 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 流量限制：記憶體或 Redis 由 core/rate_limit.py 依 REDIS_URL 是否設定自動切換
 app.state.limiter = limiter
-# pyright: ignore 是因為 Starlette 的型別只接受參數為 Exception 的 handler，傳子類別會誤報
+# pyright: ignore：Starlette 的型別只接受參數為 Exception 的 handler，傳子類別會誤報
 app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)  # pyright: ignore[reportArgumentType]
 
-# 資料庫例外集中處理：連線類錯誤回 503，其他資料庫錯誤回 500（見 core/exception_handlers.py）。
-# Starlette 會依例外的繼承順序挑最具體的 handler，ConnectionFailure 是 PyMongoError 的子類別
+# Starlette 依繼承關係挑最具體的 handler，所以子類別 ConnectionFailure 會先被接住
 app.add_exception_handler(ConnectionFailure, database_unavailable_handler)  # pyright: ignore[reportArgumentType]
 app.add_exception_handler(PyMongoError, database_error_handler)  # pyright: ignore[reportArgumentType]
 
-# 路由註冊
 app.include_router(user.router)
 app.include_router(linked_account.router)
 app.include_router(pr_review_webhook.router)
 app.include_router(google_calendar.router)
 app.include_router(manual_task.router)
 app.include_router(schedule.router)
-# 外部平台（/github/issues、/jira/issues、/moodle/assignments…）依 platforms.PLATFORMS 自動產生
+# 外部平台的路由依 PLATFORMS 自動產生
 for platform_router in platform_routers:
     app.include_router(platform_router)
 
-# 健康檢查 endpoint
 @app.get("/health")
 async def health_check():
     return {"status": "ok"}
 
-# Local development only
+# 只用於本機開發
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(
-        app,  # 注意這裡直接傳 app 物件，不是 "main:app"
+        app,
         host="0.0.0.0",
         port=int(os.environ.get("PORT", 8080))
     )

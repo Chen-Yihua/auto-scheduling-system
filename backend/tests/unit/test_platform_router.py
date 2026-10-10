@@ -1,8 +1,4 @@
-# 所有外部平台共用的「取得項目」流程（platforms/router.py 的 get_platform_items）：
-# 查不到帳號、解密失敗、抓取失敗各回什麼狀態碼、有沒有設定回應 header，以及快取。
-# 每種行為對 GitHub／Jira／Moodle 各跑一次，確認每個平台都接上了同一套流程、錯誤訊息也是各自的。
-# 同步流程本身（重試、退回舊資料、寫入資料庫）由 test_platform_sync.py 負責，這裡直接換成假的；
-# 各平台怎麼抓資料、怎麼轉格式，由 test_github_crud.py 等各平台自己的測試負責。
+# get_platform_items 的狀態碼、header 和快取；每個案例對三個平台各跑一次。sync 在這裡換成假的
 from datetime import datetime, timezone
 
 import pytest
@@ -74,8 +70,7 @@ def _sync_returning(items, stale=False, synced_at=SYNCED_AT, auth_error=False, c
 @pytest.mark.asyncio
 @pytest.mark.parametrize("platform, account, expected_credentials", PLATFORM_CASES)
 async def test_fetches_with_decrypted_credentials_and_returns_items(monkeypatch, platform, account, expected_credentials):
-    """成功流程：用使用者 id + 平台名稱查到帳號 → 解密 → 用明文憑證抓資料 → 回傳項目，
-    X-Data-Stale 為 false。抓資料拿到的是解密後的明文，不是資料庫裡的密文。"""
+    """成功流程：用解密後的憑證抓資料並回傳，X-Data-Stale 為 false。"""
     accounts = _use_account(monkeypatch, account)
     received = []
 
@@ -104,8 +99,7 @@ async def test_fetches_with_decrypted_credentials_and_returns_items(monkeypatch,
 @pytest.mark.parametrize("platform", [GITHUB, JIRA, MOODLE], ids=lambda p: p.name)
 @pytest.mark.parametrize("account", [None, {}], ids=["no-account", "account-without-credentials"])
 async def test_raises_400_when_account_not_linked(monkeypatch, platform, account):
-    """還沒綁定這個平台、或帳號資料裡沒有憑證 → 400 加上這個平台自己的說明，
-    前端才能顯示「請先設定帳號」。"""
+    """還沒綁定或沒有憑證 → 400 和該平台的說明。"""
     _use_account(monkeypatch, account)
 
     with pytest.raises(HTTPException) as exc_info:
@@ -186,8 +180,7 @@ async def test_raises_500_on_unexpected_sync_error(monkeypatch, platform, accoun
 
 @pytest.mark.asyncio
 async def test_stale_data_with_auth_error_sets_both_headers(monkeypatch):
-    """憑證已失效、但有舊資料可顯示 → 回舊資料，X-Data-Stale 標示是舊的、
-    X-Auth-Error 告訴前端要請使用者重新連結。"""
+    """憑證失效但有舊資料 → 回舊資料，設 X-Data-Stale 和 X-Auth-Error。"""
     _use_account(monkeypatch, {"apiKey": encrypt_secret("gh-token")})
     monkeypatch.setattr(GITHUB, "sync", _sync_returning([ITEM], stale=True, auth_error=True))
 
@@ -201,8 +194,7 @@ async def test_stale_data_with_auth_error_sets_both_headers(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_stale_data_without_auth_error_omits_auth_header(monkeypatch):
-    """平台暫時連不上、退回舊資料（不是憑證問題）→ X-Data-Stale 為 true，
-    但不設 X-Auth-Error，不能叫使用者去重新連結一個其實沒問題的帳號。"""
+    """平台暫時連不上而退回舊資料 → 設 X-Data-Stale，不設 X-Auth-Error。"""
     _use_account(monkeypatch, {"apiKey": encrypt_secret("gh-token")})
     monkeypatch.setattr(GITHUB, "sync", _sync_returning([ITEM], stale=True, auth_error=False))
 
@@ -237,8 +229,7 @@ async def test_cached_platform_second_call_within_ttl_skips_fetch_entirely(monke
 
 @pytest.mark.asyncio
 async def test_cached_platform_does_not_cache_stale_fallback(monkeypatch):
-    """抓取失敗、只能退回舊資料時，這份舊資料不能被快取——否則下一次請求會直接讀到
-    「已知是舊的」快取，錯過重新嘗試抓取的機會。"""
+    """退回的舊資料不快取，下次請求才會重新抓取。"""
     _use_account(monkeypatch, MOODLE_ACCOUNT)
     calls = []
     monkeypatch.setattr(MOODLE, "sync", _sync_returning([ITEM], stale=True, calls=calls))
@@ -263,8 +254,7 @@ async def test_platform_without_cache_ttl_always_fetches_live(monkeypatch):
 
 
 def test_each_platform_endpoint_has_its_own_rate_limit_entry():
-    """每個平台的 endpoint 都是同一個內部函式產生的；slowapi 用函式名稱登記限流規則，
-    名稱沒分開的話，兩個有限流的平台會共用同一組規則跟計數。只有設了 rate_limit 的平台才會被登記。"""
+    """各平台 endpoint 的函式名稱不同，限流計數才不會共用；只有設了 rate_limit 的平台會被登記。"""
     from core.rate_limit import limiter
 
     registered = {name: [str(l.limit) for l in limits]

@@ -57,8 +57,7 @@ describe('useGoogleOAuthCallback', () => {
   it('有授權碼：伺服器端渲染時就已經是「連接中」（不用等瀏覽器載入完 JavaScript）', async () => {
     route.query.code = 'auth-code'
 
-    // 伺服器端渲染不會執行 onMounted，只會跑 setup；這時狀態就要是 true，
-    // 導回來的第一份 HTML 裡行事曆卡片才會直接是「連接中」
+    // SSR 只跑 setup，狀態要在 setup 就設好
     await renderToString(createSSRApp(Host))
 
     expect(connecting()).toBe(true)

@@ -17,9 +17,7 @@ def _slot(start_iso, end_iso):
     return {"start": start_iso, "end": end_iso}
 
 
-# 測試裡的空檔、截止日都是寫死的日期，判斷「24 小時內到期」的基準時間也要寫死，
-# 不然結果會隨著實際跑測試的日期改變。這個時間點比測試裡所有截止日都早很多，
-# 不會把它們誤判成緊急任務——只測一般排序規則的測試都用這個
+# 固定的基準時間，早於所有截止日，避免被判斷為緊急任務
 NOW = datetime(2026, 8, 1, tzinfo=timezone.utc)
 
 
@@ -42,8 +40,7 @@ def test_high_priority_scheduled_before_low_when_only_one_slot_fits_one_task():
 
 
 def test_priority_still_wins_over_sort_order_across_different_priorities():
-    """priority 仍然是主要依據：Low 任務就算 sort_order 排在最前面，也不會排在 High 任務前面
-    ——拖拉排序精靈現在是三欄式（低/中/高），sort_order 只在同一欄內才有意義。"""
+    """priority 優先於 sort_order：Low 任務即使 sort_order 最小也排在 High 後面。"""
     tasks = [
         _task("t1", "High，沒特別排過序", "High"),
         _task("t2", "Low，但 sort_order=0", "Low", sort_order=0),
@@ -57,8 +54,7 @@ def test_priority_still_wins_over_sort_order_across_different_priorities():
 
 
 def test_sort_order_breaks_ties_within_the_same_priority():
-    """同一個 priority 內，sort_order 小的先排——這是使用者在拖拉排序精靈同一欄
-    內排的上下順序（見 PUT /schedule/reorder）。"""
+    """同一個 priority 內，sort_order 小的先排。"""
     tasks = [
         _task("t1", "同為 High，排序在後面", "High", sort_order=1),
         _task("t2", "同為 High，排序在前面", "High", sort_order=0),
@@ -72,8 +68,7 @@ def test_sort_order_breaks_ties_within_the_same_priority():
 
 
 def test_tasks_without_sort_order_fall_back_to_due_date_and_are_sorted_after_ones_with_sort_order():
-    """同一個 priority 內，沒有 sort_order 的任務（例如排完序後才新建的）退回 due_date 排序，
-    但一律排在同 priority 內有 sort_order 的任務後面——手動排過序的結果優先。"""
+    """同 priority 內沒有 sort_order 的任務依 due_date 排，且排在有 sort_order 的後面。"""
     tasks = [
         _task("t1", "同為 Low，沒排過序", "Low", sort_order=None, due_date=datetime(2026, 9, 15)),
         _task("t2", "同為 Low，排過序 sort_order=0", "Low", sort_order=0, due_date=datetime(2026, 12, 1)),
@@ -87,8 +82,7 @@ def test_tasks_without_sort_order_fall_back_to_due_date_and_are_sorted_after_one
 
 
 def test_tasks_already_confirmed_and_locked_are_excluded_from_scheduling():
-    """已經「確認排程」寫進 Google Calendar 的任務（有 calendar_event_id）→ 排除在外，
-    不會再出現在 scheduled 或 unscheduled 裡，那個時段已經是既成事實。"""
+    """有 calendar_event_id 的任務不出現在 scheduled 或 unscheduled。"""
     tasks = [
         _task("t1", "已鎖定的任務", "High", calendar_event_id="event-123"),
         _task("t2", "還沒排程的任務", "High"),
@@ -226,9 +220,7 @@ def test_each_task_uses_its_own_duration_field():
 
 
 def test_small_task_can_still_use_a_slot_too_small_for_an_earlier_big_task():
-    """前面的大任務塞不下的空檔，仍要留給後面較小的任務用。
-例：20 分鐘和 90 分鐘兩個空檔，90 分鐘的大任務排進後者，15 分鐘的小任務排進前者——
-不能因為處理大任務時「跳過」了 20 分鐘的空檔，就害小任務沒地方去。"""
+    """大任務放不下的空檔要保留給後面較小的任務。"""
     tasks = [
         # 兩個都是 High，用 due_date 確保「大任務」先被處理（早 deadline 先排）
         _task("big", "大任務", "High", duration=90, due_date=datetime(2026, 9, 15)),
@@ -258,7 +250,7 @@ def test_task_without_duration_falls_back_to_default():
 
 
 def test_task_missing_required_field_is_skipped_not_crashed():
-    """任務缺必要欄位（例如 priority 是 None 的壞資料）→ 跳過這筆，不能讓整個請求 KeyError 當掉。正常情況 id/title/priority 一定有值。"""
+    """缺必要欄位的任務 → 跳過，不讓整個請求失敗。"""
     tasks = [
         {"id": "t1", "title": "缺 priority", "priority": None, "status": "To Do"},
         _task("t2", "正常任務", "High"),
@@ -376,8 +368,7 @@ def test_daily_max_minutes_none_means_no_cap():
 # ---------- 緊急任務（24 小時內到期）與截止日檢查 ----------
 
 def test_urgent_low_priority_task_is_scheduled_before_non_urgent_high_priority_task():
-    """今晚就要交的 Low 任務，要排在下週才到期的 High 任務前面——
-    不能只看 priority，讓緊急的任務被擠到截止日之後。"""
+    """24 小時內到期的 Low 任務排在下週到期的 High 任務前面。"""
     now = datetime(2026, 9, 10, 18, 0, tzinfo=timezone.utc)
     tasks = [
         _task("report", "下週要交的報告", "High", duration=120, due_date=datetime(2026, 9, 17, tzinfo=timezone.utc)),
@@ -411,8 +402,7 @@ def test_multiple_urgent_tasks_are_ordered_by_due_date_regardless_of_priority():
 
 
 def test_task_is_not_placed_after_its_deadline():
-    """唯一放得下的空檔在截止日之後 → 不能排進去還顯示成「已排入」，
-    要列進 unscheduled，並說明是截止日前排不進去。"""
+    """唯一放得下的空檔在截止日之後 → 列入 unscheduled 並說明原因。"""
     now = datetime(2026, 9, 1, tzinfo=timezone.utc)
     tasks = [_task("t1", "9/10 中午前要交", "High", duration=60, due_date=datetime(2026, 9, 10, 12, 0, tzinfo=timezone.utc))]
     free_slots = [_slot("2026-09-10T13:00:00Z", "2026-09-10T15:00:00Z")]
@@ -424,8 +414,7 @@ def test_task_is_not_placed_after_its_deadline():
 
 
 def test_task_skips_too_small_early_slot_but_still_fits_before_deadline():
-    """最早的空檔太小，下一個空檔還在截止日前 → 照樣排進去；截止日只擋「排在截止日之後」，
-    不會因為第一個空檔放不下就誤判成趕不上。"""
+    """第一個空檔太小但下一個仍在截止日前 → 照樣排入。"""
     now = datetime(2026, 9, 1, tzinfo=timezone.utc)
     tasks = [_task("t1", "任務", "High", duration=60, due_date=datetime(2026, 9, 10, 12, 0, tzinfo=timezone.utc))]
     free_slots = [
@@ -439,8 +428,7 @@ def test_task_skips_too_small_early_slot_but_still_fits_before_deadline():
 
 
 def test_overdue_task_is_still_scheduled_as_soon_as_possible():
-    """已經過期的任務沒有「趕得上」的可能，不套用截止日檢查（不然永遠排不進去），
-    而是當成緊急任務，排在一般 High 任務前面、盡早補做。"""
+    """已過期的任務不套用截止日檢查，當成緊急任務盡早排入。"""
     now = datetime(2026, 9, 10, 8, 0, tzinfo=timezone.utc)
     tasks = [
         _task("high", "一般 High", "High"),
@@ -455,8 +443,7 @@ def test_overdue_task_is_still_scheduled_as_soon_as_possible():
 
 
 def test_deadline_with_non_utc_timezone_is_compared_at_the_same_instant():
-    """截止日帶台灣時區（+08:00）時，要換算成同一個時刻跟 UTC 的空檔比較：
-    台灣時間 18:00 = UTC 10:00，09:00–10:00Z 的空檔剛好趕得上。"""
+    """截止日帶 +08:00 時要換算成 UTC 再和空檔比較。"""
     now = datetime(2026, 9, 1, tzinfo=timezone.utc)
     taipei = timezone(timedelta(hours=8))
     tasks = [_task("t1", "台灣時間 18:00 截止", "High", duration=60, due_date=datetime(2026, 9, 10, 18, 0, tzinfo=taipei))]
@@ -486,10 +473,7 @@ def test_apply_blocked_periods_recurring_all_day_removes_whole_day_slot():
 
 
 def test_apply_blocked_periods_output_keeps_utc_marker_so_frontend_does_not_misread_it_as_local_time():
-    """曾經是真的會炸的 bug：內部比較時把時間去掉時區（當成牆上時鐘時間）算完後，
-    輸出忘記補回 UTC 標記（Z），少了它前端 new Date(...) 會把這個字串當成瀏覽器
-    所在時區的本地時間解讀——結果使用者看到排程建議排在已經過去的時間
-    （例如現在已經是晚上，卻顯示排在「今天早上」）。"""
+    """輸出的時間要帶 Z，否則前端會當成本地時間。"""
     day = date(2026, 9, 10)
     free_slots = [_slot(f"{day}T09:00:00Z", f"{day}T17:00:00Z")]
     rule = {"days_of_week": [day.weekday()], "all_day": False, "start_time": "12:00", "end_time": "13:00"}
@@ -560,9 +544,7 @@ def test_apply_blocked_periods_skips_malformed_slots_and_exceptions():
 
 
 def test_apply_blocked_periods_skips_recurring_rule_missing_start_or_end_time():
-    """使用者在精靈畫面勾了星期、但還沒填起訖時間（規律填到一半）就送出——
-    不是 all_day 卻缺 start_time/end_time 的規則當還沒設定完整，跳過，
-    不該讓整個排程建議計算噴例外（曾經是真的會炸：AttributeError on None.split）。"""
+    """不是 all_day 又缺起訖時間的規則 → 略過，不丟例外。"""
     day = date(2026, 9, 10)
     free_slots = [_slot(f"{day}T09:00:00Z", f"{day}T17:00:00Z")]
     rule = {"days_of_week": [day.weekday()], "all_day": False, "start_time": None, "end_time": None}
@@ -578,8 +560,7 @@ EVERY_DAY = [0, 1, 2, 3, 4, 5, 6]
 
 
 def test_apply_blocked_periods_uses_user_local_time_not_utc():
-    """台灣使用者（UTC+8）設定「每天 22:00-08:00 不工作」，擋掉的要是台灣時間的半夜，
-    也就是 UTC 14:00 到隔天 00:00——之前直接拿 UTC 比，擋成了台灣時間 06:00-16:00。"""
+    """UTC+8 的「每天 22:00-08:00」要擋掉 UTC 14:00 到隔天 00:00。"""
     # 台灣時間 9/10 08:00 ~ 9/11 07:59
     free_slots = [_slot("2026-09-10T00:00:00Z", "2026-09-10T23:59:00Z")]
     rule = {"days_of_week": EVERY_DAY, "all_day": False, "start_time": "22:00", "end_time": "08:00"}
@@ -591,8 +572,7 @@ def test_apply_blocked_periods_uses_user_local_time_not_utc():
 
 
 def test_apply_blocked_periods_exception_is_an_exact_instant_regardless_of_timezone():
-    """單次例外時段前端送的是 UTC 時刻（toISOString），不管使用者在哪個時區，
-    擋掉的都要是那個確切的時刻。"""
+    """一次性例外是 UTC 時刻，不受使用者時區影響。"""
     free_slots = [_slot("2026-09-10T00:00:00Z", "2026-09-10T06:00:00Z")]
     exception = {"start": "2026-09-10T02:00:00Z", "end": "2026-09-10T03:00:00Z"}
 
@@ -605,8 +585,7 @@ def test_apply_blocked_periods_exception_is_an_exact_instant_regardless_of_timez
 
 
 def test_daily_max_minutes_counts_days_in_user_local_time():
-    """每日上限的「一天」是使用者當地的日曆日：UTC 9/10 15:00 和 17:00 是同一個 UTC 日，
-    但在台灣分別是 9/10 23:00 和 9/11 01:00，屬於不同的兩天，各自都還有額度。"""
+    """每日上限以當地日期計算：同一個 UTC 日在台灣可能是兩天。"""
     tasks = [
         _task("t1", "任務一", "High", duration=60),
         _task("t2", "任務二", "High", duration=60),

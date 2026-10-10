@@ -11,8 +11,7 @@ const props = defineProps<{
   syncedAt?: string | null
   authError?: boolean
   notLinked?: boolean
-  // 不給就顯示全部——dashboard 卡片用小數字避免無限拉長，
-  // /jira 這個完整清單頁面則不傳
+  // 不傳則顯示全部
   limit?: number
 }>()
 
@@ -22,10 +21,9 @@ const displayedIssues = computed(() =>
 const hasMoreIssues = computed(() => !!props.limit && props.issues.length > props.limit)
 
 const openJiraIssue = (key: string) => {
-  // 沒有 domain 就不知道 issue 在哪個 Jira 站台，不能退回任何寫死的網域——
-  // 那會把使用者帶到別人的 Jira
+  // 沒有 domain 時不能用寫死的網域，否則會連到別人的 Jira
   if (!props.domain) return
-  // 使用者存的 domain 可能帶或不帶 https://，統一去掉再組網址
+  // domain 可能帶 https://
   const domain = props.domain.replace(/^https?:\/\//, '')
   window.open(`https://${domain}/browse/${key}`, '_blank')
 }
@@ -51,7 +49,6 @@ const openJiraIssue = (key: string) => {
       <USkeleton v-for="i in 3" :key="i" class="h-24 mb-4" />
     </div>
 
-    <!-- 尚未綁定 Jira 帳號 -->
     <div
       v-else-if="notLinked"
       class="text-center text-sm text-gray-500 dark:text-gray-400 py-6"

@@ -77,16 +77,13 @@ const exampleContent = computed(() => {
       </div>
     </template>
 
-    <!-- Skeleton Loading -->
     <USkeleton v-if="!data && !error" class="h-64 rounded-lg" />
 
-    <!-- 錯誤訊息 -->
     <template v-else-if="error">
       <p class="text-sm text-red-500 mb-3">{{ error.message }}</p>
       <UButton label="重試" color="error" variant="soft" @click="fetchData" />
     </template>
 
-    <!-- 題目內容 -->
     <template v-else>
       <div class="flex justify-between items-center w-full gap-2 mb-3">
         <span class="text-sm font-semibold truncate">{{ data?.question.title }}</span>
@@ -100,13 +97,10 @@ const exampleContent = computed(() => {
         </div>
       </div>
 
-      <!-- 主內容，截斷顯示 -->
-      <!-- v-html：內容是 LeetCode 官方 API 回傳的題目 HTML（第三方，但屬受信任來源），目前沒有另外過濾。
-           若日後要顯示不受信任的內容，需先用 DOMPurify 清理 -->
+      <!-- v-html：LeetCode 官方 API 的題目 HTML，視為受信任來源，沒有另外過濾 -->
       <!-- eslint-disable-next-line vue/no-v-html -->
       <div class="prose max-w-none text-sm" v-html="mainContent" />
 
-      <!-- Example 區塊 -->
       <UCollapsible v-model="isCollapsed" class="mt-4">
         <UButton
           variant="ghost" color="neutral" size="xs"
@@ -116,7 +110,7 @@ const exampleContent = computed(() => {
           {{ isCollapsed ? '顯示範例' : '收合' }}
         </UButton>
 
-        <!-- Nuxt UI 3.1.0 的 slot 型別寫法跟新版 Vue 型別檢查不相容（誤報，執行時正常）；升級 @nuxt/ui 後若檢查不再報錯，vue-tsc 會提示可以移除下面這行 -->
+        <!-- Nuxt UI 3.1.0 的 slot 型別和新版 Vue 不相容（誤報）；升級後不再報錯時 vue-tsc 會提示移除 -->
         <!-- @vue-expect-error -->
         <template #content>
           <!-- eslint-disable-next-line vue/no-v-html -->
@@ -125,7 +119,6 @@ const exampleContent = computed(() => {
       </UCollapsible>
     </template>
 
-    <!-- 題目連結 -->
     <template v-if="data && !error" #footer>
       <UButton :href="fullLink" label="前往 LeetCode" color="info" variant="subtle" />
     </template>

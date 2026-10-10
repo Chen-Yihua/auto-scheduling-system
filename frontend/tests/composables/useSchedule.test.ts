@@ -29,9 +29,7 @@ describe('useSchedule composable', () => {
     toastSpy.add.mockClear()
   })
 
-  // 這個要排第一個：useSchedule 是 createSharedComposable，同一支測試檔裡
-  // 後面任何一個測試呼叫過 fetchScheduleSuggestion，hasFetched 就會永久變 true，
-  // 初始狀態只有在還沒有任何測試碰過它之前才驗證得到
+  // 要排第一個：狀態是共用的，其他測試執行後 hasFetched 就不再是初始值
   it('初始狀態：還沒 fetch 過，loading／hasFetched 都是 false', () => {
     const ctx = useSchedule()
     expect(ctx.loading.value).toBe(false)

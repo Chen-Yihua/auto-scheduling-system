@@ -42,8 +42,7 @@ async def test_fetch_github_user_issues(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_fetch_github_user_issues_pins_api_version_header(monkeypatch):
-    """每個請求都要帶 X-GitHub-Api-Version（GitHub 官方建議），鎖定回傳格式，
-    不會因為 GitHub 換了預設版本就悄悄改變。"""
+    """每個請求都要帶 X-GitHub-Api-Version。"""
     sent_headers = []
 
     class MockResponse:
@@ -136,7 +135,7 @@ async def test_fetch_github_user_issues_stops_at_max_pages_safety_cap(monkeypatc
 @pytest.mark.asyncio
 @pytest.mark.parametrize("status_code", [400, 401, 403, 404])
 async def test_fetch_github_user_issues_client_error_is_non_retryable(monkeypatch, status_code):
-    """400/401/403/404 是客戶端錯誤（token 過期、沒權限、請求不對、資源不存在），重試也沒用 → 要丟 NonRetryableError。"""
+    """400/401/403/404 重試也沒用 → NonRetryableError。"""
     class MockClient:
         async def __aenter__(self): return self
         async def __aexit__(self, *args): pass
@@ -171,8 +170,7 @@ async def test_fetch_github_user_issues_transient_error_is_retryable(monkeypatch
 
 
 def test_transform_github_item_issue():
-    """一般 issue：GitHub 原始欄位要正確對應到統一格式的每個欄位（id、number、status、url、author、labels…），isPR 為 False。
-    id 要用 GitHub 全域唯一的 id，不能用 repo 內的 number——不同 repo 都有 #1，會互相覆蓋。"""
+    """一般 issue 的欄位對應正確，id 用全域 id 而不是 number，isPR 為 False。"""
     raw = {
         "id": 9000123,
         "number": 123,
@@ -265,9 +263,7 @@ class _FakeGithubIssues:
 
 @pytest.mark.asyncio
 async def test_sync_github_issues_migrates_legacy_ids_by_url(monkeypatch):
-    """DB 裡還有舊版用 number 當 id 的資料（沒有 number 欄位）→ 用 url 對到新抓回來的項目，
-    把 id 改成全域 id、補上 number，使用者設定的排程欄位才不會在這次同步被當成過期資料刪掉。
-    搬移要在 sync_platform_items 寫入／清除舊資料之前完成。"""
+    """用 number 當 id 的舊資料 → 依 url 改成新 id，排程欄位要保留。"""
     fake = _FakeGithubIssues(legacy_count=1)
     monkeypatch.setattr(database.db, "github_issues", fake)
     items = [{"id": 9000001, "number": 1, "url": "https://github.com/a/repo/issues/1"}]

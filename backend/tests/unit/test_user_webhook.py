@@ -161,7 +161,7 @@ async def test_webhook_rejects_payload_that_is_valid_json_but_not_an_object(monk
 
 @pytest.mark.asyncio
 async def test_webhook_defaults_data_to_empty_dict_when_data_field_is_not_a_dict(monkeypatch):
-    """data 欄位型別不對（例如字串）→ 不能讓整支 webhook 回 500，安全退回空字典即可（非 user.deleted 事件本來就不看 data 內容）。"""
+    """data 型別錯誤 → 當成空字典，不回 500。"""
     result = await _call_webhook(monkeypatch, {"type": "user.created", "data": "not-a-dict"})
 
     assert result == {"status": "ok"}

@@ -6,8 +6,7 @@ import { priorityLabel } from '~/utils/labels'
 const { loading, scheduled, unscheduled, notLinked, hasFetched, confirming, confirmSchedule } = useSchedule()
 const router = useRouter()
 
-// 產生／重新產生排程建議前一律先過拖拉排序精靈（獨立頁面，見 pages/schedule.vue）；
-// 精靈完成後會自己呼叫 fetchScheduleSuggestion 再導回這裡
+// 產生建議前先進排程精靈，精靈完成後會產生建議並導回這裡
 function startWizard() {
   router.push('/schedule')
 }
@@ -25,8 +24,7 @@ const getPriorityColor = (priority: string | undefined) => {
   }
 }
 
-// scheduled 的 start/end 都是同一天的機率很高，只在跨日才重複顯示日期，
-// 畫面上比較不擁擠
+// 跨日時才重複顯示日期
 const formatRange = (start: string, end: string) => {
   const startDate = new Date(start)
   const endDate = new Date(end)

@@ -6,8 +6,7 @@ import type { FormSubmitEvent } from '@nuxt/ui'
 import type { SchedulableTask } from '~/types/schedulableTask'
 import { priorityLabel } from '~/utils/labels'
 
-// limit 不給就顯示全部——dashboard 卡片用小數字避免無限拉長，
-// /tasks 這個完整清單頁面則不傳，直接看到全部任務
+// 不傳 limit 則顯示全部
 const props = defineProps<{ limit?: number }>()
 
 const {
@@ -31,11 +30,7 @@ const {
   onCancel,
 } = useTaskForm()
 
-// 任務列表現在顯示手動任務 + GitHub/Jira/Moodle 統一清單（見
-// crud/schedulable_items.py），不是只有手動任務。新增/編輯/刪除仍然只
-// 作用在手動任務（外部平台項目沒有標題/描述可以編輯），all_tasks 只用來
-// 在按下「編輯」時找到完整的任務資料（SchedulableTask 沒有 duration/
-// inference_hint 這些編輯表單需要的欄位）
+// 列表顯示所有來源的項目，但只有手動任務能編輯；all_tasks 用來取得編輯表單需要的完整欄位
 const { tasks: schedulableTasks, loading, fetchSchedulableTasks, toggleDone } = useSchedulableTasks()
 
 const displayedTasks = computed(() =>
@@ -51,7 +46,7 @@ const sourceIcon: Record<SchedulableTask['source'], string> = {
 }
 
 function startEditSchedulableTask(item: SchedulableTask) {
-  // 組合 id 去掉 "manual:" 前綴才是 useTaskForm 認得的原始 id
+  // 去掉 "manual:" 前綴才是原始 id
   const rawId = item.id.replace(/^manual:/, '')
   const task = all_tasks.value.find((t) => t.id === rawId)
   if (task) startEditTask(task)
@@ -74,7 +69,6 @@ const getPriorityColor = (priority: string | null | undefined) => {
   }
 }
 
-// 任務列表緊湊顯示用：只留月/日 時:分，完整日期時間只在編輯表單裡看得到
 function compactDueDate(dueDate: string): string {
   const d = new Date(dueDate)
   const pad = (n: number) => String(n).padStart(2, '0')
@@ -82,7 +76,6 @@ function compactDueDate(dueDate: string): string {
 }
 
 
-// 等待 user 有值再 resolve
 function waitForUser<T>(userRef: Ref<T>): Promise<NonNullable<T>> {
   return new Promise(resolve => {
     if (userRef.value) return resolve(userRef.value as NonNullable<T>)
@@ -96,10 +89,7 @@ function waitForUser<T>(userRef: Ref<T>): Promise<NonNullable<T>> {
 }
 
 
-// 提交表單時的處理函數。一定要 await，UButton 的 loading-auto 才追蹤得到
-// 真正的非同步流程；不然按鈕全程可以按，使用者手速快一點就會連點出好幾筆
-// 重複的任務（onSubmit/onEdit 自己也有 submitting 擋重入，這裡是雙重保險）。
-// 成功後順便重新抓一次統一清單，畫面上的任務列表才會反映剛剛的新增/修改
+// 必須 await，UButton 的 loading-auto 才追蹤得到非同步流程
 async function handleSubmit(e: FormSubmitEvent<typeof state>) {
   if (isEditMode.value) {
     await onEdit(e)
@@ -114,7 +104,7 @@ async function handleDelete() {
   await fetchSchedulableTasks()
 }
 
-// fetchTasks／fetchSchedulableTasks 各自會處理錯誤（記錄、跳 toast），這裡不用再包 try/catch
+// 兩個 fetch 各自處理錯誤，不用再包 try/catch
 onMounted(async () => {
   await waitForUser(user)
   await Promise.all([fetchTasks(), fetchSchedulableTasks()])
@@ -122,21 +112,16 @@ onMounted(async () => {
 </script>
 
 <template>
-  <!-- 這裡整個元件要用同一個根節點包起來，不能讓 Modal 跟下面的任務清單
-  UCard 變成兩個各自獨立的頂層節點——外層 dashboard/Dashboard.vue 左欄用
-  space-y-6 控制各區塊間距，如果這裡是兩個 root，Modal 關閉時那個空的
-  wrapper div 還是會被當成一個「子元素」，害任務清單卡片多吃到一份
-  margin-top，跟右欄卡片對不齊 -->
+  <!-- 要用單一根節點：外層用 space-y 排版，多個 root 會多出間距 -->
   <div>
     <template v-if="user">
-      <!-- 新增任務按鈕移到頁面右上角的 Header 裡（見 header/AppHeader.vue），
-      這裡跟它共用同一份 showEditModal 狀態，所以在哪裡按都會打開這個 Modal -->
+      <!-- 新增按鈕在 AppHeader，透過共用的 showEditModal 打開這個 Modal -->
       <UModal
         v-model:open="showEditModal"
         :dismissible="false" 
         :close-on-esc="false"
       >    
-        <!-- Nuxt UI 3.1.0 的 slot 型別寫法跟新版 Vue 型別檢查不相容（誤報，執行時正常）；升級 @nuxt/ui 後若檢查不再報錯，vue-tsc 會提示可以移除下面這行 -->
+        <!-- Nuxt UI 3.1.0 的 slot 型別和新版 Vue 不相容（誤報）；升級後不再報錯時 vue-tsc 會提示移除 -->
         <!-- @vue-expect-error -->
         <template #content>
           <UForm 
@@ -149,10 +134,6 @@ onMounted(async () => {
               {{ isEditMode ? '編輯任務' : '新增任務' }}
             </h2>
 
-            <!-- 說明這個表單裡 AI 能幫上什麼忙：優先級、預估時長都可以留空，
-            AI 會根據標題/描述自動幫你評估；也可以在下面「給 AI 的提醒」補充
-            標題描述看不出來的細節，讓 AI 判斷更準。不特別解釋的話，不熟悉
-            AI 工具的使用者容易搞不懂「提醒」欄位是要寫什麼、為什麼要寫 -->
             <div class="flex items-start gap-2 rounded-lg bg-blue-50 text-blue-800 text-sm px-4 py-3">
               <UIcon name="i-lucide-sparkles" class="w-4 h-4 flex-shrink-0 mt-0.5" />
               <p>
@@ -200,7 +181,7 @@ onMounted(async () => {
                     <UButton class="justify-start text-left w-full" color="neutral" variant="subtle" icon="i-lucide-calendar">
                         {{ displayDate }}
                     </UButton>
-                    <!-- Nuxt UI 3.1.0 的 slot 型別寫法跟新版 Vue 型別檢查不相容（誤報，執行時正常）；升級 @nuxt/ui 後若檢查不再報錯，vue-tsc 會提示可以移除下面這行 -->
+                    <!-- Nuxt UI 3.1.0 的 slot 型別和新版 Vue 不相容（誤報）；升級後不再報錯時 vue-tsc 會提示移除 -->
                     <!-- @vue-expect-error -->
                     <template #content>
                         <div class="p-2">
@@ -291,7 +272,6 @@ onMounted(async () => {
       </UModal>
     </template>
 
-    <!-- 任務清單區塊 -->
     <UCard>
       <template #header>
         <div class="flex items-center gap-2">
@@ -303,17 +283,12 @@ onMounted(async () => {
       <div v-if="loading">
         <USkeleton v-for="i in 3" :key="i" class="h-24 mb-4" />
       </div>
-      <!-- 真的沒有任務是正常狀態，不是還在載入，不該一直顯示 Skeleton -->
       <div
         v-else-if="schedulableTasks.length === 0"
         class="text-center text-sm text-gray-500 dark:text-gray-400 py-6"
       >
         目前沒有任務，點擊右上角的編輯圖示新增一個吧
       </div>
-      <!-- 每筆任務一行緊湊顯示：只留標題、優先級、截止日期跟操作按鈕——
-      描述跟完成狀態徽章（目前實際上只有「待辦／已完成」兩種，已完成已經
-      反映在下面按鈕文字跟顏色上）不是掃過清單時真正需要的資訊，點「編輯」
-      還是看得到完整內容，不用整張卡片攤開才看得完 -->
       <div v-else class="space-y-2">
         <div
           v-for="task in displayedTasks"

@@ -172,8 +172,7 @@ async def test_get_all_schedulable_items_only_returns_the_given_users_items():
 
 @pytest.mark.asyncio
 async def test_reorder_schedulable_items_preserves_global_index_across_sources():
-    """混著手動任務跟外部平台項目一起送出，sort_order 要是提交清單裡的全域索引，
-    不能各自來源重新從 0 編號（否則同一欄裡兩個來源交錯的順序會被打散）。"""
+    """混合來源時，sort_order 是整份清單的索引，不分來源各自編號。"""
     try:
         await db.manual_tasks.insert_one({"_id": "t1", "user_id": "sched-user", "title": "手動任務", "priority": "Low"})
         await db.github_issues.insert_one({"id": 1, "user_id": "sched-user", "title": "GitHub", "status": "open"})

@@ -1,7 +1,4 @@
-# 透過 HTTP 測試 /manual_tasks 這組 API：路由有註冊、登入驗證有掛上、
-# 回傳的 JSON 格式（response_model）跟錯誤狀態碼真的送得出去。
-# crud 層在這裡被 mock 掉；建立任務時「哪些欄位交給 LLM 推斷」、更新時保留原值、
-# 只能動自己的任務等規則，由 unit/test_manual_task_router.py 和 unit/test_manual_task_crud.py 負責。
+# 透過 HTTP 確認路由、登入驗證、回應格式和錯誤狀態碼；細部邏輯由 unit 測試負責
 import pytest
 from fastapi import HTTPException
 from httpx import AsyncClient

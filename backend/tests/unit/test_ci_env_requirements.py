@@ -1,13 +1,6 @@
 """
-這幾天 GitHub Actions 的 backend-test job 一直失敗，原因是 main.py 的 import chain
-在「載入模組」的當下（不是執行測試的當下）就需要幾個環境變數，CI 卻沒有帶進去：
-- core/security.py 缺 CLERK_JWKS_URL / CLERK_ISSUER 會直接 raise RuntimeError
-- routers/pr_review_webhook.py 缺 GEMINI_API_KEY，建立 genai.Client 會直接 raise ValueError
-
-這份測試做兩件事：
-1. 用 subprocess 真的重現「缺變數就掛」的行為，證明這不是憑空猜測。
-2. 檢查 .github/workflows/deploy.yml 的 backend-test job 確實有把這幾個變數帶進去，
-   避免以後有人改 workflow 時又把它們拿掉、CI 又悄悄變紅。
+部分模組在 import 時就需要環境變數（CLERK_*、GEMINI_API_KEY）。
+確認缺少時 import 會失敗，以及 CI workflow 有帶入這些變數。
 """
 import os
 import subprocess
@@ -33,7 +26,7 @@ def _run_import_in_clean_process(code: str, env_overrides: dict) -> subprocess.C
 
 
 def test_missing_clerk_env_vars_breaks_import():
-    """沒有 CLERK_JWKS_URL / CLERK_ISSUER 時，import core.security 要直接失敗（fail fast），不能帶著壞設定啟動。"""
+    """沒有 CLERK_JWKS_URL / CLERK_ISSUER 時，import core.security 要失敗。"""
     result = _run_import_in_clean_process("import core.security", env_overrides={})
 
     assert result.returncode != 0
@@ -54,12 +47,10 @@ def test_clerk_env_vars_present_allows_import():
 
 
 def test_missing_gemini_api_key_breaks_webhook_import():
-    """沒有 GEMINI_API_KEY 時，import routers.pr_review_webhook 要失敗（建立 genai.Client 就會出錯）。"""
+    """沒有 GEMINI_API_KEY 時，import routers.pr_review_webhook 要失敗。"""
     result = _run_import_in_clean_process("import routers.pr_review_webhook", env_overrides={})
 
-    # 只斷言「import 失敗」，不比對 google-genai SDK 例外訊息的確切文字——
-    # requirements.txt 沒有鎖版本，SDK 版本更新時錯誤訊息措辭本來就可能改變，
-    # 綁死文字內容會讓這個測試在依賴升級時無端變紅（過去就真的因此壞過一次）。
+    # 不比對錯誤訊息：SDK 沒鎖版本，訊息文字可能改變
     assert result.returncode != 0
 
 
@@ -90,7 +81,7 @@ def _get_job_block(workflow_text: str, job_name: str) -> str:
 
 
 def test_backend_test_job_has_required_env_vars_wired_in_ci():
-    """CI 的 backend-test job 一定要帶入 CLERK_ISSUER、CLERK_JWKS_URL、GEMINI_API_KEY，不然 pytest 連收集測試都會失敗；防止以後改 workflow 時不小心拿掉。"""
+    """CI 的 backend-test job 要帶入 CLERK_ISSUER、CLERK_JWKS_URL、GEMINI_API_KEY。"""
     with open(WORKFLOW_PATH, encoding="utf-8") as f:
         workflow_text = f.read()
 

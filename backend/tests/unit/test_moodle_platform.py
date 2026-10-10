@@ -1,10 +1,4 @@
-"""
-platforms/moodle.py 的 Selenium 爬蟲邏輯——「例外路徑也要收尾（driver.quit()）」正好
-是這裡的活教材，但這個檔案先前完全沒有專屬測試。
-
-策略：完全 mock 掉 selenium 的 webdriver.Chrome 跟 WebDriverWait，不真的開瀏覽器，
-只驗證 control flow——該不該收尾、該不該丟例外——不驗證 DOM 互動細節本身。
-"""
+"""mock 掉 Selenium，只驗證流程：失敗時要關閉 driver、該丟的例外有丟。"""
 import pytest
 from unittest.mock import MagicMock
 
@@ -55,8 +49,7 @@ def test_login_to_moodle_quits_driver_and_raises_when_login_fails(monkeypatch):
 def test_login_to_moodle_quits_driver_on_unexpected_exception(monkeypatch):
     """登入過程出現非帳密問題的錯誤（例如等待逾時）→ 錯誤照樣往外丟，瀏覽器一樣要關掉。"""
     driver = _mock_chrome(monkeypatch, "https://moodle.nccu.edu.tw/my/")
-    # 模擬 WebDriverWait 本身出包（例如逾時），不是帳密問題——驗證不管哪種
-    # 例外，driver 都要被收掉，不能留著 Chrome 行程
+    # 非帳密問題的例外（例如逾時）也要關閉 driver
     monkeypatch.setattr(
         moodle_crud, "WebDriverWait",
         lambda driver, timeout: MagicMock(until=MagicMock(side_effect=TimeoutError("等待逾時")))

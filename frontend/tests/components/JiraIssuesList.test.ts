@@ -3,8 +3,7 @@ import { mount } from '@vue/test-utils'
 import { defineComponent, h } from 'vue'
 import JiraIssuesList from '~/components/platforms/JiraIssuesList.vue'
 
-// UCard 的預設 auto-stub（`true`）不會渲染 slot 內容，這裡改用會渲染
-// header/default/footer slot 的 stub，才能斷言卡片裡實際顯示了什麼
+// UCard 預設的 stub 不渲染 slot，改用會渲染 slot 的假元件
 const UCardStub = defineComponent({
   name: 'UCard',
   emits: ['click'],
@@ -83,10 +82,7 @@ describe('JiraIssuesList.vue', () => {
     expect(wrapper.text()).toContain('ISSUE-1')
     expect(wrapper.text()).toContain('Fix the bug')
 
-    // 整個區塊現在也包在外層的 UCard 裡（跟 Hacker News 一樣的外框），
-    // 所以畫面上有兩層 .u-card-stub：index 0 是外層的區塊容器（文字內容
-    // 涵蓋整個區塊，也會包含 'ISSUE-1'，不能用文字比對來分辨），
-    // index 1 才是真正顯示這筆 issue 內容的那一張卡片
+    // index 0 是外層容器，index 1 才是這筆 issue 的卡片
     const cards = wrapper.findAll('.u-card-stub')
     expect(cards.length).toBe(2)
     await cards[1].trigger('click')

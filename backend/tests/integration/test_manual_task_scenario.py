@@ -1,15 +1,6 @@
 """
-端對端「情境」測試：跟其他 test_manual_task_api.py / test_manual_task_scenario.py 不同的地方是——
-這裡不是逐一測試單一 endpoint，而是把使用者真實會做的一整串操作串起來，
-在同一個測試裡透過真的 HTTP（httpx + ASGITransport 打 main.app）依序呼叫，
-確認「上一步寫進去的資料，下一步真的讀得到、也真的反映了更新」。
-
-用 mongomock（見 conftest.py）當資料庫，不是每支測試都各自 mock crud 函式——
-這樣才測得到「create 完 DB 裡真的有資料、update 完真的覆蓋掉舊值、delete 完真的查不到」
-這種跨步驟的資料一致性，而不只是「這個 endpoint 收到請求會怎麼回應」。
-
-clerk_id 特意用這個檔案獨有的字串，避免跟其他測試檔案共用同一個 mongomock
-session-scope 資料庫時互相污染到彼此的資料。
+情境測試：透過 HTTP 依序操作任務，用 mongomock 確認跨步驟的資料一致性。
+clerk_id 用這個檔案獨有的值，避免和其他測試共用的資料庫互相影響。
 """
 import pytest
 from fastapi import status
@@ -33,11 +24,10 @@ def _override_auth():
 
 @pytest.mark.asyncio
 async def test_manual_task_full_lifecycle():
-    """任務的完整生命週期：建立（priority/duration 都有填，不觸發 AI 推斷）→ 列表 → 單筆查詢 → 編輯（更新有真的落地）→ 刪除 → 單筆查不到（404）→ 列表回到空清單（200，不是 404）。"""
+    """任務完整流程：建立 → 列表 → 查詢 → 編輯 → 刪除 → 查詢 404 → 列表為空（200）。"""
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
-        # 1. 建立任務（priority/duration 都有填，不會觸發 AI 推斷，
-        #    避免這個情境測試還要額外去 mock Gemini）
+        # 1. 建立任務（有填 priority/duration，不觸發 AI 推斷）
         create_res = await ac.post(
             "/manual-tasks/",
             json={
@@ -99,8 +89,7 @@ async def test_manual_task_full_lifecycle():
         get_after_delete = await ac.get(f"/manual-tasks/{task_id}")
         assert get_after_delete.status_code == status.HTTP_404_NOT_FOUND
 
-        # 8. 這個使用者名下已經沒有任何任務 -> 是正常狀態，列表 endpoint 回 200 + 空陣列，
-        # 不是 404（404 代表資源路徑不存在，這裡路徑一直都存在，只是內容剛好是空的）
+        # 8. 沒有任務時回 200 和空陣列，不是 404
         list_after_delete = await ac.get("/manual-tasks/me")
         assert list_after_delete.status_code == status.HTTP_200_OK
         assert list_after_delete.json() == []
@@ -108,8 +97,7 @@ async def test_manual_task_full_lifecycle():
 
 @pytest.mark.asyncio
 async def test_manual_task_ai_inference_fills_missing_fields_and_survives_full_lifecycle():
-    """沒填 priority/duration → AI 推斷出的值要能一路撐過列表顯示、單筆查詢、編輯保留、
-最後刪除——不是只有建立當下那一次回應正確。"""
+    """沒填 priority/duration → AI 推斷的值在列表、查詢、編輯後都要保留。"""
     from unittest.mock import AsyncMock, patch
 
     with patch(

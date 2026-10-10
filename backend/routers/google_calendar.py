@@ -35,9 +35,7 @@ async def oauth_callback(
         "grant_type": "authorization_code",
     }
 
-    # 分開處理「連不上 Google」「Google 拒絕這個授權碼」兩種情況，
-    # 不要用大範圍的 except Exception 把下面更具體的錯誤（例如
-    # save_google_calendar_token 可能丟出的 503）也接住蓋掉
+    # 不用 except Exception，以免蓋掉後面更具體的錯誤（例如 DB 的 503）
     try:
         async with httpx.AsyncClient(timeout=GOOGLE_HTTP_TIMEOUT) as client:
             res = await client.post(token_url, data=token_payload)
@@ -61,14 +59,12 @@ async def oauth_callback(
     return JSONResponse(content={"message": "Google Calendar 授權成功"})
 
 
-# 輕量檢查：只查 DB 有沒有存過 token，不會真的打 Google API，
-# 給前端在呼叫 /oauth/calendars 之前先確認是否已授權
+# 只查 DB 不呼叫 Google，讓前端先確認是否已授權
 @router.get("/status")
 async def get_google_calendar_status(clerk_user: dict = Depends(get_current_clerk_user)):
     connected = await is_google_calendar_connected(clerk_user["sub"])
     return {"connected": connected}
 
-# 取得使用者的 Google Calendar 清單（token 過期會自動換新再打一次）
 @router.get("/calendars")
 async def get_google_calendars(clerk_user: dict = Depends(get_current_clerk_user)):
     calendars = await list_calendars_for_user(clerk_user["sub"])

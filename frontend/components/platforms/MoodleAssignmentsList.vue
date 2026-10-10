@@ -9,8 +9,7 @@ const props = defineProps<{
   syncedAt?: string | null
   authError?: boolean
   notLinked?: boolean
-  // 不給就顯示全部——dashboard 卡片用小數字避免無限拉長，
-  // /moodle 這個完整清單頁面則不傳
+  // 不傳則顯示全部
   limit?: number
 }>()
 
@@ -36,7 +35,6 @@ const openAssignment = (url: string) => {
 
     <StaleDataBanner :stale="isStale ?? false" :synced-at="syncedAt ?? null" :auth-error="authError ?? false" platform-label="Moodle" />
 
-    <!-- 尚未綁定 Moodle 帳號 -->
     <div
       v-if="notLinked"
       class="text-center text-sm text-gray-500 dark:text-gray-400 py-6"
@@ -44,13 +42,11 @@ const openAssignment = (url: string) => {
       尚未綁定 Moodle 帳號，請先設定
     </div>
 
-    <!-- Loading -->
     <div v-else-if="loading" class="flex justify-center items-center py-6">
       <UIcon name="i-lucide-loader" class="animate-spin w-6 h-6 text-primary" />
       <span class="ml-2 text-primary">載入中...</span>
     </div>
 
-    <!-- empty -->
     <div v-else-if="assignments.length === 0" class="text-center text-sm text-gray-500 dark:text-gray-400 py-6">
       目前沒有未繳作業
     </div>

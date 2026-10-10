@@ -13,7 +13,6 @@ def _to_task(doc: dict) -> dict:
     return doc
 
 
-# 建立任務
 async def create_manual_task(task: ManualTaskOut) -> dict:
     doc = task.model_dump()
     doc["_id"] = doc.pop("id")
@@ -36,34 +35,22 @@ async def create_manual_task(task: ManualTaskOut) -> dict:
         "calendar_event_id": doc.get("calendar_event_id"),
     }
 
-# 查詢指定任務
 async def get_manual_task_by_id(task_id: str, user_id: str):
     task = await db.manual_tasks.find_one({"_id": task_id, "user_id": user_id})
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     return _to_task(task)
 
-# 查詢 user 所有任務
 async def get_manual_tasks_by_user_id(user_id: str):
     tasks = await db.manual_tasks.find({"user_id": user_id}).to_list()
     return [_to_task(task) for task in tasks]
 
-# 依拖拉排序（三欄：低/中/高，可跨欄拖動，可能跟其他來源的項目混在同一次
-# 排程精靈提交裡）後的結果，寫回 priority 和 sort_order
 async def reorder_manual_tasks(user_id: str, items: list[dict]):
     """
-    items 每筆帶著 task_id、被拖到哪一欄的 priority、還有 sort_order
-    （由呼叫端——crud/schedulable_items.py 的 reorder_schedulable_items——
-    依「使用者提交的完整清單裡的位置」指定，不是這裡自己 enumerate 算出來的：
-    排程精靈可能同時混著手動任務跟外部平台項目，sort_order 只在同一個
-    priority 內比較，必須是跨來源一致的同一套數字，不能各自從 0 重算）。
+    寫回拖拉排序後的 priority 和 sort_order。sort_order 由呼叫端依跨來源的完整清單指定。
 
-    先確認每個 id 都是這個使用者自己的任務，再一次寫回——不能讓人把別人
-    帳號下的任務 id 混進來，藉此竄改不屬於自己的任務。
-
-    用 update_one 逐筆寫入而不是 update_manual_task_by_id：後者「這次沒有
-    任何欄位真的被改到就丟 400」的假設在這裡不成立——拖拉排序後名次剛好
-    跟原本一樣（modified_count == 0）是完全正常的情況，不該被當成錯誤。
+    先確認每個 id 都屬於這個使用者，避免竄改別人的任務。
+    不用 update_manual_task_by_id：順序沒變（modified_count 為 0）在這裡是正常情況，不該丟 400。
     """
     if not items:
         return []
@@ -85,23 +72,19 @@ async def reorder_manual_tasks(user_id: str, items: list[dict]):
     return await get_manual_tasks_by_user_id(user_id)
 
 
-# 確認排程後，把 Google Calendar 事件 id 寫回任務，標記為已鎖定
 async def set_calendar_event_id(task_id: str, user_id: str, calendar_event_id: str):
     """
-    只有 services/google_calendar.py 的 create_calendar_events_for_scheduled_tasks（使用者
-    「確認排程」時）會呼叫，不透過一般的 PUT /manual-tasks/{id} 更新流程——
-    calendar_event_id 不該讓 client 透過一般更新請求自己填，那樣等於能無中生有
-    「假裝」一筆任務已經鎖定，跳過真正建立 Google Calendar 事件那一步。
+    確認排程建立行事曆事件後呼叫。calendar_event_id 不開放透過一般更新 API 寫入，
+    否則 client 可以假裝任務已排入行事曆。
     """
     await db.manual_tasks.update_one(
         {"_id": task_id, "user_id": user_id},
         {"$set": {"calendar_event_id": calendar_event_id, "updated": datetime.now(timezone.utc)}},
     )
 
-# 更新任務
 async def update_manual_task_by_id(task_id: str, data: dict):
     logger.debug("Updating manual task %s with data=%s", task_id, data)
-    # id 就是 _id，不能被更新
+    # id 對應 _id，不能更新
     fields = {key: value for key, value in data.items() if key != "id"}
     result = await db.manual_tasks.update_one({"_id": task_id}, {"$set": fields})
     if result.modified_count == 0:
@@ -111,7 +94,6 @@ async def update_manual_task_by_id(task_id: str, data: dict):
         raise HTTPException(status_code=404, detail="Task not found")
     return _to_task(doc)
 
-# 刪除任務
 async def delete_manual_task_by_id(task_id: str):
     result = await db.manual_tasks.delete_one({"_id": task_id})
     if result.deleted_count == 0:

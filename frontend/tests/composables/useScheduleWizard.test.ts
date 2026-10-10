@@ -114,8 +114,7 @@ describe('useScheduleWizard composable', () => {
     const ctx = useScheduleWizard()
     ctx.initWizard([])
 
-    // 加了規律列，勾了星期但還沒填時間；加了整天規律但沒勾任何星期；
-    // 加了例外時段但還沒選日期——這三種都是「還沒填完」，不該送出
+    // 三種還沒填完的時段都不該送出
     ctx.addBlockedRecurringRule()
     ctx.preferences.value.blocked_recurring[0]!.days_of_week = [5]
     ctx.addBlockedRecurringRule()

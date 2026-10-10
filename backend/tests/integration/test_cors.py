@@ -7,7 +7,7 @@ client = TestClient(app)
 # ========== CORS middleware 實際行為（用預設白名單 http://localhost:3000）==========
 
 def test_allowed_origin_gets_reflected_back():
-    """白名單內的來源（http://localhost:3000）→ 回應要帶 access-control-allow-origin，並原樣回填該來源。"""
+    """白名單內的來源 → 回應帶 access-control-allow-origin 並回填該來源。"""
     res = client.get("/health", headers={"Origin": "http://localhost:3000"})
     assert res.status_code == 200
     assert res.headers.get("access-control-allow-origin") == "http://localhost:3000"

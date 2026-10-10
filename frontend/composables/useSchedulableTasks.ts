@@ -4,9 +4,7 @@ import { createSharedComposable } from '@vueuse/core'
 import type { SchedulableTask } from '@/types/schedulableTask'
 import { getFriendlyErrorTitle } from '@/utils/errorMessages'
 
-// createSharedComposable：任務列表卡片（TaskForm.vue）跟排程精靈頁面
-// （pages/schedule.vue）都要看到同一份「手動任務 + GitHub/Jira/Moodle」統一清單，
-// 標記完成或排序精靈存檔後，兩邊都該反映最新狀態，不用各自重抓一次
+// 共用狀態：任務列表和排程精靈要看到同一份清單
 function useSchedulableTasksImpl() {
   const toast = useToast()
   const config = useRuntimeConfig()
@@ -38,9 +36,7 @@ function useSchedulableTasksImpl() {
     }
   }
 
-  // 使用者手動標記完成／取消完成。手動任務跟外部平台項目都走同一支端點
-  // （見 crud/schedulable_items.py 的 set_done），這裡樂觀更新本地狀態，
-  // 失敗再重新整理一次真正的資料，不留下跟後端不同步的假象
+  // 樂觀更新，失敗時重新抓取以和後端同步
   const toggleDone = async (task: SchedulableTask) => {
     const nextDone = task.status !== 'Done'
     const previousStatus = task.status

@@ -1,6 +1,4 @@
-# 透過 HTTP 測試 /github 這組 API：路由有註冊、登入驗證有掛上、
-# 回傳的 JSON 格式（response_model）跟錯誤狀態碼真的送得出去。
-# 各種錯誤分支（503/500/401、header）由 test_github_router.py 負責，這裡不重複測。
+# 透過 HTTP 確認路由、登入驗證、回應格式和錯誤狀態碼；細部邏輯由 unit 測試負責
 import pytest
 from fastapi import status
 from httpx import AsyncClient

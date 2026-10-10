@@ -4,14 +4,12 @@ from zoneinfo import ZoneInfo
 
 logger = logging.getLogger(__name__)
 
-# manual_tasks 現在允許每個任務自己填（或由 LLM 推斷）預估時長；
-# 這裡的預設值只給「沒有 duration 欄位」的舊資料當退路。
+# 沒有 duration 欄位的舊資料用這個值
 DEFAULT_TASK_DURATION_MINUTES = 60
 
 PRIORITY_ORDER = {"High": 0, "Medium": 1, "Low": 2}
 
-# 截止日在這段時間內（含已經過期）的任務算「緊急」，不管 priority 一律先排——
-# 不然一個今晚就要交的 Low 任務，會被一堆下個月才到期的 High 任務擠到後面
+# 截止日在這段時間內（含已過期）的任務不管 priority 一律先排
 URGENT_WINDOW = timedelta(hours=24)
 
 
@@ -22,11 +20,7 @@ def _parse_iso(value) -> datetime:
 
 
 def _sortable_due_date(due) -> datetime:
-    """
-    due_date 可能是 aware 或 naive datetime（取決於建立任務當下帶的格式），
-    排序前一律去掉 tzinfo，避免 aware/naive 互相比較直接噴例外。
-    這裡只用來決定「誰先誰後」，容許幾小時時區誤差不影響排程建議的實用性。
-    """
+    """排序用：去掉 tzinfo 避免 aware/naive 混合比較出錯，幾小時的誤差不影響先後。"""
     if due is None:
         return datetime.max.replace(tzinfo=None)
     if due.tzinfo is not None:
@@ -35,10 +29,7 @@ def _sortable_due_date(due) -> datetime:
 
 
 def _due_as_utc(due) -> datetime | None:
-    """
-    把 due_date 統一成 aware 的 UTC datetime，才能跟 free_slots（UTC）比較先後。
-    pymongo 讀回來的 datetime 預設是不含時區的 UTC，所以 naive 一律當成 UTC。
-    """
+    """轉成 aware UTC。pymongo 讀回的 naive datetime 本來就是 UTC。"""
     if due is None:
         return None
     if isinstance(due, str):
@@ -49,10 +40,7 @@ def _due_as_utc(due) -> datetime | None:
 
 
 def _to_local_wall_time(value: datetime, zone: ZoneInfo) -> datetime:
-    """
-    換算成使用者當地的「牆上時鐘時間」（不含時區），才能跟使用者填的
-    「22:00」這種當地時間直接比較。沒有時區的 datetime 一律當成 UTC。
-    """
+    """轉成使用者當地的牆上時間（naive），才能跟「22:00」這類設定比較。naive 視為 UTC。"""
     if value.tzinfo is None:
         value = value.replace(tzinfo=timezone.utc)
     return value.astimezone(zone).replace(tzinfo=None)
@@ -73,16 +61,9 @@ def _expand_recurring_blocks(
     rules: list[dict], window_start: datetime, window_end: datetime,
 ) -> list[tuple[datetime, datetime]]:
     """
-    把「每週固定規律」（例如「每天 22:00-08:00」「週六、週日全天」）展開成
-    這個時間窗內、每一天實際對應的 datetime 區間。
-
-    起訖時間跨過午夜（end_time <= start_time，例如 22:00-08:00）拆成兩段：
-    當天 start_time ~ 24:00，跟隔天 00:00 ~ end_time——這樣才不會漏掉隔天
-    一大早那一段，也不用處理「區間橫跨兩天」這種更複雜的表示法。
-
-    使用者在精靈畫面上可能先勾了星期、還沒填起訖時間就送出（例如規律還在
-    編輯中）；這種不是 all_day、卻沒有 start_time/end_time 的規則視為還沒
-    設定完整，直接跳過，不當成錯誤擋掉整個排程建議。
+    把每週固定的不工作時段展開成時間窗內每天的實際區間。
+    跨午夜的規則（例如 22:00-08:00）拆成當天和隔天兩段。
+    不是 all_day 又沒有起訖時間的規則視為還沒填完，略過。
     """
     blocks: list[tuple[datetime, datetime]] = []
     day = window_start.date()
@@ -136,17 +117,10 @@ def apply_blocked_periods(
     tz_name: str = "UTC",
 ) -> list[dict]:
     """
-    從 Google Calendar 算出的空檔（free_slots）裡，再挖掉使用者這一輪在
-    排程精靈填的「不工作時段」——每週固定規律 + 這次額外加的一次性例外。
+    從空檔挖掉使用者設定的不工作時段（每週規律和一次性例外）。
 
-    使用者填的「22:00」是他所在時區（tz_name）的當地時間，Google 回來的空檔
-    卻是 UTC，所以先把空檔、例外時段都換算成當地的牆上時鐘時間，在當地時間
-    上挖掉不工作時段，最後再換回 UTC。不換算的話，台灣使用者（UTC+8）設定的
-    「每天 22:00-08:00」會變成擋掉台灣時間 06:00-16:00，半夜反而沒擋到。
-
-    「輸出」一定要帶 UTC 時區標記（Z）——少了這個標記，前端 new Date(...)
-    會把它當成瀏覽器所在時區的本地時間解讀，讓排程建議看起來排到過去的時間
-    （例如已經是晚上，卻顯示排在「今天早上」）。
+    不工作時段是使用者當地（tz_name）的時間，空檔是 UTC，所以先換成當地時間再挖，
+    最後轉回 UTC。輸出必須帶 Z，否則前端 new Date() 會當成瀏覽器的本地時間。
     """
     if not blocked_recurring and not blocked_exceptions:
         return free_slots
@@ -195,41 +169,19 @@ def build_schedule_suggestion(
     tz_name: str = "UTC",
 ) -> dict:
     """
-    規則式排程建議（貪婪 First-Fit）：不寫回 Google Calendar，只回傳一份建議清單。
+    規則式排程建議（貪婪 First-Fit），只回傳建議，不寫入 Google Calendar。
 
-    已經「確認排程」過、寫進 Google Calendar 的任務（有 calendar_event_id，
-    見 POST /schedule/confirm）會被排除，不會再被拿來重新排程——那些時段
-    已經是既成事實，要改只能直接去 Google Calendar 改。
+    排序：
+    - 已完成或已寫入行事曆（有 calendar_event_id）的任務不排。
+    - 截止日在 URGENT_WINDOW 內或已過期的任務最優先，依截止日早到晚。
+    - 其餘依 priority，同 priority 內依 sort_order；沒有 sort_order 的排在後面，依 due_date。
 
-    緊急任務優先：截止日在 URGENT_WINDOW（24 小時）內、或已經過期的任務，
-    不管 priority 一律排在最前面，彼此之間依截止日早到晚（EDF）。不然一個
-    今晚就要交的 Low 任務，會被一堆下個月才到期的 High 任務擠到後面。
-    now 是判斷「24 小時內」的基準時間，預設是當下，測試可以傳固定時間進來。
+    安排：每個任務從最早的空檔找第一個放得下的。前面任務放不下的空檔仍保留給
+    後面較短的任務。未過期的任務必須在截止日前結束，否則列入 unscheduled。
 
-    其餘任務的排序規則：priority（High > Medium > Low）是主要依據——排程精靈的
-    拖拉排序畫面現在是低/中/高三欄，拖去別欄當場就是在改 priority
-    （見 PUT /schedule/reorder），不是另外一套獨立的排序機制。
-    同一個 priority 內，才看 sort_order（使用者在畫面上同一欄內排的上下
-    順序）決定誰先誰後；沒有 sort_order 的任務（例如排完序後才新建的）
-    退回舊規則，依 due_date 早到晚排序、沒有 due_date 的排在最後面，
-    整批排在同 priority 內有 sort_order 的任務後面。
-
-    排定規則：依序把任務塞進可用空檔，每個任務用自己的 duration
-    （沒有就退回 task_duration_minutes）；每次都從最早的空檔開始找，
-    只要找到一個容量夠的空檔就塞進去、消耗掉那段時間。
-    因為每個任務時長可能不同，這裡故意不做「空檔用完就跳過」的捷徑——
-    前面任務太大塞不下的空檔，仍要留給後面時長較短的任務用。
-    截止日還沒到的任務，必須在截止日前完成（end <= due_date），寧可列進
-    unscheduled 讓使用者知道，也不能排在截止日之後還顯示成「已排入」。
-    已經過期的任務沒有「趕得上」的可能，不套用這條限制，盡早排進去就好。
-    塞不進任何空檔的任務，放進 unscheduled 並附上原因。
-
-    buffer_minutes：每排完一個任務，消耗掉的時間多加這一段當緩衝
-    （不算進下一個任務可用），0 就是目前預設的「完全貼著排」。
-    daily_max_minutes：同一天已經排的時長加起來到這個上限後，當天剩下的
-    空檔就先跳過、留給後面的任務找別天的空檔（不會因此整段消耗掉）。
-    「同一天」是使用者當地（tz_name）的日曆日，不是 UTC 的——不然台灣使用者
-    的「一天」會在早上 8 點（UTC 午夜）才切換。
+    buffer_minutes：每個任務後保留的緩衝時間。
+    daily_max_minutes：每天最多安排的分鐘數，以使用者當地（tz_name）的日期計算。
+    now：判斷緊急和過期的基準時間，測試可傳固定值。
     """
     now = now or datetime.now(timezone.utc)
     zone = ZoneInfo(tz_name)
@@ -248,11 +200,7 @@ def build_schedule_suggestion(
 
     pending_sorted = sorted(pending, key=sort_key)
 
-    # 理論上 tasks 一定有 id/title/priority（見 schemas/manual_task.py 的
-    # ManualTaskOut，這三個是必填欄位），但這裡不假設一定成立——資料格式
-    # 以後可能改變、也可能有繞過驗證的舊資料。少了這些欄位就湊不出一筆
-    # 有意義的排程結果（回傳的 ScheduleSuggestion 這幾個欄位也都是必填），
-    # 與其讓整個請求因為一筆壞資料就當掉，不如跳過它、記錄下來
+    # 缺必要欄位的壞資料跳過，不讓一筆資料拖垮整個請求
     valid_tasks = []
     for t in pending_sorted:
         if not t.get("id") or not t.get("title") or not t.get("priority"):
@@ -260,7 +208,6 @@ def build_schedule_suggestion(
             continue
         valid_tasks.append(t)
 
-    # free_slots 同理，缺 start/end 就不是一個有意義的空檔，直接跳過
     valid_slots = []
     for s in free_slots:
         if not s.get("start") or not s.get("end"):
@@ -290,7 +237,7 @@ def build_schedule_suggestion(
                 if remaining_today < task_minutes:
                     continue
             if deadline is not None and slot["start"] + duration > deadline:
-                # slots 依開始時間排序，這個放不進截止日前，後面的只會更晚，不用再找
+                # slots 依開始時間排序，後面的只會更晚
                 missed_deadline = True
                 break
             start = slot["start"]
@@ -326,13 +273,10 @@ def check_suggestion_still_valid(
     now: datetime | None = None,
 ) -> tuple[list[dict], list[dict]]:
     """
-    確認排程時，檢查使用者當初看到的那份排程建議（存在快取裡的快照）現在還能不能
-    照原樣寫進 Google Calendar——使用者確認什麼，就寫入什麼，不重新計算；但看到
-    建議到按下確認之間，任務或行事曆可能已經變了，有問題的那幾筆要擋下來說明原因，
-    其餘照寫。
+    確認排程前，檢查使用者看到的建議是否仍能照原樣寫入（期間任務或行事曆可能已改變）。
 
-    回傳 (可以寫入的項目, 不能寫入的項目＋原因)。free_slots 要是「此刻」的行事曆
-    空檔（不套用不工作時段——這裡只檢查有沒有跟行程撞期）。純函式，不碰資料庫或 API。
+    回傳 (可寫入的項目, 不能寫入的項目與原因)。free_slots 是此刻的空檔，
+    不套用不工作時段，只檢查有沒有撞期。
     """
     now = now or datetime.now(timezone.utc)
     tasks_by_id = {t["id"]: t for t in current_tasks}

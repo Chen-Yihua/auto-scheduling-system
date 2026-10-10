@@ -1,6 +1,4 @@
-# 透過 HTTP 測試 /schedule 這組 API：路由有註冊、登入驗證有掛上、
-# 回傳的 JSON 格式（response_model）跟錯誤狀態碼真的送得出去。
-# 排程規則本身（誰先排、塞哪個空檔）由 test_schedule_crud.py 負責，這裡不重複測。
+# 透過 HTTP 確認路由、登入驗證、回應格式和錯誤狀態碼；細部邏輯由 unit 測試負責
 import pytest
 from fastapi import HTTPException, status
 from httpx import AsyncClient
@@ -12,7 +10,7 @@ import routers.schedule as schedule_router
 
 @pytest.mark.asyncio
 async def test_get_schedule_suggestion(monkeypatch, logged_in_user):
-    """POST /schedule/suggest 成功（不帶 preferences）：200，回傳 scheduled / unscheduled 兩份清單，datetime 被轉成字串。"""
+    """POST /schedule/suggest 不帶 preferences → 200，回傳 scheduled 和 unscheduled。"""
     async def mock_get_tasks(user_id):
         return [{"id": "t1", "title": "任務一", "priority": "High", "status": "To Do", "due_date": None}]
 
@@ -34,7 +32,7 @@ async def test_get_schedule_suggestion(monkeypatch, logged_in_user):
 
 @pytest.mark.asyncio
 async def test_get_schedule_suggestion_with_preferences(monkeypatch, logged_in_user):
-    """POST /schedule/suggest 帶 preferences：不工作時段會先把空檔挖掉，塞不進去的任務要出現在 unscheduled。"""
+    """帶 preferences → 先扣掉不工作時段，放不下的任務列入 unscheduled。"""
     async def mock_get_tasks(user_id):
         return [{"id": "t1", "title": "任務一", "priority": "High", "status": "To Do", "due_date": None, "duration": 60}]
 
@@ -59,10 +57,7 @@ async def test_get_schedule_suggestion_with_preferences(monkeypatch, logged_in_u
 
 @pytest.mark.asyncio
 async def test_get_schedule_suggestion_with_preferences_keeps_scheduled_time_in_utc(monkeypatch, logged_in_user):
-    """曾經是真的會炸的 bug：套用不工作時段後，回傳的 scheduled start/end 弄丟了 UTC
-    時區標記，前端 new Date(...) 會當成瀏覽器本地時間解讀，讓排程建議看起來排到
-    已經過去的時間。這裡只擋掉空檔的一小段（12:00-13:00），任務仍然排得進去，
-    確認回傳的時間字串真的是帶時區資訊的（不是被誤判成本地時間的裸字串）。"""
+    """套用不工作時段後，回傳的 start/end 仍要帶 UTC 時區，否則前端會當成本地時間。"""
     async def mock_get_tasks(user_id):
         return [{"id": "t1", "title": "任務一", "priority": "High", "status": "To Do", "due_date": None, "duration": 60}]
 
@@ -116,8 +111,10 @@ async def test_get_schedule_suggestion_requires_login():
 
 @pytest.mark.asyncio
 async def test_suggest_then_confirm_writes_exactly_what_the_user_saw(monkeypatch, logged_in_user):
-    """完整流程：先產生排程建議，再確認 → 寫進行事曆的就是剛才看到的那幾筆、同樣的時間；
-    同一份建議再確認一次 → 409，不會重複建立行事曆事件。"""
+    """
+    產生建議後確認 → 寫入的就是看到的那幾筆和時間；
+    同一份建議再確認一次 → 409，不會重複建立事件。
+    """
     async def mock_get_tasks(user_id):
         return [{"id": "manual:t1", "title": "任務一", "priority": "High", "status": "To Do",
                  "due_date": None, "calendar_event_id": None}]
@@ -218,7 +215,7 @@ async def test_reorder_schedule_tasks_success(monkeypatch, logged_in_user):
 
 @pytest.mark.asyncio
 async def test_update_schedule_task_fields_success(monkeypatch, logged_in_user):
-    """PATCH /schedule/tasks/fields：task_id 放 body，Moodle 那種帶斜線/問號的組合 id 也不會被 URL 解析搞壞。"""
+    """PATCH /schedule/tasks/fields：含斜線和問號的 Moodle id 放在 body 也能正確處理。"""
     captured = {}
 
     async def mock_update(user_id, task_id, data):

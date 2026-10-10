@@ -9,8 +9,7 @@ import type { MoodleAssignment } from '~/types/moodle'
 const openSpy = vi.fn()
 vi.stubGlobal('open', openSpy)
 
-// 自訂 UCard stub，渲染 slot（UCard 的預設 auto-stub 不會渲染 slot 內容，
-// 但這個元件整個區塊、以及裡面每筆作業，現在都包在 UCard 裡）
+// UCard 預設的 stub 不渲染 slot，改用會渲染 slot 的假元件
 const UCardStub = defineComponent({
   name: 'UCard',
   emits: ['click'],
@@ -44,8 +43,7 @@ describe('MoodleAssignmentsList.vue', () => {
   it('未綁定帳號時顯示提示', () => {
     const wrapper = render({ notLinked: true })
     expect(wrapper.text()).toContain('尚未綁定 Moodle 帳號')
-    // 整個區塊現在固定包在一張 UCard 裡（跟 Hacker News 一樣的外框），
-    // 差別只在於裡面沒有渲染任何一筆「作業」的卡片
+    // 只有外層容器的卡片，沒有作業卡片
     expect(wrapper.findAll('.u-card-stub').length).toBe(1)
   })
 

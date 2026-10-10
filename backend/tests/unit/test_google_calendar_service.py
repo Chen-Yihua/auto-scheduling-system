@@ -1,8 +1,4 @@
-"""
-services/google_calendar.py：以使用者為單位操作 Google Calendar。
-token 過期自動換新再打一次、Google 回錯誤或連不上的分支，所有功能共用同一段，
-這裡透過 get_free_slots_for_user 測一次。
-"""
+"""token 換新和錯誤處理由各功能共用，這裡透過 get_free_slots_for_user 測試。"""
 import pytest
 import httpx
 from datetime import datetime, timezone
@@ -26,7 +22,7 @@ def clear_free_slots_cache():
 
 @pytest.mark.asyncio
 async def test_get_free_slots_happy_path(monkeypatch):
-    """成功流程：取 token → 找 primary 行事曆 → 查忙碌時段 → 回傳空檔（忙碌時段之前的 00:00–09:00 是第一段空檔）。"""
+    """成功流程：找到 primary 行事曆並回傳忙碌時段以外的空檔。"""
     async def mock_find_one(query):
         return {"_id": "uid123", "access_token": encrypt_secret("valid-token")}
 
@@ -55,7 +51,7 @@ async def test_get_free_slots_happy_path(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_get_free_slots_refreshes_token_on_401(monkeypatch):
-    """取得行事曆清單時 token 過期（401）→ 自動 refresh 換新 token 後重打一次（共 2 次），後續查忙碌時段用的是新 token。"""
+    """token 過期（401）→ 換新後重試，之後的請求用新 token。"""
     async def mock_find_one(query):
         return {"_id": "uid123", "access_token": encrypt_secret("expired-token"), "refresh_token": encrypt_secret("rt")}
 
@@ -112,7 +108,7 @@ async def test_get_free_slots_raises_404_when_no_primary_calendar(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_get_free_slots_raises_400_when_not_connected(monkeypatch):
-    """尚未連接 Google Calendar → 400（跟 github/jira 的「尚未連結帳號」一致），跟「連過但憑證失效」的 401 分開。"""
+    """尚未連接 Google Calendar → 400，和憑證失效的 401 區分。"""
     async def mock_find_one(query):
         return None
 

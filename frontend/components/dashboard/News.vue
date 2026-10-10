@@ -40,10 +40,8 @@ const isCollapsed = ref(true)
       </div>
     </template>
 
-    <!-- Loading Skeleton -->
     <USkeleton v-if="isLoading" class="h-64 rounded-lg" />
 
-    <!-- Error -->
     <p
       v-else-if="error || !stories || stories.length === 0"
       class="text-sm text-gray-500 dark:text-gray-400 text-center py-6"
@@ -51,9 +49,7 @@ const isCollapsed = ref(true)
       暫時無法載入新聞，請稍後再試。
     </p>
 
-    <!-- News List -->
     <template v-else>
-      <!-- 顯示前三則新聞 -->
       <ul class="space-y-1">
         <li
           v-for="(story, idx) in stories.slice(0, 3)"
@@ -79,7 +75,6 @@ const isCollapsed = ref(true)
         </li>
       </ul>
 
-      <!-- 折疊後的其餘新聞 -->
       <UCollapsible v-model="isCollapsed" class="mt-2">
         <UButton
           variant="soft"
@@ -91,7 +86,7 @@ const isCollapsed = ref(true)
           {{ isCollapsed ? '顯示更多' : '收起' }}
         </UButton>
 
-        <!-- Nuxt UI 3.1.0 的 slot 型別寫法跟新版 Vue 型別檢查不相容（誤報，執行時正常）；升級 @nuxt/ui 後若檢查不再報錯，vue-tsc 會提示可以移除下面這行 -->
+        <!-- Nuxt UI 3.1.0 的 slot 型別和新版 Vue 不相容（誤報）；升級後不再報錯時 vue-tsc 會提示移除 -->
         <!-- @vue-expect-error -->
         <template #content>
           <ul class="space-y-1 mt-2">

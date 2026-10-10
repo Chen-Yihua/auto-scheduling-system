@@ -1,4 +1,4 @@
-// 把 ISO 時間字串轉成「X 分鐘前」這種相對時間文字，給資料新鮮度提示用
+// ISO 時間轉成「X 分鐘前」這類相對時間
 export function formatRelativeTime(iso: string | null | undefined): string {
   if (!iso) return '未知時間'
 

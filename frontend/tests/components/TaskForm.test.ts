@@ -18,17 +18,13 @@ vi.stubGlobal('useToast',        () => toastSpy)
 vi.stubGlobal('useRuntimeConfig',() => ({ public: { apiBaseUrl: 'http://localhost:8000' } }))
 vi.stubGlobal('$fetch',          (...args: unknown[]) => fetchSpy(...args))
 
-// useSchedulableTasks.ts（跟 useSchedule.ts/useScheduleWizard.ts 同樣的風格）
-// 是明確 import useAuth，不是靠 Nuxt 的全域自動引入，上面的 vi.stubGlobal
-// 攔截不到，要另外 mock 掉整個模組
+// useSchedulableTasks 明確 import useAuth，stubGlobal 攔不到，要 mock 整個模組
 vi.mock('@clerk/vue', () => ({
   useAuth: () => ({ getToken: { value: tokenSpy } }),
 }))
 
 // ---------- 3. UI 元件 Stub ----------
-// 可點擊的 UButton。onClick 要把原生事件物件轉傳給 emit，不然範本裡用
-// @click.stop 這種修飾詞時，Vue 會拿 undefined 當事件物件呼叫
-// stopPropagation() 而噴例外（任務卡片上的「編輯」「標記完成」都用了 .stop）
+// 要轉傳原生事件，否則 @click.stop 會對 undefined 呼叫 stopPropagation
 const StubButton = defineComponent({
   name: 'UButton',
   emits: ['click'],
@@ -84,8 +80,7 @@ const uiStubs: Record<string, boolean | Component> = {
 }
 
 // ---------- 4. 假任務工具 ----------
-// 舊的 Task 格式（/manual-tasks/me）——目前只用來讓「編輯」按鈕找得到完整資料，
-// 畫面顯示改用下面的 fakeSchedulableTasks（/schedule/tasks 的統一格式）
+// /manual-tasks/me 的完整資料，只給編輯表單用；列表用 fakeSchedulableTasks
 const fakeTasks = (n = 1) =>
   Array.from({ length: n }, (_, i) => ({
     id: `t${i}`,
@@ -112,8 +107,7 @@ const fakeSchedulableTasks = (n = 1) =>
     url: null,
   }))
 
-// $fetch 現在會被兩支 composable 打到不同的路徑（/manual-tasks/me、
-// /schedule/tasks），依 URL 分別回傳對應的假資料，不依賴呼叫順序
+// 依 URL 回傳對應的假資料，不依賴呼叫順序
 function mockFetchByUrl(responses: Record<string, unknown>) {
   fetchSpy.mockImplementation(async (url: string) => {
     const match = Object.keys(responses).find((key) => url.includes(key))
@@ -135,8 +129,6 @@ describe('TaskForm.vue (render)', () => {
     const wrapper = shallowMount(TaskForm, { global: { stubs: uiStubs } })
     await flushPromises()
 
-    // 已經抓取完成、確定是「真的沒有任務」，不該再顯示 Skeleton
-    // （那會讓人誤以為資料一直載入不出來、像壞掉了）
     expect(wrapper.findAll('u-skeleton-stub').length).toBe(0)
     expect(wrapper.text()).toContain('目前沒有任務')
   })
@@ -170,9 +162,7 @@ describe('TaskForm.vue (render)', () => {
   })
 
   it('新增任務按鈕移到 Header，跟 TaskForm 共用同一份 showEditModal 狀態', async () => {
-    // 按鈕本身現在畫在 header/AppHeader.vue，這裡改成模擬「header 那邊按下按鈕」
-    // 的效果：直接透過共用的 useTaskForm() 把 showEditModal 設成 true，
-    // 驗證 TaskForm 自己的 Modal 真的會反應到同一份狀態上
+    // 按鈕在 AppHeader，這裡直接設定共用的 showEditModal 來模擬
     mockFetchByUrl({ '/manual-tasks/me': [], '/schedule/tasks': [] })
 
     const wrapper = shallowMount(TaskForm, { global: { stubs: uiStubs } })
@@ -254,8 +244,7 @@ describe('TaskForm.vue (render)', () => {
   })
 
   it('手動任務按「編輯」會用組合 id 去掉 "manual:" 前綴，找到 /manual-tasks/me 裡完整的任務資料並打開 Modal', async () => {
-    // 統一清單（/schedule/tasks）只有標題等精簡欄位，編輯表單需要的
-    // description/duration/inference_hint 要從 /manual-tasks/me 的完整資料找
+    // 編輯表單的完整欄位來自 /manual-tasks/me
     const fullTasks = fakeTasks(1)
     const schedulableTasks = fakeSchedulableTasks(1)
     mockFetchByUrl({ '/manual-tasks/me': fullTasks, '/schedule/tasks': schedulableTasks })

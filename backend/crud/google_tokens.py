@@ -29,7 +29,7 @@ async def is_google_calendar_connected(clerk_id: str) -> bool:
     """確認 google calendar 有沒有連接過。"""
     doc = await db.googleCalendarTokens.find_one({"_id": clerk_id})
     return bool(doc and doc.get("access_token"))
-    
+
 
 async def get_google_calendar_token(clerk_id: str) -> str:
     """從 DB 拿出使用者的 access_token，解密後回傳。"""
@@ -47,17 +47,12 @@ def _google_error_code(res: httpx.Response) -> str | None:
     return body.get("error") if isinstance(body, dict) else None
 
 async def refresh_google_calendar_token(clerk_id: str) -> str:
-    """
-    用存在 DB 的 refresh_token 去 Google 換新 access_token，
-    並把新的 token 寫回 DB。最後回傳新的 access_token。
-    """
-    # 從 DB 拿 refresh_token
+    """用 refresh_token 向 Google 換新的 access_token，寫回 DB 後回傳。"""
     doc = await db.googleCalendarTokens.find_one({"_id": clerk_id})
     if not doc or not doc.get("refresh_token"):
         raise HTTPException(status_code=401, detail="沒有可用的 Refresh Token，請重新授權")
     refresh_token = decrypt_secret(doc["refresh_token"])
 
-    # Call Google Token Endpoint
     token_url = "https://oauth2.googleapis.com/token"
     payload = {
         "client_id":     GOOGLE_CLIENT_ID,
@@ -79,8 +74,7 @@ async def refresh_google_calendar_token(clerk_id: str) -> str:
     except httpx.HTTPStatusError as e:
         error_code = _google_error_code(e.response)
         if error_code == "invalid_grant":
-            # Google 拒絕這個 refresh_token 本身時，清掉讓 /oauth/status
-            # 回報「尚未連接」，讓使用者重新連接
+            # refresh_token 已失效，清掉讓使用者重新連接
             logger.warning("Google refresh token 已失效: %s", e.response.text)
             try:
                 await db.googleCalendarTokens.delete_one({"_id": clerk_id})
@@ -88,20 +82,19 @@ async def refresh_google_calendar_token(clerk_id: str) -> str:
                 logger.exception("清除失效的 Google Calendar token 失敗")
             raise HTTPException(status_code=401, detail="Google 授權已失效，請重新連接 Google Calendar")
         if error_code == "invalid_client":
-            # 是伺服器的 client id/secret 設定錯誤，使用者的 token 沒壞，不能刪
+            # 伺服器的 client 設定錯誤，使用者的 token 沒壞，不能刪
             logger.error("Google 拒絕 OAuth client 設定: %s", e.response.text)
             raise HTTPException(status_code=500, detail="伺服器設定錯誤，請聯絡管理員")
         # 429、5xx 等暫時性錯誤，token 可能還有效，不能刪
         raise HTTPException(status_code=502, detail="Google 暫時無法處理請求，請稍後再試")
 
-    # 取新的 access_token（與可能新的 refresh_token）
+    # Google 不一定會回新的 refresh_token
     access_token  = token_data.get("access_token")
     new_rt        = token_data.get("refresh_token", refresh_token)
 
     if not access_token:
         raise HTTPException(status_code=400, detail="Google 刷新 Token 失敗")
 
-    # 把新的 Token 寫回 DB
     await db.googleCalendarTokens.update_one(
         {"_id": clerk_id},
         {

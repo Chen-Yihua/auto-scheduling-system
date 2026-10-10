@@ -9,7 +9,7 @@ import main as main_mod
 
 @pytest.mark.asyncio
 async def test_ensure_indexes_creates_expected_indexes(monkeypatch):
-    """啟動時建立的索引要對：linkedAccounts 用 (clerk_id, platform)；manual_tasks 的 user_id 有索引；三個平台的快取集合用 (user_id, id)，且不強制 unique（避免舊資料讓建立索引失敗）。"""
+    """啟動時建立的索引正確，且平台集合的索引不設 unique。"""
     linked_accounts_mock = AsyncMock()
     manual_tasks_mock = AsyncMock()
     github_issues_mock = AsyncMock()
@@ -29,8 +29,6 @@ async def test_ensure_indexes_creates_expected_indexes(monkeypatch):
 
     manual_tasks_mock.assert_called_once_with("user_id")
 
-    # github_issues / jira_issues / moodle_assignments：sync_platform_items() upsert 用的
-    # 複合鍵，三個平台一致，都不強制 unique，避免舊資料造成建立索引失敗
     for platform_mock in (github_issues_mock, jira_issues_mock, moodle_assignments_mock):
         platform_mock.assert_any_call([("user_id", 1), ("id", 1)])
         for call in platform_mock.call_args_list:

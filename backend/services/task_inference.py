@@ -20,19 +20,14 @@ MIN_DURATION_MINUTES = 15
 MAX_DURATION_MINUTES = 480
 VALID_PRIORITIES = {"High", "Medium", "Low"}
 
-# 建立任務的請求會等這個呼叫回來，Gemini 卡住時不能讓使用者一直等，超時就退回預設值
+# 建立任務會等這個呼叫，逾時就用預設值
 LLM_TIMEOUT_MS = 10_000
 
 
 async def infer_missing_task_fields(title: str, description: str, hint: str | None = None) -> dict:
     """
-    使用者建立任務時沒填 priority/duration，用 LLM 從標題/描述（加上使用者
-    自己給的提醒，例如「這比想像中難」）推斷合理值並附理由。
-
-    這裡 LLM 的影響範圍鎖死在兩個純量欄位（不牽涉時段分配），
-    所以驗證很單純：priority 是不是合法的三選一、duration 是不是落在合理範圍。
-    不管是 LLM 呼叫失敗、回傳格式錯誤、還是驗證沒過，都直接退回固定預設值，
-    絕不讓「建立任務」這個動作因為 LLM 出狀況而失敗。
+    用 LLM 從標題、描述和使用者的提醒推斷 priority 和 duration，並附上理由。
+    任何失敗（呼叫失敗、格式錯誤、值不合法）都回傳預設值，不讓建立任務失敗。
     """
     try:
         prompt = TASK_FIELD_INFERENCE_PROMPT.format(
@@ -64,7 +59,7 @@ async def infer_missing_task_fields(title: str, description: str, hint: str | No
             raise ValueError(f"LLM 回傳不合法的 duration_minutes: {duration!r}")
         if not (MIN_DURATION_MINUTES <= duration <= MAX_DURATION_MINUTES):
             raise ValueError(f"LLM 回傳的 duration_minutes 超出合理範圍: {duration!r}")
-        # reason 只是給使用者看的說明，格式不對不值得丟掉整組合法的 priority/duration
+        # reason 只是說明文字，不合法時不必丟掉整組結果
         if not isinstance(reason, str):
             reason = ""
 

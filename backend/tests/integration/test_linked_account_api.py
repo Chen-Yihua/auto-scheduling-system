@@ -1,7 +1,4 @@
-# 透過 HTTP 測試 /users/me/linked-accounts 這組 API：路由有註冊、登入驗證有掛上、
-# 回傳的 JSON 格式（response_model）跟錯誤狀態碼真的送得出去。
-# crud 層在這裡被 mock 掉；crud 本身由 test_linked_account_crud.py 負責，
-# 多步驟的情境由 test_linked_account_scenario.py 負責。
+# 透過 HTTP 確認路由、登入驗證、回應格式和錯誤狀態碼；細部邏輯由 unit 測試負責
 import pytest
 from fastapi import status
 from httpx import AsyncClient

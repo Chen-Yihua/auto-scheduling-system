@@ -1,10 +1,6 @@
 """
-把沒在 crud / router 裡處理的例外，統一轉成給前端的錯誤回應：
-- 資料庫連不上 → 503
-- 其他資料庫錯誤 → 500
-- 其他沒被接住的例外（程式 bug）→ 500
-
-回應只帶固定的中文訊息，例外內容與 traceback 只記在 log。
+沒被處理的例外統一轉成錯誤回應：DB 連不上回 503，其他 DB 錯誤和未預期例外回 500。
+例外內容只記在 log，不回傳給前端。
 """
 import logging
 
@@ -27,12 +23,10 @@ async def database_error_handler(request: Request, exc: PyMongoError) -> JSONRes
 
 class UnhandledExceptionMiddleware:
     """
-    沒被任何 handler 接住的例外 → 記 log，回固定訊息的 JSON 500。
-    HTTPException、資料庫例外、驗證錯誤等都會先被內層的 exception handler 處理，不會走到這裡。
+    接住所有沒被處理的例外，回 JSON 500。
 
-    用 middleware 而不是 app.add_exception_handler(Exception, ...)：後者會被放到最外層
-    （比 CORS 還外面），回應不會帶 CORS 標頭，瀏覽器只會看到 CORS 錯誤，看不到真正的 500。
-    這個 middleware 排在 CORS 內層（見 main.py），回應才會經過 CORS，加上標頭。
+    不用 add_exception_handler(Exception, ...)：它會在 CORS 外層，回應沒有 CORS 標頭，
+    瀏覽器只會看到 CORS 錯誤。
     """
 
     def __init__(self, app):
@@ -56,7 +50,7 @@ class UnhandledExceptionMiddleware:
         except Exception:
             logger.exception("未處理的例外 %s %s", scope["method"], scope["path"])
             if response_started:
-                # 回應已經送出一半，沒辦法再改成 500，只能讓連線中斷
+                # 回應已開始送出，無法改成 500
                 raise
             response = JSONResponse(status_code=500, content={"detail": "伺服器發生未預期的錯誤，請稍後再試"})
             await response(scope, receive, send)

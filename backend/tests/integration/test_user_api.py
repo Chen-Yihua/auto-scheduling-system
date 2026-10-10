@@ -1,6 +1,4 @@
-# 透過 HTTP 測試 /users 這組 API：路由有註冊、登入驗證有掛上、
-# 回傳的 JSON 格式（response_model）跟錯誤狀態碼真的送得出去。
-# crud 層在這裡整個被 mock 掉；crud 本身由 test_user_crud.py 負責。
+# 透過 HTTP 確認路由、登入驗證、回應格式和錯誤狀態碼；細部邏輯由 unit 測試負責
 import pytest
 from httpx import AsyncClient
 from httpx._transports.asgi import ASGITransport

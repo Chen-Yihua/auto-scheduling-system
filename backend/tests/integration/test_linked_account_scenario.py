@@ -1,11 +1,6 @@
 """
-端對端「情境」測試（跟 test_manual_task_scenario.py 同一個精神）：把使用者連結
-GitHub 帳號的一整串操作串起來，透過真的 HTTP 呼叫 main.app，確認每一步寫進
-mongomock 的資料，下一步真的讀得到、也真的反映了更新，而不是每個 endpoint
-各自獨立 mock 掉資料庫。
-
-真的會打外部 GitHub API 的 `fetch_github_userinfo` monkeypatch 掉，避免測試
-依賴真的網路；其餘（加密、遮罩、mongomock 讀寫）全部走真的程式碼路徑。
+情境測試：透過 HTTP 依序操作連結帳號，用 mongomock 確認每一步的資料在下一步讀得到。
+只 mock 呼叫外部平台的函式，加密、遮罩和 DB 讀寫都走真的程式碼。
 """
 import pytest
 from fastapi import status
@@ -32,13 +27,12 @@ def _override_auth():
 
 @pytest.mark.asyncio
 async def test_github_linked_account_full_lifecycle(monkeypatch):
-    """GitHub 綁定帳號的完整生命週期：連結 → 列表（金鑰是遮罩過的，不是明文）→ 更新金鑰（會重新驗證並寫入新值）→ 刪除 → 列表回到空清單。"""
+    """GitHub 帳號完整流程：連結 → 列表（金鑰已遮罩）→ 更新金鑰 → 刪除 → 列表為空。"""
     call_count = {"n": 0}
 
     async def mock_fetch_github_userinfo(token):
         call_count["n"] += 1
-        # 回傳值隨呼叫次數變化，才能證明「更新」那一步真的重新驗證、
-        # 重新寫入了新的值，而不是沿用建立當下的舊資料
+        # 每次呼叫回傳不同值，才能證明更新時有重新驗證
         return {
             "username": f"mock_user_v{call_count['n']}",
             "avatar_url": f"https://mock.avatar/v{call_count['n']}",
@@ -101,14 +95,10 @@ async def test_github_linked_account_full_lifecycle(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_moodle_linked_account_rejects_wrong_password_and_leaves_nothing_behind(monkeypatch):
-    """Moodle 帳密錯誤 → API 回 401，而且完全沒有資料寫進資料庫，
-不會留下一筆「看起來已連結、其實密碼從沒驗證成功過」的殘影資料。
-（連結 Moodle 帳號會真的觸發 Selenium 登入驗證，見 platforms/moodle.py。）"""
+    """Moodle 帳密錯誤 → 401，且沒有寫入任何資料。"""
     from platforms.sync import NonRetryableError
 
-    # verify_moodle_login 本身是同步函式（真正的實作用 Selenium，是阻塞的），
-    # crud/linked_account.py 用 run_in_threadpool 呼叫它——mock 也要是同步的，
-    # 不然 run_in_threadpool 只會拿到一個沒被 await 的 coroutine，不會真的拋出例外
+    # 原函式是同步的（透過 run_in_threadpool 呼叫），mock 也要是同步的
     def mock_verify_login_fails(username, password):
         raise NonRetryableError(f"Moodle 登入失敗，使用者：{username}")
 
@@ -135,8 +125,7 @@ async def test_moodle_linked_account_rejects_wrong_password_and_leaves_nothing_b
 
 @pytest.mark.asyncio
 async def test_update_linked_account_with_unchanged_values_still_succeeds(monkeypatch):
-    """打開編輯沒改任何東西就按儲存（送出的值跟資料庫一樣）→ 200，不能因為「沒有欄位被改到」
-    就回 404 讓前端顯示儲存失敗。"""
+    """送出的值和資料庫相同 → 200，不能因為沒有欄位被修改就回 404。"""
     async def mock_fetch_github_userinfo(token):
         return {"username": "mock_user", "avatar_url": "https://mock.avatar"}
 
@@ -158,8 +147,7 @@ async def test_update_linked_account_with_unchanged_values_still_succeeds(monkey
 
 @pytest.mark.asyncio
 async def test_update_nonexistent_linked_account_returns_404_without_creating_record():
-    """更新一個根本沒連結過的平台 → 404，而且不能順手建立一筆只有部分欄位的紀錄
-    （之前用 upsert，會留下一筆沒有金鑰、看起來像已連結的殘影資料）。"""
+    """更新沒連結過的平台 → 404，且不能建立出只有部分欄位的紀錄。"""
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         update_res = await ac.patch("/users/me/linked-accounts/jira", json={"domain": "foo.atlassian.net"})

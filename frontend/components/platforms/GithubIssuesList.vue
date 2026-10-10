@@ -10,8 +10,7 @@ const props = defineProps<{
   syncedAt?: string | null
   authError?: boolean
   notLinked?: boolean
-  // 不給就顯示全部——dashboard 卡片用小數字避免無限拉長，
-  // /github 這個完整清單頁面則不傳
+  // 不傳則顯示全部
   limit?: number
 }>()
 
@@ -45,7 +44,6 @@ const openIssue = (url: string) => {
       <USkeleton v-for="i in 3" :key="i" class="h-24 mb-4" />
     </div>
 
-    <!-- 尚未綁定 GitHub 帳號 -->
     <div
       v-else-if="notLinked"
       class="text-center text-sm text-gray-500 dark:text-gray-400 py-6"

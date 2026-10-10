@@ -13,7 +13,7 @@ import ScheduleSuggestion from '~/components/tasks/ScheduleSuggestion.vue'
 import GoogleCalendarEmbed from '~/components/dashboard/GoogleCalendarEmbed.vue'
 import MoodleAssignmentsList from '~/components/platforms/MoodleAssignmentsList.vue'
 
-// reactive 包起來，template 裡可以直接寫 github.items，不用一個個欄位改名解構
+// reactive 讓 template 可以直接寫 github.items
 const github = reactive(usePlatformItems('github'));
 const jira = reactive(usePlatformItems('jira'));
 const moodle = reactive(usePlatformItems('moodle'));
@@ -21,8 +21,7 @@ const { calendarIds, primaryCalendarId, fetchGoogleCalendars, isConnected, calen
 const { isSignedIn } = useUser();
 const { connecting: googleConnecting, connectedCount: googleConnectedCount } = useGoogleCalendarAuth();
 
-// 各自獨立抓取、互不影響——任何一個失敗都不該卡住其他的
-// （之前串成一條 await 鏈，其中一個丟出例外就會讓後面的都卡在 loading 動不了）
+// 各自獨立抓取，一個失敗不影響其他
 function loadDashboardData() {
   fetchGoogleCalendars();
   github.fetchItems();
@@ -30,8 +29,7 @@ function loadDashboardData() {
   moodle.fetchItems();
 }
 
-// 這幾個都是需要授權才能查的個人資料，還沒登入時打了只會是 401，
-// 不該讓訪客一進頁面就看到一排「抓取失敗」的錯誤提示
+// 未登入時不抓，否則訪客會看到一排錯誤提示
 watch(isSignedIn, (signedIn) => {
   if (signedIn === undefined) return; // Clerk 還在初始化，先不動作
   if (signedIn) {
@@ -39,7 +37,7 @@ watch(isSignedIn, (signedIn) => {
   }
 }, { immediate: true });
 
-// Google 授權是回到首頁之後才在背景完成的，完成時要重新查一次，卡片才會從「連接中」換成行事曆
+// 授權在背景完成後重新查詢，卡片才會從「連接中」換成行事曆
 watch(googleConnectedCount, () => {
   fetchGoogleCalendars();
 });
@@ -47,10 +45,7 @@ watch(googleConnectedCount, () => {
 
 <template>
   <div class="p-4">
-    <!-- Clerk 還在初始化（isSignedIn 是 undefined）時先不畫，避免登入的人一進來先閃一下「請先登入」 -->
-    <!-- 三欄式版面：左 待辦事項＋第三方平台任務、中 行事曆、右 動態消息／LeetCode。
-    登入前後版面完全一樣：需要登入的卡片，訪客只看到標題加一句提示（LoginRequiredCard），
-    位置不變；Hacker News／LeetCode 不需要登入，兩邊都照常顯示 -->
+    <!-- Clerk 初始化完成前不顯示，避免已登入的人先看到「請先登入」 -->
     <div
       v-if="isSignedIn !== undefined"
       class="grid grid-cols-1 lg:grid-cols-[320px_1fr_320px] gap-6 mt-4 items-start"

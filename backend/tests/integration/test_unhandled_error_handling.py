@@ -1,5 +1,4 @@
-# 兜底的錯誤處理（core/exception_handlers.py 的 UnhandledExceptionMiddleware，註冊在 main.py）：
-# 程式出現沒預期的 bug 時，回 JSON 500 並帶 CORS 標頭，讓瀏覽器看得到真正的狀態碼。
+# 未預期的例外要回 JSON 500 並帶 CORS 標頭，瀏覽器才看得到真正的狀態碼
 import logging
 
 import pytest

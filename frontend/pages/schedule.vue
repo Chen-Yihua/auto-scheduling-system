@@ -39,15 +39,13 @@ const sourceIcon: Record<SchedulableTask['source'], string> = {
   moodle: 'custom:moodle',
 }
 
-// 步驟指示：目前只有前兩步是這個頁面自己的內容，第三步只是告訴使用者
-// 「送出後會發生什麼事」，不是這個頁面會畫出來的畫面
+// 第三步只是說明送出後的結果，不在這個頁面上
 const steps = [
   { n: 1, label: '拖拉排序優先權' },
   { n: 2, label: '確認截止日期與時長' },
   { n: 3, label: '查看排程建議' },
 ]
 
-// 拖拉：記住被拖動的任務原本在哪一欄、哪個位置
 const dragSource = ref<{ column: PriorityKey; index: number } | null>(null)
 
 function onDragStart(column: PriorityKey, index: number) {
@@ -81,8 +79,7 @@ function cancel() {
   router.push('/')
 }
 
-// <input type="datetime-local"> 要的格式是本地時間 "YYYY-MM-DDTHH:mm"（不含時區），
-// 但 task.due_date 存的是 ISO 字串（通常帶 Z），兩邊要各自轉換
+// datetime-local 用不含時區的本地時間，due_date 是 ISO 字串，需要互相轉換
 function toDatetimeLocalValue(dueDate: string | undefined | null): string {
   if (!dueDate) return ''
   const d = new Date(dueDate)
@@ -107,8 +104,6 @@ function onDurationInput(task: SchedulableTask, event: Event) {
 
 const allTasksFlat = computed(() => PRIORITIES.flatMap((p) => columns[p]))
 
-// 排程偏好設定：不工作時段（每週固定規律 + 這次額外加的例外時段）跟緩衝時間／
-// 每天上限，見 useScheduleWizard 的 preferences（每次精靈重新選，不存資料庫）
 const dayLabels = ['一', '二', '三', '四', '五', '六', '日'] // 對齊後端 Python weekday()：0=一...6=日
 
 function toggleRuleDay(rule: BlockedRecurringRule, day: number) {
@@ -142,7 +137,6 @@ function onExceptionEndInput(exception: BlockedException, event: Event) {
     </div>
 
     <div v-else-if="isSignedIn" class="p-4 max-w-3xl mx-auto mt-4">
-      <!-- 步驟指示 -->
       <div class="flex items-center justify-center gap-2 mb-6">
         <template v-for="(s, i) in steps" :key="s.n">
           <div class="flex items-center gap-2">

@@ -17,11 +17,11 @@ class LinkedAccountUpdate(BaseModel):
     domain: Optional[str] = None
 
 class LinkedAccountOut(BaseModel):
-    id: str  # _id 轉成 id
+    id: str
     platform: str
     status: str
     username: str
     apiKey: Optional[str] = None
     avatar_url: Optional[str] = None
     domain: Optional[str] = None  # Jira 用
-    password: Optional[str] = None  # Moodle 用，回傳前已遮罩
+    password: Optional[str] = None  # Moodle 用，已遮罩

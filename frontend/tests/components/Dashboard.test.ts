@@ -22,8 +22,7 @@ vi.mock('@clerk/vue', () => ({
   useUser: () => ({ isSignedIn: isSignedInRef }),
 }))
 
-// ---------- 需要授權的 composables：用 spy 追蹤有沒有被呼叫 ----------
-// 每個外部平台各自一個 spy，才看得出三個是不是都有抓
+// ---------- 需要授權的 composables：每個平台各一個 spy ----------
 const fetchItemsSpies = { github: vi.fn(), jira: vi.fn(), moodle: vi.fn() }
 const fetchGoogleCalendarsSpy = vi.fn()
 
@@ -84,8 +83,7 @@ describe('dashboard/Dashboard.vue', () => {
   })
 
   afterEach(() => {
-    // isSignedInRef 是共用的 module-level ref，前一個測試留下的元件如果沒
-    // unmount，watch(isSignedIn, ...) 還是活的，下個測試改值時會被重複觸發
+    // isSignedInRef 是共用的，沒 unmount 的話上一個元件的 watch 會被觸發
     activeWrapper?.unmount()
     activeWrapper = null
   })
@@ -172,8 +170,6 @@ describe('dashboard/Dashboard.vue', () => {
 
     const calendar = wrapper.findComponent({ name: 'GoogleCalendarEmbed' })
     expect(calendar.props('connecting')).toBe(false)
-    // 確認排程寫入 Calendar 後 useGoogleCalendar 會 bump 這個 token，
-    // 要真的傳給 GoogleCalendarEmbed 它才能拿去強制重新整理 iframe
     expect(calendar.props('reloadToken')).toBe(calendarReloadTokenRef.value)
 
     stateStore.get('googleCalendarConnecting')!.value = true

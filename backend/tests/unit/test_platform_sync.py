@@ -14,7 +14,7 @@ class FakeCursor:
 
 
 class FakeCollection:
-    """簡化版的 in-memory collection，模擬 PyMongo 非同步 collection 的 update_one(upsert)/find().to_list() 行為。"""
+    """簡化的 in-memory collection，模擬 update_one(upsert) 和 find().to_list()。"""
 
     def __init__(self, initial=None):
         self._docs = list(initial or [])
@@ -69,8 +69,7 @@ async def test_sync_platform_items_live_success_upserts_and_returns_fresh():
 
 @pytest.mark.asyncio
 async def test_sync_platform_items_removes_items_no_longer_returned_by_live_fetch():
-    """使用者的第 2 筆項目（例如 issue 被關閉）這次即時抓資料已經不存在 → 應該從 DB 清掉，
-    不然之後即時抓資料失敗、退回快取時，會被當成還存在的資料顯示給使用者。"""
+    """這次沒抓到的項目要從 DB 刪除，否則退回舊資料時會出現已不存在的項目。"""
     collection = FakeCollection(initial=[
         {"id": 1, "title": "still open", "user_id": "u1"},
         {"id": 2, "title": "already closed on github", "user_id": "u1"},
@@ -272,8 +271,7 @@ async def test_sync_platform_items_does_not_retry_non_retryable_error():
     # 就算 max_attempts=5，NonRetryableError 也只該打一次就放棄，不多試
     assert call_count["n"] == 1
     assert stale is True
-    # NonRetryableError 導致的退回快取，要標記成 auth_error，讓呼叫端知道
-    # 這不是暫時性問題，使用者的憑證可能已經失效——不能悄悄退回舊資料就當沒事
+    # 憑證錯誤造成的退回要標記 auth_error
     assert auth_error is True
     assert items[0]["title"] == "cached"
 

@@ -57,7 +57,7 @@ async def get_current_user(
     return user
 
 # 註冊新使用者
-@router.post("/", response_model=UserOut)
+@router.post("/", response_model=UserOut, status_code=201)
 async def register_user(
     user_data: UserCreate,
     clerk_user: dict = Depends(get_current_clerk_user)

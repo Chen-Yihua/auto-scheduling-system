@@ -40,7 +40,9 @@ async def test_create_github_account_success(monkeypatch):
 
     assert updated_doc["username"] == "mock_user"
     assert updated_doc["apiKey"] != "token123"  # 落地前一定要加密，不是明文
-    assert result["linkedAccounts"]["github"]["avatar_url"] == "https://avatar"
+    assert result["id"] == "uid123_github"
+    assert result["avatar_url"] == "https://avatar"
+    assert result["apiKey"] == "****n123"  # 回傳的是遮罩值，不是明文也不是密文
 
 
 @pytest.mark.asyncio
@@ -132,7 +134,7 @@ async def test_create_jira_account_success(monkeypatch):
     result = await create_linked_account("uid123", account)
 
     assert updated_doc["username"] == "jira_user"
-    assert result["linkedAccounts"]["jira"]["avatar_url"] == "https://avatar"
+    assert result["avatar_url"] == "https://avatar"
 
 
 @pytest.mark.asyncio
@@ -156,7 +158,7 @@ async def test_create_moodle_account_success(monkeypatch):
 
     assert updated_doc["status"] == "connected"
     assert updated_doc["password"] != "pw123"  # 落地前一定要加密
-    assert result["linkedAccounts"]["moodle"]["status"] == "connected"
+    assert result["status"] == "connected"
 
 
 @pytest.mark.asyncio

@@ -58,8 +58,11 @@ async def test_github_linked_account_full_lifecycle(monkeypatch):
                 "apiKey": "token-v1",
             },
         )
-        assert create_res.status_code == status.HTTP_200_OK, create_res.text
-        assert create_res.json()["linkedAccounts"]["github"]["username"] == "mock_user_v1"
+        assert create_res.status_code == status.HTTP_201_CREATED, create_res.text
+        created = create_res.json()
+        assert created["username"] == "mock_user_v1"
+        assert "token-v1" not in created["apiKey"]
+        assert "clerk_id" not in created  # response_model 只回傳 LinkedAccountOut 定義的欄位
 
         # 2. 列表裡看得到，而且金鑰是遮罩過的，不是明文
         list_res = await ac.get("/users/me/linked-accounts/")
@@ -145,7 +148,7 @@ async def test_update_linked_account_with_unchanged_values_still_succeeds(monkey
             "/users/me/linked-accounts/",
             json={"platform": "github", "status": "connected", "username": "", "apiKey": "token"},
         )
-        assert create_res.status_code == status.HTTP_200_OK, create_res.text
+        assert create_res.status_code == status.HTTP_201_CREATED, create_res.text
 
         update_res = await ac.patch("/users/me/linked-accounts/github", json={"status": "connected"})
         assert update_res.status_code == status.HTTP_200_OK, update_res.text

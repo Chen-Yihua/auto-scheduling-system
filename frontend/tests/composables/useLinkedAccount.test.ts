@@ -90,8 +90,8 @@ describe('useLinkedAccount', () => {
     openEdit(git)
     git.inputValue = 'NEWKEY'
 
-    // 1st call => POST create, 回傳 avatar
-    fetchSpy.mockResolvedValueOnce({ linkedAccounts: { github: { avatar_url: 'a.png' } } })
+    // 1st call => POST create, 回傳建立好的帳號（username/avatar 由後端向 GitHub 查回）
+    fetchSpy.mockResolvedValueOnce({ platform: 'github', username: 'octocat', avatar_url: 'a.png' })
 
     await saveKey(git)
 
@@ -102,6 +102,8 @@ describe('useLinkedAccount', () => {
     expect(git.value).toBe('NEWKEY')
     expect(git.editing).toBe(false)
     expect(git.isMasked).toBe(false) // 剛建立，這個 session 內允許複製一次
+    expect(git.username).toBe('octocat')
+    expect(git.avatar).toBe('a.png')
     expect(toastSpy.add).toHaveBeenCalledWith(
       expect.objectContaining({ title: 'GitHub Key 儲存成功', color: 'success' }),
     )
@@ -198,7 +200,7 @@ describe('useLinkedAccount', () => {
     moo.inputValue = 'stu001'
     moo.password = 'secret'
 
-    fetchSpy.mockResolvedValueOnce({ linkedAccounts: {} }) // 沒有 avatar
+    fetchSpy.mockResolvedValueOnce({ platform: 'moodle', username: 'stu001' }) // 沒有 avatar
 
     await saveKey(moo)
 
@@ -250,7 +252,7 @@ describe('useLinkedAccount', () => {
     jira.inputValue = 'JKEY'
     jira.domain = 'foo.atlassian.net'
 
-    fetchSpy.mockResolvedValueOnce({ linkedAccounts: { jira: { avatar_url: 'j.png' } } })
+    fetchSpy.mockResolvedValueOnce({ platform: 'jira', avatar_url: 'j.png' })
 
     await saveKey(jira)
 

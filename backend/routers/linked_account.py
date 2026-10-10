@@ -20,7 +20,7 @@ async def get_current_linked_accounts(
 # 註冊（新增）綁定帳號
 # 平台是 GitHub/Jira 會真的打一次驗證 API，平台是 Moodle 會真的開一次 Selenium
 # 登入驗證——成本跟 /moodle/assignments 同一個等級，一起限流。
-@router.post("/")
+@router.post("/", response_model=LinkedAccountOut, status_code=201)
 @limiter.limit("10/minute")
 async def create_linked_account(
     request: Request,

@@ -52,19 +52,17 @@ async def test_create_linked_account(monkeypatch):
 
     async def mock_create(clerk_id, account):
         return {
-            "linkedAccounts": {
-                "github": {
-                    "username": "tester",
-                    "avatar_url": "https://avatar",
-                    "status": "connected",
-                }
-            }
+            "id": "uid123_github",
+            "platform": "github",
+            "username": "tester",
+            "avatar_url": "https://avatar",
+            "status": "connected",
         }
 
     monkeypatch.setattr(crud_mod, "create_linked_account", mock_create)
 
     result = await router.create_linked_account(request=MagicMock(), account_data=account, clerk_user=mock_user)
-    assert result["linkedAccounts"]["github"]["status"] == "connected"
+    assert result["status"] == "connected"
 
 
 @pytest.mark.asyncio

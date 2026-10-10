@@ -6,7 +6,7 @@ from fastapi import HTTPException
 
 from core.database import db
 from core.crypto import encrypt_secret, decrypt_secret
-from platforms.sync import NonRetryableError
+from platforms.sync import NonRetryableError, UpstreamError
 from platforms.base import PlatformAdapter, PlatformUserInfo
 from schemas.jira import JiraIssue
 
@@ -57,7 +57,7 @@ async def fetch_jira_user_issues(api_key: str, domain: str, max_results: int = 1
                 message = f"Jira API failed: {response.status_code} {response.text}"
                 if response.status_code in NON_RETRYABLE_STATUS_CODES:
                     raise NonRetryableError(message)
-                raise Exception(message)
+                raise UpstreamError(message)
 
             data = response.json()
             all_issues.extend(data.get("issues", []))

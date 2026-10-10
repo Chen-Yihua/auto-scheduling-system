@@ -14,7 +14,7 @@ from selenium.webdriver.support import expected_conditions as EC
 
 from core.database import db
 from core.crypto import encrypt_secret, decrypt_secret
-from platforms.sync import NonRetryableError
+from platforms.sync import NonRetryableError, UpstreamError
 from platforms.base import PlatformAdapter
 from schemas.moodle import MoodleAssignment
 
@@ -178,7 +178,10 @@ class MoodlePlatform(PlatformAdapter):
 
     async def fetch_items(self, credentials):
         # Selenium 是同步、會阻塞的，丟到 thread pool 跑，不卡住其他請求
-        return await run_in_threadpool(fetch_assignments, credentials["username"], credentials["password"])
+        try:
+            return await run_in_threadpool(fetch_assignments, credentials["username"], credentials["password"])
+        except WebDriverException as e:
+            raise UpstreamError(f"Moodle 爬取失敗: {e}") from e
 
     # Moodle 爬蟲拿不到提交狀態，沒有自動判斷依據，只能靠使用者手動標記完成（沿用預設的 is_done）
 

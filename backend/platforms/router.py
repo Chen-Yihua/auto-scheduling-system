@@ -8,10 +8,11 @@
 """
 import logging
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 
 from core.cache import cache_get, cache_set
-from platforms.sync import NonRetryableError
+from platforms.sync import NonRetryableError, UpstreamError
 from core.crypto import decrypt_secret
 from core.database import db
 from core.security import get_current_clerk_user
@@ -58,6 +59,9 @@ async def get_platform_items(platform: PlatformAdapter, user_id: str, response: 
     except NonRetryableError:
         logger.warning("%s credentials invalid/expired for user_id=%s", platform.name, user_id)
         raise HTTPException(status_code=401, detail=platform.auth_failed_detail)
+    except (UpstreamError, httpx.HTTPError):
+        logger.warning("%s unavailable for user_id=%s", platform.name, user_id, exc_info=True)
+        raise HTTPException(status_code=502, detail=platform.fetch_failed_detail)
     except Exception:
         logger.exception("Failed to sync %s items for user_id=%s", platform.name, user_id)
         raise HTTPException(status_code=500, detail=platform.fetch_failed_detail)

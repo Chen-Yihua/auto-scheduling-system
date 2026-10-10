@@ -15,7 +15,7 @@ router = APIRouter(prefix="/manual-tasks", tags=["manual-tasks"])
 # 建立任務
 # 沒填 priority/duration 時會呼叫 Gemini（見 services/task_inference.py），
 # 限流避免有人（或壞掉的前端迴圈）連續狂建任務，把 LLM 額度燒光
-@router.post("/", response_model=ManualTaskOut)
+@router.post("/", response_model=ManualTaskOut, status_code=201)
 @limiter.limit("20/minute")
 async def create_manual_task(
     request: Request,

@@ -50,7 +50,7 @@ async def test_manual_task_full_lifecycle():
                 "due_date": "2026-12-31T00:00:00Z",
             },
         )
-        assert create_res.status_code == status.HTTP_200_OK, create_res.text
+        assert create_res.status_code == status.HTTP_201_CREATED, create_res.text
         created = create_res.json()
         task_id = created["id"]
         assert created["title"] == "情境測試：期末報告"
@@ -132,7 +132,7 @@ async def test_manual_task_ai_inference_fills_missing_fields_and_survives_full_l
                     "due_date": "2026-12-31T00:00:00Z",
                 },
             )
-            assert create_res.status_code == status.HTTP_200_OK, create_res.text
+            assert create_res.status_code == status.HTTP_201_CREATED, create_res.text
             created = create_res.json()
             task_id = created["id"]
             assert created["priority"] == "Low"

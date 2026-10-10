@@ -22,7 +22,7 @@ test_account = LinkedAccountCreate(
 
 @pytest.mark.asyncio
 async def test_create_linked_account(monkeypatch, logged_in_user):
-    """POST /users/me/linked-accounts/：建立 GitHub 綁定帳號成功，回 200。"""
+    """POST /users/me/linked-accounts/：建立 GitHub 綁定帳號成功，回 201。"""
     async def mock_fetch(token):
         return {"username": "mock_user", "avatar_url": "https://mock.avatar"}
 
@@ -37,7 +37,7 @@ async def test_create_linked_account(monkeypatch, logged_in_user):
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         res = await ac.post("/users/me/linked-accounts/", json=test_account.model_dump())
 
-    assert res.status_code == status.HTTP_200_OK
+    assert res.status_code == status.HTTP_201_CREATED
 
 
 @pytest.mark.asyncio

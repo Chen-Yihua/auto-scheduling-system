@@ -13,6 +13,16 @@ logger = logging.getLogger(__name__)
 SENSITIVE_FIELDS = ("apiKey", "password")
 
 
+def _to_public(account: dict) -> dict:
+    """DB 文件轉成回傳給前端的格式：敏感欄位遮罩、_id 改成 id。"""
+    account = dict(account)
+    for field in SENSITIVE_FIELDS:
+        if account.get(field):
+            account[field] = mask_secret(decrypt_secret(account[field]))
+    account["id"] = account.pop("_id")
+    return account
+
+
 # 各平台的帳號驗證寫在 platforms/ 的 adapter 裡
 async def create_linked_account(clerk_id: str, account: LinkedAccountCreate) -> dict:
     doc = account.model_dump()
@@ -37,29 +47,12 @@ async def create_linked_account(clerk_id: str, account: LinkedAccountCreate) -> 
     except DuplicateKeyError:
         raise HTTPException(status_code=409, detail="Linked account already exists")
 
-    return {
-        "message": "Linked account created",
-        "linkedAccounts": {
-            account.platform: {
-                "status": doc["status"],
-                "username": doc["username"],
-                "avatar_url": doc["avatar_url"]
-            }
-        }
-    }
+    return _to_public(doc)
 
 
 async def get_linked_accounts_by_clerk_id(clerk_id: str):
     cursor = db.linkedAccounts.find({"clerk_id": clerk_id})
-    accounts = []
-    async for account in cursor:
-        for field in SENSITIVE_FIELDS:
-            if account.get(field):
-                account[field] = mask_secret(decrypt_secret(account[field]))
-        account["id"] = account["_id"]
-        del account["_id"]
-        accounts.append(account)
-    return accounts
+    return [_to_public(account) async for account in cursor]
 
 
 async def update_linked_account_by_clerk_id(clerk_id: str, platform: str, data: dict):

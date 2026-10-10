@@ -27,11 +27,6 @@ export interface LinkedAccountKey {
   _originalDomain?: string;
 }
 
-// POST /users/me/linked-accounts/ 的回傳
-interface CreateLinkedAccountResponse {
-  linkedAccounts: Record<string, { avatar_url?: string }>;
-}
-
 // PATCH/POST 存檔送給後端的 body，欄位依平台不同而有無
 interface LinkedAccountPayload {
   platform: string;
@@ -174,7 +169,7 @@ export const useLinkedAccount = () => {
       let avatarUrl: string | undefined;
 
       if (isNew) {
-        const res = await $fetch<CreateLinkedAccountResponse>(
+        const res = await $fetch<LinkedAccountRecord>(
           `${BASE_URL}/users/me/linked-accounts/`,
           {
             method: 'POST',
@@ -182,7 +177,10 @@ export const useLinkedAccount = () => {
             body: payload,
           },
         );
-        avatarUrl = res?.linkedAccounts?.[keyItem.platform]?.avatar_url;
+        // username/avatar 是後端向平台查回來的，前端送出時不知道
+        avatarUrl = res.avatar_url;
+        if (res.avatar_url) keyItem.avatar = res.avatar_url;
+        if (res.username) keyItem.username = res.username;
       } else {
         // 部分更新：body 直接放要改的欄位，平台放在路徑上
         await $fetch(`${BASE_URL}/users/me/linked-accounts/${keyItem.platform}`, {

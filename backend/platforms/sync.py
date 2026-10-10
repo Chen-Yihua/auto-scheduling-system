@@ -16,6 +16,11 @@ class NonRetryableError(Exception):
     pass
 
 
+class UpstreamError(Exception):
+    """外部平台暫時性失敗（5xx、限流、連不上），跟我們自己的 bug 區分，router 回 502。"""
+    pass
+
+
 async def sync_platform_items(
     collection,
     user_id: str,

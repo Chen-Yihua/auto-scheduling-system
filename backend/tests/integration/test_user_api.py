@@ -69,7 +69,7 @@ async def test_register_user_success(mock_create_user, mock_get_user_by_clerk_id
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         response = await ac.post("/users/", json=fake_user_create.model_dump())
 
-    assert response.status_code == 200
+    assert response.status_code == 201
     assert response.json()["name"] == "John Doe"
 
 @pytest.mark.asyncio

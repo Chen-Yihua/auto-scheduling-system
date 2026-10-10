@@ -10,7 +10,8 @@ from fastapi import HTTPException, Response
 
 from core import cache
 import platforms.router as platform_router
-from platforms.sync import NonRetryableError
+import httpx
+from platforms.sync import NonRetryableError, UpstreamError
 from core.crypto import encrypt_secret
 from platforms.github import GITHUB
 from platforms.jira import JIRA
@@ -144,6 +145,25 @@ async def test_raises_401_when_credentials_rejected_and_no_cached_data(monkeypat
 
     assert exc_info.value.status_code == 401
     assert exc_info.value.detail == platform.auth_failed_detail
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("platform, account, _", PLATFORM_CASES)
+@pytest.mark.parametrize("error", [UpstreamError("503 Service Unavailable"), httpx.ConnectError("連不上")])
+async def test_raises_502_when_platform_unavailable_and_no_cached_data(monkeypatch, platform, account, _, error):
+    """平台暫時掛掉或連不上，而且沒有舊資料可退 → 502，跟我們自己的 bug（500）區分。"""
+    _use_account(monkeypatch, account)
+
+    async def fake_sync(user_id, fetch_fn):
+        raise error
+
+    monkeypatch.setattr(platform, "sync", fake_sync)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await platform_router.get_platform_items(platform, USER_ID, Response())
+
+    assert exc_info.value.status_code == 502
+    assert exc_info.value.detail == platform.fetch_failed_detail
 
 
 @pytest.mark.asyncio

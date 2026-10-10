@@ -5,7 +5,7 @@ import httpx
 from fastapi import HTTPException
 
 from core.crypto import encrypt_secret
-from platforms.sync import NonRetryableError
+from platforms.sync import NonRetryableError, UpstreamError
 from platforms.sync import sync_platform_items
 from platforms.base import PlatformAdapter, PlatformUserInfo
 from schemas.github import GitHubIssue
@@ -60,7 +60,7 @@ async def fetch_github_user_issues(token: str, per_page: int = 100) -> list:
                     message = f"GitHub API failed: {response.status_code} {response.text}"
                     if response.status_code in NON_RETRYABLE_STATUS_CODES:
                         raise NonRetryableError(message)
-                    raise Exception(message)
+                    raise UpstreamError(message)
                 items = response.json().get("items", [])
                 all_items.extend(items)
                 if len(items) < per_page:

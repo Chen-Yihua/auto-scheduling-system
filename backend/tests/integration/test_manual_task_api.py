@@ -64,7 +64,7 @@ async def test_create_manual_task_success(mock_create_manual_task, mock_infer, f
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         response = await ac.post("/manual-tasks/", json=fake_task_input.model_dump())
 
-    assert response.status_code == 200
+    assert response.status_code == 201
     assert response.json()["id"] == "task_id"
     assert response.json()["created"] == "2023-10-01T00:00:00Z"
     # priority/duration 兩個都填了，不該去問 LLM
@@ -81,7 +81,7 @@ async def test_create_manual_task_ignores_client_supplied_user_id(mock_create_ma
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         response = await ac.post("/manual-tasks/", json=payload)
 
-    assert response.status_code == 200
+    assert response.status_code == 201
     saved_task = mock_create_manual_task.call_args[0][0]
     assert saved_task.user_id == logged_in_user["sub"]
 

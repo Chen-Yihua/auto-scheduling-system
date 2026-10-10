@@ -1,6 +1,5 @@
 import pytest
 from fastapi import HTTPException
-from pymongo.errors import DuplicateKeyError
 import crud.linked_account as linked_mod
 import platforms.github as github_platform
 import platforms.jira as jira_platform
@@ -25,15 +24,15 @@ async def test_create_github_account_success(monkeypatch):
     """建立 GitHub 綁定帳號成功：用 GitHub 回傳的使用者資訊填 username / avatar，apiKey 存進資料庫前要加密。"""
     updated_doc = {}
 
-    async def mock_update_one(filter, update, upsert=False):
+    async def mock_insert_one(doc):
         nonlocal updated_doc
-        updated_doc = update["$set"]
-        return type("Mock", (), {"upserted_id": "uid123_github"})()
+        updated_doc = doc
+        return type("Mock", (), {"inserted_id": "uid123_github"})()
 
     async def mock_fetch_github_userinfo(token):
         return {"username": "mock_user", "avatar_url": "https://avatar"}
 
-    monkeypatch.setattr(linked_mod.db.linkedAccounts, "update_one", mock_update_one)
+    monkeypatch.setattr(linked_mod.db.linkedAccounts, "insert_one", mock_insert_one)
     monkeypatch.setattr(github_platform, "fetch_github_userinfo", mock_fetch_github_userinfo)
 
     account = LinkedAccountCreate(platform="github", apiKey="token123", status="", username="")
@@ -89,19 +88,16 @@ async def test_create_moodle_wrong_password_rejected(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_create_duplicate_account_returns_409(monkeypatch):
-    """該平台已經綁定過 → 409。"""
-    async def mock_update_one(filter, update, upsert=False):
-        raise DuplicateKeyError("duplicate")
-
+    """該平台已經綁定過（例如另一個分頁已經綁好）→ 409，不能默默覆蓋原本的資料。"""
     async def mock_fetch_github_userinfo(token):
         return {"username": "mock", "avatar_url": "mock"}
 
-    monkeypatch.setattr(linked_mod.db.linkedAccounts, "update_one", mock_update_one)
     monkeypatch.setattr(github_platform, "fetch_github_userinfo", mock_fetch_github_userinfo)
 
     account = LinkedAccountCreate(platform="github", apiKey="abc123", status="", username="")
+    await create_linked_account("uid409", account)
     with pytest.raises(HTTPException) as exc_info:
-        await create_linked_account("uid123", account)
+        await create_linked_account("uid409", account)
     assert exc_info.value.status_code == 409
 
 
@@ -119,15 +115,15 @@ async def test_create_jira_account_success(monkeypatch):
     """建立 Jira 綁定帳號成功：用 Jira 回傳的使用者資訊填 username / avatar。"""
     updated_doc = {}
 
-    async def mock_update_one(filter, update, upsert=False):
+    async def mock_insert_one(doc):
         nonlocal updated_doc
-        updated_doc = update["$set"]
-        return type("Mock", (), {"upserted_id": "uid123_jira"})()
+        updated_doc = doc
+        return type("Mock", (), {"inserted_id": "uid123_jira"})()
 
     async def mock_fetch_jira_userinfo(api_key, domain):
         return {"username": "jira_user", "avatar_url": "https://avatar"}
 
-    monkeypatch.setattr(linked_mod.db.linkedAccounts, "update_one", mock_update_one)
+    monkeypatch.setattr(linked_mod.db.linkedAccounts, "insert_one", mock_insert_one)
     monkeypatch.setattr(jira_platform, "fetch_jira_userinfo", mock_fetch_jira_userinfo)
 
     account = LinkedAccountCreate(
@@ -144,15 +140,15 @@ async def test_create_moodle_account_success(monkeypatch):
     """建立 Moodle 綁定帳號成功：帳密驗證通過後 status 為 connected，密碼存進資料庫前要加密。"""
     updated_doc = {}
 
-    async def mock_update_one(filter, update, upsert=False):
+    async def mock_insert_one(doc):
         nonlocal updated_doc
-        updated_doc = update["$set"]
-        return type("Mock", (), {"upserted_id": "uid123_moodle"})()
+        updated_doc = doc
+        return type("Mock", (), {"inserted_id": "uid123_moodle"})()
 
     def mock_verify_succeeds(username, password):
         return True
 
-    monkeypatch.setattr(linked_mod.db.linkedAccounts, "update_one", mock_update_one)
+    monkeypatch.setattr(linked_mod.db.linkedAccounts, "insert_one", mock_insert_one)
     monkeypatch.setattr(moodle_platform, "verify_moodle_login", mock_verify_succeeds)
 
     account = LinkedAccountCreate(platform="moodle", username="stu001", password="pw123", status="")

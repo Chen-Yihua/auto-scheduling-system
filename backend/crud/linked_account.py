@@ -33,16 +33,12 @@ async def create_linked_account(clerk_id: str, account: LinkedAccountCreate) -> 
     doc[platform.secret_field] = encrypt_secret(doc[platform.secret_field])
 
     try:
-        await db.linkedAccounts.update_one(
-            {"_id": doc["_id"]},
-            {"$set": doc},
-            upsert=True
-        )
+        await db.linkedAccounts.insert_one(doc)
     except DuplicateKeyError:
         raise HTTPException(status_code=409, detail="Linked account already exists")
 
     return {
-        "message": "Linked account updated",
+        "message": "Linked account created",
         "linkedAccounts": {
             account.platform: {
                 "status": doc["status"],

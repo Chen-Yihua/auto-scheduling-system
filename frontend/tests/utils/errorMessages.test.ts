@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { getFriendlyErrorTitle, isAuthError, isNotLinkedError } from '~/utils/errorMessages'
+import { getFriendlyErrorTitle, isAlreadyLinkedError, isAuthError, isNotLinkedError } from '~/utils/errorMessages'
 
 describe('getFriendlyErrorTitle', () => {
   it('後端自訂的 RATE_LIMITED 錯誤碼，回傳限流訊息', () => {
@@ -56,5 +56,16 @@ describe('isNotLinkedError', () => {
     expect(isNotLinkedError({ response: { status: 500 } })).toBe(false)
     expect(isNotLinkedError(new Error('network error'))).toBe(false)
     expect(isNotLinkedError(undefined)).toBe(false)
+  })
+})
+
+describe('isAlreadyLinkedError', () => {
+  it('狀態碼 409 判定為已經綁定過', () => {
+    expect(isAlreadyLinkedError({ response: { status: 409 } })).toBe(true)
+  })
+
+  it('其他狀態碼回傳 false', () => {
+    expect(isAlreadyLinkedError({ response: { status: 400 } })).toBe(false)
+    expect(isAlreadyLinkedError(undefined)).toBe(false)
   })
 })

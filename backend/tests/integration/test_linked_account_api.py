@@ -28,10 +28,10 @@ async def test_create_linked_account(monkeypatch, logged_in_user):
 
     monkeypatch.setattr(github_platform, "fetch_github_userinfo", mock_fetch)
 
-    async def mock_update_one(filter, update, upsert=False):
-        return type("Mock", (), {"upserted_id": "test_user_123_github"})()
+    async def mock_insert_one(doc):
+        return type("Mock", (), {"inserted_id": "test_user_123_github"})()
 
-    monkeypatch.setattr(linked_mod.db.linkedAccounts, "update_one", mock_update_one)
+    monkeypatch.setattr(linked_mod.db.linkedAccounts, "insert_one", mock_insert_one)
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:

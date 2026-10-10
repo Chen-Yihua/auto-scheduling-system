@@ -3,7 +3,7 @@ import { ref, computed } from 'vue';
 import { useRuntimeConfig } from '#imports';
 import { useUser, useAuth } from '@clerk/vue';
 import { until } from '@vueuse/core';
-import { getFriendlyErrorTitle } from '@/utils/errorMessages';
+import { getFriendlyErrorTitle, isAlreadyLinkedError } from '@/utils/errorMessages';
 import type { LinkedAccountRecord } from '@/types/linkedAccount';
 
 // 畫面上一筆平台連結帳號（GitHub/Jira/Moodle 共用同一個形狀，欄位依平台各自使用）
@@ -231,7 +231,9 @@ export const useLinkedAccount = () => {
     } catch (err) {
       console.error(err);
       toast.add({
-        title: getFriendlyErrorTitle(err, `${keyItem.label} 儲存失敗`),
+        title: isNew && isAlreadyLinkedError(err)
+          ? `${keyItem.label} 已經綁定過，請重新整理頁面`
+          : getFriendlyErrorTitle(err, `${keyItem.label} 儲存失敗`),
         color: 'error',
         icon: 'i-lucide-x',
       });

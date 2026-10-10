@@ -12,6 +12,13 @@ from core.crypto import encrypt_secret, decrypt_secret
 from schemas.linked_account import LinkedAccountCreate
 
 
+def _mock_insert_one(stored: dict):
+    async def _insert_one(doc):
+        stored.clear()
+        stored.update(doc)
+    return _insert_one
+
+
 def _mock_update_one(stored: dict):
     async def _update_one(filter, update, upsert=False):
         stored.clear()
@@ -26,7 +33,7 @@ def _mock_update_one(stored: dict):
 async def test_create_moodle_account_encrypts_password(monkeypatch):
     """建立 Moodle 帳號時，密碼存進資料庫前要加密，不能存明文；解密後要等於原本的密碼。"""
     stored = {}
-    monkeypatch.setattr(linked_mod.db.linkedAccounts, "update_one", _mock_update_one(stored))
+    monkeypatch.setattr(linked_mod.db.linkedAccounts, "insert_one", _mock_insert_one(stored))
     monkeypatch.setattr(moodle_platform, "verify_moodle_login", lambda username, password: True)
 
     account = LinkedAccountCreate(platform="moodle", status="", username="stu123", password="my-real-password")
@@ -42,7 +49,7 @@ async def test_create_moodle_account_rejects_wrong_credentials(monkeypatch):
     from platforms.sync import NonRetryableError
 
     stored = {}
-    monkeypatch.setattr(linked_mod.db.linkedAccounts, "update_one", _mock_update_one(stored))
+    monkeypatch.setattr(linked_mod.db.linkedAccounts, "insert_one", _mock_insert_one(stored))
 
     def fake_verify(username, password):
         raise NonRetryableError("Moodle 登入失敗，使用者：stu123")
@@ -67,7 +74,7 @@ async def test_create_github_account_encrypts_apikey(monkeypatch):
         assert token == "ghp_real_token"  # 呼叫 GitHub 驗證時必須拿到明文
         return {"username": "octocat", "avatar_url": "https://avatar"}
 
-    monkeypatch.setattr(linked_mod.db.linkedAccounts, "update_one", _mock_update_one(stored))
+    monkeypatch.setattr(linked_mod.db.linkedAccounts, "insert_one", _mock_insert_one(stored))
     monkeypatch.setattr(github_platform, "fetch_github_userinfo", mock_fetch_github_userinfo)
 
     account = LinkedAccountCreate(platform="github", status="", username="", apiKey="ghp_real_token")

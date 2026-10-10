@@ -3,7 +3,7 @@ from unittest.mock import MagicMock
 from fastapi import HTTPException
 from routers import linked_account as router
 import crud.linked_account as crud_mod
-from schemas.linked_account import LinkedAccountCreate
+from schemas.linked_account import LinkedAccountCreate, LinkedAccountUpdate
 
 mock_user = {"sub": "test_user_123"}
 
@@ -78,7 +78,7 @@ async def test_update_linked_account(monkeypatch):
     result = await router.update_linked_account(
         request=MagicMock(),
         platform="github",
-        data={"status": "connected"},
+        data=LinkedAccountUpdate(status="connected"),
         clerk_user=mock_user
     )
     assert result["success"] is True
@@ -96,7 +96,7 @@ async def test_update_linked_account_fail(monkeypatch):
         await router.update_linked_account(
             request=MagicMock(),
             platform="github",
-            data={"status": "connected"},
+            data=LinkedAccountUpdate(status="connected"),
             clerk_user=mock_user
         )
     assert exc_info.value.status_code == 404

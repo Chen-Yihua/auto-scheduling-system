@@ -9,6 +9,13 @@ class LinkedAccountCreate(BaseModel):
     apiKey: Optional[str] = None
     domain: Optional[str] = None
 
+class LinkedAccountUpdate(BaseModel):
+    status: Optional[str] = None
+    username: Optional[str] = None
+    password: Optional[str] = None
+    apiKey: Optional[str] = None
+    domain: Optional[str] = None
+
 class LinkedAccountOut(BaseModel):
     id: str  # _id 轉成 id
     platform: str

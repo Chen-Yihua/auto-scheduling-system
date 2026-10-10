@@ -248,10 +248,8 @@ async def test_update_github_account_with_token(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_update_linked_account_no_valid_fields():
-    """要更新的欄位裡沒有任何合法欄位（例如只有 foo）→ 回傳 False（router 會轉成 404）。"""
-    result = await update_linked_account_by_clerk_id(
-        "uid123", "github", {"foo": "bar"}
-    )
+    """沒有任何要更新的欄位 → 回傳 False（router 會轉成 404）。"""
+    result = await update_linked_account_by_clerk_id("uid123", "github", {})
     assert result is False
 
 

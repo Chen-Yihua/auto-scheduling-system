@@ -26,8 +26,6 @@ class LinkedAccountDoc(TypedDict, total=False):
 # 存 DB 前加密，回傳前端前遮罩
 SENSITIVE_FIELDS = ("apiKey", "password")
 
-ALLOWED_UPDATE_FIELDS = {"status", "username", "password", "apiKey", "domain"}
-
 
 # 各平台的帳號驗證寫在 platforms/ 的 adapter 裡
 async def create_linked_account(clerk_id: str, account: LinkedAccountCreate) -> dict:
@@ -82,19 +80,18 @@ async def get_linked_accounts_by_clerk_id(clerk_id: str):
     return accounts
 
 
-async def update_linked_account_by_clerk_id(clerk_id: str, platform: str, data: dict):
+async def update_linked_account_by_clerk_id(clerk_id: str, platform: str, data: LinkedAccountDoc):
     composite_id = f"{clerk_id}_{platform}"
-    filtered_data: LinkedAccountDoc = {k: v for k, v in data.items() if k in ALLOWED_UPDATE_FIELDS}
-    if not filtered_data:
+    if not data:
         return False
 
     adapter = PLATFORMS.get(platform)
-    if adapter and adapter.needs_reverify(filtered_data):
-        filtered_data = await adapter.apply_update(filtered_data, composite_id)
+    if adapter and adapter.needs_reverify(data):
+        data = await adapter.apply_update(data, composite_id)
 
     # 不 upsert：帳號不存在要回 404
     # 用 matched_count：值沒變時 modified_count 是 0，但不算失敗
-    result = await db.linkedAccounts.update_one({"_id": composite_id}, {"$set": filtered_data})
+    result = await db.linkedAccounts.update_one({"_id": composite_id}, {"$set": data})
     return result.matched_count > 0
 
 

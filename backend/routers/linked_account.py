@@ -1,7 +1,7 @@
 from typing import List
-from fastapi import APIRouter, HTTPException, Depends, Body, Request
+from fastapi import APIRouter, HTTPException, Depends, Request
 from crud import linked_account as linked_account_crud
-from schemas.linked_account import LinkedAccountCreate, LinkedAccountOut
+from schemas.linked_account import LinkedAccountCreate, LinkedAccountOut, LinkedAccountUpdate
 from core.security import get_current_clerk_user
 from core.rate_limit import limiter
 
@@ -43,13 +43,13 @@ async def create_linked_account(
 async def update_linked_account(
     request: Request,
     platform: str,
-    data: dict = Body(...),
+    data: LinkedAccountUpdate,
     clerk_user: dict = Depends(get_current_clerk_user)
 ):
     success = await linked_account_crud.update_linked_account_by_clerk_id(
         clerk_user['sub'],
         platform,
-        data
+        data.model_dump(exclude_none=True)
     )
     if not success:
         raise HTTPException(status_code=404, detail="Linked account not found or no valid fields to update")

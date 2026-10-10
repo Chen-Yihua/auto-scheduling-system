@@ -133,3 +133,38 @@ async def test_get_linked_accounts_requires_login():
         res = await ac.get("/users/me/linked-accounts/")
 
     assert res.status_code in (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN)
+
+
+@pytest.mark.asyncio
+async def test_update_linked_account_passes_only_known_fields_to_crud(monkeypatch, logged_in_user):
+    """PATCH 只把有送、且 schema 裡有的欄位交給 crud；未知欄位和 null 都不會傳下去。"""
+    received = {}
+
+    async def mock_update(clerk_id, platform, data):
+        received.update(data)
+        return True
+
+    monkeypatch.setattr(linked_mod, "update_linked_account_by_clerk_id", mock_update)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        res = await ac.patch(
+            "/users/me/linked-accounts/github",
+            json={"apiKey": "new-token", "domain": None, "clerk_id": "someone_else"},
+        )
+
+    assert res.status_code == status.HTTP_200_OK
+    assert received == {"apiKey": "new-token"}
+
+
+@pytest.mark.asyncio
+async def test_update_linked_account_rejects_wrong_field_type(monkeypatch, logged_in_user):
+    """欄位型別錯誤（apiKey 不是字串）→ 422，不會進到 crud。"""
+    async def mock_update(clerk_id, platform, data):
+        raise AssertionError("不該呼叫到 crud")
+
+    monkeypatch.setattr(linked_mod, "update_linked_account_by_clerk_id", mock_update)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        res = await ac.patch("/users/me/linked-accounts/github", json={"apiKey": 123})
+
+    assert res.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT

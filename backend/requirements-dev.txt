@@ -1,6 +1,7 @@
 # 本機開發與 CI 跑測試用：正式環境套件 + 測試工具（Docker image 只裝 requirements.txt）
 -r requirements.txt
 pytest
+pyright
 pytest-asyncio
 pytest-cov
 trio

@@ -73,6 +73,7 @@ async def sync_platform_items(
         )
         cached = await collection.find({"user_id": user_id}).to_list(length=None)
         if not cached:
+            assert last_exc is not None  # items 是 None 代表至少失敗過一次
             raise last_exc
         synced_at = cached[0].get("synced_at")
         for doc in cached:

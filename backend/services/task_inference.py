@@ -50,6 +50,8 @@ async def infer_missing_task_fields(title: str, description: str, hint: str | No
                 "http_options": {"timeout": LLM_TIMEOUT_MS},
             },
         )
+        if not response.text:
+            raise ValueError("LLM 回傳空內容")
         parsed = json.loads(response.text)
 
         priority = parsed.get("priority")

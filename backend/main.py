@@ -51,12 +51,13 @@ app.add_middleware(
 
 # 流量限制：記憶體或 Redis 由 core/rate_limit.py 依 REDIS_URL 是否設定自動切換
 app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
+# pyright: ignore 是因為 Starlette 的型別只接受參數為 Exception 的 handler，傳子類別會誤報
+app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)  # pyright: ignore[reportArgumentType]
 
 # 資料庫例外集中處理：連線類錯誤回 503，其他資料庫錯誤回 500（見 core/exception_handlers.py）。
 # Starlette 會依例外的繼承順序挑最具體的 handler，ConnectionFailure 是 PyMongoError 的子類別
-app.add_exception_handler(ConnectionFailure, database_unavailable_handler)
-app.add_exception_handler(PyMongoError, database_error_handler)
+app.add_exception_handler(ConnectionFailure, database_unavailable_handler)  # pyright: ignore[reportArgumentType]
+app.add_exception_handler(PyMongoError, database_error_handler)  # pyright: ignore[reportArgumentType]
 
 # 路由註冊
 app.include_router(user.router)

@@ -18,11 +18,10 @@ clerk_config = ClerkConfig(
     jwks_url=CLERK_JWKS_URL,
     issuer=CLERK_ISSUER,
     verify_iss=True,
-    auto_error=True, # 自動回 403 / 401，未傳或驗證失敗時
     leeway=10, # 容忍一點點時間誤差再判斷 token
 )
 
-clerk_auth = ClerkHTTPBearer(config=clerk_config)
+clerk_auth = ClerkHTTPBearer(config=clerk_config, auto_error=True)  # 未傳或驗證失敗時自動回 403 / 401
 
 
 

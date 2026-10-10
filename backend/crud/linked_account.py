@@ -1,5 +1,4 @@
 import logging
-from typing import Optional, TypedDict
 from core.database import db
 from core.crypto import encrypt_secret, decrypt_secret, mask_secret
 from schemas.linked_account import LinkedAccountCreate
@@ -10,26 +9,13 @@ from fastapi import HTTPException
 logger = logging.getLogger(__name__)
 
 
-# 只給型別檢查用，runtime 不驗證；欄位因平台而異，所以全部非必填
-class LinkedAccountDoc(TypedDict, total=False):
-    _id: str
-    clerk_id: str
-    platform: str
-    status: str
-    username: str
-    password: Optional[str]
-    apiKey: Optional[str]
-    domain: Optional[str]
-    avatar_url: Optional[str]
-
-
 # 存 DB 前加密，回傳前端前遮罩
 SENSITIVE_FIELDS = ("apiKey", "password")
 
 
 # 各平台的帳號驗證寫在 platforms/ 的 adapter 裡
 async def create_linked_account(clerk_id: str, account: LinkedAccountCreate) -> dict:
-    doc: LinkedAccountDoc = account.model_dump()
+    doc = account.model_dump()
     doc["_id"] = f"{clerk_id}_{account.platform}"
     doc["clerk_id"] = clerk_id
     logger.debug("create_linked_account platform=%s domain=%s", account.platform, account.domain)
@@ -80,7 +66,7 @@ async def get_linked_accounts_by_clerk_id(clerk_id: str):
     return accounts
 
 
-async def update_linked_account_by_clerk_id(clerk_id: str, platform: str, data: LinkedAccountDoc):
+async def update_linked_account_by_clerk_id(clerk_id: str, platform: str, data: dict):
     composite_id = f"{clerk_id}_{platform}"
     if not data:
         return False

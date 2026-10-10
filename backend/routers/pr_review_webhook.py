@@ -130,6 +130,8 @@ async def github_webhook(
                     "http_options": {"timeout": LLM_TIMEOUT_MS},
                 }
             )
+            if not response.text:
+                raise ValueError("Gemini 回傳空內容")
             # 用 ReviewSummary 再驗證一次：少了 summary、欄位型別不對都會在這裡拋例外
             summary = ReviewSummary.model_validate_json(response.text)
         except Exception:

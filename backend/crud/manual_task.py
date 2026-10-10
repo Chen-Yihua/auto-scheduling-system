@@ -14,7 +14,7 @@ def _to_task(doc: dict) -> dict:
 
 
 # 建立任務
-async def create_manual_task(task: ManualTaskOut) -> str:
+async def create_manual_task(task: ManualTaskOut) -> dict:
     doc = task.model_dump()
     doc["_id"] = doc.pop("id")
     await db.manual_tasks.insert_one(doc)
@@ -106,7 +106,10 @@ async def update_manual_task_by_id(task_id: str, data: dict):
     result = await db.manual_tasks.update_one({"_id": task_id}, {"$set": fields})
     if result.modified_count == 0:
         raise HTTPException(status_code=400, detail="No valid fields to update")
-    return _to_task(await db.manual_tasks.find_one({"_id": task_id}))
+    doc = await db.manual_tasks.find_one({"_id": task_id})
+    if doc is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return _to_task(doc)
 
 # 刪除任務
 async def delete_manual_task_by_id(task_id: str):

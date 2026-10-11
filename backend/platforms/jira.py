@@ -40,7 +40,7 @@ async def fetch_jira_user_issues(api_key: str, domain: str, max_results: int = 1
     url = f"{_base_url(domain)}/rest/api/3/search/jql"
 
     all_issues = []
-    next_page_token = None
+    next_page_token = None # 下一頁從哪個 issue 開始
 
     async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
         for _ in range(JIRA_MAX_PAGES):

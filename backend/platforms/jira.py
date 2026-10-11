@@ -144,14 +144,14 @@ class JiraPlatform(PlatformAdapter):
     def is_done(self, item):
         return item.get("status_category") == "done"
 
-    async def verify_new(self, account):
+    async def verify_new_account(self, account):
         info = await fetch_jira_userinfo(account["apiKey"], account["domain"])
         return {**info, "status": "connected"}
 
     def needs_reverify(self, changes):
         return "apiKey" in changes or "domain" in changes
 
-    async def apply_update(self, changes, composite_id):
+    async def verify_account_update(self, changes, composite_id):
         # 只改其中一個時，另一個用現有值補齊再驗證
         api_key = changes.get("apiKey")
         domain = changes.get("domain")

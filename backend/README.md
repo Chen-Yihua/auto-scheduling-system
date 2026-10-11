@@ -241,7 +241,7 @@ app.include_router(note.router)
 
 1. `schemas/gitlab.py`：API 回傳格式（Pydantic model）
 2. `platforms/gitlab.py`：繼承 `PlatformAdapter`（見 `platforms/base.py` 每個欄位的說明），
-   至少實作 `credentials_from_account`、`fetch_items`、`verify_new`、`apply_update`；
+   至少實作 `credentials_from_account`、`fetch_items`、`verify_new_account`、`verify_account_update`；
    平台能回報完成狀態的話再覆寫 `is_done`
 3. `platforms/__init__.py`：把 `GITLAB` 加進 `PLATFORMS`
 4. 測試：抓資料、轉格式、帳號驗證寫在 `tests/unit/test_gitlab_crud.py`；

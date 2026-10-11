@@ -38,7 +38,7 @@ async def create_linked_account(clerk_id: str, account: LinkedAccountCreate) -> 
     if missing:
         raise HTTPException(status_code=400, detail=f"{', '.join(missing)} required for {account.platform}")
 
-    result = await platform.verify_new(doc)
+    result = await platform.verify_new_account(doc)
     doc.update(result)
     doc[platform.secret_field] = encrypt_secret(doc[platform.secret_field])
 
@@ -62,7 +62,7 @@ async def update_linked_account_by_clerk_id(clerk_id: str, platform: str, data: 
 
     adapter = PLATFORMS.get(platform)
     if adapter and adapter.needs_reverify(data):
-        data = await adapter.apply_update(data, composite_id)
+        data = await adapter.verify_account_update(data, composite_id)
 
     # 不 upsert：帳號不存在要回 404
     # 用 matched_count：值沒變時 modified_count 是 0，但不算失敗

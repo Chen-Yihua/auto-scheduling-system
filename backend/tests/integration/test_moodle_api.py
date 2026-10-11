@@ -53,7 +53,7 @@ async def test_get_moodle_assignments(monkeypatch, logged_in_user):
         return assignments, False, datetime(2026, 9, 1, tzinfo=timezone.utc), False
 
     monkeypatch.setattr(platform_router.db, "linkedAccounts", MockLinkedAccounts())
-    monkeypatch.setattr(MOODLE, "sync", mock_sync)
+    monkeypatch.setattr(MOODLE, "sync_items", mock_sync)
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         res = await ac.get("/moodle/assignments")

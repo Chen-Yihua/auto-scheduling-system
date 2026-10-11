@@ -49,7 +49,7 @@ async def get_platform_items(platform: PlatformAdapter, user_id: str, response: 
         return await platform.fetch_items(credentials)
 
     try:
-        items, stale, synced_at, auth_error = await platform.sync(user_id, fetch)
+        items, stale, synced_at, auth_error = await platform.sync_items(user_id, fetch)
     except NonRetryableError:
         logger.warning("%s credentials invalid/expired for user_id=%s", platform.name, user_id)
         raise HTTPException(status_code=401, detail=platform.auth_failed_detail)

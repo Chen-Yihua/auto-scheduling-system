@@ -57,7 +57,7 @@ class PlatformAdapter:
         """
         raise NotImplementedError
 
-    async def sync(self, user_id: str, fetch_fn: Callable[[], Awaitable[list[dict]]]):
+    async def sync_items(self, user_id: str, fetch_fn: Callable[[], Awaitable[list[dict]]]):
         """即時抓資料並寫進 collection，失敗時退回上次成功的資料。回傳值同 sync_platform_items。"""
         return await sync_platform_items(
             collection=self.collection,
@@ -72,7 +72,7 @@ class PlatformAdapter:
 
     # ---------- 連結帳號時的驗證 ----------
 
-    async def verify_new(self, account: dict) -> dict:
+    async def verify_new_account(self, account: dict) -> dict:
         """
         用明文憑證實際呼叫平台驗證，回傳要一併存入的欄位（username、avatar_url 等）。
         驗證失敗丟 HTTPException。
@@ -83,7 +83,7 @@ class PlatformAdapter:
         """預設只有改到 secret_field 才重新驗證；還有其他憑證欄位的平台（例如 Jira 的 domain）要覆寫。"""
         return self.secret_field in changes
 
-    async def apply_update(self, changes: dict, composite_id: str) -> dict:
+    async def verify_account_update(self, changes: dict, composite_id: str) -> dict:
         """needs_reverify 為 True 時呼叫：重新驗證，回傳加密好、可直接寫入 DB 的欄位。"""
         raise NotImplementedError
 

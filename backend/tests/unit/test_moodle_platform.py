@@ -90,7 +90,7 @@ def test_fetch_assignments_quits_driver_even_when_scraping_raises(monkeypatch):
     monkeypatch.setattr(moodle_crud, "_login_to_moodle", lambda u, p: driver)
 
     with pytest.raises(RuntimeError):
-        moodle_crud.fetch_assignments("stu123", "pw123")
+        moodle_crud.fetch_moodle_assignments("stu123", "pw123")
 
     driver.quit.assert_called_once()
 
@@ -133,7 +133,7 @@ def test_fetch_assignments_happy_path_returns_parsed_assignments(monkeypatch):
 
     driver.find_elements.side_effect = find_elements_router
 
-    result = moodle_crud.fetch_assignments("stu123", "pw123")
+    result = moodle_crud.fetch_moodle_assignments("stu123", "pw123")
 
     assert len(result) == 1
     assert result[0]["course_name"] == "資料庫課程"
@@ -161,7 +161,7 @@ def test_fetch_assignments_skips_bad_course_link_but_keeps_going(monkeypatch):
     driver.find_element.return_value = semester_div
     driver.find_elements.return_value = []  # 正常課程沒有作業，測到這裡就夠了
 
-    result = moodle_crud.fetch_assignments("stu123", "pw123")
+    result = moodle_crud.fetch_moodle_assignments("stu123", "pw123")
 
     assert result == []  # 沒有整支炸掉，安全跳過壞的那個連結
     driver.quit.assert_called_once()
@@ -181,7 +181,7 @@ def test_fetch_assignments_skips_course_that_fails_to_open(monkeypatch):
     driver.find_element.return_value = semester_div
     driver.get.side_effect = RuntimeError("連線逾時")
 
-    result = moodle_crud.fetch_assignments("stu123", "pw123")
+    result = moodle_crud.fetch_moodle_assignments("stu123", "pw123")
 
     assert result == []
     driver.quit.assert_called_once()
@@ -204,7 +204,7 @@ def test_fetch_assignments_skips_assignment_that_fails_to_parse(monkeypatch):
     driver.find_element.return_value = semester_div
     driver.find_elements.return_value = [bad_assignment]
 
-    result = moodle_crud.fetch_assignments("stu123", "pw123")
+    result = moodle_crud.fetch_moodle_assignments("stu123", "pw123")
 
     assert result == []
     driver.quit.assert_called_once()
@@ -237,7 +237,7 @@ def test_fetch_assignments_defaults_due_date_when_missing(monkeypatch):
     driver.find_element.side_effect = find_element_router
     driver.find_elements.return_value = [assignment_block]
 
-    result = moodle_crud.fetch_assignments("stu123", "pw123")
+    result = moodle_crud.fetch_moodle_assignments("stu123", "pw123")
 
     assert len(result) == 1
     assert result[0]["due_date"] == "無截止日期"
@@ -266,7 +266,7 @@ def test_fetch_assignments_skips_assignment_page_that_fails_to_open(monkeypatch)
     # 第一次 driver.get 是打開課程頁（成功），第二次是打開作業頁（失敗）
     driver.get.side_effect = [None, RuntimeError("作業頁面連線逾時")]
 
-    result = moodle_crud.fetch_assignments("stu123", "pw123")
+    result = moodle_crud.fetch_moodle_assignments("stu123", "pw123")
 
     assert result == []
     driver.quit.assert_called_once()
@@ -286,7 +286,7 @@ def test_fetch_assignments_skips_course_with_no_assignments(monkeypatch):
     driver.find_element.return_value = semester_div
     driver.find_elements.return_value = []  # 這個課程沒有 modtype_assign 區塊
 
-    result = moodle_crud.fetch_assignments("stu123", "pw123")
+    result = moodle_crud.fetch_moodle_assignments("stu123", "pw123")
 
     assert result == []
     driver.quit.assert_called_once()
@@ -307,7 +307,7 @@ async def test_sync_moodle_assignments_delegates_to_sync_platform_items(monkeypa
     async def fetch_fn():
         return []
 
-    result = await moodle_crud.MOODLE.sync("uid123", fetch_fn)
+    result = await moodle_crud.MOODLE.sync_items("uid123", fetch_fn)
 
     assert result == ("issues", False, None, False)
     assert captured["collection"] is database.db.moodle_assignments
@@ -325,7 +325,7 @@ async def test_moodle_fetch_items_scrapes_with_username_and_password(monkeypatch
         calls.append((username, password))
         return [{"id": "https://moodle/hw1", "title": "HW1"}]
 
-    monkeypatch.setattr(moodle_crud, "fetch_assignments", fake_fetch_assignments)
+    monkeypatch.setattr(moodle_crud, "fetch_moodle_assignments", fake_fetch_assignments)
 
     items = await moodle_crud.MOODLE.fetch_items({"username": "stu001", "password": "moodle-pw"})
 

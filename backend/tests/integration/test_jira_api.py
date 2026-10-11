@@ -44,7 +44,7 @@ async def test_get_jira_issues(monkeypatch, logged_in_user):
 
     monkeypatch.setattr(platform_router.db, "linkedAccounts", MockLinkedAccounts())
     monkeypatch.setattr(platform_router, "decrypt_secret", lambda value: "fake_api_key")
-    monkeypatch.setattr(JIRA, "sync", mock_sync)
+    monkeypatch.setattr(JIRA, "sync_items", mock_sync)
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         res = await ac.get("/jira/issues")

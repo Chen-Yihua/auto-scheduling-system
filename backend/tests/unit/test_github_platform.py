@@ -246,7 +246,7 @@ def test_transform_github_item_tolerates_missing_optional_fields():
     assert result["isPR"] is False
 
 
-# ---------- GITHUB.sync：舊資料（用 number 當 id）搬移 ----------
+# ---------- GITHUB.sync_items：舊資料（用 number 當 id）搬移 ----------
 
 class _FakeGithubIssues:
     """只模擬搬移邏輯用到的 count_documents／update_one，記錄 update_one 收到的參數。"""
@@ -278,7 +278,7 @@ async def test_sync_github_issues_migrates_legacy_ids_by_url(monkeypatch):
     async def fetch():
         return items
 
-    result, *_ = await github_mod.GITHUB.sync("user_1", fetch)
+    result, *_ = await github_mod.GITHUB.sync_items("user_1", fetch)
 
     assert result == items
     assert fake.updates == [(
@@ -301,7 +301,7 @@ async def test_sync_github_issues_skips_migration_when_no_legacy_docs(monkeypatc
     async def fetch():
         return [{"id": 9000001, "number": 1, "url": "https://github.com/a/repo/issues/1"}]
 
-    await github_mod.GITHUB.sync("user_1", fetch)
+    await github_mod.GITHUB.sync_items("user_1", fetch)
 
     assert fake.updates == []
 

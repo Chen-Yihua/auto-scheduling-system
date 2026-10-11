@@ -83,7 +83,7 @@ async def test_fetches_with_decrypted_credentials_and_returns_items(monkeypatch,
         return await fetch_fn(), False, SYNCED_AT, False
 
     monkeypatch.setattr(platform, "fetch_items", fake_fetch_items)
-    monkeypatch.setattr(platform, "sync", fake_sync)
+    monkeypatch.setattr(platform, "sync_items", fake_sync)
 
     response = Response()
     result = await platform_router.get_platform_items(platform, USER_ID, response)
@@ -132,7 +132,7 @@ async def test_raises_401_when_credentials_rejected_and_no_cached_data(monkeypat
     async def fake_sync(user_id, fetch_fn):
         raise NonRetryableError("401 Unauthorized")
 
-    monkeypatch.setattr(platform, "sync", fake_sync)
+    monkeypatch.setattr(platform, "sync_items", fake_sync)
 
     with pytest.raises(HTTPException) as exc_info:
         await platform_router.get_platform_items(platform, USER_ID, Response())
@@ -151,7 +151,7 @@ async def test_raises_502_when_platform_unavailable_and_no_cached_data(monkeypat
     async def fake_sync(user_id, fetch_fn):
         raise error
 
-    monkeypatch.setattr(platform, "sync", fake_sync)
+    monkeypatch.setattr(platform, "sync_items", fake_sync)
 
     with pytest.raises(HTTPException) as exc_info:
         await platform_router.get_platform_items(platform, USER_ID, Response())
@@ -169,7 +169,7 @@ async def test_raises_500_on_unexpected_sync_error(monkeypatch, platform, accoun
     async def fake_sync(user_id, fetch_fn):
         raise RuntimeError("unexpected bug")
 
-    monkeypatch.setattr(platform, "sync", fake_sync)
+    monkeypatch.setattr(platform, "sync_items", fake_sync)
 
     with pytest.raises(HTTPException) as exc_info:
         await platform_router.get_platform_items(platform, USER_ID, Response())
@@ -182,7 +182,7 @@ async def test_raises_500_on_unexpected_sync_error(monkeypatch, platform, accoun
 async def test_stale_data_with_auth_error_sets_both_headers(monkeypatch):
     """憑證失效但有舊資料 → 回舊資料，設 X-Data-Stale 和 X-Auth-Error。"""
     _use_account(monkeypatch, {"apiKey": encrypt_secret("gh-token")})
-    monkeypatch.setattr(GITHUB, "sync", _sync_returning([ITEM], stale=True, auth_error=True))
+    monkeypatch.setattr(GITHUB, "sync_items", _sync_returning([ITEM], stale=True, auth_error=True))
 
     response = Response()
     result = await platform_router.get_platform_items(GITHUB, USER_ID, response)
@@ -196,7 +196,7 @@ async def test_stale_data_with_auth_error_sets_both_headers(monkeypatch):
 async def test_stale_data_without_auth_error_omits_auth_header(monkeypatch):
     """平台暫時連不上而退回舊資料 → 設 X-Data-Stale，不設 X-Auth-Error。"""
     _use_account(monkeypatch, {"apiKey": encrypt_secret("gh-token")})
-    monkeypatch.setattr(GITHUB, "sync", _sync_returning([ITEM], stale=True, auth_error=False))
+    monkeypatch.setattr(GITHUB, "sync_items", _sync_returning([ITEM], stale=True, auth_error=False))
 
     response = Response()
     await platform_router.get_platform_items(GITHUB, USER_ID, response)
@@ -215,7 +215,7 @@ async def test_cached_platform_second_call_within_ttl_skips_fetch_entirely(monke
     """短時間內重複整理：第二次直接用快取，不再重新爬 Moodle（每次都要開瀏覽器，成本高）。"""
     _use_account(monkeypatch, MOODLE_ACCOUNT)
     calls = []
-    monkeypatch.setattr(MOODLE, "sync", _sync_returning([ITEM], calls=calls))
+    monkeypatch.setattr(MOODLE, "sync_items", _sync_returning([ITEM], calls=calls))
 
     first = await platform_router.get_platform_items(MOODLE, USER_ID, Response())
     second_response = Response()
@@ -232,7 +232,7 @@ async def test_cached_platform_does_not_cache_stale_fallback(monkeypatch):
     """退回的舊資料不快取，下次請求才會重新抓取。"""
     _use_account(monkeypatch, MOODLE_ACCOUNT)
     calls = []
-    monkeypatch.setattr(MOODLE, "sync", _sync_returning([ITEM], stale=True, calls=calls))
+    monkeypatch.setattr(MOODLE, "sync_items", _sync_returning([ITEM], stale=True, calls=calls))
 
     await platform_router.get_platform_items(MOODLE, USER_ID, Response())
     await platform_router.get_platform_items(MOODLE, USER_ID, Response())
@@ -245,7 +245,7 @@ async def test_platform_without_cache_ttl_always_fetches_live(monkeypatch):
     """沒設快取的平台（GitHub）每次都即時抓，使用者剛關掉的 issue 重新整理就看得到。"""
     _use_account(monkeypatch, {"apiKey": encrypt_secret("gh-token")})
     calls = []
-    monkeypatch.setattr(GITHUB, "sync", _sync_returning([ITEM], calls=calls))
+    monkeypatch.setattr(GITHUB, "sync_items", _sync_returning([ITEM], calls=calls))
 
     await platform_router.get_platform_items(GITHUB, USER_ID, Response())
     await platform_router.get_platform_items(GITHUB, USER_ID, Response())

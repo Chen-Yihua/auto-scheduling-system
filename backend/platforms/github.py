@@ -133,7 +133,7 @@ class GithubPlatform(PlatformAdapter):
         raw_items = await fetch_github_user_issues(token=credentials["token"])
         return [transform_github_item(item) for item in raw_items]
 
-    async def sync(self, user_id, fetch_fn):
+    async def sync_items(self, user_id, fetch_fn):
         # 搬移要在 upsert 和刪除舊項目之前做，所以包在 fetch 裡
         async def fetch_and_migrate():
             items = await fetch_fn()
@@ -162,11 +162,11 @@ class GithubPlatform(PlatformAdapter):
     def is_done(self, item):
         return item.get("status") == "closed"
 
-    async def verify_new(self, account):
+    async def verify_new_account(self, account):
         info = await fetch_github_userinfo(account["apiKey"])
         return {**info, "status": "connected"}
 
-    async def apply_update(self, changes, composite_id):
+    async def verify_account_update(self, changes, composite_id):
         info = await fetch_github_userinfo(changes["apiKey"])
         changes["username"] = info["username"]
         changes["avatar_url"] = info["avatar_url"]

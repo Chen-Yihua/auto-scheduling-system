@@ -67,7 +67,7 @@ def verify_moodle_login(username, password) -> bool:
     return True
 
 
-def fetch_assignments(username, password):
+def fetch_moodle_assignments(username, password):
     driver = _login_to_moodle(username, password)
     try:
         semester_div = driver.find_element(By.ID, "SemesterItem_1")
@@ -166,7 +166,7 @@ class MoodlePlatform(PlatformAdapter):
     async def fetch_items(self, credentials):
         # Selenium 是同步阻塞的，放到 thread pool 才不會卡住 event loop
         try:
-            return await run_in_threadpool(fetch_assignments, credentials["username"], credentials["password"])
+            return await run_in_threadpool(fetch_moodle_assignments, credentials["username"], credentials["password"])
         except WebDriverException as e:
             raise UpstreamError(f"Moodle 爬取失敗: {e}") from e
 
@@ -181,14 +181,14 @@ class MoodlePlatform(PlatformAdapter):
             logger.error("Moodle 驗證發生非預期錯誤: %s", e)
             raise HTTPException(status_code=503, detail="Moodle 服務暫時無法使用，請稍後再試")
 
-    async def verify_new(self, account):
+    async def verify_new_account(self, account):
         await self._verify(account["username"], account["password"])
         return {"avatar_url": "", "status": "connected"}
 
     def needs_reverify(self, changes):
         return "username" in changes or "password" in changes
 
-    async def apply_update(self, changes, composite_id):
+    async def verify_account_update(self, changes, composite_id):
         # 只改其中一個時，另一個用現有值補齊再驗證
         username = changes.get("username")
         password = changes.get("password")

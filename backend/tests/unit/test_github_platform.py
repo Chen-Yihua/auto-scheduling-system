@@ -28,7 +28,7 @@ async def test_fetch_github_user_issues(monkeypatch):
             calls.append(params["q"])
             return MockResponse(params["q"])
 
-    monkeypatch.setattr("httpx.AsyncClient", lambda: MockClient())
+    monkeypatch.setattr("httpx.AsyncClient", lambda *a, **k: MockClient())
 
     result = await github_mod.fetch_github_user_issues("fake_token")
 
@@ -57,7 +57,7 @@ async def test_fetch_github_user_issues_pins_api_version_header(monkeypatch):
             sent_headers.append(headers)
             return MockResponse()
 
-    monkeypatch.setattr("httpx.AsyncClient", lambda: MockClient())
+    monkeypatch.setattr("httpx.AsyncClient", lambda *a, **k: MockClient())
 
     await github_mod.fetch_github_user_issues("fake_token")
 
@@ -90,7 +90,7 @@ async def test_fetch_github_user_issues_paginates_full_pages(monkeypatch):
             calls.append((params["q"], params["page"]))
             return MockResponse(params["page"])
 
-    monkeypatch.setattr("httpx.AsyncClient", lambda: MockClient())
+    monkeypatch.setattr("httpx.AsyncClient", lambda *a, **k: MockClient())
 
     result = await github_mod.fetch_github_user_issues("fake_token", per_page=2)
 
@@ -123,7 +123,7 @@ async def test_fetch_github_user_issues_stops_at_max_pages_safety_cap(monkeypatc
             call_count["n"] += 1
             return MockResponse()
 
-    monkeypatch.setattr("httpx.AsyncClient", lambda: MockClient())
+    monkeypatch.setattr("httpx.AsyncClient", lambda *a, **k: MockClient())
 
     await github_mod.fetch_github_user_issues("fake_token", per_page=1)
 
@@ -141,7 +141,7 @@ async def test_fetch_github_user_issues_client_error_is_non_retryable(monkeypatc
         async def get(self, url, headers, params):
             return Response(status_code=status_code, content=b"error", request=Request("GET", url))
 
-    monkeypatch.setattr("httpx.AsyncClient", lambda: MockClient())
+    monkeypatch.setattr("httpx.AsyncClient", lambda *a, **k: MockClient())
 
     with pytest.raises(NonRetryableError) as exc_info:
         await github_mod.fetch_github_user_issues("fake_token")
@@ -159,7 +159,7 @@ async def test_fetch_github_user_issues_transient_error_is_retryable(monkeypatch
         async def get(self, url, headers, params):
             return Response(status_code=status_code, content=b"error", request=Request("GET", url))
 
-    monkeypatch.setattr("httpx.AsyncClient", lambda: MockClient())
+    monkeypatch.setattr("httpx.AsyncClient", lambda *a, **k: MockClient())
 
     with pytest.raises(Exception) as exc_info:
         await github_mod.fetch_github_user_issues("fake_token")

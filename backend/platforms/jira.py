@@ -28,18 +28,21 @@ def _base_url(domain: str) -> str:
     return f"https://{domain.replace('https://', '')}"
 
 
+def _headers(api_key: str) -> dict:
+    return {
+        "Authorization": f"Basic {api_key}",
+        "Accept": "application/json",
+    }
+
+
 # 新端點沒有 total，只能靠 nextPageToken 判斷是否還有下一頁
 async def fetch_jira_user_issues(api_key: str, domain: str, max_results: int = 100) -> list:
     url = f"{_base_url(domain)}/rest/api/3/search/jql"
-    headers = {
-        "Authorization": f"Basic {api_key}",
-        "Accept": "application/json"
-    }
 
     all_issues = []
     next_page_token = None
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
         for _ in range(JIRA_MAX_PAGES):
             params = {
                 "jql": "assignee=currentUser() ORDER BY updated DESC",
@@ -48,7 +51,7 @@ async def fetch_jira_user_issues(api_key: str, domain: str, max_results: int = 1
             }
             if next_page_token:
                 params["nextPageToken"] = next_page_token
-            response = await client.get(url, headers=headers, params=params)
+            response = await client.get(url, headers=_headers(api_key), params=params)
 
             if response.status_code != 200:
                 message = f"Jira API failed: {response.status_code} {response.text}"
@@ -92,13 +95,9 @@ def transform_jira_item(raw: dict) -> dict:
 # 連結帳號時驗證 API Token 和網域，並取得使用者名稱和頭像
 async def fetch_jira_userinfo(api_key_base64: str, domain: str) -> PlatformUserInfo:
     url = f"{_base_url(domain)}/rest/api/3/myself"
-    headers = {
-        "Authorization": f"Basic {api_key_base64}",
-        "Accept": "application/json",
-    }
     try:
         async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
-            response = await client.get(url, headers=headers)
+            response = await client.get(url, headers=_headers(api_key_base64))
     except httpx.RequestError as e:
         logger.error("Jira 驗證連線失敗: %s", e)
         raise HTTPException(status_code=502, detail="無法連線至 Jira，請稍後再試")

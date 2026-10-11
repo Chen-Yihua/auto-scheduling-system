@@ -41,7 +41,7 @@ async def fetch_github_user_issues(token: str, per_page: int = 100) -> list:
 
     all_items = []
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
         for q in queries:
             page = 1
             while page <= GITHUB_MAX_PAGES:

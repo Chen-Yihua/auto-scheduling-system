@@ -4,7 +4,7 @@ from zoneinfo import ZoneInfo
 
 logger = logging.getLogger(__name__)
 
-# 沒有 duration 欄位的舊資料用這個值
+# 沒設定 duration 的項目用這個值，例如還沒在排程精靈填過時長的外部平台項目
 DEFAULT_TASK_DURATION_MINUTES = 60
 
 PRIORITY_ORDER = {"High": 0, "Medium": 1, "Low": 2}

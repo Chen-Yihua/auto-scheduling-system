@@ -6,7 +6,6 @@ from fastapi import HTTPException
 
 from core.crypto import encrypt_secret
 from platforms.sync import NonRetryableError, UpstreamError
-from platforms.sync import sync_platform_items
 from platforms.base import PlatformAdapter, PlatformUserInfo
 from schemas.github import GitHubIssue
 
@@ -132,32 +131,6 @@ class GithubPlatform(PlatformAdapter):
     async def fetch_items(self, credentials):
         raw_items = await fetch_github_user_issues(token=credentials["token"])
         return [transform_github_item(item) for item in raw_items]
-
-    async def sync_items(self, user_id, fetch_fn):
-        # 搬移要在 upsert 和刪除舊項目之前做，所以包在 fetch 裡
-        async def fetch_and_migrate():
-            items = await fetch_fn()
-            await self._migrate_legacy_ids(user_id, items)
-            return items
-
-        return await sync_platform_items(
-            collection=self.collection,
-            user_id=user_id,
-            id_field="id",
-            fetch_fn=fetch_and_migrate,
-        )
-
-    # 舊資料用 issue number 當 id 且沒有 number 欄位。用 url 對應到新 id，
-    # 否則同步時會被當成已刪除，連帶丟掉使用者設定的排程欄位
-    async def _migrate_legacy_ids(self, user_id: str, items: list[dict]) -> None:
-        legacy_filter = {"user_id": user_id, "number": {"$exists": False}}
-        if not await self.collection.count_documents(legacy_filter):
-            return
-        for item in items:
-            await self.collection.update_one(
-                {**legacy_filter, "url": item["url"]},
-                {"$set": {"id": item["id"], "number": item["number"]}},
-            )
 
     def is_done(self, item):
         return item.get("status") == "closed"

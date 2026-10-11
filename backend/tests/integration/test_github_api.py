@@ -51,9 +51,6 @@ async def test_get_github_issues(monkeypatch, logged_in_user):
         async def delete_many(self, *args, **kwargs):
             return MockUpdateResult()
 
-        async def count_documents(self, *args, **kwargs):
-            return 0  # 沒有舊版（用 number 當 id）的資料要搬移
-
     monkeypatch.setattr(platform_router.db, "linkedAccounts", MockCollection())
     monkeypatch.setattr(platform_router.db, "github_issues", MockCollection())
     monkeypatch.setattr(github_platform, "fetch_github_user_issues", mock_fetch)

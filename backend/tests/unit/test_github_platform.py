@@ -1,6 +1,5 @@
 import pytest
 import platforms.github as github_mod
-from core import database
 from platforms.sync import NonRetryableError
 from httpx import Response, Request
 
@@ -244,66 +243,6 @@ def test_transform_github_item_tolerates_missing_optional_fields():
     assert result["labels"] == []
     assert result["comments"] is None
     assert result["isPR"] is False
-
-
-# ---------- GITHUB.sync_items：舊資料（用 number 當 id）搬移 ----------
-
-class _FakeGithubIssues:
-    """只模擬搬移邏輯用到的 count_documents／update_one，記錄 update_one 收到的參數。"""
-    def __init__(self, legacy_count):
-        self.legacy_count = legacy_count
-        self.updates = []
-
-    async def count_documents(self, query):
-        return self.legacy_count
-
-    async def update_one(self, query, update):
-        self.updates.append((query, update))
-
-
-@pytest.mark.asyncio
-async def test_sync_github_issues_migrates_legacy_ids_by_url(monkeypatch):
-    """用 number 當 id 的舊資料 → 依 url 改成新 id，排程欄位要保留。"""
-    fake = _FakeGithubIssues(legacy_count=1)
-    monkeypatch.setattr(database.db, "github_issues", fake)
-    items = [{"id": 9000001, "number": 1, "url": "https://github.com/a/repo/issues/1"}]
-
-    async def fake_sync_platform_items(collection, user_id, id_field, fetch_fn):
-        result = await fetch_fn()
-        assert fake.updates, "搬移要在 fetch_fn 回傳前做完，sync_platform_items 才不會先刪掉舊資料"
-        return result, False, None, False
-
-    monkeypatch.setattr(github_mod, "sync_platform_items", fake_sync_platform_items)
-
-    async def fetch():
-        return items
-
-    result, *_ = await github_mod.GITHUB.sync_items("user_1", fetch)
-
-    assert result == items
-    assert fake.updates == [(
-        {"user_id": "user_1", "number": {"$exists": False}, "url": "https://github.com/a/repo/issues/1"},
-        {"$set": {"id": 9000001, "number": 1}},
-    )]
-
-
-@pytest.mark.asyncio
-async def test_sync_github_issues_skips_migration_when_no_legacy_docs(monkeypatch):
-    """已經沒有舊資料 → 只多一次 count 查詢，不能每次同步都對每個項目跑一次 update。"""
-    fake = _FakeGithubIssues(legacy_count=0)
-    monkeypatch.setattr(database.db, "github_issues", fake)
-
-    async def fake_sync_platform_items(collection, user_id, id_field, fetch_fn):
-        return await fetch_fn(), False, None, False
-
-    monkeypatch.setattr(github_mod, "sync_platform_items", fake_sync_platform_items)
-
-    async def fetch():
-        return [{"id": 9000001, "number": 1, "url": "https://github.com/a/repo/issues/1"}]
-
-    await github_mod.GITHUB.sync_items("user_1", fetch)
-
-    assert fake.updates == []
 
 
 @pytest.mark.asyncio

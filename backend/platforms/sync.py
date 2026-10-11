@@ -71,7 +71,7 @@ async def sync_platform_items(
             assert last_exc is not None  # items 是 None 代表至少失敗過一次
             raise last_exc
         synced_at = last_synced[0].get("synced_at")
-        # _id 是 MongoDB 的 ObjectId，不能轉成 JSON，新抓的資料也沒有這個欄位
+        # _id 是 MongoDB 的 ObjectId，不能轉成 JSON，新抓的資料也沒有這個欄位，需移除 _id
         for doc in last_synced:
             doc.pop("_id", None)
         auth_error = isinstance(last_exc, NonRetryableError)

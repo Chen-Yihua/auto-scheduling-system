@@ -10,8 +10,8 @@ db = client[DB_NAME]
 
 async def ensure_indexes() -> None:
     """替常用查詢欄位建立索引，避免資料量變大後全表掃描。"""
-    # 不用 unique：_id 是 "{clerk_id}_{platform}"，已保證不重複
-    await db.linkedAccounts.create_index([("clerk_id", 1), ("platform", 1)])
+    # 查單筆帳號用 _id（"{clerk_id}_{platform}"），這個索引給「列出使用者所有帳號」用
+    await db.linkedAccounts.create_index("clerk_id")
 
     await db.manual_tasks.create_index("user_id")
 

@@ -24,8 +24,7 @@ async def test_ensure_indexes_creates_expected_indexes(monkeypatch):
 
     await database_mod.ensure_indexes()
 
-    # linkedAccounts：常用 clerk_id 單獨查，也常用 (clerk_id, platform) 一起查
-    linked_accounts_mock.assert_any_call([("clerk_id", 1), ("platform", 1)])
+    linked_accounts_mock.assert_called_once_with("clerk_id")
 
     manual_tasks_mock.assert_called_once_with("user_id")
 

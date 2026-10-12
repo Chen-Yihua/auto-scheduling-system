@@ -90,7 +90,7 @@ async def test_fetches_with_decrypted_credentials_and_returns_items(monkeypatch,
 
     assert result == [ITEM]
     assert received == [expected_credentials]
-    assert accounts.queries == [{"clerk_id": USER_ID, "platform": platform.name}]
+    assert accounts.queries == [{"_id": f"{USER_ID}_{platform.name}"}]
     assert response.headers["X-Data-Stale"] == "false"
     assert response.headers["X-Synced-At"] == SYNCED_AT.isoformat()
 

@@ -35,7 +35,7 @@ async def get_platform_items(platform: PlatformAdapter, user_id: str, response: 
             return cached["items"]
 
     # 若快取沒有或過期就去抓取
-    account = await db.linkedAccounts.find_one({"clerk_id": user_id, "platform": platform.name})
+    account = await db.linkedAccounts.find_one({"_id": f"{user_id}_{platform.name}"})
     if not account:
         raise HTTPException(status_code=400, detail=platform.not_linked_detail)
 

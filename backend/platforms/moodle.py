@@ -80,6 +80,8 @@ def fetch_moodle_assignments(username, password):
         assignments_links = []
         courses = []
         logger.debug("Found %d course links", len(course_links))
+
+        # 取得課程名稱和課程頁面連結
         for link in course_links:
             try:
                 name = link.text.strip()
@@ -88,6 +90,7 @@ def fetch_moodle_assignments(username, password):
             except Exception as e:
                 logger.warning("忽略某個課程連結：%s", e)
 
+        # 取得每個課程的作業連結
         for name, url in courses:
             logger.debug("課程名稱：%s，課程連結：%s", name, url)
             try:
@@ -110,6 +113,8 @@ def fetch_moodle_assignments(username, password):
                 except Exception as e:
                     logger.warning("無法抓取作業：%s", e)
         logger.debug("總作業數量：%d", len(assignments_links))
+
+        # 取得每個作業的截止日期
         for name, title, url in assignments_links:
             if title.endswith("\n作業"):
                 title = title[:-3]
@@ -146,6 +151,7 @@ class MoodlePlatform(PlatformAdapter):
 
     route_path = "/moodle/assignments"
     response_model = MoodleAssignment
+    
     # 每次抓取都要開 Chrome 跑好幾秒，所以限流較嚴、快取較久
     rate_limit = "5/minute"
     cache_ttl_seconds = 15 * 60

@@ -25,6 +25,7 @@ def _cache_key(platform: PlatformAdapter, user_id: str) -> str:
 
 
 async def get_platform_items(platform: PlatformAdapter, user_id: str, response: Response) -> list[dict]:
+    # 先嘗試從快取拿資料
     if platform.cache_ttl_seconds:
         cached = await cache_get(_cache_key(platform, user_id))
         if cached is not None:
@@ -33,6 +34,7 @@ async def get_platform_items(platform: PlatformAdapter, user_id: str, response: 
                 response.headers["X-Synced-At"] = cached["synced_at"]
             return cached["items"]
 
+    # 若快取沒有或過期就去抓取
     account = await db.linkedAccounts.find_one({"clerk_id": user_id, "platform": platform.name})
     if not account:
         raise HTTPException(status_code=400, detail=platform.not_linked_detail)
@@ -48,6 +50,7 @@ async def get_platform_items(platform: PlatformAdapter, user_id: str, response: 
     async def fetch():
         return await platform.fetch_items(credentials)
 
+    # fetch() 可能會拋出 NonRetryableError、UpstreamError、httpx.HTTPError，或其他未知錯誤
     try:
         items, stale, synced_at, auth_error = await platform.sync_items(user_id, fetch)
     except NonRetryableError:
@@ -60,6 +63,7 @@ async def get_platform_items(platform: PlatformAdapter, user_id: str, response: 
         logger.exception("Failed to sync %s items for user_id=%s", platform.name, user_id)
         raise HTTPException(status_code=500, detail=platform.fetch_failed_detail)
 
+    # 回傳 header，讓前端知道資料是否過期、憑證是否失效、最後同步時間
     response.headers["X-Data-Stale"] = str(stale).lower()
     if auth_error:
         response.headers["X-Auth-Error"] = "true"

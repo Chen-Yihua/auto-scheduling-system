@@ -1,5 +1,6 @@
 """Moodle（政大）：使用者課程裡的作業。Moodle 沒有可用的 API，用 Selenium 登入 SSO 後爬取。"""
 import logging
+import os
 import time
 
 from fastapi import HTTPException
@@ -27,12 +28,13 @@ def _login_to_moodle(username, password):
     帳密錯誤（登入後沒導向 my/）丟 NonRetryableError。
     """
     opts = Options()
-    opts.binary_location = "/usr/bin/chromium"
+    # 預設是 Debian apt 安裝的路徑，其他環境用環境變數指定
+    opts.binary_location = os.getenv("CHROME_BIN", "/usr/bin/chromium")
     opts.add_argument("--headless=new")
     opts.add_argument("--no-sandbox")
     opts.add_argument("--disable-dev-shm-usage")
 
-    service = Service("/usr/bin/chromedriver")
+    service = Service(os.getenv("CHROMEDRIVER_PATH", "/usr/bin/chromedriver"))
     driver = webdriver.Chrome(service=service, options=opts)
     try:
         driver.get("https://i.nccu.edu.tw/Login.aspx?ReturnUrl=%2fsso_app%2fMoodleSSO2.aspx")

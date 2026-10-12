@@ -36,6 +36,26 @@ def test_login_to_moodle_returns_driver_on_success(monkeypatch):
     driver.quit.assert_not_called()
 
 
+def test_login_to_moodle_uses_browser_paths_from_env(monkeypatch):
+    """設定 CHROME_BIN / CHROMEDRIVER_PATH → 用指定的路徑，而不是預設的 /usr/bin。"""
+    monkeypatch.setenv("CHROME_BIN", "/custom/chrome")
+    monkeypatch.setenv("CHROMEDRIVER_PATH", "/custom/chromedriver")
+    captured = {}
+    driver = MagicMock()
+    driver.current_url = "https://moodle.nccu.edu.tw/my/"
+
+    def fake_chrome(**kwargs):
+        captured.update(kwargs)
+        return driver
+
+    monkeypatch.setattr(moodle_crud.webdriver, "Chrome", fake_chrome)
+
+    moodle_crud._login_to_moodle("stu123", "pw123")
+
+    assert captured["options"].binary_location == "/custom/chrome"
+    assert captured["service"].path == "/custom/chromedriver"
+
+
 def test_login_to_moodle_quits_driver_and_raises_when_login_fails(monkeypatch):
     """帳密錯誤 → 丟 NonRetryableError（重試也沒用），而且要先關掉瀏覽器，不能留著 Chrome 行程。"""
     driver = _mock_chrome(monkeypatch, "https://i.nccu.edu.tw/Login.aspx?error=1")

@@ -9,7 +9,7 @@
 - **Python 3.11**（CI 與 Docker 部署都用這個版本）
 - **MongoDB**：本機 `mongodb://localhost:27017`，或 MongoDB Atlas
 - **Redis**（選用）：不設定就用記憶體，本機開發夠用
-- **Chrome / Chromium**（選用）：只有要用 Moodle 帳號連結、作業同步時才需要，後端會用 Selenium 開 headless Chrome；正式環境的 Dockerfile 已內建
+- **Chrome / Chromium 和 chromedriver**（選用）：只有要用 Moodle 帳號連結、作業同步時才需要，後端會用 Selenium 開 headless Chrome；正式環境的 Dockerfile 已內建。預設路徑是 `/usr/bin/chromium` 和 `/usr/bin/chromedriver`（Debian/Ubuntu 用 apt 安裝的位置），安裝在其他位置時用 `CHROME_BIN`、`CHROMEDRIVER_PATH` 指定
 
 ---
 

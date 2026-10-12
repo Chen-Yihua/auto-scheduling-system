@@ -254,10 +254,14 @@ async def test_platform_without_cache_ttl_always_fetches_live(monkeypatch):
 
 
 def test_each_platform_endpoint_has_its_own_rate_limit_entry():
-    """各平台 endpoint 的函式名稱不同，限流計數才不會共用；只有設了 rate_limit 的平台會被登記。"""
+    """各平台 endpoint 的函式名稱不同，各自登記自己的限流規則，計數不會共用。"""
     from core.rate_limit import limiter
 
     registered = {name: [str(l.limit) for l in limits]
                   for name, limits in limiter._route_limits.items() if name.startswith("platforms.router.")}
 
-    assert registered == {"platforms.router.get_moodle_items": ["5 per 1 minute"]}
+    assert registered == {
+        "platforms.router.get_github_items": ["10 per 1 minute"],
+        "platforms.router.get_jira_items": ["30 per 1 minute"],
+        "platforms.router.get_moodle_items": ["5 per 1 minute"],
+    }

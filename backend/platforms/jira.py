@@ -120,6 +120,7 @@ class JiraPlatform(PlatformAdapter):
 
     route_path = "/jira/issues"
     response_model = JiraIssue
+    rate_limit = "30/minute"
 
     not_linked_detail = "No Jira linked account"
     auth_failed_detail = "Jira 授權已失效，請重新連結帳號"

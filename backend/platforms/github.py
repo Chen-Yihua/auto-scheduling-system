@@ -112,6 +112,8 @@ class GithubPlatform(PlatformAdapter):
 
     route_path = "/github/issues"
     response_model = GitHubIssue
+    # GitHub search API 每分鐘只能 30 次，而每次請求至少會查 2 次（issue 和 PR）
+    rate_limit = "10/minute"
 
     not_linked_detail = "No GitHub token linked"
     auth_failed_detail = "GitHub 授權已失效，請重新連結帳號"

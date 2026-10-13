@@ -203,14 +203,15 @@ async def test_get_free_slots_different_users_have_independent_cache(monkeypatch
 
 
 @pytest.mark.asyncio
-async def test_get_free_slots_raises_400_on_non_401_status_error(monkeypatch):
-    """取得行事曆清單時 Google 回 401 以外的錯誤（例如 500）→ 400。"""
+@pytest.mark.parametrize("google_status, expected", [(500, 502), (429, 502), (403, 400)])
+async def test_get_free_slots_maps_google_calendar_list_errors(monkeypatch, google_status, expected):
+    """取得行事曆清單時 Google 回 5xx 或 429 → 502（對方的問題）；其他 4xx → 400。"""
     async def mock_find_one(query):
         return {"_id": "uid123", "access_token": encrypt_secret("valid-token")}
 
     async def mock_fetch_calendar_list(token):
         request = httpx.Request("GET", "https://example.com")
-        response = httpx.Response(500, request=request)
+        response = httpx.Response(google_status, request=request)
         raise httpx.HTTPStatusError("error", request=request, response=response)
 
     monkeypatch.setattr(google_tokens.db.googleCalendarTokens, "find_one", mock_find_one)
@@ -219,7 +220,30 @@ async def test_get_free_slots_raises_400_on_non_401_status_error(monkeypatch):
     with pytest.raises(HTTPException) as exc_info:
         await calendar_service.get_free_slots_for_user("uid123")
 
-    assert exc_info.value.status_code == 400
+    assert exc_info.value.status_code == expected
+
+
+@pytest.mark.asyncio
+async def test_get_free_slots_raises_502_when_freebusy_returns_server_error(monkeypatch):
+    """查忙碌時段時 Google 回 5xx → 502，不是沒被處理的 500。"""
+    async def mock_find_one(query):
+        return {"_id": "uid123", "access_token": encrypt_secret("valid-token")}
+
+    async def mock_fetch_calendar_list(token):
+        return [{"id": "primary-cal-id", "primary": True}]
+
+    async def mock_fetch_freebusy(token, calendar_id):
+        request = httpx.Request("POST", "https://example.com")
+        raise httpx.HTTPStatusError("error", request=request, response=httpx.Response(503, request=request))
+
+    monkeypatch.setattr(google_tokens.db.googleCalendarTokens, "find_one", mock_find_one)
+    monkeypatch.setattr(calendar_service, "fetch_google_calendar_list", mock_fetch_calendar_list)
+    monkeypatch.setattr(calendar_service, "fetch_freebusy", mock_fetch_freebusy)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await calendar_service.get_free_slots_for_user("uid123")
+
+    assert exc_info.value.status_code == 502
 
 
 @pytest.mark.asyncio

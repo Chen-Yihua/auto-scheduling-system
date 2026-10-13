@@ -20,6 +20,15 @@ logger = logging.getLogger(__name__)
 FREE_SLOTS_CACHE_TTL_SECONDS = 60
 
 
+def _google_error(e: httpx.HTTPStatusError, detail: str) -> HTTPException:
+    """Google 回 5xx 或 429 是對方的暫時性問題，回 502；其他 4xx 回 400。"""
+    status = e.response.status_code
+    logger.warning("Google Calendar API 回應錯誤: %s %s", status, e.response.text)
+    if status >= 500 or status == 429:
+        return HTTPException(status_code=502, detail="Google 暫時無法處理請求，請稍後再試")
+    return HTTPException(status_code=400, detail=detail)
+
+
 async def _get_access_token_and_calendars(clerk_id: str) -> tuple[str, list[dict]]:
     """
     取得行事曆列表，401 時換新 token 重試。
@@ -34,7 +43,7 @@ async def _get_access_token_and_calendars(clerk_id: str) -> tuple[str, list[dict
             access_token = await refresh_google_calendar_token(clerk_id)
             calendars = await fetch_google_calendar_list(access_token)
         else:
-            raise HTTPException(status_code=400, detail="取得行事曆列表失敗")
+            raise _google_error(e, "取得行事曆列表失敗")
     except httpx.RequestError as e:
         logger.error("連線 Google Calendar API 失敗: %s", e)
         raise HTTPException(status_code=502, detail="無法連線至 Google，請稍後再試")
@@ -74,6 +83,8 @@ async def get_free_slots_for_user(clerk_id: str, use_cache: bool = True) -> list
 
     try:
         fb_response = await fetch_freebusy(access_token, primary_calendar_id)
+    except httpx.HTTPStatusError as e:
+        raise _google_error(e, "取得行事曆空檔失敗")
     except httpx.RequestError as e:
         logger.error("連線 Google FreeBusy API 失敗: %s", e)
         raise HTTPException(status_code=502, detail="無法連線至 Google，請稍後再試")

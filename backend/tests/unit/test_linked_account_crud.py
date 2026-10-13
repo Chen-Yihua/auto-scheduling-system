@@ -161,8 +161,8 @@ async def test_create_moodle_account_success(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_create_moodle_webdriver_exception_raises_503(monkeypatch):
-    """Selenium/WebDriver 本身出包（不是帳密錯誤）→ 503。這是我方服務暫時有問題，要跟使用者輸入錯誤的 401 分開。"""
+async def test_create_moodle_webdriver_exception_raises_502(monkeypatch):
+    """Selenium 出錯（不是帳密錯誤）→ 502，和帳密錯誤的 401 區分。"""
     from selenium.common.exceptions import WebDriverException
 
     def mock_verify_raises(username, password):
@@ -173,7 +173,7 @@ async def test_create_moodle_webdriver_exception_raises_503(monkeypatch):
     account = LinkedAccountCreate(platform="moodle", username="stu001", password="pw123", status="")
     with pytest.raises(HTTPException) as exc_info:
         await create_linked_account("uid123", account)
-    assert exc_info.value.status_code == 503
+    assert exc_info.value.status_code == 502
 
 
 # ========== 查詢 Linked Accounts ==========

@@ -187,7 +187,7 @@ class MoodlePlatform(PlatformAdapter):
             raise HTTPException(status_code=401, detail="Moodle 帳號或密碼錯誤")
         except WebDriverException as e:
             logger.error("Moodle 驗證發生非預期錯誤: %s", e)
-            raise HTTPException(status_code=503, detail="Moodle 服務暫時無法使用，請稍後再試")
+            raise HTTPException(status_code=502, detail="Moodle 服務暫時無法使用，請稍後再試")
 
     async def verify_new_account(self, account):
         await self._verify(account["username"], account["password"])

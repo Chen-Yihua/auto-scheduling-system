@@ -131,3 +131,30 @@ async def test_delete_user_by_clerk_id_returns_false_when_nothing_deleted(monkey
     result = await user_crud.delete_user_by_clerk_id("uid123")
 
     assert result is False
+
+
+@pytest.mark.asyncio
+async def test_delete_user_by_clerk_id_removes_all_data_of_that_user_only():
+    """刪除使用者 → 他的任務、綁定帳號、Google token、平台項目都要刪掉，其他使用者的資料不受影響。"""
+    db = user_crud.db
+    collections = {
+        "manual_tasks": "user_id",
+        "linkedAccounts": "clerk_id",
+        "github_issues": "user_id",
+        "jira_issues": "user_id",
+        "moodle_assignments": "user_id",
+    }
+    for owner in ("del_alice", "del_bob"):
+        await db.users.insert_one({"_id": owner, "email": f"{owner}@example.com", "name": owner})
+        await db.googleCalendarTokens.insert_one({"_id": owner, "access_token": "x"})
+        for name, owner_field in collections.items():
+            await getattr(db, name).insert_one({"_id": f"{owner}_{name}", owner_field: owner})
+
+    assert await user_crud.delete_user_by_clerk_id("del_alice") is True
+
+    assert await db.users.find_one({"_id": "del_alice"}) is None
+    assert await db.googleCalendarTokens.find_one({"_id": "del_alice"}) is None
+    assert await db.googleCalendarTokens.find_one({"_id": "del_bob"}) is not None
+    for name, owner_field in collections.items():
+        assert await getattr(db, name).count_documents({owner_field: "del_alice"}) == 0
+        assert await getattr(db, name).count_documents({owner_field: "del_bob"}) == 1

@@ -2,6 +2,7 @@ from core.database import db
 from schemas.user import UserCreate, UserUpdate
 from pymongo.errors import DuplicateKeyError
 from fastapi import HTTPException
+from platforms import PLATFORMS
 
 async def create_user(user: UserCreate) -> dict:
     doc = user.model_dump()
@@ -38,5 +39,13 @@ async def update_user_by_clerk_id(clerk_id: str, data: UserUpdate) -> None:
         raise HTTPException(status_code=404, detail="User not found or no changes made")
 
 async def delete_user_by_clerk_id(clerk_id: str) -> bool:
+    """刪除使用者和他名下的所有資料，回傳使用者是否存在。"""
+    # users 最後才刪：中途失敗時使用者還在，可以重試
+    await db.manual_tasks.delete_many({"user_id": clerk_id})
+    await db.linkedAccounts.delete_many({"clerk_id": clerk_id})
+    await db.googleCalendarTokens.delete_one({"_id": clerk_id})
+    for platform in PLATFORMS.values():
+        await platform.collection.delete_many({"user_id": clerk_id})
+
     result = await db.users.delete_one({"_id": clerk_id})
     return result.deleted_count > 0

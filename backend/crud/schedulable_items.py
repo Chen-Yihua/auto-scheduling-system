@@ -64,6 +64,7 @@ async def get_all_schedulable_items(user_id: str) -> list[dict]:
 
 async def reorder_schedulable_items(user_id: str, items: list[dict]):
     """
+    處理使用者拖拉任務後的排序結果，將排序資訊寫入對應的項目。
     items 是拖拉排序後的完整順序，可混合不同來源。
     sort_order 用整份清單的索引，不分來源各自編號，否則同一欄內交錯的順序會被打散。
     """

@@ -453,6 +453,39 @@ describe('useTaskForm', () => {
     expect(ctx.submitting.value).toBe(false)
   })
 
+  it('onSubmit 失敗後重試，兩次請求帶相同的 Idempotency-Key，後端才不會重複建立', async () => {
+    const ctx = useTaskForm()
+    ctx.startEditTask(null)
+    ctx.state.title = '任務'
+    fetchSpy.mockRejectedValueOnce(new Error('timeout'))
+    vi.spyOn(console, 'error').mockImplementationOnce(() => {})
+
+    await ctx.onSubmit(submitEvent(ctx.state))
+    await submitAndFlushTimers(() => ctx.onSubmit(submitEvent(ctx.state)))
+
+    const keys = fetchSpy.mock.calls
+      .filter(([, options]) => options?.method === 'POST')
+      .map(([, options]) => options.headers['Idempotency-Key'])
+    expect(keys).toHaveLength(2)
+    expect(keys[0]).toBeTruthy()
+    expect(keys[1]).toBe(keys[0])
+  })
+
+  it('建立成功後再新增下一個任務，會換一個新的 Idempotency-Key', async () => {
+    const ctx = useTaskForm()
+    ctx.startEditTask(null)
+    ctx.state.title = '第一個'
+    await submitAndFlushTimers(() => ctx.onSubmit(submitEvent(ctx.state)))
+    ctx.state.title = '第二個'
+    await submitAndFlushTimers(() => ctx.onSubmit(submitEvent(ctx.state)))
+
+    const keys = fetchSpy.mock.calls
+      .filter(([, options]) => options?.method === 'POST')
+      .map(([, options]) => options.headers['Idempotency-Key'])
+    expect(keys).toHaveLength(2)
+    expect(keys[1]).not.toBe(keys[0])
+  })
+
   // ---------- 編輯任務：邊界情況 ----------
   it('送出期間重複呼叫 onEdit 會被擋下來，不會送出第二次請求', async () => {
     const ctx = useTaskForm()

@@ -3,6 +3,7 @@ import pytest
 from fastapi import HTTPException
 
 import crud.manual_task as manual_task_crud
+from pymongo.errors import DuplicateKeyError
 
 
 # ---------- 只能查自己的任務，回傳的任務用 id 表示（用記憶體資料庫，不 mock 查詢）----------
@@ -248,3 +249,48 @@ async def test_delete_manual_task_by_id_succeeds(monkeypatch):
 
     # 不丟例外就代表成功
     await manual_task_crud.delete_manual_task_by_id("task1")
+
+
+# ---------- 建立任務：Idempotency-Key ----------
+
+def _task(user_id="idem_user"):
+    from datetime import datetime, timezone
+    from schemas.manual_task import ManualTaskOut
+    now = datetime.now(timezone.utc)
+    return ManualTaskOut(
+        id="new-task", user_id=user_id, title="期末報告", description="", status="To Do",
+        priority="Low", duration=30, created=now, updated=now,
+    )
+
+
+@pytest.mark.asyncio
+async def test_create_manual_task_stores_idempotency_key(monkeypatch):
+    """帶 key 建立 → key 一起存進資料庫，之後才查得到。"""
+    saved = {}
+
+    async def fake_insert_one(doc):
+        saved.update(doc)
+
+    monkeypatch.setattr(manual_task_crud.db.manual_tasks, "insert_one", fake_insert_one)
+
+    await manual_task_crud.create_manual_task(_task(), "key-1")
+
+    assert saved["idempotency_key"] == "key-1"
+
+
+@pytest.mark.asyncio
+async def test_create_manual_task_returns_existing_when_same_key_inserted_concurrently(monkeypatch):
+    """同一個 key 的兩個請求同時送達，另一個先寫入 → 回傳已建立的那筆，不丟錯誤。"""
+    async def fake_insert_one(doc):
+        raise DuplicateKeyError("duplicate")
+
+    async def fake_find_one(query):
+        assert query == {"user_id": "idem_user", "idempotency_key": "key-1"}
+        return {"_id": "first-task", "user_id": "idem_user", "title": "期末報告"}
+
+    monkeypatch.setattr(manual_task_crud.db.manual_tasks, "insert_one", fake_insert_one)
+    monkeypatch.setattr(manual_task_crud.db.manual_tasks, "find_one", fake_find_one)
+
+    result = await manual_task_crud.create_manual_task(_task(), "key-1")
+
+    assert result["id"] == "first-task"

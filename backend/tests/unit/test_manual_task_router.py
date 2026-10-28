@@ -21,9 +21,9 @@ def _task_input(**overrides):
     return ManualTaskInput(**fields)
 
 
-async def _create(task_input):
+async def _create(task_input, idempotency_key=None):
     return await manual_task_router.create_manual_task(
-        request=MagicMock(), taskInput=task_input, clerk_user=mock_user
+        request=MagicMock(), taskInput=task_input, clerk_user=mock_user, idempotency_key=idempotency_key
     )
 
 
@@ -32,7 +32,7 @@ def created_tasks(monkeypatch):
     """收集 router 交給 crud 要存起來的任務（不真的寫資料庫）。"""
     saved = []
 
-    async def fake_create(task):
+    async def fake_create(task, idempotency_key=None):
         saved.append(task)
         return task
 
@@ -112,6 +112,23 @@ async def test_create_manual_task_owner_is_the_logged_in_user(created_tasks, inf
     assert first.id != second.id
     UUID(first.id)  # 是合法的 UUID，不是隨便一個字串
     assert first.created == first.updated
+
+
+@pytest.mark.asyncio
+async def test_create_manual_task_with_used_idempotency_key_returns_existing_task(monkeypatch, created_tasks, infer_calls):
+    """同一個 Idempotency-Key 重送 → 回傳第一次建立的任務，不再建立、也不再呼叫 LLM。"""
+    existing = {"id": "t-first", "user_id": "test_user_123", "title": "期末報告"}
+
+    async def fake_get_by_key(user_id, key):
+        return existing if (user_id, key) == ("test_user_123", "key-1") else None
+
+    monkeypatch.setattr(manual_task_router.manual_task_crud, "get_manual_task_by_idempotency_key", fake_get_by_key)
+
+    result = await _create(_task_input(priority=None, duration=None), idempotency_key="key-1")
+
+    assert result is existing
+    assert created_tasks == []
+    assert infer_calls == []
 
 
 # ---------- 更新任務 ----------

@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from core.database import db
 from schemas.manual_task import ManualTaskOut
 from fastapi import HTTPException
+from pymongo.errors import DuplicateKeyError
 
 logger = logging.getLogger(__name__)
 
@@ -13,10 +14,24 @@ def _to_task(doc: dict) -> dict:
     return doc
 
 
-async def create_manual_task(task: ManualTaskOut) -> dict:
+async def get_manual_task_by_idempotency_key(user_id: str, idempotency_key: str) -> dict | None:
+    doc = await db.manual_tasks.find_one({"user_id": user_id, "idempotency_key": idempotency_key})
+    return _to_task(doc) if doc else None
+
+
+async def create_manual_task(task: ManualTaskOut, idempotency_key: str | None = None) -> dict:
     doc = task.model_dump()
     doc["_id"] = doc.pop("id")
-    await db.manual_tasks.insert_one(doc)
+    if idempotency_key:
+        doc["idempotency_key"] = idempotency_key
+    try:
+        await db.manual_tasks.insert_one(doc)
+    except DuplicateKeyError:
+        # 同一個 key 的請求同時送達，另一個已經建立成功，回傳那一筆
+        existing = await get_manual_task_by_idempotency_key(task.user_id, idempotency_key) if idempotency_key else None
+        if existing is None:
+            raise
+        return existing
     return {
         "id": doc["_id"],
         "user_id": doc.get("user_id"),

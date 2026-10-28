@@ -9,7 +9,7 @@ import main as main_mod
 
 @pytest.mark.asyncio
 async def test_ensure_indexes_creates_expected_indexes(monkeypatch):
-    """啟動時建立的索引正確，且平台集合的索引不設 unique。"""
+    """啟動時建立的索引正確，平台集合和任務的 Idempotency-Key 都設 unique。"""
     linked_accounts_mock = AsyncMock()
     manual_tasks_mock = AsyncMock()
     github_issues_mock = AsyncMock()
@@ -26,12 +26,15 @@ async def test_ensure_indexes_creates_expected_indexes(monkeypatch):
 
     linked_accounts_mock.assert_called_once_with("clerk_id")
 
-    manual_tasks_mock.assert_called_once_with("user_id")
+    manual_tasks_mock.assert_any_call("user_id")
+    manual_tasks_mock.assert_any_call(
+        [("user_id", 1), ("idempotency_key", 1)],
+        unique=True,
+        partialFilterExpression={"idempotency_key": {"$type": "string"}},
+    )
 
     for platform_mock in (github_issues_mock, jira_issues_mock, moodle_assignments_mock):
-        platform_mock.assert_any_call([("user_id", 1), ("id", 1)])
-        for call in platform_mock.call_args_list:
-            assert call.kwargs.get("unique") is not True
+        platform_mock.assert_called_once_with([("user_id", 1), ("id", 1)], unique=True)
 
 
 def test_app_startup_calls_ensure_indexes(monkeypatch):

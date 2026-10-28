@@ -1,5 +1,5 @@
 import logging
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Header, Request
 from crud import manual_task as manual_task_crud
 from services.task_inference import infer_missing_task_fields
 from schemas.manual_task import ManualTaskInput, ManualTaskOut, ManualTaskUpdate
@@ -18,9 +18,18 @@ router = APIRouter(prefix="/manual-tasks", tags=["manual-tasks"])
 async def create_manual_task(
     request: Request,
     taskInput: ManualTaskInput,
-    clerk_user: dict = Depends(get_current_clerk_user)
+    clerk_user: dict = Depends(get_current_clerk_user),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key", max_length=100),
 ):
-    """建立任務。沒填 priority/duration 時用 LLM 從 title/description 推斷。"""
+    """
+    建立任務。沒填 priority/duration 時用 LLM 從 title/description 推斷。
+    帶相同 Idempotency-Key 的重送請求會回傳第一次建立的任務，不會重複建立。
+    """
+    if idempotency_key:
+        existing = await manual_task_crud.get_manual_task_by_idempotency_key(clerk_user["sub"], idempotency_key)
+        if existing:
+            return existing
+
     task_data = taskInput.model_dump()
     inferred_fields = []
     inference_reason = None
@@ -49,7 +58,7 @@ async def create_manual_task(
     )
 
     logger.debug("Creating manual task: %s (inferred_fields=%s)", task.title, inferred_fields)
-    new_task = await manual_task_crud.create_manual_task(task)
+    new_task = await manual_task_crud.create_manual_task(task, idempotency_key)
     return new_task
 
 @router.get("/me", response_model=list[ManualTaskOut])

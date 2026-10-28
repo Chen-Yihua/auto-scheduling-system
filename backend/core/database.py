@@ -14,9 +14,15 @@ async def ensure_indexes() -> None:
     await db.linkedAccounts.create_index("clerk_id")
 
     await db.manual_tasks.create_index("user_id")
+    # 防止同一次建立請求重送時產生重複任務；沒帶 key 的任務不受限制
+    await db.manual_tasks.create_index(
+        [("user_id", 1), ("idempotency_key", 1)],
+        unique=True,
+        partialFilterExpression={"idempotency_key": {"$type": "string"}},
+    )
 
-    # 不用 unique：已有重複資料時建立會失敗，伺服器會無法啟動
+    # unique：同一使用者同時同步兩次時，資料庫才會擋下重複的項目
     # 在函式內 import 以避免循環 import
     from platforms import PLATFORMS
     for platform in PLATFORMS.values():
-        await platform.collection.create_index([("user_id", 1), ("id", 1)])
+        await platform.collection.create_index([("user_id", 1), ("id", 1)], unique=True)

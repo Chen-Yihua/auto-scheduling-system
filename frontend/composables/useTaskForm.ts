@@ -66,7 +66,11 @@ function useTaskFormImpl() {
         return errors
     }
 
+    // 同一個表單重送時帶相同的 key，後端才不會重複建立；換新任務時才重新產生
+    let idempotencyKey = crypto.randomUUID()
+
     function resetForm() {
+        idempotencyKey = crypto.randomUUID()
         state.title = ''
         state.description = ''
         state.priority = ''
@@ -166,7 +170,7 @@ function useTaskFormImpl() {
             const result = await $fetch<Task>(`${BASE_URL}/manual-tasks/`, {
                 method: 'POST',
                 body: payload,
-                headers: { Authorization: `Bearer ${token}` }
+                headers: { Authorization: `Bearer ${token}`, 'Idempotency-Key': idempotencyKey }
             })
 
             const inferenceSummary = buildInferenceSummary(result)

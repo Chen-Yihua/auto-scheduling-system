@@ -83,8 +83,11 @@ class PlatformAdapter:
         """預設只有改到 secret_field 才重新驗證；還有其他憑證欄位的平台（例如 Jira 的 domain）要覆寫。"""
         return self.secret_field in changes
 
-    async def verify_account_update(self, changes: dict, composite_id: str) -> dict:
-        """needs_reverify 為 True 時呼叫：重新驗證，回傳加密好、可直接寫入 DB 的欄位。"""
+    async def verify_account_update(self, changes: dict, existing: dict) -> dict:
+        """
+        needs_reverify 為 True 時呼叫：重新驗證，回傳加密好、可直接寫入 DB 的欄位。
+        existing 是現有的帳號資料（憑證是密文），用來補齊這次沒改到的欄位。
+        """
         raise NotImplementedError
 
     def __repr__(self) -> str:

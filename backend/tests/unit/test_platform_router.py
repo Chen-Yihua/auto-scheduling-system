@@ -6,6 +6,7 @@ from fastapi import HTTPException, Response
 
 from core import cache
 import platforms.router as platform_router
+from core import database
 import httpx
 from platforms.sync import NonRetryableError, UpstreamError
 from core.crypto import encrypt_secret
@@ -55,7 +56,7 @@ def clear_cache():
 
 def _use_account(monkeypatch, account):
     accounts = FakeLinkedAccounts(account)
-    monkeypatch.setattr(platform_router.db, "linkedAccounts", accounts)
+    monkeypatch.setattr(database.db, "linkedAccounts", accounts)
     return accounts
 
 

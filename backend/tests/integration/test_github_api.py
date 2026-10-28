@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from main import app
 from core.crypto import encrypt_secret
 import platforms.router as platform_router
+from core import database
 import platforms.github as github_platform
 
 @pytest.mark.asyncio
@@ -51,8 +52,8 @@ async def test_get_github_issues(monkeypatch, logged_in_user):
         async def delete_many(self, *args, **kwargs):
             return MockUpdateResult()
 
-    monkeypatch.setattr(platform_router.db, "linkedAccounts", MockCollection())
-    monkeypatch.setattr(platform_router.db, "github_issues", MockCollection())
+    monkeypatch.setattr(database.db, "linkedAccounts", MockCollection())
+    monkeypatch.setattr(database.db, "github_issues", MockCollection())
     monkeypatch.setattr(github_platform, "fetch_github_user_issues", mock_fetch)
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
@@ -69,7 +70,7 @@ async def test_get_github_issues_when_account_not_linked(monkeypatch, logged_in_
         async def find_one(self, *args, **kwargs):
             return None
 
-    monkeypatch.setattr(platform_router.db, "linkedAccounts", EmptyLinkedAccounts())
+    monkeypatch.setattr(database.db, "linkedAccounts", EmptyLinkedAccounts())
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         res = await ac.get("/github/issues")

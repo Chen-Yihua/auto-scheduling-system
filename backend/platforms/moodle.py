@@ -13,7 +13,6 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
-from core.database import db
 from core.crypto import encrypt_secret, decrypt_secret
 from platforms.sync import NonRetryableError, UpstreamError
 from platforms.base import PlatformAdapter
@@ -196,18 +195,11 @@ class MoodlePlatform(PlatformAdapter):
     def needs_reverify(self, changes):
         return "username" in changes or "password" in changes
 
-    async def verify_account_update(self, changes, composite_id):
+    async def verify_account_update(self, changes, existing):
         # 只改其中一個時，另一個用現有值補齊再驗證
-        username = changes.get("username")
+        username = changes.get("username") or existing.get("username")
         password = changes.get("password")
-
-        existing = None
-        if not username or not password:
-            existing = await db.linkedAccounts.find_one({"_id": composite_id})
-
-        if not username:
-            username = existing.get("username") if existing else None
-        if not password and existing and existing.get("password"):
+        if not password and existing.get("password"):
             password = decrypt_secret(existing["password"])
 
         if username and password:

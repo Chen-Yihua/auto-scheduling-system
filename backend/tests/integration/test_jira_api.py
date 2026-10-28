@@ -6,6 +6,7 @@ from httpx._transports.asgi import ASGITransport
 
 from main import app
 import platforms.router as platform_router
+from core import database
 from platforms.jira import JIRA
 
 
@@ -42,7 +43,7 @@ async def test_get_jira_issues(monkeypatch, logged_in_user):
     async def mock_sync(user_id, fetch_fn):
         return [issue], False, None, False
 
-    monkeypatch.setattr(platform_router.db, "linkedAccounts", MockLinkedAccounts())
+    monkeypatch.setattr(database.db, "linkedAccounts", MockLinkedAccounts())
     monkeypatch.setattr(platform_router, "decrypt_secret", lambda value: "fake_api_key")
     monkeypatch.setattr(JIRA, "sync_items", mock_sync)
 
@@ -63,7 +64,7 @@ async def test_get_jira_issues(monkeypatch, logged_in_user):
 @pytest.mark.asyncio
 async def test_get_jira_issues_when_account_not_linked(monkeypatch, logged_in_user):
     """使用者還沒綁定 Jira → 400 加說明，前端才能顯示「請先設定帳號」。"""
-    monkeypatch.setattr(platform_router.db, "linkedAccounts", EmptyLinkedAccounts())
+    monkeypatch.setattr(database.db, "linkedAccounts", EmptyLinkedAccounts())
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         res = await ac.get("/jira/issues")

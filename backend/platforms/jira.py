@@ -4,7 +4,6 @@ import logging
 import httpx
 from fastapi import HTTPException
 
-from core.database import db
 from core.crypto import encrypt_secret, decrypt_secret
 from platforms.sync import NonRetryableError, UpstreamError
 from platforms.base import PlatformAdapter, PlatformUserInfo
@@ -151,18 +150,11 @@ class JiraPlatform(PlatformAdapter):
     def needs_reverify(self, changes):
         return "apiKey" in changes or "domain" in changes
 
-    async def verify_account_update(self, changes, composite_id):
+    async def verify_account_update(self, changes, existing):
         # 只改其中一個時，另一個用現有值補齊再驗證
+        domain = changes.get("domain") or existing.get("domain")
         api_key = changes.get("apiKey")
-        domain = changes.get("domain")
-
-        existing = None
-        if not api_key or not domain:
-            existing = await db.linkedAccounts.find_one({"_id": composite_id})
-
-        if not domain:
-            domain = existing.get("domain") if existing else None
-        if not api_key and existing and existing.get("apiKey"):
+        if not api_key and existing.get("apiKey"):
             api_key = decrypt_secret(existing["apiKey"])
 
         if api_key and domain:

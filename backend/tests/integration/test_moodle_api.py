@@ -10,6 +10,7 @@ from core import cache
 from main import app
 from core.crypto import encrypt_secret
 import platforms.router as platform_router
+from core import database
 from platforms.moodle import MOODLE
 
 
@@ -52,7 +53,7 @@ async def test_get_moodle_assignments(monkeypatch, logged_in_user):
         # (作業清單, 是不是舊資料, 同步時間, 登入是否失敗)
         return assignments, False, datetime(2026, 9, 1, tzinfo=timezone.utc), False
 
-    monkeypatch.setattr(platform_router.db, "linkedAccounts", MockLinkedAccounts())
+    monkeypatch.setattr(database.db, "linkedAccounts", MockLinkedAccounts())
     monkeypatch.setattr(MOODLE, "sync_items", mock_sync)
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
@@ -71,7 +72,7 @@ async def test_get_moodle_assignments(monkeypatch, logged_in_user):
 @pytest.mark.asyncio
 async def test_get_moodle_assignments_when_account_not_linked(monkeypatch, logged_in_user):
     """使用者還沒綁定 Moodle → 400 加說明，前端才能顯示「請先設定帳號」。"""
-    monkeypatch.setattr(platform_router.db, "linkedAccounts", EmptyLinkedAccounts())
+    monkeypatch.setattr(database.db, "linkedAccounts", EmptyLinkedAccounts())
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         res = await ac.get("/moodle/assignments")

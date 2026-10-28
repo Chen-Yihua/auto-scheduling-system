@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from core.cache import cache_get, cache_set
 from platforms.sync import NonRetryableError, UpstreamError
 from core.crypto import decrypt_secret
-from core.database import db
+from crud.linked_account import find_linked_account
 from core.security import get_current_clerk_user
 from platforms import PLATFORMS
 from platforms.base import PlatformAdapter
@@ -35,7 +35,7 @@ async def get_platform_items(platform: PlatformAdapter, user_id: str, response: 
             return cached["items"]
 
     # 若快取沒有或過期就去抓取
-    account = await db.linkedAccounts.find_one({"_id": f"{user_id}_{platform.name}"})
+    account = await find_linked_account(user_id, platform.name)
     if not account:
         raise HTTPException(status_code=400, detail=platform.not_linked_detail)
 

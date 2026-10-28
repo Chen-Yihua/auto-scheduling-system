@@ -141,7 +141,7 @@ class GithubPlatform(PlatformAdapter):
         info = await fetch_github_userinfo(account["apiKey"])
         return {**info, "status": "connected"}
 
-    async def verify_account_update(self, changes, composite_id):
+    async def verify_account_update(self, changes, existing):
         info = await fetch_github_userinfo(changes["apiKey"])
         changes["username"] = info["username"]
         changes["avatar_url"] = info["avatar_url"]

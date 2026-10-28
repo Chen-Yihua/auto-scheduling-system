@@ -141,6 +141,11 @@ async def test_update_moodle_password_encrypts_before_save(monkeypatch):
 async def test_update_jira_apikey_without_domain_still_encrypted(monkeypatch):
     """只更新 Jira 的 apiKey、沒帶 domain 時也要加密（這個情境過去漏加密過）。"""
     stored = {}
+
+    async def mock_find_one(query):
+        return {"_id": "uid123_jira"}  # 現有資料也沒有 domain，所以不會呼叫 Jira 驗證
+
+    monkeypatch.setattr(linked_mod.db.linkedAccounts, "find_one", mock_find_one)
     monkeypatch.setattr(linked_mod.db.linkedAccounts, "update_one", _mock_update_one(stored))
 
     result = await update_linked_account_by_clerk_id(

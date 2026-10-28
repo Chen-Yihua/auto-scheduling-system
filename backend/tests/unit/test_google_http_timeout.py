@@ -5,6 +5,7 @@ import httpx
 import pytest
 
 import crud.google_tokens as google_tokens
+import services.google_oauth as google_oauth
 from core.crypto import encrypt_secret
 import routers.google_calendar as google_calendar_router
 import services.google_calendar_client as gcal
@@ -83,5 +84,5 @@ async def test_refresh_google_calendar_token_uses_relaxed_timeout(monkeypatch):
     monkeypatch.setattr(google_tokens.db.googleCalendarTokens, "find_one", mock_find_one)
     monkeypatch.setattr(google_tokens.db.googleCalendarTokens, "update_one", mock_update_one)
 
-    assert await google_tokens.refresh_google_calendar_token("uid123") == "new-access"
+    assert await google_oauth.refresh_google_calendar_token("uid123") == "new-access"
     _assert_relaxed(timeouts)

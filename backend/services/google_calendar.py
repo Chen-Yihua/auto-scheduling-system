@@ -5,7 +5,8 @@ import httpx
 from fastapi import HTTPException
 
 from core.cache import cache_get, cache_set
-from crud.google_tokens import get_google_calendar_token, refresh_google_calendar_token
+from crud.google_tokens import get_google_calendar_token
+from services.google_oauth import refresh_google_calendar_token
 from crud.schedulable_items import set_calendar_event_id_for_composite
 from services.google_calendar_client import (
     fetch_google_calendar_list,
@@ -35,6 +36,8 @@ async def _get_access_token_and_calendars(clerk_id: str) -> tuple[str, list[dict
     回傳的 access_token 可能已換新，呼叫端之後的請求要用它。
     """
     access_token = await get_google_calendar_token(clerk_id)
+    if not access_token:
+        raise HTTPException(status_code=400, detail="尚未連接 Google Calendar")
 
     try:
         calendars = await fetch_google_calendar_list(access_token)

@@ -77,6 +77,9 @@ async def sync_platform_items(
         auth_error = isinstance(last_exc, NonRetryableError)
         return last_synced, True, synced_at, auth_error
 
+    # 翻頁期間資料有變動時，同一個項目可能出現在兩頁；保留最後一次的內容
+    items = list({item[id_field]: item for item in items}.values())
+
     now = datetime.now(timezone.utc)
     for item in items:
         doc = {**item, "user_id": user_id, "synced_at": now}

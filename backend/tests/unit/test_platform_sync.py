@@ -68,6 +68,22 @@ async def test_sync_platform_items_live_success_upserts_and_returns_fresh():
 
 
 @pytest.mark.asyncio
+async def test_sync_platform_items_removes_duplicate_ids_in_fetched_items():
+    """抓回來的資料裡同一個 id 出現兩次（例如翻頁時資料變動）→ 只保留一筆，用最後一次的內容。"""
+    collection = FakeCollection()
+
+    async def fetch():
+        return [{"id": 1, "title": "舊"}, {"id": 2, "title": "b"}, {"id": 1, "title": "新"}]
+
+    items, *_ = await sync_platform_items(
+        collection=collection, user_id="u1", id_field="id", fetch_fn=fetch
+    )
+
+    assert [(i["id"], i["title"]) for i in items] == [(1, "新"), (2, "b")]
+    assert len(collection._docs) == 2
+
+
+@pytest.mark.asyncio
 async def test_sync_platform_items_removes_items_no_longer_returned_by_live_fetch():
     """這次沒抓到的項目要從 DB 刪除，否則退回舊資料時會出現已不存在的項目。"""
     collection = FakeCollection(initial=[

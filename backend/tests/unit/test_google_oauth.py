@@ -1,9 +1,9 @@
 """services/google_oauth.py：用 refresh_token 向 Google 換新 access_token。"""
 import logging
+from core.errors import ConfigurationError, ExternalServiceError, InvalidRequestError, ReauthRequiredError
 
 import pytest
 import httpx
-from fastapi import HTTPException
 from pymongo.errors import PyMongoError
 
 import services.google_oauth as google_oauth
@@ -95,10 +95,9 @@ async def test_refresh_google_token_raises_401_and_clears_doc_when_google_reject
     monkeypatch.setattr(db.googleCalendarTokens, "delete_one", mock_delete_one)
     monkeypatch.setattr(google_oauth.httpx, "AsyncClient", lambda *a, **kw: MockClient())
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(ReauthRequiredError):
         await google_oauth.refresh_google_calendar_token("uid123")
 
-    assert exc_info.value.status_code == 401
     assert delete_calls["n"] == 1
 
 
@@ -110,10 +109,9 @@ async def test_refresh_google_calendar_token_raises_401_when_no_refresh_token_st
 
     monkeypatch.setattr(db.googleCalendarTokens, "find_one", mock_find_one)
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(ReauthRequiredError):
         await google_oauth.refresh_google_calendar_token("uid123")
 
-    assert exc_info.value.status_code == 401
 
 
 @pytest.mark.asyncio
@@ -135,10 +133,9 @@ async def test_refresh_google_calendar_token_raises_502_when_google_unreachable(
     monkeypatch.setattr(db.googleCalendarTokens, "find_one", mock_find_one)
     monkeypatch.setattr(google_oauth.httpx, "AsyncClient", lambda *a, **kw: FailingClient())
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(ExternalServiceError):
         await google_oauth.refresh_google_calendar_token("uid123")
 
-    assert exc_info.value.status_code == 502
 
 
 @pytest.mark.asyncio
@@ -173,10 +170,9 @@ async def test_refresh_google_calendar_token_still_401s_when_cleanup_delete_fail
     monkeypatch.setattr(db.googleCalendarTokens, "delete_one", mock_delete_one)
     monkeypatch.setattr(google_oauth.httpx, "AsyncClient", lambda *a, **kw: MockClient())
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(ReauthRequiredError):
         await google_oauth.refresh_google_calendar_token("uid123")
 
-    assert exc_info.value.status_code == 401
 
 
 @pytest.mark.asyncio
@@ -208,10 +204,9 @@ async def test_refresh_google_calendar_token_raises_400_when_google_response_mis
     monkeypatch.setattr(db.googleCalendarTokens, "find_one", mock_find_one)
     monkeypatch.setattr(google_oauth.httpx, "AsyncClient", lambda *a, **kw: MockClient())
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(InvalidRequestError):
         await google_oauth.refresh_google_calendar_token("uid123")
 
-    assert exc_info.value.status_code == 400
 
 
 def _mock_token_endpoint(monkeypatch, status_code, text):
@@ -246,10 +241,9 @@ async def test_refresh_google_calendar_token_keeps_token_when_google_has_server_
     """Google 自己暫時故障（5xx）→ 回 502 請使用者稍後再試，不能把還有效的 token 刪掉。"""
     deleted = _mock_token_endpoint(monkeypatch, 503, "Service Unavailable")
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(ExternalServiceError):
         await google_oauth.refresh_google_calendar_token("uid123")
 
-    assert exc_info.value.status_code == 502
     assert deleted == []
 
 
@@ -258,8 +252,7 @@ async def test_refresh_google_calendar_token_keeps_token_when_client_config_is_w
     """invalid_client（伺服器設定錯誤）→ 500，不刪 token。"""
     deleted = _mock_token_endpoint(monkeypatch, 401, '{"error": "invalid_client"}')
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(ConfigurationError):
         await google_oauth.refresh_google_calendar_token("uid123")
 
-    assert exc_info.value.status_code == 500
     assert deleted == []

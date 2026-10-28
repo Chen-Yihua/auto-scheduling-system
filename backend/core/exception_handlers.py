@@ -1,5 +1,5 @@
 """
-例外統一轉成錯誤回應：crud 的 AppError 依類型回 400/404/409；DB 連不上回 503，
+例外統一轉成錯誤回應：AppError 依類型轉成對應的狀態碼；DB 連不上回 503，
 其他 DB 錯誤和未預期例外回 500，例外內容只記在 log，不回傳給前端。
 """
 import logging
@@ -8,15 +8,28 @@ from fastapi import Request
 from fastapi.responses import JSONResponse
 from pymongo.errors import ConnectionFailure, PyMongoError
 
-from core.errors import AppError, ConflictError, InvalidRequestError, NotFoundError
+from core.errors import (
+    AccessDeniedError,
+    AppError,
+    ConfigurationError,
+    ConflictError,
+    ExternalServiceError,
+    InvalidRequestError,
+    NotFoundError,
+    ReauthRequiredError,
+)
 
 logger = logging.getLogger(__name__)
 
 
 _STATUS_BY_ERROR = {
     InvalidRequestError: 400,
+    ReauthRequiredError: 401,
+    AccessDeniedError: 403,
     NotFoundError: 404,
     ConflictError: 409,
+    ConfigurationError: 500,
+    ExternalServiceError: 502,
 }
 
 

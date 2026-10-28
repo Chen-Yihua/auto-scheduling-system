@@ -1,6 +1,5 @@
 import pytest
-from core.errors import ConflictError, InvalidRequestError, NotFoundError
-from fastapi import HTTPException
+from core.errors import AccessDeniedError, ConflictError, ExternalServiceError, InvalidRequestError, NotFoundError, ReauthRequiredError
 import crud.linked_account as linked_mod
 from core.crypto import encrypt_secret
 import platforms.github as github_platform
@@ -81,9 +80,8 @@ async def test_create_moodle_wrong_password_rejected(monkeypatch):
     monkeypatch.setattr(moodle_platform, "verify_moodle_login", mock_verify_fails)
 
     account = LinkedAccountCreate(platform="moodle", username="stu001", password="wrong", status="")
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(ReauthRequiredError):
         await create_linked_account("uid123", account)
-    assert exc_info.value.status_code == 401
 
 
 @pytest.mark.asyncio
@@ -168,9 +166,8 @@ async def test_create_moodle_webdriver_exception_raises_502(monkeypatch):
     monkeypatch.setattr(moodle_platform, "verify_moodle_login", mock_verify_raises)
 
     account = LinkedAccountCreate(platform="moodle", username="stu001", password="pw123", status="")
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(ExternalServiceError):
         await create_linked_account("uid123", account)
-    assert exc_info.value.status_code == 502
 
 
 # ========== 查詢 Linked Accounts ==========
@@ -459,11 +456,10 @@ async def test_update_moodle_wrong_password_raises_401(monkeypatch):
     monkeypatch.setattr(linked_mod.db.linkedAccounts, "find_one", mock_find_one)
     monkeypatch.setattr(moodle_platform, "verify_moodle_login", mock_verify_fails)
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(ReauthRequiredError):
         await update_linked_account_by_clerk_id(
             "uid123", "moodle", {"password": "wrong"}
         )
-    assert exc_info.value.status_code == 401
 
 
 # ========== 刪除 Linked Account ==========
@@ -518,9 +514,8 @@ async def test_fetch_github_userinfo_unauthorized(monkeypatch):
             return httpx.Response(status_code=401)
 
     monkeypatch.setattr(httpx, "AsyncClient", lambda *a, **kw: MockClient())
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(ReauthRequiredError):
         await fetch_github_userinfo("bad_token")
-    assert exc_info.value.status_code == 401
 
 
 @pytest.mark.asyncio
@@ -533,9 +528,8 @@ async def test_fetch_github_userinfo_connection_error_raises_502(monkeypatch):
             raise httpx.ConnectError("GitHub 掛了")
 
     monkeypatch.setattr(httpx, "AsyncClient", lambda *a, **kw: MockClient())
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(ExternalServiceError):
         await fetch_github_userinfo("token123")
-    assert exc_info.value.status_code == 502
 
 
 @pytest.mark.asyncio
@@ -548,9 +542,8 @@ async def test_fetch_github_userinfo_other_error_status_raises_403(monkeypatch):
             return httpx.Response(status_code=404)  # 不是 401，但也不是 200
 
     monkeypatch.setattr(httpx, "AsyncClient", lambda *a, **kw: MockClient())
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(AccessDeniedError):
         await fetch_github_userinfo("token123")
-    assert exc_info.value.status_code == 403
 
 
 @pytest.mark.asyncio
@@ -580,9 +573,8 @@ async def test_fetch_jira_userinfo_unauthorized(monkeypatch):
             return httpx.Response(status_code=401)
 
     monkeypatch.setattr(httpx, "AsyncClient", lambda *a, **kw: MockClient())
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(ReauthRequiredError):
         await fetch_jira_userinfo("bad_key", "example.atlassian.net")
-    assert exc_info.value.status_code == 401
 
 
 @pytest.mark.asyncio
@@ -595,9 +587,8 @@ async def test_fetch_jira_userinfo_connection_error_raises_502(monkeypatch):
             raise httpx.ConnectError("Jira 掛了")
 
     monkeypatch.setattr(httpx, "AsyncClient", lambda *a, **kw: MockClient())
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(ExternalServiceError):
         await fetch_jira_userinfo("base64key", "example.atlassian.net")
-    assert exc_info.value.status_code == 502
 
 
 @pytest.mark.asyncio
@@ -610,6 +601,5 @@ async def test_fetch_jira_userinfo_other_error_status_raises_403(monkeypatch):
             return httpx.Response(status_code=404)
 
     monkeypatch.setattr(httpx, "AsyncClient", lambda *a, **kw: MockClient())
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(AccessDeniedError):
         await fetch_jira_userinfo("base64key", "example.atlassian.net")
-    assert exc_info.value.status_code == 403

@@ -75,7 +75,7 @@ class PlatformAdapter:
     async def verify_new_account(self, account: dict) -> dict:
         """
         用明文憑證實際呼叫平台驗證，回傳要一併存入的欄位（username、avatar_url 等）。
-        驗證失敗丟 HTTPException。
+        驗證失敗丟 core/errors.py 的例外。
         """
         raise NotImplementedError
 

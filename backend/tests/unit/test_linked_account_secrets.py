@@ -1,5 +1,5 @@
 import pytest
-from fastapi import HTTPException
+from core.errors import ReauthRequiredError
 import crud.linked_account as linked_mod
 import platforms.github as github_platform
 import platforms.moodle as moodle_platform
@@ -58,10 +58,9 @@ async def test_create_moodle_account_rejects_wrong_credentials(monkeypatch):
 
     account = LinkedAccountCreate(platform="moodle", status="", username="stu123", password="wrong-password")
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(ReauthRequiredError):
         await create_linked_account("uid123", account)
 
-    assert exc_info.value.status_code == 401
     assert stored == {}  # 驗證失敗，完全不該寫進 DB
 
 

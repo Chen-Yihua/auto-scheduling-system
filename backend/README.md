@@ -65,8 +65,7 @@ backend/
 
 ### 錯誤處理
 
-- crud 丟 `core/errors.py` 的例外，由 `core/exception_handlers.py` 轉成 400、404、409。
-- 其他狀態碼（例如外部平台故障的 502）在 router 或 services 直接 `raise HTTPException`。
+- 只有 router 用 `HTTPException`；crud、services、platforms 丟 `core/errors.py` 的例外，由 `core/exception_handlers.py` 轉成狀態碼。
 - 資料庫錯誤和未預期的例外不用自己 `try/except`，由全域 handler 回 503 或 500。
 
 ---

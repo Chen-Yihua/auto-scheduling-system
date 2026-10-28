@@ -2,7 +2,7 @@
 import logging
 
 import httpx
-from fastapi import HTTPException
+from core.errors import AccessDeniedError, ExternalServiceError, ReauthRequiredError
 
 from core.crypto import encrypt_secret
 from platforms.sync import NonRetryableError, UpstreamError
@@ -92,12 +92,12 @@ async def fetch_github_userinfo(token: str) -> PlatformUserInfo:
             response = await client.get("https://api.github.com/user", headers=_headers(token))
     except httpx.RequestError as e:
         logger.error("GitHub 驗證連線失敗: %s", e)
-        raise HTTPException(status_code=502, detail="無法連線至 GitHub，請稍後再試")
+        raise ExternalServiceError("無法連線至 GitHub，請稍後再試")
 
     if response.status_code == 401:
-        raise HTTPException(status_code=401, detail="Unauthorized GitHub token")
+        raise ReauthRequiredError("Unauthorized GitHub token")
     if response.status_code != 200:
-        raise HTTPException(status_code=403, detail="Invalid GitHub token or access denied")
+        raise AccessDeniedError("Invalid GitHub token or access denied")
 
     data = response.json()
     return {

@@ -2,7 +2,7 @@
 import logging
 
 import httpx
-from fastapi import HTTPException
+from core.errors import AppError, ExternalServiceError, InvalidRequestError, NotFoundError
 
 from core.cache import cache_get, cache_set
 from crud.google_tokens import get_google_calendar_token
@@ -21,13 +21,13 @@ logger = logging.getLogger(__name__)
 FREE_SLOTS_CACHE_TTL_SECONDS = 60
 
 
-def _google_error(e: httpx.HTTPStatusError, detail: str) -> HTTPException:
+def _google_error(e: httpx.HTTPStatusError, detail: str) -> AppError:
     """Google 回 5xx 或 429 是對方的暫時性問題，回 502；其他 4xx 回 400。"""
     status = e.response.status_code
     logger.warning("Google Calendar API 回應錯誤: %s %s", status, e.response.text)
     if status >= 500 or status == 429:
-        return HTTPException(status_code=502, detail="Google 暫時無法處理請求，請稍後再試")
-    return HTTPException(status_code=400, detail=detail)
+        return ExternalServiceError("Google 暫時無法處理請求，請稍後再試")
+    return InvalidRequestError(detail)
 
 
 async def _get_access_token_and_calendars(clerk_id: str) -> tuple[str, list[dict]]:
@@ -37,7 +37,7 @@ async def _get_access_token_and_calendars(clerk_id: str) -> tuple[str, list[dict
     """
     access_token = await get_google_calendar_token(clerk_id)
     if not access_token:
-        raise HTTPException(status_code=400, detail="尚未連接 Google Calendar")
+        raise InvalidRequestError("尚未連接 Google Calendar")
 
     try:
         calendars = await fetch_google_calendar_list(access_token)
@@ -49,7 +49,7 @@ async def _get_access_token_and_calendars(clerk_id: str) -> tuple[str, list[dict
             raise _google_error(e, "取得行事曆列表失敗")
     except httpx.RequestError as e:
         logger.error("連線 Google Calendar API 失敗: %s", e)
-        raise HTTPException(status_code=502, detail="無法連線至 Google，請稍後再試")
+        raise ExternalServiceError("無法連線至 Google，請稍後再試")
 
     return access_token, calendars
 
@@ -65,7 +65,7 @@ async def _get_access_token_and_primary_calendar_id(clerk_id: str) -> tuple[str,
 
     primary = next((c for c in calendars if c.get("primary")), None)
     if not primary:
-        raise HTTPException(status_code=404, detail="找不到 primary calendar")
+        raise NotFoundError("找不到 primary calendar")
 
     return access_token, primary["id"]
 
@@ -90,7 +90,7 @@ async def get_free_slots_for_user(clerk_id: str, use_cache: bool = True) -> list
         raise _google_error(e, "取得行事曆空檔失敗")
     except httpx.RequestError as e:
         logger.error("連線 Google FreeBusy API 失敗: %s", e)
-        raise HTTPException(status_code=502, detail="無法連線至 Google，請稍後再試")
+        raise ExternalServiceError("無法連線至 Google，請稍後再試")
 
     window_start = fb_response["timeMin"]
     window_end = fb_response["timeMax"]

@@ -2,7 +2,7 @@
 import logging
 
 import httpx
-from fastapi import HTTPException
+from core.errors import AccessDeniedError, ExternalServiceError, ReauthRequiredError
 
 from core.crypto import encrypt_secret, decrypt_secret
 from platforms.sync import NonRetryableError, UpstreamError
@@ -99,12 +99,12 @@ async def fetch_jira_userinfo(api_key_base64: str, domain: str) -> PlatformUserI
             response = await client.get(url, headers=_headers(api_key_base64))
     except httpx.RequestError as e:
         logger.error("Jira 驗證連線失敗: %s", e)
-        raise HTTPException(status_code=502, detail="無法連線至 Jira，請稍後再試")
+        raise ExternalServiceError("無法連線至 Jira，請稍後再試")
 
     if response.status_code == 401:
-        raise HTTPException(status_code=401, detail="Unauthorized Jira token")
+        raise ReauthRequiredError("Unauthorized Jira token")
     if response.status_code != 200:
-        raise HTTPException(status_code=403, detail="Invalid Jira token or access denied")
+        raise AccessDeniedError("Invalid Jira token or access denied")
 
     data = response.json()
     return {

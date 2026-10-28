@@ -3,7 +3,7 @@ import logging
 import os
 import time
 
-from fastapi import HTTPException
+from core.errors import ExternalServiceError, ReauthRequiredError
 from fastapi.concurrency import run_in_threadpool
 from selenium import webdriver
 from selenium.common.exceptions import WebDriverException
@@ -183,10 +183,10 @@ class MoodlePlatform(PlatformAdapter):
         try:
             await run_in_threadpool(verify_moodle_login, username, password)
         except NonRetryableError:
-            raise HTTPException(status_code=401, detail="Moodle 帳號或密碼錯誤")
+            raise ReauthRequiredError("Moodle 帳號或密碼錯誤")
         except WebDriverException as e:
             logger.error("Moodle 驗證發生非預期錯誤: %s", e)
-            raise HTTPException(status_code=502, detail="Moodle 服務暫時無法使用，請稍後再試")
+            raise ExternalServiceError("Moodle 服務暫時無法使用，請稍後再試")
 
     async def verify_new_account(self, account):
         await self._verify(account["username"], account["password"])

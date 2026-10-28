@@ -3,7 +3,7 @@ import pytest
 from datetime import datetime, timezone
 from unittest.mock import MagicMock
 from uuid import UUID
-from fastapi import HTTPException
+from core.errors import NotFoundError
 
 import routers.manual_task as manual_task_router
 from core.database import db
@@ -176,9 +176,8 @@ async def test_get_manual_task_hides_other_users_task():
     """使用者 bob 查 alice 的任務 → 404，看不到內容。"""
     await _insert_alice_task("router-t1")
     try:
-        with pytest.raises(HTTPException) as exc_info:
+        with pytest.raises(NotFoundError):
             await manual_task_router.get_manual_task("router-t1", clerk_user={"sub": "bob"})
-        assert exc_info.value.status_code == 404
     finally:
         await _remove_task("router-t1")
 
@@ -188,11 +187,10 @@ async def test_update_manual_task_refuses_other_users_task_and_leaves_it_unchang
     """使用者 bob 更新 alice 的任務 → 404，alice 的任務內容不會被改動。"""
     await _insert_alice_task("router-t2")
     try:
-        with pytest.raises(HTTPException) as exc_info:
+        with pytest.raises(NotFoundError):
             await manual_task_router.update_manual_task(
                 "router-t2", ManualTaskUpdate(title="被 bob 改掉了"), clerk_user={"sub": "bob"}
             )
-        assert exc_info.value.status_code == 404
         assert (await db.manual_tasks.find_one({"_id": "router-t2"}))["title"] == "Alice 的任務"
     finally:
         await _remove_task("router-t2")
@@ -203,9 +201,8 @@ async def test_delete_manual_task_refuses_other_users_task_and_keeps_it():
     """使用者 bob 刪除 alice 的任務 → 404，任務仍在資料庫裡。"""
     await _insert_alice_task("router-t3")
     try:
-        with pytest.raises(HTTPException) as exc_info:
+        with pytest.raises(NotFoundError):
             await manual_task_router.delete_manual_task("router-t3", clerk_user={"sub": "bob"})
-        assert exc_info.value.status_code == 404
         assert await db.manual_tasks.find_one({"_id": "router-t3"}) is not None
     finally:
         await _remove_task("router-t3")

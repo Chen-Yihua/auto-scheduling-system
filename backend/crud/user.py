@@ -1,7 +1,7 @@
 from core.database import db
 from schemas.user import UserCreate, UserUpdate
 from pymongo.errors import DuplicateKeyError
-from fastapi import HTTPException
+from core.errors import ConflictError, NotFoundError
 from platforms import PLATFORMS
 
 async def create_user(user: UserCreate) -> dict:
@@ -10,7 +10,7 @@ async def create_user(user: UserCreate) -> dict:
     try:
         await db.users.insert_one(doc)
     except DuplicateKeyError:
-        raise HTTPException(status_code=409, detail="User already exists")
+        raise ConflictError("User already exists")
 
     return {
         "id": doc["_id"],
@@ -30,13 +30,13 @@ async def get_user_by_clerk_id(clerk_id: str):
 async def update_user_by_clerk_id(clerk_id: str, data: UserUpdate) -> None:
     filtered_data = data.model_dump(exclude_unset=True)
     if not filtered_data:
-        raise HTTPException(status_code=404, detail="User not found or no changes made")
+        raise NotFoundError("User not found or no changes made")
 
     result = await db.users.update_one({"_id": clerk_id}, {"$set": filtered_data})
 
     # 用 matched_count：值沒變時 modified_count 是 0，但使用者存在，不該回 404
     if result.matched_count == 0:
-        raise HTTPException(status_code=404, detail="User not found or no changes made")
+        raise NotFoundError("User not found or no changes made")
 
 async def delete_user_by_clerk_id(clerk_id: str) -> bool:
     """刪除使用者和他名下的所有資料，回傳使用者是否存在。"""

@@ -1,7 +1,7 @@
 """crud/user.py 的函式。"""
 import pytest
+from core.errors import ConflictError, NotFoundError
 from pymongo.errors import DuplicateKeyError
-from fastapi import HTTPException
 
 import crud.user as user_crud
 from schemas.user import UserCreate, UserUpdate
@@ -34,10 +34,9 @@ async def test_create_user_raises_409_when_already_exists(monkeypatch):
 
     monkeypatch.setattr(user_crud.db.users, "insert_one", mock_insert_one)
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(ConflictError) as exc_info:
         await user_crud.create_user(_user_create())
 
-    assert exc_info.value.status_code == 409
 
 
 # ---------- get_user_by_clerk_id ----------
@@ -74,10 +73,9 @@ async def test_get_user_by_clerk_id_returns_none_when_not_found(monkeypatch):
 @pytest.mark.asyncio
 async def test_update_user_by_clerk_id_raises_404_when_no_fields_to_update():
     """沒有任何要更新的欄位 → 404。"""
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(NotFoundError) as exc_info:
         await user_crud.update_user_by_clerk_id("uid123", UserUpdate())
 
-    assert exc_info.value.status_code == 404
 
 
 @pytest.mark.asyncio
@@ -99,10 +97,9 @@ async def test_update_user_by_clerk_id_raises_404_when_user_not_matched(monkeypa
 
     monkeypatch.setattr(user_crud.db.users, "update_one", mock_update_one)
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(NotFoundError) as exc_info:
         await user_crud.update_user_by_clerk_id("uid123", UserUpdate(name="Alice"))
 
-    assert exc_info.value.status_code == 404
 
 
 # ---------- delete_user_by_clerk_id ----------

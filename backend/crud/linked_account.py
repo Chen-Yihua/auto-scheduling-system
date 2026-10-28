@@ -4,7 +4,7 @@ from core.crypto import encrypt_secret, decrypt_secret, mask_secret
 from schemas.linked_account import LinkedAccountCreate
 from platforms import PLATFORMS
 from pymongo.errors import DuplicateKeyError
-from fastapi import HTTPException
+from core.errors import ConflictError, InvalidRequestError, NotFoundError
 
 logger = logging.getLogger(__name__)
 
@@ -32,11 +32,11 @@ async def create_linked_account(clerk_id: str, account: LinkedAccountCreate) -> 
 
     platform = PLATFORMS.get(account.platform)
     if not platform:
-        raise HTTPException(status_code=400, detail=f"Unsupported platform: {account.platform}")
+        raise InvalidRequestError(f"Unsupported platform: {account.platform}")
 
     missing = [f for f in platform.required_create_fields if not getattr(account, f, None)]
     if missing:
-        raise HTTPException(status_code=400, detail=f"{', '.join(missing)} required for {account.platform}")
+        raise InvalidRequestError(f"{', '.join(missing)} required for {account.platform}")
 
     result = await platform.verify_new_account(doc)
     doc.update(result)
@@ -45,7 +45,7 @@ async def create_linked_account(clerk_id: str, account: LinkedAccountCreate) -> 
     try:
         await db.linkedAccounts.insert_one(doc)
     except DuplicateKeyError:
-        raise HTTPException(status_code=409, detail="Linked account already exists")
+        raise ConflictError("Linked account already exists")
 
     return _to_public(doc)
 
@@ -55,6 +55,11 @@ async def get_linked_accounts_by_clerk_id(clerk_id: str):
     return [_to_public(account) async for account in cursor]
 
 
+async def find_linked_account(clerk_id: str, platform: str) -> dict | None:
+    """資料庫裡的原始資料，憑證是密文。"""
+    return await db.linkedAccounts.find_one({"_id": f"{clerk_id}_{platform}"})
+
+
 async def update_linked_account_by_clerk_id(clerk_id: str, platform: str, data: dict):
     composite_id = f"{clerk_id}_{platform}"
     if not data:
@@ -62,7 +67,10 @@ async def update_linked_account_by_clerk_id(clerk_id: str, platform: str, data: 
 
     adapter = PLATFORMS.get(platform)
     if adapter and adapter.needs_reverify(data):
-        data = await adapter.verify_account_update(data, composite_id)
+        existing = await find_linked_account(clerk_id, platform)
+        if existing is None:
+            return False  # 帳號不存在，不用呼叫平台驗證
+        data = await adapter.verify_account_update(data, existing)
 
     # 不 upsert：帳號不存在要回 404
     # 用 matched_count：值沒變時 modified_count 是 0，但不算失敗
@@ -73,4 +81,4 @@ async def update_linked_account_by_clerk_id(clerk_id: str, platform: str, data: 
 async def delete_linked_account_by_id(composite_id: str):
     result = await db.linkedAccounts.delete_one({"_id": composite_id})
     if result.deleted_count == 0:
-        raise HTTPException(status_code=404, detail="Linked account not found")
+        raise NotFoundError("Linked account not found")

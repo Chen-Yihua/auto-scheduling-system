@@ -1,6 +1,6 @@
 """crud/manual_task.py 的邊界情境：查無資料、沒有變更、刪不到等。"""
 import pytest
-from fastapi import HTTPException
+from core.errors import InvalidRequestError, NotFoundError
 
 import crud.manual_task as manual_task_crud
 from pymongo.errors import DuplicateKeyError
@@ -26,9 +26,8 @@ async def test_get_manual_task_by_id_hides_other_users_task():
     """使用者 bob 查 alice 的任務 → 404，不能讓他看到。"""
     await manual_task_crud.db.manual_tasks.insert_one({"_id": "crud-t2", "user_id": "alice", "title": "Alice 的任務"})
     try:
-        with pytest.raises(HTTPException) as exc_info:
+        with pytest.raises(NotFoundError) as exc_info:
             await manual_task_crud.get_manual_task_by_id("crud-t2", "bob")
-        assert exc_info.value.status_code == 404
     finally:
         await manual_task_crud.db.manual_tasks.delete_many({"_id": "crud-t2"})
 
@@ -60,10 +59,9 @@ async def test_get_manual_task_by_id_raises_404_when_not_found(monkeypatch):
 
     monkeypatch.setattr(manual_task_crud.db.manual_tasks, "find_one", mock_find_one)
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(NotFoundError) as exc_info:
         await manual_task_crud.get_manual_task_by_id("task1", "uid123")
 
-    assert exc_info.value.status_code == 404
 
 
 # ---------- get_manual_tasks_by_user_id ----------
@@ -157,12 +155,11 @@ async def test_reorder_manual_tasks_rejects_id_belonging_to_another_user():
         {"_id": "reorder-t5", "user_id": "bob", "title": "Bob 的任務", "priority": "Medium"},
     ])
     try:
-        with pytest.raises(HTTPException) as exc_info:
+        with pytest.raises(InvalidRequestError) as exc_info:
             await manual_task_crud.reorder_manual_tasks("alice", [
                 _reorder_item("reorder-t4", "Medium", 0),
                 _reorder_item("reorder-t5", "Medium", 1),
             ])
-        assert exc_info.value.status_code == 400
     finally:
         await collection.delete_many({"_id": {"$in": ["reorder-t4", "reorder-t5"]}})
 
@@ -196,10 +193,9 @@ async def test_update_manual_task_by_id_raises_400_when_nothing_modified(monkeyp
 
     monkeypatch.setattr(manual_task_crud.db.manual_tasks, "update_one", mock_update_one)
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(InvalidRequestError) as exc_info:
         await manual_task_crud.update_manual_task_by_id("task1", {"title": "沒變"})
 
-    assert exc_info.value.status_code == 400
 
 
 @pytest.mark.asyncio
@@ -233,10 +229,9 @@ async def test_delete_manual_task_by_id_raises_404_when_nothing_deleted(monkeypa
 
     monkeypatch.setattr(manual_task_crud.db.manual_tasks, "delete_one", mock_delete_one)
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(NotFoundError) as exc_info:
         await manual_task_crud.delete_manual_task_by_id("task1")
 
-    assert exc_info.value.status_code == 404
 
 
 @pytest.mark.asyncio

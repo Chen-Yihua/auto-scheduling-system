@@ -2,7 +2,7 @@ import logging
 from datetime import datetime, timezone
 from core.database import db
 from schemas.manual_task import ManualTaskOut
-from fastapi import HTTPException
+from core.errors import InvalidRequestError, NotFoundError
 from pymongo.errors import DuplicateKeyError
 
 logger = logging.getLogger(__name__)
@@ -53,7 +53,7 @@ async def create_manual_task(task: ManualTaskOut, idempotency_key: str | None = 
 async def get_manual_task_by_id(task_id: str, user_id: str):
     task = await db.manual_tasks.find_one({"_id": task_id, "user_id": user_id})
     if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
+        raise NotFoundError("Task not found")
     return _to_task(task)
 
 async def get_manual_tasks_by_user_id(user_id: str):
@@ -75,7 +75,7 @@ async def reorder_manual_tasks(user_id: str, items: list[dict]):
 
     unknown_ids = [item["task_id"] for item in items if item["task_id"] not in own_task_ids]
     if unknown_ids:
-        raise HTTPException(status_code=400, detail=f"包含不屬於你的任務 id: {unknown_ids}")
+        raise InvalidRequestError(f"包含不屬於你的任務 id: {unknown_ids}")
 
     now = datetime.now(timezone.utc)
     for item in items:
@@ -103,13 +103,13 @@ async def update_manual_task_by_id(task_id: str, data: dict):
     fields = {key: value for key, value in data.items() if key != "id"}
     result = await db.manual_tasks.update_one({"_id": task_id}, {"$set": fields})
     if result.modified_count == 0:
-        raise HTTPException(status_code=400, detail="No valid fields to update")
+        raise InvalidRequestError("No valid fields to update")
     doc = await db.manual_tasks.find_one({"_id": task_id})
     if doc is None:
-        raise HTTPException(status_code=404, detail="Task not found")
+        raise NotFoundError("Task not found")
     return _to_task(doc)
 
 async def delete_manual_task_by_id(task_id: str):
     result = await db.manual_tasks.delete_one({"_id": task_id})
     if result.deleted_count == 0:
-        raise HTTPException(status_code=404, detail="Task not found")
+        raise NotFoundError("Task not found")

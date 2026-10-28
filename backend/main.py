@@ -12,7 +12,8 @@ from core.database import ensure_indexes
 from slowapi.errors import RateLimitExceeded
 from core.rate_limit import limiter, rate_limit_exceeded_handler
 from pymongo.errors import ConnectionFailure, PyMongoError
-from core.exception_handlers import database_unavailable_handler, database_error_handler, UnhandledExceptionMiddleware
+from core.errors import AppError
+from core.exception_handlers import app_error_handler, database_unavailable_handler, database_error_handler, UnhandledExceptionMiddleware
 
 
 setup_logging()
@@ -55,6 +56,7 @@ app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)  # pyr
 # Starlette 依繼承關係挑最具體的 handler，所以子類別 ConnectionFailure 會先被接住
 app.add_exception_handler(ConnectionFailure, database_unavailable_handler)  # pyright: ignore[reportArgumentType]
 app.add_exception_handler(PyMongoError, database_error_handler)  # pyright: ignore[reportArgumentType]
+app.add_exception_handler(AppError, app_error_handler)  # pyright: ignore[reportArgumentType]
 
 app.include_router(user.router)
 app.include_router(linked_account.router)

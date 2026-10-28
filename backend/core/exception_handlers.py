@@ -1,6 +1,6 @@
 """
-沒被處理的例外統一轉成錯誤回應：DB 連不上回 503，其他 DB 錯誤和未預期例外回 500。
-例外內容只記在 log，不回傳給前端。
+例外統一轉成錯誤回應：crud 的 AppError 依類型回 400/404/409；DB 連不上回 503，
+其他 DB 錯誤和未預期例外回 500，例外內容只記在 log，不回傳給前端。
 """
 import logging
 
@@ -8,7 +8,21 @@ from fastapi import Request
 from fastapi.responses import JSONResponse
 from pymongo.errors import ConnectionFailure, PyMongoError
 
+from core.errors import AppError, ConflictError, InvalidRequestError, NotFoundError
+
 logger = logging.getLogger(__name__)
+
+
+_STATUS_BY_ERROR = {
+    InvalidRequestError: 400,
+    NotFoundError: 404,
+    ConflictError: 409,
+}
+
+
+async def app_error_handler(request: Request, exc: AppError) -> JSONResponse:
+    status = next((code for cls, code in _STATUS_BY_ERROR.items() if isinstance(exc, cls)), 500)
+    return JSONResponse(status_code=status, content={"detail": exc.detail})
 
 
 async def database_unavailable_handler(request: Request, exc: ConnectionFailure) -> JSONResponse:

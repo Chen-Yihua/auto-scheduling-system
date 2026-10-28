@@ -1,6 +1,8 @@
 import pytest
+from core.errors import ConflictError, InvalidRequestError, NotFoundError
 from fastapi import HTTPException
 import crud.linked_account as linked_mod
+from core.crypto import encrypt_secret
 import platforms.github as github_platform
 import platforms.jira as jira_platform
 import platforms.moodle as moodle_platform
@@ -49,27 +51,24 @@ async def test_create_github_account_success(monkeypatch):
 async def test_create_github_missing_token():
     """GitHub 沒帶 apiKey → 400。"""
     account = LinkedAccountCreate(platform="github", apiKey="", status="", username="")
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(InvalidRequestError) as exc_info:
         await create_linked_account("uid123", account)
-    assert exc_info.value.status_code == 400
 
 
 @pytest.mark.asyncio
 async def test_create_jira_missing_domain():
     """Jira 沒帶 domain → 400。"""
     account = LinkedAccountCreate(platform="jira", apiKey="abc123", domain=None, status="", username="")
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(InvalidRequestError) as exc_info:
         await create_linked_account("uid123", account)
-    assert exc_info.value.status_code == 400
 
 
 @pytest.mark.asyncio
 async def test_create_moodle_missing_password():
     """Moodle 沒帶密碼 → 400。"""
     account = LinkedAccountCreate(platform="moodle", username="stu001", password="", status="")
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(InvalidRequestError) as exc_info:
         await create_linked_account("uid123", account)
-    assert exc_info.value.status_code == 400
 
 
 @pytest.mark.asyncio
@@ -97,18 +96,16 @@ async def test_create_duplicate_account_returns_409(monkeypatch):
 
     account = LinkedAccountCreate(platform="github", apiKey="abc123", status="", username="")
     await create_linked_account("uid409", account)
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(ConflictError) as exc_info:
         await create_linked_account("uid409", account)
-    assert exc_info.value.status_code == 409
 
 
 @pytest.mark.asyncio
 async def test_create_account_unsupported_platform_returns_400():
     """不支援的平台（例如 notion）→ 400。"""
     account = LinkedAccountCreate(platform="notion", apiKey="abc123", status="", username="")
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(InvalidRequestError) as exc_info:
         await create_linked_account("uid123", account)
-    assert exc_info.value.status_code == 400
 
 
 @pytest.mark.asyncio
@@ -232,6 +229,14 @@ async def test_update_github_account_with_token(monkeypatch):
         updated = update["$set"]
         return type("Mock", (), {"matched_count": 1})()
 
+    async def mock_find_one(query):
+        return {"_id": "uid123_github", "apiKey": encrypt_secret("old-token")}
+
+    monkeypatch.setattr(linked_mod.db.linkedAccounts, "find_one", mock_find_one)
+    async def mock_find_one(query):
+        return {"_id": "uid123_github", "apiKey": encrypt_secret("old-token")}
+
+    monkeypatch.setattr(linked_mod.db.linkedAccounts, "find_one", mock_find_one)
     monkeypatch.setattr(linked_mod.db.linkedAccounts, "update_one", mock_update_one)
     monkeypatch.setattr(github_platform, "fetch_github_userinfo", mock_fetch_github_userinfo)
 
@@ -276,6 +281,14 @@ async def test_update_jira_account_with_domain_reverifies(monkeypatch):
         updated = update["$set"]
         return type("Mock", (), {"matched_count": 1})()
 
+    async def mock_find_one(query):
+        return {"_id": "uid123_jira", "apiKey": encrypt_secret("oldkey"), "domain": "old.atlassian.net"}
+
+    monkeypatch.setattr(linked_mod.db.linkedAccounts, "find_one", mock_find_one)
+    async def mock_find_one(query):
+        return {"_id": "uid123_jira", "apiKey": encrypt_secret("oldkey"), "domain": "old.atlassian.net"}
+
+    monkeypatch.setattr(linked_mod.db.linkedAccounts, "find_one", mock_find_one)
     monkeypatch.setattr(linked_mod.db.linkedAccounts, "update_one", mock_update_one)
     monkeypatch.setattr(jira_platform, "fetch_jira_userinfo", mock_fetch_jira_userinfo)
 
@@ -285,6 +298,24 @@ async def test_update_jira_account_with_domain_reverifies(monkeypatch):
     assert result is True
     assert updated["username"] == "jira_user"
     assert updated["apiKey"] != "newkey"  # 落地前加密
+
+
+@pytest.mark.asyncio
+async def test_update_account_that_does_not_exist_returns_false_without_calling_platform(monkeypatch):
+    """要更新憑證的帳號不存在 → 回傳 False（router 轉成 404），不呼叫平台驗證。"""
+    async def mock_find_one(query):
+        return None
+
+    async def fail_if_called(*a, **k):
+        raise AssertionError("不該呼叫平台驗證")
+
+    monkeypatch.setattr(linked_mod.db.linkedAccounts, "find_one", mock_find_one)
+    monkeypatch.setattr(jira_platform, "fetch_jira_userinfo", fail_if_called)
+
+    result = await update_linked_account_by_clerk_id(
+        "uid123", "jira", {"apiKey": "newkey", "domain": "foo.atlassian.net"}
+    )
+    assert result is False
 
 
 @pytest.mark.asyncio
@@ -454,9 +485,8 @@ async def test_delete_linked_account_not_found(monkeypatch):
         return type("Mock", (), {"deleted_count": 0})()
 
     monkeypatch.setattr(linked_mod.db.linkedAccounts, "delete_one", mock_delete_one)
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(NotFoundError) as exc_info:
         await delete_linked_account_by_id("uid123_github")
-    assert exc_info.value.status_code == 404
 
 
 # ========== 第三方帳號驗證 API ==========

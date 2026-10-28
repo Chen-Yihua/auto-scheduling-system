@@ -65,9 +65,9 @@ backend/
 
 ### 錯誤處理
 
-- 預期中的錯誤（查無資料、沒權限…）在 crud / router 裡直接 `raise HTTPException(...)`。
-- **資料庫連不上不用自己 try/except**，讓例外往外丟，由 `core/exception_handlers.py` 統一回應：連線類錯誤回 **503**，其他資料庫錯誤回 **500**。
-- 沒被接住的程式錯誤，由兜底 middleware 回固定訊息的 JSON 500（帶 CORS 標頭，前端才看得到真正的狀態碼），詳細內容只寫進 log，不回傳給前端。
+- crud 丟 `core/errors.py` 的例外，由 `core/exception_handlers.py` 轉成 400、404、409。
+- 其他狀態碼（例如外部平台故障的 502）在 router 或 services 直接 `raise HTTPException`。
+- 資料庫錯誤和未預期的例外不用自己 `try/except`，由全域 handler 回 503 或 500。
 
 ---
 

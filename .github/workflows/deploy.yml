@@ -45,7 +45,8 @@ jobs:
   # fork 出去的 PR 拿不到 repo 的 secrets，這種情況下那個測試會自動 skip，
   # 不影響這個 job 本身通過。
   frontend-e2e-test:
-    runs-on: ubuntu-latest
+    # 釘 24.04：ubuntu-latest 已換成 26.04，Playwright 1.52 不支援，裝不了瀏覽器
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: frontend

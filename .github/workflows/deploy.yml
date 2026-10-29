@@ -106,6 +106,10 @@ jobs:
     defaults:
       run:
         working-directory: frontend
+    # .vercel/ 不進版控，CI 沒有專案連結；直接指定，CLI 才不會去問要用哪個 team
+    env:
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

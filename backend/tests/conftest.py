@@ -10,6 +10,10 @@ os.environ.setdefault("SECRET_ENCRYPTION_KEY", Fernet.generate_key().decode())
 # routers.pr_review_webhook 在 import 時就會建立 genai.Client，沒有這個變數會直接噴錯
 os.environ.setdefault("GEMINI_API_KEY", "test-gemini-key")
 
+# core.security 在 import 時就檢查這兩個變數；測試不會真的打 Clerk，給假值即可
+os.environ.setdefault("CLERK_JWKS_URL", "https://test.clerk.invalid/.well-known/jwks.json")
+os.environ.setdefault("CLERK_ISSUER", "https://test.clerk.invalid")
+
 # 關掉全域限流，避免測試短時間內重複呼叫被擋；限流本身在 test_rate_limit.py 用獨立的 Limiter 測試
 os.environ.setdefault("DISABLE_RATE_LIMIT", "true")
 

@@ -35,8 +35,14 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
+          cache: npm
+          # setup-node 不吃 working-directory，lock 檔不在 repo 根目錄要明確指定
+          cache-dependency-path: frontend/package-lock.json
       - run: npm ci
+      # lint 與 typecheck 都依賴 .nuxt 產生的設定，要放在這步之後
       - run: npm run prepare:ci
+      - run: npm run lint
+      - run: npm run typecheck
       - run: npm run test
 
   # 跟 frontend-test 分開一個 job：這裡會真的 build 一次 Nuxt app、灌一次瀏覽器、
@@ -61,6 +67,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
+          cache: npm
+          # setup-node 不吃 working-directory，lock 檔不在 repo 根目錄要明確指定
+          cache-dependency-path: frontend/package-lock.json
       - run: npm ci
       - run: npm run prepare:ci
       # 用 `npx playwright`（devDependency 裡釘死的版本，跟 playwright-core 對齊）

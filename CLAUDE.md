@@ -11,10 +11,10 @@
 cd backend && pyright && pytest
 
 # 前端
-cd frontend && npm run lint && npm run test
+cd frontend && npm run lint && npm run typecheck && npm run test
 ```
 
-- 前端目前沒有型別檢查（專案沒裝 `vue-tsc`，CI 也不跑）。改到型別相關的程式碼時，要在回報中說明型別沒有經過工具驗證。
+- 前端型別檢查用 `npm run typecheck`（`vue-tsc --noEmit`，不寫檔，dev server 開著也能跑）；不要用 `nuxi typecheck`，它會重新產生 `.nuxt`。
 - 新行為要有對應的測試；修 bug 要補對應的回歸測試。
 - 測試失敗時，修程式碼，不是改測試去配合錯誤的行為；確定是測試本身寫錯，才改測試並說明理由。
 
@@ -50,7 +50,7 @@ cd frontend && npm run lint && npm run test
 
 開發者通常同時開著自己的 `npm run dev`，以及正在編輯同一批檔案的 VS Code。
 
-- dev server 可能開著時，不要跑 `npm run build`、`nuxi build`、`npm run test:e2e`，也不要刪 `.nuxt` / `.output`：它們會改寫 `.nuxt`，弄壞 dev server。`eslint`、`vitest` 可以跑。
+- dev server 可能開著時，不要跑 `npm run build`、`nuxi build`、`npm run test:e2e`，也不要刪 `.nuxt` / `.output`：它們會改寫 `.nuxt`，弄壞 dev server。`eslint`、`npm run typecheck`、`vitest` 可以跑。
 - 要起臨時 dev server 前，先用 `ps` 確認有沒有 `nuxt dev` 在跑；有的話不要再起一個共用同一個 `.nuxt` 的。
 - 停掉臨時 server 時只砍自己起的那個 PID，不要用 `pkill` 或對 `nuxi`、`node` 這類通用名稱 grep 再 kill。
 - 改了開發者在編輯器開著的檔案，之後要從磁碟重讀，確認修改沒被編輯器存檔蓋掉，並提醒開發者重新載入 buffer。

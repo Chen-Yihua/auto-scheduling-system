@@ -36,7 +36,10 @@ jobs:
         with:
           node-version: "20"
       - run: npm ci
+      # lint 與 typecheck 都依賴 .nuxt 產生的設定，要放在這步之後
       - run: npm run prepare:ci
+      - run: npm run lint
+      - run: npm run typecheck
       - run: npm run test
 
   # 跟 frontend-test 分開一個 job：這裡會真的 build 一次 Nuxt app、灌一次瀏覽器、

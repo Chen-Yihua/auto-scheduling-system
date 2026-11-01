@@ -18,6 +18,16 @@ cd frontend && npm run lint && npm run typecheck && npm run test
 - 新行為要有對應的測試；修 bug 要補對應的回歸測試。
 - 測試失敗時，修程式碼，不是改測試去配合錯誤的行為；確定是測試本身寫錯，才改測試並說明理由。
 
+## 開發流程
+
+`main` 有 ruleset 保護：只能透過 PR 合併，而且 `backend-test`、`frontend-test`、`frontend-e2e-test` 都要通過。
+
+1. 從 `main` 開分支再改程式。
+2. 跑完上面「完成的定義」的檢查才 commit。
+3. push 後用 `gh pr create` 開 PR，再用 `gh pr checks --watch` 等 CI。
+4. CI 失敗時用 `gh run view --log-failed` 讀錯誤，修正後 push 到同一個分支。
+5. 合併由開發者決定，不要自己 `gh pr merge`。
+
 ## 做這類任務前先讀
 
 | 任務 | 文件 |

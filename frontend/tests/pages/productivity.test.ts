@@ -12,10 +12,18 @@ vi.mock('@clerk/vue', () => ({
 
 const summaryRef = vueRef<ProductivitySummary | null>(null)
 const loadingRef = vueRef(false)
+const errorRef = vueRef(false)
 const fetchSummarySpy = vi.fn()
 vi.mock('~/composables/useProductivity', () => ({
-  useProductivity: () => ({ summary: summaryRef, loading: loadingRef, fetchSummary: fetchSummarySpy }),
+  useProductivity: () => ({ summary: summaryRef, loading: loadingRef, error: errorRef, fetchSummary: fetchSummarySpy }),
 }))
+
+const UButtonStub = defineComponent({
+  name: 'UButton',
+  setup(_props, { slots, attrs }) {
+    return () => h('button', attrs, slots.default?.())
+  },
+})
 
 const uiStubs = {
   AppHeader: defineComponent({ name: 'AppHeader', setup: () => () => h('div') }),
@@ -27,6 +35,7 @@ const uiStubs = {
   NuxtLink: { template: '<a><slot /></a>' },
   UCard: { template: '<div><slot name="header" /><slot /></div>' },
   UIcon: true,
+  UButton: UButtonStub,
 }
 
 function fakeSummary(overrides: Partial<ProductivitySummary> = {}): ProductivitySummary {
@@ -48,7 +57,8 @@ describe('pages/productivity.vue', () => {
     isSignedInRef.value = true
     summaryRef.value = null
     loadingRef.value = false
-    fetchSummarySpy.mockClear()
+    errorRef.value = false
+    fetchSummarySpy.mockReset()
   })
 
   it('登入後抓取統計，數字卡片顯示完成率、逾期、剩餘工時、準時率（沒有資料顯示「—」）', async () => {
@@ -99,5 +109,37 @@ describe('pages/productivity.vue', () => {
 
     expect(wrapper.text()).toContain('登入後即可查看工作效率統計')
     expect(fetchSummarySpy).not.toHaveBeenCalled()
+  })
+
+  it('載入失敗且還沒有統計時顯示錯誤狀態，按重試會重新抓取並在成功後顯示統計', async () => {
+    errorRef.value = true
+    const wrapper = render()
+    await flushPromises()
+    fetchSummarySpy.mockClear()
+    fetchSummarySpy.mockImplementation(async () => {
+      errorRef.value = false
+      summaryRef.value = fakeSummary()
+    })
+
+    const errorCard = wrapper.find('[data-testid="error"]')
+    expect(errorCard.exists()).toBe(true)
+    expect(errorCard.text()).toContain('工作效率統計載入失敗')
+
+    await errorCard.find('button').trigger('click')
+    await flushPromises()
+
+    expect(fetchSummarySpy).toHaveBeenCalledOnce()
+    expect(wrapper.find('[data-testid="error"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="kpi-completion"]').exists()).toBe(true)
+  })
+
+  it('已有統計資料時重新整理失敗，仍顯示原本的統計而不是錯誤狀態', async () => {
+    summaryRef.value = fakeSummary()
+    errorRef.value = true
+    const wrapper = render()
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="error"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="kpi-completion"]').exists()).toBe(true)
   })
 })

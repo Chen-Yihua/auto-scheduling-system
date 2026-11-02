@@ -10,7 +10,7 @@ import { formatMinutes, formatPercent } from '~/utils/format'
 import { priorityLabel, sourceLabel } from '~/utils/labels'
 
 const { isSignedIn } = useUser()
-const { summary, loading, fetchSummary } = useProductivity()
+const { summary, loading, error, fetchSummary } = useProductivity()
 
 // Clerk 初始化完成才知道有沒有登入，所以用 watch 而不是 onMounted
 watch(isSignedIn, (signedIn) => {
@@ -51,6 +51,13 @@ const priorityItems = computed(() =>
         <h1 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">工作效率</h1>
 
         <p v-if="loading && !summary" class="text-sm text-gray-500 dark:text-gray-400">載入中…</p>
+
+        <UCard v-else-if="error && !summary" data-testid="error">
+          <div class="flex flex-col items-center gap-3 py-6">
+            <p class="text-sm text-gray-500 dark:text-gray-400">工作效率統計載入失敗</p>
+            <UButton icon="i-lucide-refresh-cw" variant="outline" @click="fetchSummary">重試</UButton>
+          </div>
+        </UCard>
 
         <UCard v-else-if="summary && summary.total === 0" data-testid="empty">
           <p class="text-center text-sm text-gray-500 dark:text-gray-400 py-6">

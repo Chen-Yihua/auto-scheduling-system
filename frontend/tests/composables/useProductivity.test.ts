@@ -58,4 +58,16 @@ describe('useProductivity composable', () => {
     expect(ctx.summary.value).toBeNull()
     expect(ctx.loading.value).toBe(false)
   })
+
+  it('失敗時 error 為 true，之後重試成功 error 回到 false', async () => {
+    fetchSpy.mockRejectedValueOnce(new Error('boom'))
+    const ctx = useProductivity()
+    await ctx.fetchSummary()
+    expect(ctx.error.value).toBe(true)
+
+    fetchSpy.mockResolvedValueOnce({ total: 1 })
+    await ctx.fetchSummary()
+    expect(ctx.error.value).toBe(false)
+    expect(ctx.summary.value).toEqual({ total: 1 })
+  })
 })

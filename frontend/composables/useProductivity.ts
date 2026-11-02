@@ -11,9 +11,11 @@ export function useProductivity() {
 
   const loading = ref(false)
   const summary = ref<ProductivitySummary | null>(null)
+  const error = ref(false)
 
   const fetchSummary = async () => {
     loading.value = true
+    error.value = false
     try {
       const token = await getToken.value()
       if (!token) throw new Error('找不到 JWT')
@@ -24,10 +26,11 @@ export function useProductivity() {
         query: { timezone: Intl.DateTimeFormat().resolvedOptions().timeZone },
         headers: { Authorization: `Bearer ${token}` },
       })
-    } catch (error) {
-      console.error(error)
+    } catch (err) {
+      console.error(err)
+      error.value = true
       toast.add({
-        title: getFriendlyErrorTitle(error, '工作效率統計載入失敗'),
+        title: getFriendlyErrorTitle(err, '工作效率統計載入失敗'),
         color: 'error',
         icon: 'i-lucide-x',
       })
@@ -36,5 +39,5 @@ export function useProductivity() {
     }
   }
 
-  return { loading, summary, fetchSummary }
+  return { loading, summary, error, fetchSummary }
 }

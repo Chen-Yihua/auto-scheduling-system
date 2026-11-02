@@ -329,8 +329,10 @@ async def test_set_done_manual_task_records_and_clears_completed_at():
             "status": "Done", "priority": "Low", "duration": 60, "completed_at": done_at,
         })
 
+        before = datetime.now(timezone.utc).replace(tzinfo=None, microsecond=0)
         await schedulable_items.set_done("sched-user", "manual:t1", True)
-        assert (await db.manual_tasks.find_one({"_id": "t1"}))["completed_at"] is not None
+        completed_at = (await db.manual_tasks.find_one({"_id": "t1"}))["completed_at"]
+        assert before <= completed_at.replace(tzinfo=None) <= datetime.now(timezone.utc).replace(tzinfo=None)
 
         await schedulable_items.set_done("sched-user", "manual:t2", True)
         assert (await db.manual_tasks.find_one({"_id": "t2"}))["completed_at"] == done_at
@@ -346,9 +348,10 @@ async def test_set_done_external_item_records_and_clears_completed_at():
     try:
         await db.moodle_assignments.insert_one({"id": "https://m/1", "user_id": "sched-user", "title": "作業"})
 
+        before = datetime.now(timezone.utc).replace(tzinfo=None, microsecond=0)
         await schedulable_items.set_done("sched-user", "moodle:https://m/1", True)
         first = (await db.moodle_assignments.find_one({"id": "https://m/1"}))["completed_at"]
-        assert first is not None
+        assert before <= first.replace(tzinfo=None) <= datetime.now(timezone.utc).replace(tzinfo=None)
 
         await schedulable_items.set_done("sched-user", "moodle:https://m/1", True)
         assert (await db.moodle_assignments.find_one({"id": "https://m/1"}))["completed_at"] == first

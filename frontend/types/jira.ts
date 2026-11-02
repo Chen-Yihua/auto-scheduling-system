@@ -5,6 +5,8 @@ export interface JiraIssue {
     title: string
     status: string
     updated_at: string
+    // 只有這欄可能是 null：還沒解決的 issue 沒有解決時間
+    resolved_at?: string | null
     assignee: string
     avatar: string
     type: string

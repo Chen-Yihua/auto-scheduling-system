@@ -14,4 +14,6 @@ export interface Task {
     sort_order?: number | null
     // 有值代表已寫入行事曆，不再參與排程
     calendar_event_id?: string | null
+    // 變成 Done 的時間，由後端寫入
+    completed_at?: string | null
 }

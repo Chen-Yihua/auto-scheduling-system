@@ -2,7 +2,7 @@ import logging
 from fastapi import APIRouter, Depends, Header, Request
 from crud import manual_task as manual_task_crud
 from services.task_inference import infer_missing_task_fields
-from schemas.manual_task import ManualTaskInput, ManualTaskOut, ManualTaskUpdate
+from schemas.manual_task import ManualTaskInput, ManualTaskOut, ManualTaskUpdate, StatusEnum
 from core.security import get_current_clerk_user
 from datetime import datetime, timezone
 from uuid import uuid4
@@ -55,6 +55,7 @@ async def create_manual_task(
         updated=now,
         inferred_fields=inferred_fields,
         inference_reason=inference_reason,
+        completed_at=now if taskInput.status == StatusEnum.done else None,
     )
 
     logger.debug("Creating manual task: %s (inferred_fields=%s)", task.title, inferred_fields)
@@ -87,6 +88,10 @@ async def update_manual_task(
     task = await manual_task_crud.get_manual_task_by_id(task_id, clerk_user["sub"])
     now = datetime.now(timezone.utc)
     task.update({"updated": now})
+    if taskInput.status is not None:
+        task["completed_at"] = manual_task_crud.completed_at_after_status_change(
+            task.get("status"), task.get("completed_at"), taskInput.status, now
+        )
     # exclude_none：沒帶的欄位保留原值，不被 None 覆蓋
     task.update(taskInput.model_dump(exclude_none=True))
 

@@ -11,6 +11,7 @@ class JiraIssue(BaseModel):
     # 判斷完成要用 status_category（new/indeterminate/done），status 是各專案自訂的字串
     status_category: str = ""
     updated_at: str
+    resolved_at: Optional[str] = None
     assignee: str
     avatar: str
     type: str

@@ -1,4 +1,5 @@
 import pytest
+from datetime import datetime, timezone
 import platforms.github as github_mod
 from platforms.sync import NonRetryableError
 from httpx import Response, Request
@@ -264,3 +265,14 @@ async def test_github_fetch_items_uses_token_and_returns_transformed_items(monke
     assert calls == ["gh-token"]
     assert items[0]["id"] == 9000001
     assert items[0]["url"] == "https://github.com/a/repo/issues/1"
+
+
+def test_transform_github_item_keeps_closed_at_for_completion_time():
+    """closed_at 是統計完成時間的依據；還開著的 issue 是 None。"""
+    base = {"id": 1, "number": 1, "title": "t", "created_at": "2024-01-01T00:00:00Z", "html_url": "u"}
+
+    closed = github_mod.transform_github_item({**base, "state": "closed", "closed_at": "2024-01-03T00:00:00Z"})
+    still_open = github_mod.transform_github_item({**base, "state": "open", "closed_at": None})
+
+    assert github_mod.GITHUB.completed_at(closed) == datetime(2024, 1, 3, tzinfo=timezone.utc)
+    assert github_mod.GITHUB.completed_at(still_open) is None

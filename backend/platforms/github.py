@@ -1,5 +1,6 @@
 """GitHub：使用者參與（involves:@me）的 issue 與 PR。用 Personal Access Token 驗證。"""
 import logging
+from datetime import datetime
 
 import httpx
 from core.errors import AccessDeniedError, ExternalServiceError, ReauthRequiredError
@@ -74,6 +75,7 @@ def transform_github_item(raw: dict) -> dict:
         "status": raw["state"],
         "created_at": raw["created_at"],
         "updated_at": raw.get("updated_at"),
+        "closed_at": raw.get("closed_at"),
         "url": raw["html_url"],
         "isPR": "pull_request" in raw,
         "author": {
@@ -136,6 +138,10 @@ class GithubPlatform(PlatformAdapter):
 
     def is_done(self, item):
         return item.get("status") == "closed"
+
+    def completed_at(self, item):
+        closed_at = item.get("closed_at")
+        return datetime.fromisoformat(closed_at) if closed_at else None
 
     async def verify_new_account(self, account):
         info = await fetch_github_userinfo(account["apiKey"])

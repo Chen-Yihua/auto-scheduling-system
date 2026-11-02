@@ -161,6 +161,74 @@ async def test_update_manual_task_keeps_original_values_for_fields_not_provided(
     assert saved["updated"] > existing["updated"]  # 更新時間有刷新
 
 
+@pytest.fixture
+def saved_update(monkeypatch):
+    """讓 router 讀到 existing_task 指定的任務，並收集 router 交給 crud 要寫入的內容。"""
+    state = {"existing": {}, "saved": {}}
+
+    async def fake_get(task_id, user_id):
+        return dict(state["existing"])
+
+    async def fake_update(task_id, data):
+        state["saved"].update(data)
+        return data
+
+    monkeypatch.setattr(manual_task_router.manual_task_crud, "get_manual_task_by_id", fake_get)
+    monkeypatch.setattr(manual_task_router.manual_task_crud, "update_manual_task_by_id", fake_update)
+    return state
+
+
+def _existing_task(**overrides):
+    task = {
+        "id": "t1", "user_id": "test_user_123", "title": "標題", "description": "描述",
+        "status": "To Do", "priority": "High", "duration": 90, "completed_at": None,
+        "updated": datetime(2023, 1, 1, tzinfo=timezone.utc),
+    }
+    task.update(overrides)
+    return task
+
+
+@pytest.mark.asyncio
+async def test_update_manual_task_to_done_records_completed_at(saved_update):
+    saved_update["existing"] = _existing_task(status="In Progress")
+
+    await manual_task_router.update_manual_task("t1", ManualTaskUpdate(status="Done"), clerk_user=mock_user)
+
+    assert saved_update["saved"]["completed_at"] == saved_update["saved"]["updated"]
+
+
+@pytest.mark.asyncio
+async def test_update_manual_task_keeps_completed_at_when_still_done_or_status_not_given(saved_update):
+    """已完成的任務改標題、或再送一次 Done，完成時間都不能被刷新。"""
+    done_at = datetime(2026, 10, 1, tzinfo=timezone.utc)
+    saved_update["existing"] = _existing_task(status="Done", completed_at=done_at)
+
+    await manual_task_router.update_manual_task("t1", ManualTaskUpdate(title="新標題"), clerk_user=mock_user)
+    assert saved_update["saved"]["completed_at"] == done_at
+
+    await manual_task_router.update_manual_task("t1", ManualTaskUpdate(status="Done"), clerk_user=mock_user)
+    assert saved_update["saved"]["completed_at"] == done_at
+
+
+@pytest.mark.asyncio
+async def test_update_manual_task_back_from_done_clears_completed_at(saved_update):
+    saved_update["existing"] = _existing_task(status="Done", completed_at=datetime(2026, 10, 1, tzinfo=timezone.utc))
+
+    await manual_task_router.update_manual_task("t1", ManualTaskUpdate(status="To Do"), clerk_user=mock_user)
+
+    assert saved_update["saved"]["completed_at"] is None
+
+
+@pytest.mark.asyncio
+async def test_create_manual_task_already_done_is_completed_at_creation(created_tasks, infer_calls):
+    await _create(_task_input(status="Done"))
+    await _create(_task_input(status="To Do"))
+
+    done_task, todo_task = created_tasks
+    assert done_task.completed_at == done_task.created
+    assert todo_task.completed_at is None
+
+
 # ---------- 只能動自己的任務（用真的 crud 加記憶體資料庫，才測得到 router 與 crud 的串接）----------
 
 async def _insert_alice_task(task_id):

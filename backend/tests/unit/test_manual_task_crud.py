@@ -289,3 +289,21 @@ async def test_create_manual_task_returns_existing_when_same_key_inserted_concur
     result = await manual_task_crud.create_manual_task(_task(), "key-1")
 
     assert result["id"] == "first-task"
+
+
+# ---------- 狀態改變後的完成時間 ----------
+
+def test_completed_at_after_status_change_rules():
+    """變成 Done 記下當下；本來就是 Done 保留原值（包括沒記錄的舊任務）；離開 Done 清空。"""
+    from datetime import datetime, timezone
+
+    now = datetime(2026, 11, 4, tzinfo=timezone.utc)
+    earlier = datetime(2026, 11, 1, tzinfo=timezone.utc)
+    rule = manual_task_crud.completed_at_after_status_change
+
+    assert rule("To Do", None, "Done", now) == now
+    assert rule("In Progress", None, "Done", now) == now
+    assert rule("Done", earlier, "Done", now) == earlier
+    assert rule("Done", None, "Done", now) is None
+    assert rule("Done", earlier, "To Do", now) is None
+    assert rule("To Do", None, "In Progress", now) is None

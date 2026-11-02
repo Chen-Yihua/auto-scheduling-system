@@ -1,5 +1,6 @@
 """Jira：指派給使用者的 issue。用 API Token（email:token 的 Base64）加上站台網域驗證。"""
 import logging
+from datetime import datetime
 
 import httpx
 from core.errors import AccessDeniedError, ExternalServiceError, ReauthRequiredError
@@ -20,7 +21,7 @@ NON_RETRYABLE_STATUS_CODES = {400, 401, 403, 404}
 JIRA_MAX_PAGES = 10
 
 # /search/jql 預設只回 id，要明確列出欄位；和 transform_jira_item 用到的欄位一致
-JIRA_ISSUE_FIELDS = "summary,status,updated,assignee,issuetype"
+JIRA_ISSUE_FIELDS = "summary,status,updated,assignee,issuetype,resolutiondate"
 
 
 def _base_url(domain: str) -> str:
@@ -84,6 +85,7 @@ def transform_jira_item(raw: dict) -> dict:
         # 用 statusCategory 判斷完成：status.name 是各專案自訂的字串
         "status_category": status_category.get("key") or "",
         "updated_at": fields.get("updated") or "",
+        "resolved_at": fields.get("resolutiondate"),
         "assignee": assignee.get("displayName") or "",
         "avatar": avatar_urls.get("48x48") or "",
         "type": issuetype.get("name") or "",
@@ -142,6 +144,10 @@ class JiraPlatform(PlatformAdapter):
 
     def is_done(self, item):
         return item.get("status_category") == "done"
+
+    def completed_at(self, item):
+        resolved_at = item.get("resolved_at")
+        return datetime.fromisoformat(resolved_at) if resolved_at else None
 
     async def verify_new_account(self, account):
         info = await fetch_jira_userinfo(account["apiKey"], account["domain"])

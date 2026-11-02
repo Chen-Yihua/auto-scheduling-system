@@ -19,6 +19,13 @@ export const githubStateLabels: Record<string, string> = {
   merged: '已合併',
 }
 
+export const sourceLabels: Record<string, string> = {
+  manual: '手動任務',
+  github: 'GitHub',
+  jira: 'Jira',
+  moodle: 'Moodle',
+}
+
 export const leetcodeDifficultyLabels: Record<string, string> = {
   Easy: '簡單',
   Medium: '中等',
@@ -33,4 +40,5 @@ function labelOf(labels: Record<string, string>, value: string | undefined | nul
 export const priorityLabel = (value: string | undefined | null) => labelOf(priorityLabels, value)
 export const taskStatusLabel = (value: string | undefined | null) => labelOf(taskStatusLabels, value)
 export const githubStateLabel = (value: string | undefined | null) => labelOf(githubStateLabels, value)
+export const sourceLabel = (value: string | undefined | null) => labelOf(sourceLabels, value)
 export const leetcodeDifficultyLabel = (value: string | undefined | null) => labelOf(leetcodeDifficultyLabels, value)

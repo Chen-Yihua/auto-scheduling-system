@@ -4,7 +4,12 @@
 id 加上來源前綴（例如 "github:42"）：不同平台的 id 可能重複，前綴也用來決定要寫回哪個 collection。
 """
 from datetime import datetime, timezone
-from crud.manual_task import get_manual_tasks_by_user_id, reorder_manual_tasks, set_calendar_event_id
+from crud.manual_task import (
+    completed_at_after_status_change,
+    get_manual_tasks_by_user_id,
+    reorder_manual_tasks,
+    set_calendar_event_id,
+)
 from platforms import PLATFORMS
 
 SOURCE_MANUAL = "manual"
@@ -31,8 +36,14 @@ async def _update_external(source: str, raw_id: str, user_id: str, fields: dict)
 
 
 def _normalize_external(source: str, doc: dict) -> dict:
+    platform = PLATFORMS[source]
+    platform_done = platform.is_done(doc)
     # 平台回報完成或使用者手動標記完成，任一成立即視為完成
-    done = bool(doc.get("done")) or PLATFORMS[source].is_done(doc)
+    done = bool(doc.get("done")) or platform_done
+    completed_at = None
+    if done:
+        # 平台的關閉時間比使用者事後補標記的時間準
+        completed_at = (platform.completed_at(doc) if platform_done else None) or doc.get("completed_at")
     return {
         "id": make_composite_id(source, doc["id"]),
         "source": source,
@@ -44,6 +55,7 @@ def _normalize_external(source: str, doc: dict) -> dict:
         "sort_order": doc.get("sort_order"),
         "calendar_event_id": doc.get("calendar_event_id"),
         "url": doc.get("url"),
+        "completed_at": completed_at,
     }
 
 
@@ -103,11 +115,23 @@ async def set_done(user_id: str, composite_id: str, done: bool):
     if source == SOURCE_MANUAL:
         from crud.manual_task import get_manual_task_by_id, update_manual_task_by_id
         task = await get_manual_task_by_id(raw_id, user_id)
-        task.update({"status": "Done" if done else "To Do", "updated": datetime.now(timezone.utc)})
+        now = datetime.now(timezone.utc)
+        status = "Done" if done else "To Do"
+        task["completed_at"] = completed_at_after_status_change(task.get("status"), task.get("completed_at"), status, now)
+        task.update({"status": status, "updated": now})
         await update_manual_task_by_id(raw_id, task)
         return
 
-    await _update_external(source, raw_id, user_id, {"done": done})
+    platform = PLATFORMS.get(source)
+    if platform is None:
+        return
+    doc = await platform.collection.find_one({"id": platform.id_type(raw_id), "user_id": user_id})
+    if doc is None:
+        return
+    completed_at = None
+    if done:
+        completed_at = doc.get("completed_at") if doc.get("done") else datetime.now(timezone.utc)
+    await _update_external(source, raw_id, user_id, {"done": done, "completed_at": completed_at})
 
 
 async def set_calendar_event_id_for_composite(user_id: str, composite_id: str, calendar_event_id: str):

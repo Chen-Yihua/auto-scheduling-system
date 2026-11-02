@@ -1,4 +1,5 @@
 import pytest
+from datetime import datetime, timezone
 
 import crud.schedulable_items as schedulable_items
 from core.database import db
@@ -308,5 +309,116 @@ async def test_set_calendar_event_id_for_composite_external_item():
 
         updated = await db.moodle_assignments.find_one({"id": "https://m/1"})
         assert updated["calendar_event_id"] == "event-2"
+    finally:
+        await _cleanup()
+
+
+# ---------- 完成時間 completed_at ----------
+
+@pytest.mark.asyncio
+async def test_set_done_manual_task_records_and_clears_completed_at():
+    """標記完成寫入當下時間；已完成的再標一次保留原本的時間；取消完成清空。"""
+    done_at = datetime(2026, 10, 1)
+    try:
+        await db.manual_tasks.insert_one({
+            "_id": "t1", "user_id": "sched-user", "title": "任務", "description": "d",
+            "status": "To Do", "priority": "Low", "duration": 60,
+        })
+        await db.manual_tasks.insert_one({
+            "_id": "t2", "user_id": "sched-user", "title": "已完成", "description": "d",
+            "status": "Done", "priority": "Low", "duration": 60, "completed_at": done_at,
+        })
+
+        await schedulable_items.set_done("sched-user", "manual:t1", True)
+        assert (await db.manual_tasks.find_one({"_id": "t1"}))["completed_at"] is not None
+
+        await schedulable_items.set_done("sched-user", "manual:t2", True)
+        assert (await db.manual_tasks.find_one({"_id": "t2"}))["completed_at"] == done_at
+
+        await schedulable_items.set_done("sched-user", "manual:t2", False)
+        assert (await db.manual_tasks.find_one({"_id": "t2"}))["completed_at"] is None
+    finally:
+        await _cleanup()
+
+
+@pytest.mark.asyncio
+async def test_set_done_external_item_records_and_clears_completed_at():
+    try:
+        await db.moodle_assignments.insert_one({"id": "https://m/1", "user_id": "sched-user", "title": "作業"})
+
+        await schedulable_items.set_done("sched-user", "moodle:https://m/1", True)
+        first = (await db.moodle_assignments.find_one({"id": "https://m/1"}))["completed_at"]
+        assert first is not None
+
+        await schedulable_items.set_done("sched-user", "moodle:https://m/1", True)
+        assert (await db.moodle_assignments.find_one({"id": "https://m/1"}))["completed_at"] == first
+
+        await schedulable_items.set_done("sched-user", "moodle:https://m/1", False)
+        assert (await db.moodle_assignments.find_one({"id": "https://m/1"}))["completed_at"] is None
+    finally:
+        await _cleanup()
+
+
+@pytest.mark.asyncio
+async def test_completed_at_of_external_item_survives_next_platform_sync():
+    """同步只 $set 平台回傳的欄位，使用者標記的完成時間不能被洗掉。"""
+    from platforms.sync import sync_platform_items
+
+    try:
+        await db.moodle_assignments.insert_one({"id": "https://m/1", "user_id": "sched-user", "title": "作業"})
+        await schedulable_items.set_done("sched-user", "moodle:https://m/1", True)
+
+        async def fetch():
+            return [{"id": "https://m/1", "title": "作業（改名）"}]
+
+        await sync_platform_items(db.moodle_assignments, "sched-user", "id", fetch)
+
+        items = await schedulable_items.get_all_schedulable_items("sched-user")
+        assert items[0]["title"] == "作業（改名）"
+        assert items[0]["completed_at"] is not None
+    finally:
+        await _cleanup()
+
+
+@pytest.mark.asyncio
+async def test_completed_at_of_platform_closed_item_uses_platform_time():
+    """平台判定完成（GitHub closed、Jira done）→ 用平台的關閉時間，不用使用者標記的時間。"""
+    try:
+        await db.github_issues.insert_one({
+            "id": 1, "user_id": "sched-user", "title": "已關閉", "status": "closed",
+            "closed_at": "2026-10-01T08:00:00Z",
+            "done": True, "completed_at": datetime(2026, 10, 5, tzinfo=timezone.utc),
+        })
+        await db.jira_issues.insert_one({
+            "id": "100", "user_id": "sched-user", "title": "已解決", "status": "完成",
+            "status_category": "done", "resolved_at": "2026-10-02T10:00:00.000+0800",
+        })
+
+        items = {item["id"]: item for item in await schedulable_items.get_all_schedulable_items("sched-user")}
+
+        assert items["github:1"]["completed_at"] == datetime(2026, 10, 1, 8, 0, tzinfo=timezone.utc)
+        assert items["jira:100"]["completed_at"] == datetime(2026, 10, 2, 2, 0, tzinfo=timezone.utc)
+    finally:
+        await _cleanup()
+
+
+@pytest.mark.asyncio
+async def test_completed_at_of_reopened_item_marked_done_by_user_uses_user_time():
+    """GitHub 還開著、使用者手動標記完成 → 用標記的時間；之前的 closed_at 不算數。"""
+    marked_at = datetime(2026, 10, 5, tzinfo=timezone.utc)
+    try:
+        await db.github_issues.insert_one({
+            "id": 1, "user_id": "sched-user", "title": "重開的 issue", "status": "open",
+            "closed_at": None, "done": True, "completed_at": marked_at,
+        })
+        await db.github_issues.insert_one({
+            "id": 2, "user_id": "sched-user", "title": "未完成", "status": "open",
+            "closed_at": None, "completed_at": None,
+        })
+
+        items = {item["id"]: item for item in await schedulable_items.get_all_schedulable_items("sched-user")}
+
+        assert items["github:1"]["completed_at"].replace(tzinfo=timezone.utc) == marked_at
+        assert items["github:2"]["completed_at"] is None
     finally:
         await _cleanup()

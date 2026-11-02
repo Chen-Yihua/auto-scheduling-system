@@ -14,6 +14,7 @@ class GitHubIssue(BaseModel):
     status: str
     created_at: datetime
     updated_at: Optional[datetime]
+    closed_at: Optional[datetime] = None
     url: str
     isPR: bool
     author: Optional[GitHubAuthor]

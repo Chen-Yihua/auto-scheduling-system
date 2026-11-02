@@ -11,7 +11,7 @@
 ```
 ├── backend/   # FastAPI + MongoDB，以 Docker 部署到 Google Cloud Run
 ├── frontend/  # Nuxt 3 + TypeScript，部署到 Vercel
-├── docs/      # 系統架構圖（architecture.drawio，用 draw.io 開啟）
+├── docs/      # 架構、API 一覽、架構決策紀錄、功能規格（見 docs/README.md）
 └── .github/workflows/deploy.yml  # CI/CD：測試通過後自動部署前後端
 ```
 

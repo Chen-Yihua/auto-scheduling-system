@@ -38,9 +38,13 @@ cd frontend && npm run lint && npm run typecheck && npm run test
 | 新增後端 entity / 外部平台 | [backend/README.md](backend/README.md)「如何新增一個新的 Entity」「如何新增外部平台」 |
 | 新增後端套件 | [backend/README.md](backend/README.md)「安裝依賴套件」（正式用 vs 測試用分兩個檔） |
 | 前端元件、composable、頁面 | [frontend/README.md](frontend/README.md)「開發慣例」 |
+| 開發新功能（`/feature`） | [docs/specs/README.md](docs/specs/README.md)（規格格式） |
+| 了解整體架構、做架構層級的決定 | [docs/architecture.md](docs/architecture.md)、[docs/decisions/](docs/decisions/) |
 
 ## 跨前後端的連動
 
+- 新增、刪除 endpoint，或改了路徑、登入需求、限流，要同步更新 `docs/api.md`。
+- 新增服務、MongoDB collection、外部平台，或改變模組分層，要同步更新 `docs/architecture.md`。
 - 改了 `backend/schemas/` 的回應格式，要同步改 `frontend/types/`（手動維護，不會自動產生）。
 - 新增「import 時就必填」的環境變數，要同步更新 `.github/workflows/deploy.yml`、`backend/.env.example`，以及 `backend/tests/unit/test_ci_env_requirements.py`。
 

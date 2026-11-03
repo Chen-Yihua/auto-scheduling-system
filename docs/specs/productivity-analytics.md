@@ -86,7 +86,7 @@
 | `platforms/base.py`、`github.py`、`jira.py`、`schemas/github.py`、`schemas/jira.py` | `PlatformAdapter.completed_at`；GitHub `closed_at`、Jira `resolutiondate` / `resolved_at` |
 | `services/productivity.py` | `build_productivity_summary(items, now, tz_name)`：所有統計規則；回傳 `generated_at` |
 | `schemas/analytics.py`、`routers/analytics.py`、`main.py` | `GET /analytics/productivity`；時區不合法丟 `InvalidRequestError`；`ProductivitySummary` 加 `generated_at` |
-| `platforms/github.py`、`platforms/jira.py`、`schemas/jira.py` | transform 時把所有時間欄位轉成 UTC datetime（缺值 None）；`completed_at` 同時接受 datetime 與舊的字串；`JiraIssue.updated_at` 改為 `Optional[datetime]` |
+| `platforms/github.py`、`platforms/jira.py`、`schemas/jira.py` | transform 時把所有時間欄位轉成 UTC datetime（缺值 None）；`completed_at` 同時接受 datetime 與舊的字串；`JiraIssue.updated_at`、`resolved_at` 改為 `Optional[datetime]`，讀取時把資料庫的舊字串與不帶時區的 datetime 轉成 UTC；共用的轉換放 `core/datetimes.py` |
 
 **前端**
 
@@ -116,8 +116,8 @@
 | AC12–AC13 | `frontend/tests/pages/productivity.test.ts`、`tests/components/WeeklyBarChart.test.ts`、`tests/utils/format.test.ts` |
 | AC14 | `frontend/tests/composables/useProductivity.test.ts` |
 | AC15–AC17 | `frontend/tests/composables/useProductivity.test.ts`、`frontend/tests/pages/productivity.test.ts` |
-| AC18 | `backend/tests/unit/test_productivity.py`、`backend/tests/integration/test_analytics_api.py`、`frontend/tests/pages/productivity.test.ts` |
-| AC19 | `backend/tests/unit/test_github_platform.py`、`test_jira_platform.py`、`test_schedulable_items.py`；`frontend/tests/components/JiraIssuesList.test.ts` |
+| AC18 | `backend/tests/unit/test_productivity.py`、`backend/tests/integration/test_analytics_api.py`、`frontend/tests/pages/productivity.test.ts`、`frontend/tests/utils/format.test.ts` |
+| AC19 | `backend/tests/unit/test_github_platform.py`、`test_jira_platform.py`、`test_schedulable_items.py`、`backend/tests/integration/test_jira_api.py`；`frontend/tests/components/JiraIssuesList.test.ts` |
 
 ## 修改紀錄
 

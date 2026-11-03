@@ -125,6 +125,7 @@ def test_weekly_trend_excludes_completions_before_the_window():
 
 
 def test_on_time_rate_counts_completions_in_window_that_have_due_date():
+    """AC9（假設 8）：只算近 8 週內完成且有截止日的項目；窗口前完成的即使有截止日也不列入。"""
     items = [
         _item(status="Done", due_date=datetime(2026, 11, 3, tzinfo=timezone.utc),
               completed_at=datetime(2026, 11, 2, tzinfo=timezone.utc)),   # 準時
@@ -133,6 +134,8 @@ def test_on_time_rate_counts_completions_in_window_that_have_due_date():
         _item(status="Done", due_date=datetime(2026, 11, 1, tzinfo=timezone.utc),
               completed_at=datetime(2026, 11, 3, tzinfo=timezone.utc)),   # 遲交
         _item(status="Done", due_date=None, completed_at=NOW),            # 沒截止日，不列入
+        _item(status="Done", due_date=datetime(2026, 9, 14, tzinfo=timezone.utc),
+              completed_at=datetime(2026, 9, 13, tzinfo=timezone.utc)),   # 窗口前完成，不列入
     ]
 
     on_time = build_productivity_summary(items, NOW, "UTC")["on_time"]

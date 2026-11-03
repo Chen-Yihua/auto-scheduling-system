@@ -76,13 +76,26 @@ describe('pages/productivity.vue', () => {
     expect(kpi('on-time')).toContain('—')
   })
 
-  it('依來源與優先度的完成進度用中文標籤', async () => {
+  it('AC12：依來源與優先度的完成進度用中文標籤，並顯示完成數 / 總數', async () => {
     summaryRef.value = fakeSummary()
     const wrapper = render()
     await flushPromises()
 
-    expect(wrapper.find('[data-testid="by-source"]').text()).toContain('GitHub')
-    expect(wrapper.find('[data-testid="by-priority"]').text()).toContain('高')
+    const bySource = wrapper.find('[data-testid="by-source"]').text()
+    const byPriority = wrapper.find('[data-testid="by-priority"]').text()
+    expect(bySource).toContain('GitHub')
+    expect(bySource).toContain('1 / 4')
+    expect(byPriority).toContain('高')
+    expect(byPriority).toContain('1 / 4')
+  })
+
+  it('AC12：登入後顯示每週完成數長條圖', async () => {
+    summaryRef.value = fakeSummary()
+    const wrapper = render()
+    await flushPromises()
+
+    expect(wrapper.find('svg[role="img"]').exists()).toBe(true)
+    expect(wrapper.findAll('[data-testid="bar-value"]').map((el) => el.text())).toEqual(['1'])
   })
 
   it('沒有任何任務時顯示空狀態，不畫圖表', async () => {
@@ -111,7 +124,7 @@ describe('pages/productivity.vue', () => {
     expect(fetchSummarySpy).not.toHaveBeenCalled()
   })
 
-  it('載入失敗且還沒有統計時顯示錯誤狀態，按重試會重新抓取並在成功後顯示統計', async () => {
+  it('AC15：載入失敗且還沒有統計時顯示錯誤狀態，按重試會重新抓取並在成功後顯示統計', async () => {
     errorRef.value = true
     const wrapper = render()
     await flushPromises()
@@ -124,8 +137,10 @@ describe('pages/productivity.vue', () => {
     const errorCard = wrapper.find('[data-testid="error"]')
     expect(errorCard.exists()).toBe(true)
     expect(errorCard.text()).toContain('工作效率統計載入失敗')
+    const retryButton = errorCard.find('button')
+    expect(retryButton.text()).toBe('重試')
 
-    await errorCard.find('button').trigger('click')
+    await retryButton.trigger('click')
     await flushPromises()
 
     expect(fetchSummarySpy).toHaveBeenCalledOnce()

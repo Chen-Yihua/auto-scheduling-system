@@ -59,6 +59,17 @@ describe('useProductivity composable', () => {
     expect(ctx.loading.value).toBe(false)
   })
 
+  it('AC14：429 失敗時 toast 標題用 getFriendlyErrorTitle 的限流訊息，不是預設文字', async () => {
+    fetchSpy.mockRejectedValueOnce({ status: 429 })
+
+    const ctx = useProductivity()
+    await ctx.fetchSummary()
+
+    expect(toastSpy.add).toHaveBeenCalledWith(
+      expect.objectContaining({ title: '請求太頻繁，請稍後再試', color: 'error' }),
+    )
+  })
+
   it('失敗時 error 為 true，之後重試成功 error 回到 false', async () => {
     fetchSpy.mockRejectedValueOnce(new Error('boom'))
     const ctx = useProductivity()

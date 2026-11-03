@@ -12,10 +12,10 @@ disable-model-invocation: true
 
 ```bash
 gh issue list --state open --limit 100 --json number,title,labels,createdAt
-gh issue view <N> --comments
+gh issue view <N> --json number,title,body,labels,comments,state
 ```
 
-每個 issue 都要讀內容與留言，不能只看標題。需要判斷影響範圍時，可以讀程式碼與 `docs/`。
+每個 issue 都要讀內容與留言，不能只看標題。`gh issue view` 一定要加 `--json`，原因見 CLAUDE.md「開發流程」。需要判斷影響範圍時，可以讀程式碼與 `docs/`。
 
 ## 2. 整理成表格給開發者
 

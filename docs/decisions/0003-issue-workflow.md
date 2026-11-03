@@ -21,7 +21,7 @@ PR #10 開發時，審查找到的改善建議與原本就有的問題只列在�
 - **不阻擋的發現在當前 PR 順手修**：等於擴大範圍，而且這些修改沒有經過規格核准。
 - **由開發者逐項決定要不要開 issue**：PR #10 的經驗是容易遺漏；開 issue 的成本低，不需要的可以在 `/issue-triage` 時關掉。
 - **讓 reviewer 直接修正**：審查的人自己修，就沒有人審它修的東西。
-- **新增 agent 或 hook**：triage 只是讀取與整理，`/issue` 沿用現有的兩個 agent；合併已經有 deny 規則與 main 的 ruleset 擋著。
+- **新增 agent 或 hook**：triage 只是讀取與整理，`/issue` 沿用現有的兩個 agent；合併由 `.claude/settings.json` 的 deny 規則（`gh pr merge`、`gh api *merge*`）擋下；main 的 ruleset 只要求 PR 與 CI 通過、不要求核准，不能單獨防止 agent 合併。
 
 ## 影響
 

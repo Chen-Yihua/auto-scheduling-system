@@ -12,7 +12,7 @@ disable-model-invocation: true
 
 ## 1. 規格（plan mode）
 
-先進入 plan mode，自己讀程式碼，照 `docs/specs/README.md` 的格式寫規格交給開發者核准：
+先進入 plan mode，自己讀程式碼，照 `docs/specs/README.md` 的格式寫規格交給開發者核准（由 `/issue` 進來時，需求來自 issue；bug 用「bug 簡化格式」）：
 
 - **需求／不做**：要做什麼、明確排除什麼。
 - **假設**：程式碼看不出來、由你判斷的業務規則，逐條列出。只有無法合理假設、而且會影響整體方向的問題才先問。
@@ -25,6 +25,7 @@ disable-model-invocation: true
 
 - 交給 `feature-implementer`，附上規格檔路徑和分支名稱。
 - 它回報規格有問題時：會影響範圍或驗收條件就照第 3 節「Missing AC」的方式問開發者；不影響就直接回覆它怎麼做。
+- 它回報的「發現但沒處理的問題」，照第 3 節「不阻擋的發現開 issue」處理。
 
 ## 3. 審查
 
@@ -32,10 +33,13 @@ disable-model-invocation: true
 
 | 分類 | 處理 |
 |---|---|
-| Implementation Defect | 交回 `feature-implementer` 修正 |
+| Implementation Defect（不涉及安全） | 交回 `feature-implementer` 修正 |
+| Implementation Defect（涉及安全） | 暫停，照「Missing AC 的處理」問開發者，不自動修正 |
 | Test Gap（阻擋） | 交回 `feature-implementer` 補測試 |
-| Test Gap（不阻擋）、Improvement Suggestion | 不交給實作；列進最後的回報，由開發者決定要不要開 issue |
+| Test Gap（不阻擋）、Improvement Suggestion | 照下面「不阻擋的發現開 issue」自動開 issue，不在這個 PR 修 |
 | Missing Acceptance Criteria | 暫停，照下面的步驟處理 |
+
+任何一項涉及**重大架構決策**（新增服務或外部依賴、改變模組分層、改資料庫結構或部署方式），不論分類都暫停，照「Missing AC 的處理」問開發者；決定後寫成 `docs/decisions/` 的 ADR。
 
 **Missing AC 的處理：**
 
@@ -43,6 +47,14 @@ disable-model-invocation: true
 2. 問開發者，並請開發者決定要在這個 PR 補上，還是另開 issue。涉及未定義的產品行為、權限、安全性或資料處理時，只列出選項與各自的影響，不給建議答案，每一項都要開發者明確回答；其他的可以附上建議的驗收條件，讓開發者一次確認。
 3. 這個 PR 補：把確認後的驗收條件寫進規格，在「修改紀錄」記下日期、修改、原因、確認者，交給 `feature-implementer` 實作並補測試。
 4. 另開 issue：用 `gh issue create` 記下缺漏與建議的驗收條件，在規格的「修改紀錄」與 PR 描述附上連結，這項就解除阻擋。
+
+**不阻擋的發現開 issue：**
+
+1. 先查重複：`gh issue list --state all --search "<關鍵字>"`。已有相同問題時，在既有 issue 留言補充（`gh issue comment`），不另開。
+2. 一項發現一個 issue；同一個檔案、同一個原因的多項發現合併成一個。
+3. 內容：現象、影響範圍、依據（`檔案:行號`）、審查的建議、來源 PR 與審查紀錄的連結。
+4. 標籤：程式行為不正確（包括原本就有的問題）用 `bug`，其餘（測試補強、可讀性、文件）用 `enhancement`。不加優先度，交給 `/issue-triage`。
+5. 在審查紀錄的「處理結果」寫上 issue 連結。
 
 **每一輪都存檔**：審查完立刻照 `docs/reviews/README.md` 的格式，把報告原文存成 `docs/reviews/<功能>-round<N>.md`；每一項處理完，在檔案最後的「處理結果」寫下處理方式、決定者與 commit / issue，和修正一起 commit 進 PR。
 
@@ -53,7 +65,8 @@ disable-model-invocation: true
 - 不可把 agent 推測的行為當成已確認的需求；開發者確認前，不寫進規格的驗收條件。
 - 不可因為發現缺漏就擴大範圍：只做開發者確認過要在這個 PR 補上的部分。
 - 不可只改程式而不改規格：每項修正都要對應到規格裡的驗收條件。
+- 不可合併 PR：合併一律由開發者決定。
 
 ## 4. 回報
 
-PR 連結、驗收表（驗收條件 → 對應的測試 → 結果）、假設清單、規格修改紀錄、每一輪審查紀錄的檔案連結與阻擋項目的處理結果。給開發者看的回報要附上檔案與測試的連結（`檔案:行號`），不要只寫摘要。PR 描述放同一張驗收表；更新 PR 描述照 CLAUDE.md「開發流程」的方式。
+PR 連結、驗收表（驗收條件 → 對應的測試 → 結果）、假設清單、規格修改紀錄、每一輪審查紀錄的檔案連結與阻擋項目的處理結果、這次開了或留言了哪些 issue。給開發者看的回報要附上檔案與測試的連結（`檔案:行號`），不要只寫摘要。PR 描述放同一張驗收表；更新 PR 描述照 CLAUDE.md「開發流程」的方式。

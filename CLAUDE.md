@@ -25,7 +25,7 @@ cd frontend && npm run lint && npm run typecheck && npm run test
 1. 從 `main` 開分支再改程式。
 2. 跑完上面「完成的定義」的檢查才 commit。
 3. push 後用 `gh pr create` 開 PR，再用 `gh pr checks --watch` 等 CI。
-   - 更新 PR 描述用 `gh api -X PATCH repos/{owner}/{repo}/pulls/<號碼> -F body=@<檔案>`，不用 `gh pr edit`：本機的 gh 2.45 會查 GitHub 已停用的 classic Projects 欄位而失敗。
+   - 更新 PR 描述用 `gh api -X PATCH repos/{owner}/{repo}/pulls/<號碼> -F body=@<檔案>`；改 issue 標籤用 `gh api repos/{owner}/{repo}/issues/<號碼>/labels`。不用 `gh pr edit` / `gh issue edit`：本機的 gh 2.45 會查 GitHub 已停用的 classic Projects 欄位而失敗。
 4. CI 失敗時用 `gh run view --log-failed` 讀錯誤，修正後 push 到同一個分支。
 5. 合併由開發者決定，不要自己 `gh pr merge`。
 

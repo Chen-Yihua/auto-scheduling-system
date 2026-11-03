@@ -25,6 +25,7 @@ cd frontend && npm run lint && npm run typecheck && npm run test
 1. 從 `main` 開分支再改程式。
 2. 跑完上面「完成的定義」的檢查才 commit。
 3. push 後用 `gh pr create` 開 PR，再用 `gh pr checks --watch` 等 CI。
+   - 更新 PR 描述用 `gh api -X PATCH repos/{owner}/{repo}/pulls/<號碼> -F body=@<檔案>`，不用 `gh pr edit`：本機的 gh 2.45 會查 GitHub 已停用的 classic Projects 欄位而失敗。
 4. CI 失敗時用 `gh run view --log-failed` 讀錯誤，修正後 push 到同一個分支。
 5. 合併由開發者決定，不要自己 `gh pr merge`。
 
@@ -37,9 +38,13 @@ cd frontend && npm run lint && npm run typecheck && npm run test
 | 新增後端 entity / 外部平台 | [backend/README.md](backend/README.md)「如何新增一個新的 Entity」「如何新增外部平台」 |
 | 新增後端套件 | [backend/README.md](backend/README.md)「安裝依賴套件」（正式用 vs 測試用分兩個檔） |
 | 前端元件、composable、頁面 | [frontend/README.md](frontend/README.md)「開發慣例」 |
+| 開發新功能（`/feature`） | [docs/specs/README.md](docs/specs/README.md)（規格格式） |
+| 了解整體架構、做架構層級的決定 | [docs/architecture.md](docs/architecture.md)、[docs/decisions/](docs/decisions/) |
 
 ## 跨前後端的連動
 
+- 新增、刪除 endpoint，或改了路徑、登入需求、限流，要同步更新 `docs/api.md`。
+- 新增服務、MongoDB collection、外部平台，或改變模組分層，要同步更新 `docs/architecture.md`。
 - 改了 `backend/schemas/` 的回應格式，要同步改 `frontend/types/`（手動維護，不會自動產生）。
 - 新增「import 時就必填」的環境變數，要同步更新 `.github/workflows/deploy.yml`、`backend/.env.example`，以及 `backend/tests/unit/test_ci_env_requirements.py`。
 

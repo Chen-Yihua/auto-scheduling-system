@@ -96,7 +96,7 @@
 | `types/analytics.ts`、`types/manualTask.ts`、`types/github.ts`、`types/jira.ts` | 對應後端回應格式（`generated_at`；Jira `updated_at` 可為 null） |
 | `composables/useProductivity.ts` | 帶 JWT 與瀏覽器時區呼叫 API；`loading` / `summary` / `error`；每小時自動更新，頁面卸載時停止 |
 | `components/productivity/WeeklyBarChart.vue`、`ProgressList.vue` | SVG 直條圖、水平進度條 |
-| `pages/productivity.vue` | 數字卡片、圖表、統計時間、載入中 / 無資料 / 載入失敗狀態（移除重試按鈕）、未列入趨勢說明、LoginRequiredCard |
+| `pages/productivity.vue` | 數字卡片、圖表、統計時間、載入中 / 無資料 / 載入失敗狀態（移除重試按鈕）、未列入趨勢說明、LoginRequiredCard；登入時啟動、登出時停止自動更新 |
 | `components/platforms/JiraIssuesList.vue` | `updated_at` 為 null 時不顯示「更新於」 |
 | `components/header/AppHeader.vue` | 入口按鈕 |
 | `utils/labels.ts`、`utils/format.ts` | 來源中文對照；百分比與工時格式 |

@@ -23,9 +23,9 @@ describe('formatMinutes', () => {
 })
 
 describe('formatDateTime', () => {
-  it('AC18：UTC 時間轉成瀏覽器當地時間，格式 YYYY/MM/DD HH:mm', () => {
-    // 用當地時間建立再轉成 UTC 字串，測試結果才不受執行環境的時區影響
-    const local = new Date(2026, 0, 5, 9, 7, 30)
-    expect(formatDateTime(local.toISOString())).toBe('2026/01/05 09:07')
+  it('AC18：UTC 時間轉成瀏覽器當地時間（測試固定 Asia/Taipei，UTC+8），格式 YYYY/MM/DD HH:mm', () => {
+    expect(formatDateTime('2026-11-03T01:00:00Z')).toBe('2026/11/03 09:00')
+    // 跨日：UTC 前一天晚上在台北已是隔天
+    expect(formatDateTime('2026-01-04T16:07:30Z')).toBe('2026/01/05 00:07')
   })
 })

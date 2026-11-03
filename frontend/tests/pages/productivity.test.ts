@@ -4,7 +4,6 @@ import { ref as vueRef, h, defineComponent } from 'vue'
 
 import ProductivityPage from '~/pages/productivity.vue'
 import type { ProductivitySummary } from '~/types/analytics'
-import { formatDateTime } from '~/utils/format'
 
 const isSignedInRef = vueRef<boolean | undefined>(true)
 vi.mock('@clerk/vue', () => ({
@@ -178,17 +177,17 @@ describe('pages/productivity.vue', () => {
     expect(wrapper.find('[data-testid="empty"]').exists()).toBe(false)
   })
 
-  it('AC18：顯示統計時間（瀏覽器當地時間），自動更新成功後跟著更新', async () => {
+  it('AC18：顯示統計時間（瀏覽器當地時間，測試固定 Asia/Taipei），自動更新成功後跟著更新', async () => {
     summaryRef.value = fakeSummary({ generated_at: '2026-11-03T01:00:00Z' })
     const wrapper = render()
     await flushPromises()
 
     const generatedAt = () => wrapper.find('[data-testid="generated-at"]').text()
-    expect(generatedAt()).toBe(`統計時間：${formatDateTime('2026-11-03T01:00:00Z')}`)
+    expect(generatedAt()).toBe('統計時間：2026/11/03 09:00')
 
     summaryRef.value = fakeSummary({ generated_at: '2026-11-03T02:00:00Z' })
     await flushPromises()
-    expect(generatedAt()).toBe(`統計時間：${formatDateTime('2026-11-03T02:00:00Z')}`)
+    expect(generatedAt()).toBe('統計時間：2026/11/03 10:00')
   })
 
   it('AC17：已有統計資料時自動更新失敗，仍顯示原本的統計而不是錯誤狀態', async () => {

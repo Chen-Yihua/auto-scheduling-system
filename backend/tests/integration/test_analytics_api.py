@@ -33,6 +33,27 @@ async def test_get_productivity_summary(monkeypatch, logged_in_user):
 
 
 @pytest.mark.asyncio
+async def test_get_productivity_summary_includes_generated_at_in_utc(monkeypatch, logged_in_user):
+    """AC18：回應帶 generated_at，是 UTC 時間，不受傳入的 timezone 影響。"""
+    from datetime import datetime, timedelta, timezone
+
+    async def mock_get_items(user_id):
+        return []
+
+    monkeypatch.setattr(analytics_router, "get_all_schedulable_items", mock_get_items)
+
+    before = datetime.now(timezone.utc)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        res = await ac.get("/analytics/productivity", params={"timezone": "Asia/Taipei"})
+    after = datetime.now(timezone.utc)
+
+    assert res.status_code == status.HTTP_200_OK, res.text
+    generated_at = datetime.fromisoformat(res.json()["generated_at"].replace("Z", "+00:00"))
+    assert generated_at.utcoffset() == timedelta(0)
+    assert before <= generated_at <= after
+
+
+@pytest.mark.asyncio
 async def test_get_productivity_summary_rejects_unknown_timezone(logged_in_user):
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         res = await ac.get("/analytics/productivity", params={"timezone": "Mars/Olympus"})

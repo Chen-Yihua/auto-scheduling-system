@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from typing import Optional
 from pydantic import BaseModel
 from schemas.manual_task import PriorityEnum
@@ -31,6 +31,7 @@ class OnTimeStat(BaseModel):
 
 
 class ProductivitySummary(BaseModel):
+    generated_at: datetime  # UTC
     total: int
     done: int
     # 0 到 1；沒有任何項目時是 None，和完成率 0% 區分

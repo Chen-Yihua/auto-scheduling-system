@@ -425,3 +425,24 @@ async def test_completed_at_of_reopened_item_marked_done_by_user_uses_user_time(
         assert items["github:2"]["completed_at"] is None
     finally:
         await _cleanup()
+
+
+@pytest.mark.asyncio
+async def test_completed_at_of_platform_closed_item_stored_as_datetime():
+    """AC19：同步後平台時間存成 datetime，算出的完成時間要是帶時區的 UTC，才能和截止日比較。"""
+    try:
+        await db.github_issues.insert_one({
+            "id": 1, "user_id": "sched-user", "title": "已關閉", "status": "closed",
+            "closed_at": datetime(2026, 10, 1, 8, 0, tzinfo=timezone.utc),
+        })
+        await db.jira_issues.insert_one({
+            "id": "100", "user_id": "sched-user", "title": "已解決", "status": "完成",
+            "status_category": "done", "resolved_at": datetime(2026, 10, 2, 2, 0, tzinfo=timezone.utc),
+        })
+
+        items = {item["id"]: item for item in await schedulable_items.get_all_schedulable_items("sched-user")}
+
+        assert items["github:1"]["completed_at"] == datetime(2026, 10, 1, 8, 0, tzinfo=timezone.utc)
+        assert items["jira:100"]["completed_at"] == datetime(2026, 10, 2, 2, 0, tzinfo=timezone.utc)
+    finally:
+        await _cleanup()

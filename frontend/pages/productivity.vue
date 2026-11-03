@@ -6,15 +6,20 @@ import AppHeader from '~/components/header/AppHeader.vue'
 import LoginRequiredCard from '~/components/LoginRequiredCard.vue'
 import WeeklyBarChart from '~/components/productivity/WeeklyBarChart.vue'
 import ProgressList from '~/components/productivity/ProgressList.vue'
-import { formatMinutes, formatPercent } from '~/utils/format'
+import { formatDateTime, formatMinutes, formatPercent } from '~/utils/format'
 import { priorityLabel, sourceLabel } from '~/utils/labels'
 
 const { isSignedIn } = useUser()
-const { summary, loading, error, fetchSummary } = useProductivity()
+const { summary, loading, error, fetchSummary, startAutoRefresh, stopAutoRefresh } = useProductivity()
 
 // Clerk 初始化完成才知道有沒有登入，所以用 watch 而不是 onMounted
 watch(isSignedIn, (signedIn) => {
-  if (signedIn) fetchSummary()
+  if (signedIn) {
+    fetchSummary()
+    startAutoRefresh()
+  } else {
+    stopAutoRefresh()
+  }
 }, { immediate: true })
 
 const sourceItems = computed(() =>
@@ -48,20 +53,24 @@ const priorityItems = computed(() =>
       />
 
       <template v-else-if="isSignedIn">
-        <h1 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">工作效率</h1>
+        <div class="flex flex-wrap items-baseline justify-between gap-2 mb-4">
+          <h1 class="text-xl font-semibold text-gray-900 dark:text-white">工作效率</h1>
+          <p v-if="summary" data-testid="generated-at" class="text-xs text-gray-500 dark:text-gray-400">
+            統計時間：{{ formatDateTime(summary.generated_at) }}
+          </p>
+        </div>
 
-        <p v-if="loading && !summary" class="text-sm text-gray-500 dark:text-gray-400">載入中…</p>
+        <p v-if="loading && !summary" class="text-sm text-gray-500 dark:text-gray-400">統計資料載入中，請稍候…</p>
 
         <UCard v-else-if="error && !summary" data-testid="error">
-          <div class="flex flex-col items-center gap-3 py-6">
-            <p class="text-sm text-gray-500 dark:text-gray-400">工作效率統計載入失敗</p>
-            <UButton icon="i-lucide-refresh-cw" variant="outline" @click="fetchSummary">重試</UButton>
-          </div>
+          <p class="text-center text-sm text-gray-500 dark:text-gray-400 py-6">
+            統計資料載入失敗，系統會在下次自動更新時重試，請稍候
+          </p>
         </UCard>
 
         <UCard v-else-if="summary && summary.total === 0" data-testid="empty">
           <p class="text-center text-sm text-gray-500 dark:text-gray-400 py-6">
-            還沒有任何任務，新增任務或連結平台後就能看到統計。
+            目前沒有可統計的資料
           </p>
         </UCard>
 

@@ -75,6 +75,7 @@ def build_productivity_summary(items: list[dict], now: datetime, tz_name: str) -
             on_time += completed_at <= due_date
 
     return {
+        "generated_at": now,
         "total": len(items),
         "done": done,
         "completion_rate": _rate(done, len(items)),

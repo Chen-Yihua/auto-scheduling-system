@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { formatMinutes, formatPercent } from '~/utils/format'
+import { formatDateTime, formatMinutes, formatPercent } from '~/utils/format'
 
 describe('formatPercent', () => {
   it('沒有資料（null）顯示「—」，和 0% 區分', () => {
@@ -19,5 +19,13 @@ describe('formatMinutes', () => {
     expect(formatMinutes(45)).toBe('45 分')
     expect(formatMinutes(120)).toBe('2 小時')
     expect(formatMinutes(150)).toBe('2 小時 30 分')
+  })
+})
+
+describe('formatDateTime', () => {
+  it('AC18：UTC 時間轉成瀏覽器當地時間，格式 YYYY/MM/DD HH:mm', () => {
+    // 用當地時間建立再轉成 UTC 字串，測試結果才不受執行環境的時區影響
+    const local = new Date(2026, 0, 5, 9, 7, 30)
+    expect(formatDateTime(local.toISOString())).toBe('2026/01/05 09:07')
   })
 })

@@ -153,3 +153,10 @@ def test_done_items_without_completed_at_are_untracked():
     assert summary["untracked_done"] == 1
     assert sum(row["completed"] for row in summary["weekly"]) == 0
     assert summary["on_time"]["completed_with_due"] == 0
+
+
+def test_summary_includes_generation_time():
+    """AC18：回傳統計產生時間（傳入的 now，UTC），頁面才能顯示統計時間。"""
+    summary = build_productivity_summary([], NOW, "Asia/Taipei")
+
+    assert summary["generated_at"] == NOW

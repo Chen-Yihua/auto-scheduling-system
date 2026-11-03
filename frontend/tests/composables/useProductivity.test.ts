@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { ref as vueRef } from 'vue'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { effectScope, ref as vueRef } from 'vue'
 
 import { useProductivity } from '~/composables/useProductivity'
 
@@ -70,14 +70,96 @@ describe('useProductivity composable', () => {
     )
   })
 
-  it('失敗時 error 為 true，之後重試成功 error 回到 false', async () => {
-    fetchSpy.mockRejectedValueOnce(new Error('boom'))
-    const ctx = useProductivity()
-    await ctx.fetchSummary()
-    expect(ctx.error.value).toBe(true)
+  it('AC16：呼叫 API 期間 loading 為 true，回應後回到 false', async () => {
+    let resolve: (value: unknown) => void = () => {}
+    fetchSpy.mockReturnValueOnce(new Promise((r) => { resolve = r }))
 
+    const ctx = useProductivity()
+    const pending = ctx.fetchSummary()
+    await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalled())
+    expect(ctx.loading.value).toBe(true)
+
+    resolve({ total: 1 })
+    await pending
+    expect(ctx.loading.value).toBe(false)
+  })
+})
+
+describe('useProductivity 自動更新', () => {
+  const HOUR = 60 * 60 * 1000
+  let scope: ReturnType<typeof effectScope>
+
+  // 頁面卸載時 Vue 會停掉元件的 scope，用 effectScope 模擬同樣的生命週期
+  const setup = () => {
+    scope = effectScope()
+    const ctx = scope.run(() => useProductivity())!
+    ctx.startAutoRefresh()
+    return ctx
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    fetchSpy = vi.fn()
+    toastSpy.add.mockClear()
+  })
+
+  afterEach(() => {
+    scope?.stop()
+    vi.useRealTimers()
+  })
+
+  it('AC17：頁面開著時每小時重新呼叫一次 API，未滿一小時不呼叫', async () => {
+    fetchSpy.mockResolvedValue({ total: 1 })
+    setup()
+
+    await vi.advanceTimersByTimeAsync(HOUR - 1)
+    expect(fetchSpy).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(1)
+    expect(fetchSpy).toHaveBeenCalledTimes(1)
+    await vi.advanceTimersByTimeAsync(HOUR)
+    expect(fetchSpy).toHaveBeenCalledTimes(2)
+  })
+
+  it('AC17：重複啟動自動更新不會變成每小時呼叫多次', async () => {
+    fetchSpy.mockResolvedValue({ total: 1 })
+    const ctx = setup()
+    ctx.startAutoRefresh()
+
+    await vi.advanceTimersByTimeAsync(HOUR)
+    expect(fetchSpy).toHaveBeenCalledTimes(1)
+  })
+
+  it('AC17：已有統計時自動更新失敗，保留原本的統計並跳 toast', async () => {
+    const ctx = setup()
     fetchSpy.mockResolvedValueOnce({ total: 1 })
     await ctx.fetchSummary()
+
+    fetchSpy.mockRejectedValueOnce(new Error('boom'))
+    await vi.advanceTimersByTimeAsync(HOUR)
+
+    expect(ctx.summary.value).toEqual({ total: 1 })
+    expect(toastSpy.add).toHaveBeenCalledWith(expect.objectContaining({ color: 'error' }))
+  })
+
+  it('AC17：離開頁面後停止自動更新', async () => {
+    fetchSpy.mockResolvedValue({ total: 1 })
+    setup()
+    scope.stop()
+
+    await vi.advanceTimersByTimeAsync(HOUR * 3)
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it('AC15：載入失敗後等下一次自動更新重試，成功時 error 回到 false 並有統計', async () => {
+    const ctx = setup()
+    fetchSpy.mockRejectedValueOnce(new Error('boom'))
+    await ctx.fetchSummary()
+    expect(ctx.error.value).toBe(true)
+    expect(ctx.summary.value).toBeNull()
+
+    fetchSpy.mockResolvedValueOnce({ total: 1 })
+    await vi.advanceTimersByTimeAsync(HOUR)
+
     expect(ctx.error.value).toBe(false)
     expect(ctx.summary.value).toEqual({ total: 1 })
   })

@@ -211,3 +211,47 @@ def test_transform_jira_item_keeps_resolution_date_for_completion_time():
 
     assert jira.JIRA.completed_at(jira.transform_jira_item(raw)) == datetime(2026, 10, 2, 2, 0, tzinfo=timezone.utc)
     assert jira.JIRA.completed_at(jira.transform_jira_item(unresolved)) is None
+
+
+def test_transform_jira_item_converts_times_to_utc_datetime():
+    """AC19：updated、resolutiondate 轉成 UTC datetime（Jira 的時區是 +0800 這種沒有冒號的格式），缺值存 None 而不是空字串。"""
+    raw = {
+        "id": "1", "key": "JIRA-1",
+        "fields": {"status": {"name": "完成", "statusCategory": {"key": "done"}},
+                   "updated": "2026-10-02T10:00:00.000+0800",
+                   "resolutiondate": "2026-10-02T09:00:00.000+0800"},
+    }
+    missing = {"id": "2", "key": "JIRA-2", "fields": {"status": {"name": "To Do"}}}
+
+    result = jira.transform_jira_item(raw)
+    empty = jira.transform_jira_item(missing)
+
+    assert result["updated_at"] == datetime(2026, 10, 2, 2, 0, tzinfo=timezone.utc)
+    assert result["resolved_at"] == datetime(2026, 10, 2, 1, 0, tzinfo=timezone.utc)
+    assert result["updated_at"].utcoffset().total_seconds() == 0
+    assert empty["updated_at"] is None
+    assert empty["resolved_at"] is None
+
+
+def test_jira_completed_at_accepts_stored_datetime_and_old_string():
+    """AC19：資料庫讀出的 resolved_at 可能是新格式（不帶時區的 UTC datetime）或舊的 +0800 字串。"""
+    expected = datetime(2026, 10, 2, 2, 0, tzinfo=timezone.utc)
+
+    assert jira.JIRA.completed_at({"resolved_at": datetime(2026, 10, 2, 2, 0)}) == expected
+    assert jira.JIRA.completed_at({"resolved_at": "2026-10-02T10:00:00.000+0800"}) == expected
+
+
+def test_jira_issue_schema_reads_old_string_times_from_database():
+    """AC19：下次同步前，資料庫裡還有舊格式（+0800 字串、缺值存的空字串），回應時不能驗證失敗。"""
+    from schemas.jira import JiraIssue
+
+    base = {"id": "1", "key": "JIRA-1", "title": "t", "status": "s", "assignee": "", "avatar": "", "type": "", "iconUrl": ""}
+
+    old = JiraIssue(**base, updated_at="2026-10-02T10:00:00.000+0800", resolved_at="2026-10-02T10:00:00.000+0800")
+    old_empty = JiraIssue(**base, updated_at="")
+    new = JiraIssue(**base, updated_at=None)
+
+    assert old.updated_at == datetime(2026, 10, 2, 2, 0, tzinfo=timezone.utc)
+    assert old.resolved_at == datetime(2026, 10, 2, 2, 0, tzinfo=timezone.utc)
+    assert old_empty.updated_at is None
+    assert new.updated_at is None

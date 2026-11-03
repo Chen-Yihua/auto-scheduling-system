@@ -190,8 +190,8 @@ def test_transform_github_item_issue():
     assert result["number"] == 123
     assert result["title"] == "Test issue"
     assert result["status"] == "open"
-    assert result["created_at"] == "2024-01-01T00:00:00Z"
-    assert result["updated_at"] == "2024-01-02T00:00:00Z"
+    assert result["created_at"] == datetime(2024, 1, 1, tzinfo=timezone.utc)
+    assert result["updated_at"] == datetime(2024, 1, 2, tzinfo=timezone.utc)
     assert result["url"] == "https://github.com/example/repo/issues/123"
     assert result["isPR"] is False
     assert result["author"]["username"] == "alice"
@@ -276,3 +276,31 @@ def test_transform_github_item_keeps_closed_at_for_completion_time():
 
     assert github_mod.GITHUB.completed_at(closed) == datetime(2024, 1, 3, tzinfo=timezone.utc)
     assert github_mod.GITHUB.completed_at(still_open) is None
+
+
+def test_transform_github_item_converts_all_times_to_utc_datetime():
+    """AC19：created_at、updated_at、closed_at 都轉成 UTC datetime 再存，缺值存 None。"""
+    base = {"id": 1, "number": 1, "title": "t", "state": "closed", "html_url": "u"}
+
+    full = github_mod.transform_github_item({
+        **base,
+        "created_at": "2026-10-01T08:00:00Z",
+        "updated_at": "2026-10-02T10:00:00+08:00",
+        "closed_at": "2026-10-03T00:30:00Z",
+    })
+    missing = github_mod.transform_github_item({**base, "created_at": "2026-10-01T08:00:00Z"})
+
+    assert full["created_at"] == datetime(2026, 10, 1, 8, 0, tzinfo=timezone.utc)
+    assert full["updated_at"] == datetime(2026, 10, 2, 2, 0, tzinfo=timezone.utc)
+    assert full["closed_at"] == datetime(2026, 10, 3, 0, 30, tzinfo=timezone.utc)
+    assert full["updated_at"].utcoffset().total_seconds() == 0
+    assert missing["updated_at"] is None
+    assert missing["closed_at"] is None
+
+
+def test_github_completed_at_accepts_stored_datetime_and_old_string():
+    """AC19：資料庫讀出的 closed_at 可能是新格式（Mongo 回不帶時區的 UTC datetime）或舊的字串，都要算出同一個 UTC 時間。"""
+    expected = datetime(2026, 10, 3, 0, 30, tzinfo=timezone.utc)
+
+    assert github_mod.GITHUB.completed_at({"closed_at": datetime(2026, 10, 3, 0, 30)}) == expected
+    assert github_mod.GITHUB.completed_at({"closed_at": "2026-10-03T00:30:00Z"}) == expected

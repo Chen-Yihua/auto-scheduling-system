@@ -1,7 +1,9 @@
-import { ref } from 'vue'
+import { onScopeDispose, ref } from 'vue'
 import { useAuth } from '@clerk/vue'
 import type { ProductivitySummary } from '@/types/analytics'
 import { getFriendlyErrorTitle } from '@/utils/errorMessages'
+
+const AUTO_REFRESH_MS = 60 * 60 * 1000
 
 export function useProductivity() {
   const toast = useToast()
@@ -39,5 +41,21 @@ export function useProductivity() {
     }
   }
 
-  return { loading, summary, error, fetchSummary }
+  let refreshTimer: ReturnType<typeof setInterval> | null = null
+
+  const stopAutoRefresh = () => {
+    if (refreshTimer === null) return
+    clearInterval(refreshTimer)
+    refreshTimer = null
+  }
+
+  // 載入失敗也不另外重試，等下一次自動更新
+  const startAutoRefresh = () => {
+    if (refreshTimer !== null) return
+    refreshTimer = setInterval(fetchSummary, AUTO_REFRESH_MS)
+  }
+
+  onScopeDispose(stopAutoRefresh)
+
+  return { loading, summary, error, fetchSummary, startAutoRefresh, stopAutoRefresh }
 }

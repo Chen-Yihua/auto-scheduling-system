@@ -21,6 +21,7 @@ export interface WeeklyCompletion {
 }
 
 export interface ProductivitySummary {
+  generated_at: string // ISO 8601，UTC
   total: number
   done: number
   // 0 到 1；沒有任何項目時是 null

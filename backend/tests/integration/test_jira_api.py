@@ -57,7 +57,10 @@ async def test_get_jira_issues(monkeypatch, logged_in_user):
     assert body[0]["id"] == issue["id"]
     assert body[0]["status_category"] == ""
     for key, value in issue.items():
-        assert body[0][key] == value
+        if key != "updated_at":
+            assert body[0][key] == value
+    # AC19：資料庫裡舊的字串時間照樣讀得出來，回應統一成 UTC
+    assert body[0]["updated_at"] == "2024-01-01T00:00:00Z"
     assert res.headers["X-Data-Stale"] == "false"
 
 

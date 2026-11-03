@@ -1,12 +1,12 @@
 """Jira：指派給使用者的 issue。用 API Token（email:token 的 Base64）加上站台網域驗證。"""
 import logging
-from datetime import datetime
 
 import httpx
 from core.errors import AccessDeniedError, ExternalServiceError, ReauthRequiredError
 
 from core.crypto import encrypt_secret, decrypt_secret
 from platforms.sync import NonRetryableError, UpstreamError
+from core.datetimes import to_utc_datetime
 from platforms.base import PlatformAdapter, PlatformUserInfo
 from schemas.jira import JiraIssue
 
@@ -84,8 +84,8 @@ def transform_jira_item(raw: dict) -> dict:
         "status": status.get("name") or "",
         # 用 statusCategory 判斷完成：status.name 是各專案自訂的字串
         "status_category": status_category.get("key") or "",
-        "updated_at": fields.get("updated") or "",
-        "resolved_at": fields.get("resolutiondate"),
+        "updated_at": to_utc_datetime(fields.get("updated")),
+        "resolved_at": to_utc_datetime(fields.get("resolutiondate")),
         "assignee": assignee.get("displayName") or "",
         "avatar": avatar_urls.get("48x48") or "",
         "type": issuetype.get("name") or "",
@@ -146,8 +146,8 @@ class JiraPlatform(PlatformAdapter):
         return item.get("status_category") == "done"
 
     def completed_at(self, item):
-        resolved_at = item.get("resolved_at")
-        return datetime.fromisoformat(resolved_at) if resolved_at else None
+        # 資料庫裡可能還是舊的字串，下次同步才會換成 datetime
+        return to_utc_datetime(item.get("resolved_at"))
 
     async def verify_new_account(self, account):
         info = await fetch_jira_userinfo(account["apiKey"], account["domain"])

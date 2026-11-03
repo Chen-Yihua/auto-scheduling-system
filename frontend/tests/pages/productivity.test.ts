@@ -15,10 +15,11 @@ const loadingRef = vueRef(false)
 const errorRef = vueRef(false)
 const fetchSummarySpy = vi.fn()
 const startAutoRefreshSpy = vi.fn()
+const stopAutoRefreshSpy = vi.fn()
 vi.mock('~/composables/useProductivity', () => ({
   useProductivity: () => ({
     summary: summaryRef, loading: loadingRef, error: errorRef,
-    fetchSummary: fetchSummarySpy, startAutoRefresh: startAutoRefreshSpy, stopAutoRefresh: vi.fn(),
+    fetchSummary: fetchSummarySpy, startAutoRefresh: startAutoRefreshSpy, stopAutoRefresh: stopAutoRefreshSpy,
   }),
 }))
 
@@ -68,6 +69,7 @@ describe('pages/productivity.vue', () => {
     errorRef.value = false
     fetchSummarySpy.mockReset()
     startAutoRefreshSpy.mockReset()
+    stopAutoRefreshSpy.mockReset()
   })
 
   it('登入後抓取統計，數字卡片顯示完成率、逾期、剩餘工時、準時率（沒有資料顯示「—」）', async () => {
@@ -140,6 +142,17 @@ describe('pages/productivity.vue', () => {
     await flushPromises()
 
     expect(startAutoRefreshSpy).toHaveBeenCalledOnce()
+  })
+
+  it('AC17：頁面開著時登出，停止自動更新', async () => {
+    render()
+    await flushPromises()
+    expect(stopAutoRefreshSpy).not.toHaveBeenCalled()
+
+    isSignedInRef.value = false
+    await flushPromises()
+
+    expect(stopAutoRefreshSpy).toHaveBeenCalledOnce()
   })
 
   it('AC15：載入失敗且還沒有統計時顯示錯誤狀態與等待自動更新的說明，沒有任何按鈕', async () => {

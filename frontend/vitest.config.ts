@@ -2,6 +2,9 @@ import { defineConfig } from 'vitest/config'
 import vue from '@vitejs/plugin-vue'
 import path from 'path'
 
+// 固定非 UTC 時區：CI 是 UTC，分不出「當地時間」和 UTC 的顯示錯誤
+process.env.TZ = 'Asia/Taipei'
+
 export default defineConfig({
   plugins: [vue()],
   test: {

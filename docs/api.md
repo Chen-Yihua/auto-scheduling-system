@@ -54,6 +54,12 @@
 | POST | `/schedule/suggest` | ✅ | `SchedulePreferences` | `ScheduleSuggestion` | 產生建議並存成快照，不寫入行事曆 |
 | POST | `/schedule/confirm` | ✅ | — | `ScheduleConfirmResult` | 把快照寫入 Google Calendar；快照過期回 409 |
 
+## 工作效率統計
+
+| 方法 | 路徑 | 登入 | Request | Response | 說明 |
+|---|---|---|---|---|---|
+| GET | `/analytics/productivity` | ✅ | query `timezone`（IANA 時區，預設 `UTC`） | `ProductivitySummary` | 彙總可排程項目的完成狀況與週趨勢；時區不合法回 400 |
+
 ## Google Calendar
 
 | 方法 | 路徑 | 登入 | Request | 說明 |

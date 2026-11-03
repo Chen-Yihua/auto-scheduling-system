@@ -27,6 +27,16 @@ watch(user, (newUser) => {
     </p>
     <ColorModeButton />
 
+    <UButton
+      to="/productivity"
+      icon="i-lucide-chart-column"
+      aria-label="工作效率"
+      title="工作效率"
+      color="neutral"
+      variant="ghost"
+      size="md"
+    />
+
     <!-- 訪客也顯示但停用，讓版面一致 -->
     <UButton
       icon="mdi-file-edit"

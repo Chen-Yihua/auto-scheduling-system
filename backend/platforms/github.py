@@ -6,6 +6,7 @@ from core.errors import AccessDeniedError, ExternalServiceError, ReauthRequiredE
 
 from core.crypto import encrypt_secret
 from platforms.sync import NonRetryableError, UpstreamError
+from core.datetimes import to_utc_datetime
 from platforms.base import PlatformAdapter, PlatformUserInfo
 from schemas.github import GitHubIssue
 
@@ -72,8 +73,9 @@ def transform_github_item(raw: dict) -> dict:
         "number": raw["number"],  # 顯示用
         "title": raw["title"],
         "status": raw["state"],
-        "created_at": raw["created_at"],
-        "updated_at": raw.get("updated_at"),
+        "created_at": to_utc_datetime(raw["created_at"]),
+        "updated_at": to_utc_datetime(raw.get("updated_at")),
+        "closed_at": to_utc_datetime(raw.get("closed_at")),
         "url": raw["html_url"],
         "isPR": "pull_request" in raw,
         "author": {
@@ -136,6 +138,10 @@ class GithubPlatform(PlatformAdapter):
 
     def is_done(self, item):
         return item.get("status") == "closed"
+
+    def completed_at(self, item):
+        # 資料庫裡可能還是舊的字串，下次同步才會換成 datetime
+        return to_utc_datetime(item.get("closed_at"))
 
     async def verify_new_account(self, account):
         info = await fetch_github_userinfo(account["apiKey"])

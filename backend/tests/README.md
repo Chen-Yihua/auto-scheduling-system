@@ -38,6 +38,7 @@ pytest                     # 全部（CI 用這個）
 | github / jira / moodle | ✅（`_platform`） | ✅（共用 `test_platform_router.py`） | ✅ | `test_platform_sync.py` |
 | google calendar | ✅（`test_google_tokens.py`） | ✅ | ✅ | `test_google_calendar_service.py`、`_client` |
 | schedule | ✅（`test_scheduler.py`） | ✅ | ✅ | |
+| analytics | ✅（`test_productivity.py`） | — | ✅ | `_scenario` |
 | linked account | ✅ | ✅ | ✅ | `_scenario`、`_secrets` |
 | manual task | ✅ | ✅ | ✅ | `_scenario`、`test_task_inference.py` |
 | user | ✅ | — | ✅ | `test_user_webhook.py` |

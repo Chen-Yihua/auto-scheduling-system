@@ -86,7 +86,7 @@ const openJiraIssue = (key: string) => {
           <span class="text-xs text-gray-500">{{ issue.assignee }}</span>
         </div>
 
-        <template #footer>
+        <template v-if="issue.updated_at" #footer>
           <div class="text-xs text-gray-400">
             更新於 {{ new Date(issue.updated_at).toLocaleDateString() }}
           </div>

@@ -10,6 +10,7 @@ export interface GitHubAuthor {
     status: string
     created_at: string
     updated_at?: string
+    closed_at?: string | null
     url: string
     isPR: boolean
     author?: GitHubAuthor

@@ -129,4 +129,17 @@ describe('JiraIssuesList.vue', () => {
     expect(wrapper.text()).not.toContain('ISSUE-3')
     expect(wrapper.text()).toContain('查看全部（3）')
   })
+
+  it('AC19：updated_at 是 null（平台沒給更新時間）時不顯示「更新於」', () => {
+    const issues = [baseIssue, { ...baseIssue, id: '2', key: 'ISSUE-2', updated_at: null }]
+    const wrapper = mount(JiraIssuesList, {
+      props: { issues, loading: false },
+      global: { stubs: uiStubs },
+    })
+
+    const cards = wrapper.findAll('.u-card-stub')
+    expect(cards[1].text()).toContain('更新於')
+    expect(cards[2].text()).not.toContain('更新於')
+    expect(cards[2].text()).not.toContain('1970')
+  })
 })

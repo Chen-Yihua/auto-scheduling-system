@@ -21,7 +21,7 @@ Hacker News 不經過後端，由瀏覽器直接呼叫公開 API。
 routers/     HTTP 進出：驗證登入、組回應；只有這層用 HTTPException
    │
    ├── crud/        讀寫 MongoDB
-   ├── services/    商業邏輯（排程計算、AI 推估、Google Calendar）
+   ├── services/    商業邏輯（排程計算、AI 推估、Google Calendar、工作效率統計）
    └── platforms/   外部平台 adapter（GitHub、Jira、Moodle），由 PLATFORMS 註冊表統一產生路由
    │
 core/        共用：資料庫連線、加密、限流、快取、錯誤型別與全域例外處理
@@ -42,9 +42,9 @@ crud、services、platforms 丟 `core/errors.py` 的例外，由 `core/exception
 
 ## 主要資料流
 
-**外部平台同步**：每次讀取都即時向平台抓資料並 upsert 進對應的 collection，平台上已不存在的項目會刪除。抓取失敗時退回上次成功的資料，並以 `X-Data-Stale` / `X-Auth-Error` header 告訴前端。同步只 `$set` 平台回傳的欄位，所以使用者設定的排程欄位（priority、duration、done 等）不會被覆蓋。
+**外部平台同步**：每次讀取都即時向平台抓資料並 upsert 進對應的 collection，平台上已不存在的項目會刪除。抓取失敗時退回上次成功的資料，並以 `X-Data-Stale` / `X-Auth-Error` header 告訴前端。同步只 `$set` 平台回傳的欄位，所以使用者設定的排程欄位（priority、duration、done、completed_at 等）不會被覆蓋。
 
-**可排程項目**：`crud/schedulable_items.py` 把手動任務和三個平台的項目統一成同一種格式，id 加上來源前綴（例如 `github:42`）。排程精靈和標記完成都用這份清單。
+**可排程項目**：`crud/schedulable_items.py` 把手動任務和三個平台的項目統一成同一種格式，id 加上來源前綴（例如 `github:42`）。排程精靈、標記完成和工作效率統計都用這份清單。
 
 **排程建議與確認**：`POST /schedule/suggest` 以 Google Calendar 空檔扣掉不工作時段後計算建議，並把結果存成快照；`POST /schedule/confirm` 只寫入快照內容，不重新計算，同一份快照只能確認一次。
 

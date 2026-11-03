@@ -4,6 +4,7 @@
 新增平台：在 platforms/ 寫一個 PlatformAdapter 子類別，再到 platforms/__init__.py
 的 PLATFORMS 註冊。
 """
+from datetime import datetime
 from typing import Awaitable, Callable, Optional, TypedDict
 
 from core.database import db
@@ -69,6 +70,10 @@ class PlatformAdapter:
     def is_done(self, item: dict) -> bool:
         """平台回報的完成狀態。拿不到狀態的平台回 False，只靠使用者手動標記。"""
         return False
+
+    def completed_at(self, item: dict) -> Optional[datetime]:
+        """平台記錄的完成時間。拿不到的平台回 None，改用使用者手動標記的時間。"""
+        return None
 
     # ---------- 連結帳號時的驗證 ----------
 

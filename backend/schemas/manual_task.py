@@ -51,3 +51,5 @@ class ManualTaskOut(BaseModel):
     sort_order: Optional[int] = None
     # 確認排程後寫入的 Google Calendar 事件 id；有值的任務不再參與排程
     calendar_event_id: Optional[str] = None
+    # 變成 Done 的時間，由後端在狀態改變時寫入；ManualTaskUpdate 不含這欄，避免 client 竄改統計
+    completed_at: Optional[datetime] = None

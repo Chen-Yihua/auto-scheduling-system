@@ -1,7 +1,7 @@
 import logging
 from datetime import datetime, timezone
 from core.database import db
-from schemas.manual_task import ManualTaskOut
+from schemas.manual_task import ManualTaskOut, StatusEnum
 from core.errors import InvalidRequestError, NotFoundError
 from pymongo.errors import DuplicateKeyError
 
@@ -12,6 +12,15 @@ logger = logging.getLogger(__name__)
 def _to_task(doc: dict) -> dict:
     doc["id"] = doc.pop("_id")
     return doc
+
+
+def completed_at_after_status_change(previous_status, previous_completed_at, new_status, now: datetime):
+    """本來就是 Done 要保留原值，否則每次編輯已完成的任務都會把它算成這週完成。"""
+    if new_status != StatusEnum.done:
+        return None
+    if previous_status == StatusEnum.done:
+        return previous_completed_at
+    return now
 
 
 async def get_manual_task_by_idempotency_key(user_id: str, idempotency_key: str) -> dict | None:
@@ -48,6 +57,7 @@ async def create_manual_task(task: ManualTaskOut, idempotency_key: str | None = 
         "inference_hint": doc.get("inference_hint"),
         "sort_order": doc.get("sort_order"),
         "calendar_event_id": doc.get("calendar_event_id"),
+        "completed_at": doc.get("completed_at"),
     }
 
 async def get_manual_task_by_id(task_id: str, user_id: str):

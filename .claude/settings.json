@@ -4,11 +4,14 @@
       "Bash(gh pr checks *)",
       "Bash(gh pr view *)",
       "Bash(gh run view *)",
-      "Bash(gh run list *)"
+      "Bash(gh run list *)",
+      "Bash(git push *)",
+      "Bash(gh pr create *)"
     ],
     "deny": [
       "Read(**/.env)",
-      "Read(**/.env.local)"
+      "Read(**/.env.local)",
+      "Bash(gh pr merge *)"
     ]
   }
 }

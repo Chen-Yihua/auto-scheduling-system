@@ -3,7 +3,7 @@ load_dotenv()
 
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends
-from routers import user, linked_account, pr_review_webhook, manual_task, google_calendar, schedule
+from routers import user, linked_account, pr_review_webhook, manual_task, google_calendar, schedule, analytics
 from platforms.router import platform_routers
 from fastapi.middleware.cors import CORSMiddleware
 import os
@@ -64,6 +64,7 @@ app.include_router(pr_review_webhook.router)
 app.include_router(google_calendar.router)
 app.include_router(manual_task.router)
 app.include_router(schedule.router)
+app.include_router(analytics.router)
 # 外部平台的路由依 PLATFORMS 自動產生
 for platform_router in platform_routers:
     app.include_router(platform_router)

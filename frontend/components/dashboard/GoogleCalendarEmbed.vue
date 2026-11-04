@@ -6,6 +6,7 @@ const props = defineProps<{
   id: string;
   connect: boolean;
   connecting?: boolean; // 後端正在完成授權
+  needsReconnect?: boolean; // 已連接過，但 token 不能用了
   // 遞增時強制 iframe 重新載入，否則看不到新寫入的事件
   reloadToken?: number;
 }>();
@@ -39,6 +40,13 @@ const calendarUrl = computed(() => {
         frameborder="0"
         scrolling="no"
       />
+    </div>
+
+    <div
+      v-else-if="needsReconnect"
+      class="text-center text-sm text-gray-500 dark:text-gray-400 py-6"
+    >
+      Google Calendar 授權已失效，請重新連接。
     </div>
 
     <div

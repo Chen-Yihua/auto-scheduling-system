@@ -1,12 +1,19 @@
 # 透過 HTTP 確認路由、登入驗證、回應格式和錯誤狀態碼；細部邏輯由 unit 測試負責
+import httpx
 import pytest
+from cryptography.fernet import Fernet
 from fastapi import HTTPException, status
 from httpx import AsyncClient
 from httpx._transports.asgi import ASGITransport
 
 from main import app
+from core import cache
+from core.crypto import encrypt_secret
+from core.database import db
 import routers.google_calendar as google_calendar_router
+import routers.schedule as schedule_router
 import services.google_calendar as calendar_service
+import services.google_oauth as google_oauth
 
 
 @pytest.mark.asyncio
@@ -57,3 +64,77 @@ async def test_get_google_calendar_status_requires_login():
         res = await ac.get("/oauth/status")
 
     assert res.status_code in (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN)
+
+
+def _unauthorized_error() -> httpx.HTTPStatusError:
+    request = httpx.Request("GET", "https://example.com")
+    return httpx.HTTPStatusError("Unauthorized", request=request, response=httpx.Response(401, request=request))
+
+
+def _token_unusable(monkeypatch, case: str) -> list:
+    """讓 DB 裡的 Google token 照 case 的方式不能用；回傳記錄 delete_one 呼叫的 list。"""
+    other_key = Fernet(Fernet.generate_key())
+    access_token = encrypt_secret("expired-token")
+    refresh_token = encrypt_secret("rt")
+    if case == "decrypt_failed":
+        access_token = other_key.encrypt(b"at").decode()
+
+    async def mock_find_one(query):
+        return {"_id": "test_user_123", "access_token": access_token, "refresh_token": refresh_token}
+
+    deleted = []
+
+    async def mock_delete_one(query):
+        deleted.append(query)
+
+    async def mock_fetch_calendar_list(token):
+        raise _unauthorized_error()
+
+    monkeypatch.setattr(db.googleCalendarTokens, "find_one", mock_find_one)
+    monkeypatch.setattr(db.googleCalendarTokens, "delete_one", mock_delete_one)
+    monkeypatch.setattr(calendar_service, "fetch_google_calendar_list", mock_fetch_calendar_list)
+
+    if case == "unauthorized_client":
+        real_client = httpx.AsyncClient
+        transport = httpx.MockTransport(lambda request: httpx.Response(401, text='{"error": "unauthorized_client"}'))
+        monkeypatch.setattr(google_oauth.httpx, "AsyncClient", lambda *a, **k: real_client(transport=transport))
+    elif case == "still_401_after_refresh":
+        async def mock_refresh(clerk_id):
+            return "new-token"
+
+        monkeypatch.setattr(calendar_service, "refresh_google_calendar_token", mock_refresh)
+    return deleted
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("case", ["unauthorized_client", "decrypt_failed", "still_401_after_refresh"])
+async def test_get_calendars_requires_reauth_when_token_unusable(monkeypatch, logged_in_user, case):
+    """AC2：GET /oauth/calendars 在 token 不能用時（unauthorized_client／解密失敗／換新後仍 401）回 401，
+    detail 請使用者重新連接 Google Calendar，而且不刪 DB 裡的 token。"""
+    deleted = _token_unusable(monkeypatch, case)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        res = await ac.get("/oauth/calendars")
+
+    assert res.status_code == status.HTTP_401_UNAUTHORIZED
+    assert "重新連接 Google Calendar" in res.json()["detail"]
+    assert deleted == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("case", ["unauthorized_client", "decrypt_failed", "still_401_after_refresh"])
+async def test_schedule_suggest_requires_reauth_when_token_unusable(monkeypatch, logged_in_user, case):
+    """AC2：POST /schedule/suggest 在 token 不能用時也回 401 請使用者重新連接，不刪 token。"""
+    async def mock_get_tasks(user_id):
+        return []
+
+    cache._memory_store.clear()  # 空檔有快取，不清掉可能直接用到別的測試留下的結果
+    monkeypatch.setattr(schedule_router, "get_all_schedulable_items", mock_get_tasks)
+    deleted = _token_unusable(monkeypatch, case)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        res = await ac.post("/schedule/suggest", json={})
+
+    assert res.status_code == status.HTTP_401_UNAUTHORIZED
+    assert "重新連接 Google Calendar" in res.json()["detail"]
+    assert deleted == []

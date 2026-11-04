@@ -1,8 +1,9 @@
 """token 換新和錯誤處理由各功能共用，這裡透過 get_free_slots_for_user 測試。"""
 import pytest
-from core.errors import ExternalServiceError, InvalidRequestError, NotFoundError
+from core.errors import ExternalServiceError, InvalidRequestError, NotFoundError, ReauthRequiredError
 import httpx
 from datetime import datetime, timezone
+from cryptography.fernet import Fernet
 
 from core import cache
 from core.crypto import encrypt_secret
@@ -261,6 +262,85 @@ async def test_get_free_slots_raises_502_when_freebusy_unreachable(monkeypatch):
     with pytest.raises(ExternalServiceError):
         await calendar_service.get_free_slots_for_user("uid123")
 
+
+
+def _encrypt_with_other_key(plain: str) -> str:
+    """用另一把 SECRET_ENCRYPTION_KEY 加密，模擬另一個環境寫進共用 DB 的 token。"""
+    return Fernet(Fernet.generate_key()).encrypt(plain.encode()).decode()
+
+
+def _unauthorized_error() -> httpx.HTTPStatusError:
+    request = httpx.Request("GET", "https://example.com")
+    return httpx.HTTPStatusError("Unauthorized", request=request, response=httpx.Response(401, request=request))
+
+
+@pytest.mark.asyncio
+async def test_get_free_slots_requires_reauth_when_access_token_cannot_be_decrypted(monkeypatch):
+    """AC2(b)：存的 access token 解不開 → 401 請使用者重新連接，不是沒被處理的 500；不刪 token。"""
+    async def mock_find_one(query):
+        return {"_id": "uid123", "access_token": _encrypt_with_other_key("at"), "refresh_token": encrypt_secret("rt")}
+
+    deleted = []
+
+    async def mock_delete_one(query):
+        deleted.append(query)
+
+    monkeypatch.setattr(google_tokens.db.googleCalendarTokens, "find_one", mock_find_one)
+    monkeypatch.setattr(google_tokens.db.googleCalendarTokens, "delete_one", mock_delete_one)
+
+    with pytest.raises(ReauthRequiredError, match="重新連接 Google Calendar"):
+        await calendar_service.get_free_slots_for_user("uid123")
+
+    assert deleted == []
+
+
+@pytest.mark.asyncio
+async def test_get_free_slots_requires_reauth_when_refresh_token_cannot_be_decrypted(monkeypatch):
+    """AC2(b)：access token 過期、要換新時 refresh token 解不開 → 401 請使用者重新連接；不刪 token。"""
+    async def mock_find_one(query):
+        return {"_id": "uid123", "access_token": encrypt_secret("expired-token"), "refresh_token": _encrypt_with_other_key("rt")}
+
+    async def mock_fetch_calendar_list(token):
+        raise _unauthorized_error()
+
+    deleted = []
+
+    async def mock_delete_one(query):
+        deleted.append(query)
+
+    monkeypatch.setattr(google_tokens.db.googleCalendarTokens, "find_one", mock_find_one)
+    monkeypatch.setattr(google_tokens.db.googleCalendarTokens, "delete_one", mock_delete_one)
+    monkeypatch.setattr(calendar_service, "fetch_google_calendar_list", mock_fetch_calendar_list)
+
+    with pytest.raises(ReauthRequiredError, match="重新連接 Google Calendar"):
+        await calendar_service.get_free_slots_for_user("uid123")
+
+    assert deleted == []
+
+
+@pytest.mark.asyncio
+async def test_get_free_slots_requires_reauth_when_calendar_list_still_401_after_refresh(monkeypatch):
+    """AC2(c)：換新 token 後重試行事曆列表，Google 還是回 401 → 401 請使用者重新連接，不是沒被處理的 500。"""
+    async def mock_find_one(query):
+        return {"_id": "uid123", "access_token": encrypt_secret("expired-token"), "refresh_token": encrypt_secret("rt")}
+
+    calls = []
+
+    async def mock_fetch_calendar_list(token):
+        calls.append(token)
+        raise _unauthorized_error()
+
+    async def mock_refresh(clerk_id):
+        return "new-token"
+
+    monkeypatch.setattr(google_tokens.db.googleCalendarTokens, "find_one", mock_find_one)
+    monkeypatch.setattr(calendar_service, "fetch_google_calendar_list", mock_fetch_calendar_list)
+    monkeypatch.setattr(calendar_service, "refresh_google_calendar_token", mock_refresh)
+
+    with pytest.raises(ReauthRequiredError, match="重新連接 Google Calendar"):
+        await calendar_service.get_free_slots_for_user("uid123")
+
+    assert calls == ["expired-token", "new-token"]
 
 
 # ========== list_calendars_for_user ==========

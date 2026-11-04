@@ -17,7 +17,7 @@ import MoodleAssignmentsList from '~/components/platforms/MoodleAssignmentsList.
 const github = reactive(usePlatformItems('github'));
 const jira = reactive(usePlatformItems('jira'));
 const moodle = reactive(usePlatformItems('moodle'));
-const { calendarIds, primaryCalendarId, fetchGoogleCalendars, isConnected, calendarReloadToken } = useGoogleCalendar();
+const { calendarIds, primaryCalendarId, fetchGoogleCalendars, isConnected, needsReconnect, calendarReloadToken } = useGoogleCalendar();
 const { isSignedIn } = useUser();
 const { connecting: googleConnecting, connectedCount: googleConnectedCount } = useGoogleCalendarAuth();
 
@@ -74,6 +74,7 @@ watch(googleConnectedCount, () => {
           :calendar-ids="calendarIds"
           :connect="isConnected"
           :connecting="googleConnecting"
+          :needs-reconnect="needsReconnect"
           :reload-token="calendarReloadToken"
         />
         <LoginRequiredCard v-else title="Google 行事曆" icon="i-lucide-calendar" message="登入後即可查看 Google 行事曆" />

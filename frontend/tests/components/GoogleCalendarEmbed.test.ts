@@ -39,6 +39,27 @@ describe('GoogleCalendarEmbed.vue', () => {
     expect(wrapper.text()).toContain('尚未連接 Google Calendar')
   })
 
+  it('AC1：needsReconnect=true 時顯示「授權已失效，請重新連接」，不顯示「尚未連接」', () => {
+    const wrapper = mount(GoogleCalendarEmbed, {
+      props: { calendarIds: [], id: 'bar', connect: false, needsReconnect: true },
+      global: { stubs: uiStubs },
+    })
+
+    expect(wrapper.text()).toContain('Google Calendar 授權已失效，請重新連接')
+    expect(wrapper.text()).not.toContain('尚未連接')
+    expect(wrapper.find('iframe').exists()).toBe(false)
+  })
+
+  it('AC6：重新連接成功（connect=true）後，即使 needsReconnect 還沒更新也顯示行事曆，不顯示「授權已失效」', () => {
+    const wrapper = mount(GoogleCalendarEmbed, {
+      props: { calendarIds: ['cal1'], id: 'foo', connect: true, needsReconnect: false },
+      global: { stubs: uiStubs },
+    })
+
+    expect(wrapper.find('iframe').exists()).toBe(true)
+    expect(wrapper.text()).not.toContain('授權已失效')
+  })
+
   it('connecting=true 時只在這張卡片顯示「連接中」，不顯示未連線提示，也沒有 iframe', () => {
     const wrapper = mount(GoogleCalendarEmbed, {
       props: { calendarIds: [], id: 'baz', connect: false, connecting: true },

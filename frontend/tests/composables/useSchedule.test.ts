@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { ref as vueRef, computed as vueComputed } from 'vue'
+import { ref as vueRef, computed as vueComputed, type Ref } from 'vue'
 
 import { useSchedule } from '~/composables/useSchedule'
 import { useGoogleCalendar } from '~/composables/useGoogleCalendar'
@@ -17,10 +17,19 @@ vi.stubGlobal('computed', vueComputed)
 const toastSpy = { add: vi.fn() }
 vi.stubGlobal('useToast', () => toastSpy)
 vi.stubGlobal('useRuntimeConfig', () => ({
-  public: { apiBaseUrl: 'http://api' },
+  public: { apiBaseUrl: 'http://api', frontEndUrl: 'http://front', apiGoogleClientId: 'google-client-id' },
 }))
 
+// Nuxt 的 useState：同一個 key 在所有元件之間共用同一份狀態
+const stateStore = new Map<string, Ref<unknown>>()
+vi.stubGlobal('useState', (key: string, init: () => unknown) => {
+  if (!stateStore.has(key)) stateStore.set(key, vueRef(init()))
+  return stateStore.get(key)
+})
+
 let fetchSpy = vi.fn()
+// 按下重新連接會改 window.location.href，測完要換回 jsdom 原本的
+const realLocation = window.location
 vi.stubGlobal('$fetch', (...args: unknown[]) => fetchSpy(...args))
 
 describe('useSchedule composable', () => {
@@ -110,6 +119,24 @@ describe('useSchedule composable', () => {
     expect(toastSpy.add).toHaveBeenCalledWith(
       expect.objectContaining({ title: 'Google Calendar 授權已失效', color: 'error' }),
     )
+  })
+
+  it('AC5：產生建議時授權失效（401）→ toast 和首頁一樣有「重新連接 Google Calendar」按鈕，按下導到 Google 授權頁', async () => {
+    fetchSpy.mockRejectedValueOnce({ response: { status: 401 } })
+    vi.stubGlobal('location', { href: '' })
+
+    const ctx = useSchedule()
+    await ctx.fetchScheduleSuggestion()
+
+    const toast = toastSpy.add.mock.calls[0]![0]
+    expect(toast.description).toContain('重新連接')
+    expect(toast.actions).toHaveLength(1)
+    expect(toast.actions[0].label).toBe('重新連接 Google Calendar')
+
+    toast.actions[0].onClick()
+    expect(window.location.href).toContain('https://accounts.google.com/o/oauth2/v2/auth?')
+    expect(window.location.href).toContain('client_id=google-client-id')
+    vi.stubGlobal('location', realLocation)
   })
 
   it('其他錯誤 → 清空清單並跳出通用錯誤 toast', async () => {

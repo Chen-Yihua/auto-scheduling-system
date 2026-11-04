@@ -15,6 +15,8 @@ vi.stubGlobal('useState', (key: string, init: () => unknown) => {
   return stateStore.get(key)
 })
 
+vi.stubGlobal('useRuntimeConfig', () => ({ public: { apiBaseUrl: 'http://api' } }))
+
 // ---------- Clerk mock：isSignedIn 可由測試動態控制 ----------
 const isSignedInRef = ref<boolean | undefined>(undefined)
 
@@ -40,7 +42,9 @@ vi.mock('@/composables/usePlatformItems', () => ({
 }))
 
 const calendarReloadTokenRef = ref(0)
+const needsReconnectRef = ref(false)
 vi.stubGlobal('useGoogleCalendar', () => ({
+  needsReconnect: needsReconnectRef,
   calendarIds: ref([]),
   primaryCalendarId: ref(''),
   fetchGoogleCalendars: fetchGoogleCalendarsSpy,
@@ -179,6 +183,22 @@ describe('dashboard/Dashboard.vue', () => {
     for (const name of ['TaskForm', 'ScheduleSuggestion', 'MoodleAssignmentsList', 'GithubIssuesList', 'JiraIssuesList', 'News', 'Leetcode']) {
       expect(wrapper.findComponent({ name }).exists(), name).toBe(true)
     }
+  })
+
+  it('AC1：Google 授權失效時，行事曆卡片收到 needsReconnect，改顯示「授權已失效」', async () => {
+    isSignedInRef.value = true
+    needsReconnectRef.value = false
+    const wrapper = mount(Dashboard, { global: { stubs: uiStubs } })
+    activeWrapper = wrapper
+    await wrapper.vm.$nextTick()
+
+    const calendar = wrapper.findComponent({ name: 'GoogleCalendarEmbed' })
+    expect(calendar.props('needsReconnect')).toBe(false)
+
+    needsReconnectRef.value = true
+    await wrapper.vm.$nextTick()
+
+    expect(calendar.props('needsReconnect')).toBe(true)
   })
 
   it('Google 授權完成（連接成功次數 +1）時，重新查一次行事曆，卡片才會換成行事曆', async () => {

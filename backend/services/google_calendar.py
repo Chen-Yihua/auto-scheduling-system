@@ -2,11 +2,11 @@
 import logging
 
 import httpx
-from core.errors import AppError, ExternalServiceError, InvalidRequestError, NotFoundError
+from core.errors import AppError, ExternalServiceError, InvalidRequestError, NotFoundError, ReauthRequiredError
 
 from core.cache import cache_get, cache_set
 from crud.google_tokens import get_google_calendar_token
-from services.google_oauth import refresh_google_calendar_token
+from services.google_oauth import GOOGLE_REAUTH_DETAIL, refresh_google_calendar_token
 from crud.schedulable_items import set_calendar_event_id_for_composite
 from services.google_calendar_client import (
     fetch_google_calendar_list,
@@ -30,12 +30,28 @@ def _google_error(e: httpx.HTTPStatusError, detail: str) -> AppError:
     return InvalidRequestError(detail)
 
 
+async def _fetch_calendar_list_after_refresh(access_token: str) -> list[dict]:
+    """換新 token 後仍回 401，代表授權本身不能用，再換也沒用，要請使用者重新連接。"""
+    try:
+        return await fetch_google_calendar_list(access_token)
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 401:
+            logger.warning("換新 token 後 Google Calendar 仍回 401: %s", e.response.text)
+            raise ReauthRequiredError(GOOGLE_REAUTH_DETAIL)
+        raise
+
+
 async def _get_access_token_and_calendars(clerk_id: str) -> tuple[str, list[dict]]:
     """
     取得行事曆列表，401 時換新 token 重試。
     回傳的 access_token 可能已換新，呼叫端之後的請求要用它。
     """
-    access_token = await get_google_calendar_token(clerk_id)
+    try:
+        access_token = await get_google_calendar_token(clerk_id)
+    except ValueError:
+        # 不刪 token：正式和開發環境共用 DB，可能是另一個環境用它自己的金鑰加密的
+        logger.warning("Google access token 解密失敗 clerk_id=%s", clerk_id)
+        raise ReauthRequiredError(GOOGLE_REAUTH_DETAIL)
     if not access_token:
         raise InvalidRequestError("尚未連接 Google Calendar")
 
@@ -44,7 +60,7 @@ async def _get_access_token_and_calendars(clerk_id: str) -> tuple[str, list[dict
     except httpx.HTTPStatusError as e:
         if e.response.status_code == 401:
             access_token = await refresh_google_calendar_token(clerk_id)
-            calendars = await fetch_google_calendar_list(access_token)
+            calendars = await _fetch_calendar_list_after_refresh(access_token)
         else:
             raise _google_error(e, "取得行事曆列表失敗")
     except httpx.RequestError as e:

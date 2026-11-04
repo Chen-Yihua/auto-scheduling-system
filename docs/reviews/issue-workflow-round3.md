@@ -43,7 +43,7 @@
 
 ## 處理結果
 
-| # | 處理 | 決定者 | commit / 連結 |
+| # | 處理 | 決定者 | commit / issue / advisory 編號 |
 |---|---|---|---|
 | 1 | 漏洞在 main 已有的程式 → advisory 的 temporary private fork 修；只在本 PR 新增的程式 → 同一個 PR 修，所有公開文字一般化。AC10 範圍加上規格檔與測試名稱，新增 AC11 | 開發者（選「private fork 修 main 的漏洞」「新程式在同一個 PR 修，文字一般化」） | `b66a199` |
 | 2 | 待開發者在 `.claude/settings.json` 加 deny `Bash(gh api *merge*)` 並 commit | 開發者 | 待處理 |

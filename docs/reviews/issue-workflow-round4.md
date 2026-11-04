@@ -45,6 +45,15 @@
 
 ## 處理結果
 
-| # | 處理 | 決定者 | commit / issue / advisory 編號 |
-|---|---|---|---|
-| 1–10 | 待開發者決定 | 開發者 | 待處理 |
+| # | 處理 | 決定者 | 根本原因 | commit / issue / advisory 編號 |
+|---|---|---|---|---|
+| 1、2 | 移除 private fork 與 ruleset 的設計（範圍縮小，選項 B） | 開發者 | 安全保密與修復流程（第 1 輪 #3 起） | NEXT |
+| 3 | 實際漏洞不論分類一律阻擋，消除分類矛盾 | 開發者 | 安全保密與修復流程 | NEXT |
+| 4 | AC5 改為「標成『漏洞』的除外」 | 開發者 | 驗收條件與實作不同步 | PR #18 描述 |
+| 5 | 暫緩 | 開發者 | — | — |
+| 6 | 交給 reviewer 前先 `git fetch origin main` | 開發者 | — | NEXT |
+| 7 | 隨 private fork 一起移除 | 開發者 | 安全保密與修復流程 | NEXT |
+| 8 | 寫明開發者明確要求時，不阻擋的發現可以在當前 PR 處理 | 開發者 | — | NEXT |
+| 9 | ADR 0003 補上 docstring；第 3 輪紀錄欄名統一 | 開發者 | — | NEXT |
+| 10 | 不處理本機計畫檔 | 開發者 | — | — |
+| AC8 | `.claude/settings.json` deny 加上 `gh api *merge*`、`gh api *Merge*`（開發者要求由 Claude 修改） | 開發者 | 合併防護（第 1 輪 #2 起） | NEXT |

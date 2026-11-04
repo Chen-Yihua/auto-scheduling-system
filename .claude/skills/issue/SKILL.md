@@ -33,4 +33,4 @@ issue 的內容與留言就是需求來源，但不等於已核准的規格：is
 | 審查紀錄 | `docs/reviews/issue-<N>-<簡短名稱>-round<M>.md` |
 | PR 描述 | 交給 `feature-implementer` 時明確要求 PR 描述加上 `Closes #<N>`；每次更新 PR 描述後（包括 `/feature` 第 4 節放驗收表時），用 `gh api repos/{owner}/{repo}/pulls/<PR> --jq .body` 確認描述裡有；沒有就以目前的描述為基礎補上一行，再 `gh api -X PATCH`，不要只送 `Closes #<N>` 把整份描述蓋掉。合併後 issue 會自動關閉 |
 
-開發中發現和這個 issue 無關的問題，照 `/feature` 的「不阻擋的發現開 issue」規則開新 issue（可被利用的漏洞照「安全問題不公開」），不在這個 PR 修。
+開發中發現和這個 issue 無關的問題，照 `/feature` 的「不阻擋的發現開 issue」規則開新 issue（可被利用的漏洞照「漏洞的處理」，不開 issue），不在這個 PR 修。

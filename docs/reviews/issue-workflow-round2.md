@@ -79,8 +79,8 @@
 
 | # | 處理 | 決定者 | commit / 連結 |
 |---|---|---|---|
-| 1 | AC5 排除涉及安全的發現；新增 AC9（private advisory）；PR 描述記下修改紀錄 | 開發者（照建議） | PR #18 描述、見下一個 commit |
-| 2 | 存檔前檢查整份報告，所有安全細節改寫成 advisory 編號；「原文照貼」加上這個唯一例外（`/feature`、`docs/reviews/README.md`、reviewer 定義） | 開發者（選「存檔前檢查整份報告」） | 見下一個 commit |
-| 3 | 保密範圍選 A：所有涉及安全的項目都不公開細節；Missing AC 另開改開 advisory；implementer 的 commit、PR 描述、註解只寫一般性描述；新增 AC10 | 開發者（選 A） | 見下一個 commit |
-| 4–6 | 在本 PR 直接修：每次更新 PR 描述後確認 `Closes #N` 並保留原描述；bug 豁免寫進規格格式文件與 reviewer；分類表標明「不涉及安全／涉及安全」 | 開發者（選「在這個 PR 直接修」） | 見下一個 commit |
+| 1 | AC5 排除涉及安全的發現；新增 AC9（private advisory）；PR 描述記下修改紀錄 | 開發者（照建議） | PR #18 描述、`fb2c0a4` |
+| 2 | 存檔前檢查整份報告，所有安全細節改寫成 advisory 編號；「原文照貼」加上這個唯一例外（`/feature`、`docs/reviews/README.md`、reviewer 定義） | 開發者（選「存檔前檢查整份報告」） | `fb2c0a4` |
+| 3 | 保密範圍選 A：所有涉及安全的項目都不公開細節；Missing AC 另開改開 advisory；implementer 的 commit、PR 描述、註解只寫一般性描述；新增 AC10 | 開發者（選 A） | `fb2c0a4` |
+| 4–6 | 在本 PR 直接修：每次更新 PR 描述後確認 `Closes #N` 並保留原描述；bug 豁免寫進規格格式文件與 reviewer；分類表標明「不涉及安全／涉及安全」 | 開發者（選「在這個 PR 直接修」） | `fb2c0a4` |
 | AC8 | 開發者已手動加上 allow 規則，deny `Bash(gh api *merge*)` 尚未加 | 開發者 | 待處理 |

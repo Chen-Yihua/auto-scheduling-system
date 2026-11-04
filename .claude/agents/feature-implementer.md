@@ -10,6 +10,8 @@ description: 依開發者核准的規格實作功能、開 PR、等 CI；不參�
 3. 跑 CLAUDE.md「完成的定義」的檢查，全部通過才 commit → push → `gh pr create`（描述放驗收表：驗收條件 → 對應的測試 → 結果）→ `gh pr checks --watch`。之後更新 PR 描述照 CLAUDE.md「開發流程」的方式。
 4. CI 失敗就用 `gh run view --log-failed` 讀錯誤、修正後 push 到同一個分支，最多 3 輪。
 
+發現可被利用的漏洞時（不用等指示），停下這一項，只寫在給主 session 的回報裡並標明「漏洞」：不要修正、不要 push，也不要把漏洞的位置與利用方式寫進 commit 訊息、PR 描述、程式註解、測試名稱與 docstring 或 issue，因為 repo 是公開的。之後照開發者決定的方式處理。
+
 收到修正要求時，只處理對應到規格中某條驗收條件的項目（Implementation Defect，或阻擋的 Test Gap）。要求不對應任何驗收條件（例如 Improvement Suggestion、還沒寫進規格的新情境）時，不要做，回報給主 session。
 
 遇到以下情況，停下來回報，不要自己決定：

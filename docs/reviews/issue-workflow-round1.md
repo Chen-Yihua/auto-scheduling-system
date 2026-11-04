@@ -53,7 +53,7 @@
 |---|---|---|---|
 | 1 | `/issue-triage` 改用 `gh issue view --json`；CLAUDE.md 補上 `view` 要加 `--json` | 規則（不涉及安全的 Implementation Defect） | `c1d1b84` |
 | 2 | ADR 0003 改成如實描述合併的防護方式；`.claude/settings.json` 待開發者手動修改（agent 修改自己的權限被 auto mode 擋下） | 開發者（涉及安全，暫停詢問） | ADR：`c1d1b84`；settings：待開發者 |
-| 3 | 涉及安全的不阻擋發現改開 private security advisory，不開公開 issue；審查紀錄與 PR 描述只寫 advisory 編號，不留細節 | 開發者（選擇「自動開 private security advisory」） | 見下一個 commit |
-| 4 | 在 `/feature` 第 1 節與 reviewer 第 3 項寫明 bug 簡化格式的豁免範圍 | 開發者（選擇「寫明豁免範圍」） | 見下一個 commit |
-| 5–9 | 在本 PR 直接修：`/issue` 加 `argument-hint` 並從參數取出數字；寫明 `Closes #N` 由誰加與確認；ADR 與 triage 對「誰關 issue」一致；issue 附檔案路徑而非分支連結；改標籤後檢查每個 issue 只有一個 `priority:*` | 開發者（選擇「在這個 PR 直接修」，因為新規則尚未合併、內容都是本 PR 新增） | 見下一個 commit |
+| 3 | 涉及安全的不阻擋發現改開 private security advisory，不開公開 issue；審查紀錄與 PR 描述只寫 advisory 編號，不留細節 | 開發者（選擇「自動開 private security advisory」） | `52e1096` |
+| 4 | 在 `/feature` 第 1 節與 reviewer 第 3 項寫明 bug 簡化格式的豁免範圍 | 開發者（選擇「寫明豁免範圍」） | `52e1096` |
+| 5–9 | 在本 PR 直接修：`/issue` 加 `argument-hint` 並從參數取出數字；寫明 `Closes #N` 由誰加與確認；ADR 與 triage 對「誰關 issue」一致；issue 附檔案路徑而非分支連結；改標籤後檢查每個 issue 只有一個 `priority:*` | 開發者（選擇「在這個 PR 直接修」，因為新規則尚未合併、內容都是本 PR 新增） | `52e1096` |
 | 10 | 在 PR 描述註明計畫外的補充 | 開發者（同上） | PR #18 描述 |

@@ -19,6 +19,8 @@ disable-model-invocation: true
 - **驗收條件**：編號 AC1、AC2…，「在 X 情況下，系統要 Y」，每條都要能驗證。逐一想過失敗、空資料、載入中、未登入／無權限、資料處理、安全性；不適用的寫進「不適用的情境」並說明原因。
 - **計畫與測試對應**：要改的檔案、步驟、每條驗收條件對應的測試。
 
+bug 簡化格式不用寫「假設」「不適用的情境」「實作計畫」，也不用逐一列出上面的情境；只要 AC1 對應重現步驟，修正可能影響到的相關行為另外加 AC。
+
 開發者要求修改時，更新整份規格再交一次，直到核准。核准後把規格存成 `docs/specs/<功能>.md`，狀態改為「已核准」。
 
 ## 2. 實作（核准後自動進行，不再中途詢問）
@@ -37,6 +39,7 @@ disable-model-invocation: true
 | Implementation Defect（涉及安全） | 暫停，照「Missing AC 的處理」問開發者，不自動修正 |
 | Test Gap（阻擋） | 交回 `feature-implementer` 補測試 |
 | Test Gap（不阻擋）、Improvement Suggestion | 照下面「不阻擋的發現開 issue」自動開 issue，不在這個 PR 修 |
+| 不阻擋、但「涉及安全／架構」是「安全」的發現 | 照下面「安全發現開 private advisory」處理，**不開公開 issue** |
 | Missing Acceptance Criteria | 暫停，照下面的步驟處理 |
 
 任何一項涉及**重大架構決策**（新增服務或外部依賴、改變模組分層、改資料庫結構或部署方式），不論分類都暫停，照「Missing AC 的處理」問開發者；決定後寫成 `docs/decisions/` 的 ADR。
@@ -52,9 +55,27 @@ disable-model-invocation: true
 
 1. 先查重複：`gh issue list --state all --search "<關鍵字>"`。已有相同問題時，在既有 issue 留言補充（`gh issue comment`），不另開。
 2. 一項發現一個 issue；同一個檔案、同一個原因的多項發現合併成一個。
-3. 內容：現象、影響範圍、依據（`檔案:行號`）、審查的建議、來源 PR 與審查紀錄的連結。
+3. 內容：現象、影響範圍、依據（`檔案:行號`）、審查的建議、來源 PR 的連結與審查紀錄的檔案路徑（`docs/reviews/<名稱>-round<N>.md`；不要用分支上的檔案連結，分支刪除後會失效）。
 4. 標籤：程式行為不正確（包括原本就有的問題）用 `bug`，其餘（測試補強、可讀性、文件）用 `enhancement`。不加優先度，交給 `/issue-triage`。
 5. 在審查紀錄的「處理結果」寫上 issue 連結。
+
+**安全發現開 private advisory：**
+
+這個 repo 是公開的，漏洞的位置與利用方式不能出現在公開的 issue、PR 描述、commit 或 `docs/reviews/`。
+
+1. 先查重複：`gh api repos/{owner}/{repo}/security-advisories --jq '.[] | {ghsa_id, summary, state}'`。
+2. 建立草稿 advisory（只有 repo 管理者看得到）：把下面的 JSON 寫進暫存檔（放 scratchpad，不放 repo），再 `gh api -X POST repos/{owner}/{repo}/security-advisories --input <檔案>`。
+   ```json
+   {
+     "summary": "<一句話>",
+     "description": "現象、影響範圍、依據（檔案:行號）、建議的修法、來源 PR",
+     "severity": "low | medium | high | critical",
+     "vulnerabilities": [{"package": {"ecosystem": "other", "name": "auto-scheduling-system"}}]
+   }
+   ```
+3. 審查紀錄存檔時，這一項的「說明」「依據」「建議」改寫成「安全問題，已建立 private advisory <GHSA 編號>」，不留細節；最後的回報可以附上 advisory 連結。
+4. implementer 回報的問題裡涉及安全的，也走這個規則。
+5. 建立失敗（例如權限不足）時，不要改開公開 issue，停下來問開發者。
 
 **每一輪都存檔**：審查完立刻照 `docs/reviews/README.md` 的格式，把報告原文存成 `docs/reviews/<功能>-round<N>.md`；每一項處理完，在檔案最後的「處理結果」寫下處理方式、決定者與 commit / issue，和修正一起 commit 進 PR。
 

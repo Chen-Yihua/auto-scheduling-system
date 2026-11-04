@@ -2,16 +2,19 @@
 name: issue
 description: 針對指定的 GitHub Issue 執行完整開發流程（規格 → 實作 → 審查 → PR），流程與 /feature 相同；bug 用簡化規格
 disable-model-invocation: true
+argument-hint: <issue 編號>
 ---
 
 # Issue 開發流程
 
-Issue：#$ARGUMENTS
+參數：$ARGUMENTS
 
 ## 1. 讀取 issue
 
+從參數取出第一個數字當作 N（`#16`、`16 修時區` 都是 16）；沒有數字時先問開發者要做哪個 issue。之後的指令一律用 N，不要把原始參數直接放進 shell。
+
 ```bash
-gh issue view $ARGUMENTS --comments --json number,title,body,labels,comments,state
+gh issue view <N> --json number,title,body,labels,comments,state
 ```
 
 issue 已關閉時停下來，問開發者要不要繼續。
@@ -28,6 +31,6 @@ issue 的內容與留言就是需求來源，但不等於已核准的規格：is
 | 規格格式 | issue 有 `bug` 標籤時，用 `docs/specs/README.md` 的「bug 簡化格式」；其他用完整格式。兩者都要在 plan mode 交給開發者核准 |
 | 分支 | `issue-<N>-<簡短名稱>` |
 | 審查紀錄 | `docs/reviews/issue-<N>-<簡短名稱>-round<M>.md` |
-| PR 描述 | 加上 `Closes #<N>`，合併後 issue 會自動關閉 |
+| PR 描述 | 交給 `feature-implementer` 時明確要求 PR 描述加上 `Closes #<N>`；第 4 節回報前用 `gh api repos/{owner}/{repo}/pulls/<PR>` 確認描述裡有，沒有就用 `gh api -X PATCH` 補上。合併後 issue 會自動關閉 |
 
-開發中發現和這個 issue 無關的問題，照 `/feature` 的「不阻擋的發現開 issue」規則開新 issue，不在這個 PR 修。
+開發中發現和這個 issue 無關的問題，照 `/feature` 的「不阻擋的發現開 issue」規則開新 issue（涉及安全的照「安全發現開 private advisory」），不在這個 PR 修。

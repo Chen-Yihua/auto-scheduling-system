@@ -39,6 +39,8 @@ gh issue view <N> --json number,title,body,labels,comments,state
 2. issue 已有別的 `priority:*` 標籤時，先移除：`gh api -X DELETE repos/{owner}/{repo}/issues/<N>/labels/<舊標籤>`（標籤名稱裡的 `:` 要 URL encode 成 `%3A`）。
 3. 加上新標籤：`gh api -X POST repos/{owner}/{repo}/issues/<N>/labels -f "labels[]=priority:high"`。
 
-不用 `gh issue edit`：原因見 CLAUDE.md「開發流程」。每個 issue 最後只能有一個 `priority:*` 標籤。
+不用 `gh issue edit`：原因見 CLAUDE.md「開發流程」。
+
+4. 檢查：`gh issue view <N> --json labels --jq '[.labels[].name | select(startswith("priority:"))]'`，每個 issue 要剛好一個 `priority:*` 標籤；不是的話（例如移除成功、加上失敗），修正後再檢查一次。
 
 完成後回報每個 issue 的標籤變更，附上 issue 連結。

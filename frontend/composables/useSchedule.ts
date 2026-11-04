@@ -4,6 +4,7 @@ import type { ScheduleSuggestion, ScheduledTask, UnscheduledTask, ScheduleConfir
 import { defaultSchedulePreferences } from '@/types/schedule'
 import { getFriendlyErrorTitle, isAuthError, isNotLinkedError, isSuggestionExpiredError } from '@/utils/errorMessages'
 import { useGoogleCalendar } from '@/composables/useGoogleCalendar'
+import { useGoogleCalendarAuth } from '@/composables/useGoogleCalendarAuth'
 
 // 共用狀態：從精靈頁導回首頁時 ScheduleSuggestion 會重新掛載，結果不能消失
 function useScheduleImpl() {
@@ -11,6 +12,7 @@ function useScheduleImpl() {
   const config = useRuntimeConfig()
   const { getToken } = useAuth()
   const { triggerCalendarReload } = useGoogleCalendar()
+  const { reauthToast } = useGoogleCalendarAuth()
 
   const BASE_URL = config.public.apiBaseUrl
 
@@ -51,12 +53,13 @@ function useScheduleImpl() {
         return
       }
 
-      const authFailed = isAuthError(error)
+      if (isAuthError(error)) {
+        toast.add(reauthToast())
+        return
+      }
       toast.add({
-        title: authFailed ? 'Google Calendar 授權已失效' : getFriendlyErrorTitle(error, '排程建議產生失敗'),
-        description: authFailed
-          ? '你的 Google 授權可能已過期或被撤銷，請重新點擊「連接 Google Calendar」'
-          : '伺服器暫時發生錯誤，請稍後再試一次',
+        title: getFriendlyErrorTitle(error, '排程建議產生失敗'),
+        description: '伺服器暫時發生錯誤，請稍後再試一次',
         color: 'error',
         icon: 'i-lucide-x',
       })

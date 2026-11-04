@@ -11,7 +11,7 @@ onMounted(fetchKeys);
 onMounted(fetchGoogleCalendars);
 
 // 授權在導回首頁後才於背景完成，完成時重新查詢連接狀態
-const { connectedCount: googleConnectedCount } = useGoogleCalendarAuth();
+const { connectedCount: googleConnectedCount, goToGoogleAuth } = useGoogleCalendarAuth();
 watch(googleConnectedCount, fetchGoogleCalendars);
 
 const copiedKey = ref<string | null>(null);
@@ -33,24 +33,6 @@ const copyKey = (platform: string, key: string, isMasked?: boolean) => {
     console.error('Failed to copy key: ', err)
   })
 }
-
-const config = useRuntimeConfig()
-const FRONT_END_URL = config.public.frontEndUrl
-const GOOGLE_CLIENT_ID = config.public.apiGoogleClientId
-const REDIRECT_URI = `${FRONT_END_URL}/oauth/callback`
-const goToGoogleAuth = () => {
-  const params = new URLSearchParams({
-    client_id: GOOGLE_CLIENT_ID,
-    redirect_uri: REDIRECT_URI,
-    response_type: 'code',
-    // calendar.events 用來寫入排程事件；不需要完整的 calendar 權限
-    scope: 'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/calendar.events',
-    access_type: 'offline',
-    prompt: 'consent',
-  })
-
-  window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
-};
 </script>
 
 

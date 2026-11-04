@@ -256,3 +256,15 @@ async def test_refresh_google_calendar_token_keeps_token_when_client_config_is_w
         await google_oauth.refresh_google_calendar_token("uid123")
 
     assert deleted == []
+
+
+@pytest.mark.asyncio
+async def test_refresh_google_calendar_token_requires_reauth_without_deleting_when_unauthorized_client(monkeypatch):
+    """AC2(a)：Google 回 unauthorized_client（refresh token 是別的 OAuth client 發的）→ 401 請使用者重新連接；
+    不刪 token，因為共用 DB 的另一個環境可能還能用它。"""
+    deleted = _mock_token_endpoint(monkeypatch, 401, '{"error": "unauthorized_client"}')
+
+    with pytest.raises(ReauthRequiredError, match="重新連接 Google Calendar"):
+        await google_oauth.refresh_google_calendar_token("uid123")
+
+    assert deleted == []

@@ -12,6 +12,45 @@ PRIORITY_ORDER = {"High": 0, "Medium": 1, "Low": 2}
 # 截止日在這段時間內（含已過期）的任務不管 priority 一律先排
 URGENT_WINDOW = timedelta(hours=24)
 
+PREVIOUS_STAGE_NOT_SCHEDULED = "前一個階段還沒排入"
+PREVIOUS_STAGE_WRITE_FAILED = "前一個階段寫入失敗"
+
+
+def _stage_key(task: dict, offset: int) -> tuple | None:
+    if not task.get("parent_id") or not task.get("stage"):
+        return None
+    return (task["parent_id"], task["stage"] + offset)
+
+
+def _derived_deadlines(tasks: list[dict], by_stage: dict[tuple, dict], default_minutes: int) -> dict[str, datetime]:
+    """
+    沒有截止日的階段，期限是「下一個階段的期限 − 下一個階段的時長」，從最後一個有截止日的階段往前遞推。
+    下一個階段已完成時不受它限制。只用在排程，不寫回資料庫。
+    """
+    memo: dict[str, datetime | None] = {}
+
+    def deadline_of(task: dict) -> datetime | None:
+        if task["id"] in memo:
+            return memo[task["id"]]
+        result = _due_as_utc(task.get("due_date"))
+        if result is None:
+            key = _stage_key(task, 1)
+            following = by_stage.get(key) if key else None
+            if following is not None and following.get("status") != "Done":
+                following_deadline = deadline_of(following)
+                if following_deadline is not None:
+                    result = following_deadline - timedelta(minutes=following.get("duration") or default_minutes)
+        memo[task["id"]] = result
+        return result
+
+    derived = {}
+    for task in tasks:
+        if task.get("parent_id") and task.get("due_date") is None:
+            deadline = deadline_of(task)
+            if deadline is not None:
+                derived[task["id"]] = deadline
+    return derived
+
 
 def _parse_iso(value) -> datetime:
     if isinstance(value, datetime):
@@ -167,6 +206,7 @@ def build_schedule_suggestion(
     daily_max_minutes: int | None = None,
     now: datetime | None = None,
     tz_name: str = "UTC",
+    previous_event_ends: dict[str, datetime | None] | None = None,
 ) -> dict:
     """
     規則式排程建議（貪婪 First-Fit），只回傳建議，不寫入 Google Calendar。
@@ -182,10 +222,20 @@ def build_schedule_suggestion(
     buffer_minutes：每個任務後保留的緩衝時間。
     daily_max_minutes：每天最多安排的分鐘數，以使用者當地（tz_name）的日期計算。
     now：判斷緊急和過期的基準時間，測試可傳固定值。
+
+    階段任務：主任務不排。子任務一定在前一個階段之後處理，開始時間不早於前一個階段的結束時間加緩衝；
+    前一個階段已完成則不受限制，已寫入行事曆則用 previous_event_ends（calendar_event_id → Google 上
+    最新的結束時間，事件已不存在是 None，不受限制）。前一個階段沒排進去，後面的階段也不排。
     """
     now = now or datetime.now(timezone.utc)
     zone = ZoneInfo(tz_name)
-    pending = [t for t in tasks if t.get("status") != "Done" and not t.get("calendar_event_id")]
+    previous_event_ends = previous_event_ends or {}
+    by_stage = {key: t for t in tasks if (key := _stage_key(t, 0))}
+    derived_deadlines = _derived_deadlines(tasks, by_stage, task_duration_minutes)
+    pending = [
+        t for t in tasks
+        if not t.get("is_parent") and t.get("status") != "Done" and not t.get("calendar_event_id")
+    ]
 
     def sort_key(t):
         due = _due_as_utc(t.get("due_date"))
@@ -220,27 +270,48 @@ def build_schedule_suggestion(
     scheduled = []
     unscheduled = []
     daily_used_minutes: dict = {}
+    buffer = timedelta(minutes=buffer_minutes)
+    scheduled_end: dict[str, datetime] = {}
 
-    for task in valid_tasks:
+    def unschedule(task, reason):
+        unscheduled.append({"task_id": task["id"], "title": task["title"], "priority": task["priority"], "reason": reason})
+
+    def earliest_start(task) -> tuple[bool, datetime | None]:
+        """(能不能排, 最早的開始時間)。"""
+        key = _stage_key(task, -1)
+        previous = by_stage.get(key) if key else None
+        if previous is None or previous.get("status") == "Done":
+            return True, None
+        if previous.get("calendar_event_id"):
+            event_end = previous_event_ends.get(previous["calendar_event_id"])
+            return True, (event_end + buffer if event_end is not None else None)
+        if previous["id"] in scheduled_end:
+            return True, scheduled_end[previous["id"]] + buffer
+        return False, None
+
+    def place(task):
+        can_schedule, earliest = earliest_start(task)
+        if not can_schedule:
+            unschedule(task, PREVIOUS_STAGE_NOT_SCHEDULED)
+            return
         task_minutes = task.get("duration") or task_duration_minutes
         duration = timedelta(minutes=task_minutes)
-        due = _due_as_utc(task.get("due_date"))
+        due = _due_as_utc(task.get("due_date")) or derived_deadlines.get(task["id"])
         deadline = due if due is not None and due > now else None
-        placed = False
         missed_deadline = False
-        for slot in slots:
-            if slot["end"] - slot["start"] < duration:
+        for index, slot in enumerate(slots):
+            start = max(slot["start"], earliest) if earliest is not None else slot["start"]
+            if slot["end"] - start < duration:
                 continue
             if daily_max_minutes is not None:
-                day = slot["start"].astimezone(zone).date()
+                day = start.astimezone(zone).date()
                 remaining_today = daily_max_minutes - daily_used_minutes.get(day, 0)
                 if remaining_today < task_minutes:
                     continue
-            if deadline is not None and slot["start"] + duration > deadline:
+            if deadline is not None and start + duration > deadline:
                 # slots 依開始時間排序，後面的只會更晚
                 missed_deadline = True
                 break
-            start = slot["start"]
             end = start + duration
             scheduled.append({
                 "task_id": task["id"],
@@ -249,19 +320,36 @@ def build_schedule_suggestion(
                 "start": start,
                 "end": end,
             })
+            scheduled_end[task["id"]] = end
             if daily_max_minutes is not None:
                 day = start.astimezone(zone).date()
                 daily_used_minutes[day] = daily_used_minutes.get(day, 0) + task_minutes
-            slot["start"] = end + timedelta(minutes=buffer_minutes)
-            placed = True
-            break
-        if not placed:
-            unscheduled.append({
-                "task_id": task["id"],
-                "title": task["title"],
-                "priority": task["priority"],
-                "reason": "截止日前沒有足夠的空檔" if missed_deadline else "沒有足夠的空檔可以安排",
-            })
+            # 被前一個階段往後推時，前面空出來的時間留給其他任務，同樣在結束前保留緩衝
+            if start - buffer > slot["start"]:
+                slots.insert(index, {"start": slot["start"], "end": start - buffer})
+            slot["start"] = end + buffer
+            slots.sort(key=lambda s: s["start"])
+            return
+        unschedule(task, "截止日前沒有足夠的空檔" if missed_deadline else "沒有足夠的空檔可以安排")
+
+    valid_ids = {t["id"] for t in valid_tasks}
+    processed: set[str] = set()
+    waiting_for: dict[str, list[dict]] = {}
+
+    def process(task):
+        place(task)
+        processed.add(task["id"])
+        for following in waiting_for.pop(task["id"], []):
+            process(following)
+
+    for task in valid_tasks:
+        key = _stage_key(task, -1)
+        previous = by_stage.get(key) if key else None
+        if previous is not None and previous["id"] in valid_ids and previous["id"] not in processed:
+            # 前一個階段排序較後面，等它處理完再排
+            waiting_for.setdefault(previous["id"], []).append(task)
+            continue
+        process(task)
 
     return {"scheduled": scheduled, "unscheduled": unscheduled}
 
@@ -280,12 +368,17 @@ def check_suggestion_still_valid(
     """
     now = now or datetime.now(timezone.utc)
     tasks_by_id = {t["id"]: t for t in current_tasks}
+    ids_by_stage = {key: t["id"] for t in current_tasks if (key := _stage_key(t, 0))}
+    snapshot_ids = {item["task_id"] for item in scheduled}
     slots = [(_parse_iso(s["start"]), _parse_iso(s["end"])) for s in free_slots if s.get("start") and s.get("end")]
 
     to_write = []
     failed = []
+    failed_ids = set()
     for item in scheduled:
         task = tasks_by_id.get(item["task_id"])
+        previous_key = _stage_key(task, -1) if task else None
+        previous_id = ids_by_stage.get(previous_key) if previous_key else None
         if task is None:
             reason = "任務已不存在"
         elif task.get("status") == "Done":
@@ -296,9 +389,13 @@ def check_suggestion_still_valid(
             reason = "這個時段已經過了，請重新產生排程"
         elif not any(s_start <= item["start"] and item["end"] <= s_end for s_start, s_end in slots):
             reason = "這個時段已被其他行程占用，請重新產生排程"
+        elif previous_id in failed_ids:
+            reason = PREVIOUS_STAGE_WRITE_FAILED
         else:
-            to_write.append(item)
+            # 前一個階段也在這次要寫入時標上它，寫入 Google 時前一個失敗就跳過
+            to_write.append({**item, "previous_task_id": previous_id} if previous_id in snapshot_ids else item)
             continue
+        failed_ids.add(item["task_id"])
         failed.append({"task_id": item["task_id"], "title": item["title"], "reason": reason})
 
     return to_write, failed

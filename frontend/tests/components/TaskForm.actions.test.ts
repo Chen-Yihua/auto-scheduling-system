@@ -19,12 +19,16 @@ const onDeleteSpy = vi.fn()
 const fetchTasksSpy = vi.fn()
 const startEditTaskSpy = vi.fn()
 const allTasksRef = ref([{ id: 't1', title: '完整任務' }])
+const isEditingParentRef = ref(false)
+const editingSubtasksRef = ref<{ id: string; title: string; stage: number }[]>([])
+const onDeleteSubtaskSpy = vi.fn()
+const startAddSubtaskSpy = vi.fn()
 
 vi.mock('~/composables/useTaskForm', () => ({
   useTaskForm: () => ({
     user: userRef,
     showEditModal: ref(true),
-    state: reactive({ title: '', description: '', priority: '', duration: '', inference_hint: '' }),
+    state: reactive({ title: '', description: '', priority: '', duration: '', inference_hint: '', subtasks: [] }),
     modelValue: ref(null),
     minDate: null,
     displayDate: computed(() => '無期限'),
@@ -40,6 +44,19 @@ vi.mock('~/composables/useTaskForm', () => ({
     onEdit: onEditSpy,
     onDelete: onDeleteSpy,
     onCancel: vi.fn(),
+    addSubtaskRow: vi.fn(),
+    removeSubtaskRow: vi.fn(),
+    maxSubtasks: 10,
+    isEditingParent: isEditingParentRef,
+    isEditingSubtask: ref(false),
+    editingSubtasks: editingSubtasksRef,
+    splitBlockedReason: ref(null),
+    subtaskDraft: reactive({ title: '', priority: '', duration: '', due_date: '', position: 1 }),
+    showSubtaskDraft: ref(false),
+    startAddSubtask: startAddSubtaskSpy,
+    cancelAddSubtask: vi.fn(),
+    onAddSubtask: vi.fn(),
+    onDeleteSubtask: onDeleteSubtaskSpy,
   }),
 }))
 
@@ -82,8 +99,10 @@ describe('TaskForm.vue 接線邏輯', () => {
   beforeEach(() => {
     userRef.value = { id: 'u1' }
     isEditModeRef.value = false
+    isEditingParentRef.value = false
+    editingSubtasksRef.value = []
     tasksRef.value = []
-    for (const spy of [onSubmitSpy, onEditSpy, onDeleteSpy, fetchTasksSpy, startEditTaskSpy, fetchSchedulableTasksSpy]) {
+    for (const spy of [onSubmitSpy, onEditSpy, onDeleteSpy, fetchTasksSpy, startEditTaskSpy, fetchSchedulableTasksSpy, onDeleteSubtaskSpy, startAddSubtaskSpy]) {
       spy.mockReset()
     }
   })
@@ -145,4 +164,34 @@ describe('TaskForm.vue 接線邏輯', () => {
     expect(fetchSchedulableTasksSpy).toHaveBeenCalledTimes(1)
   })
 
+
+  it('AC28 / AC29：編輯主任務時列出子任務，按子任務的「刪除」呼叫 onDeleteSubtask，完成後重抓統一清單', async () => {
+    isEditModeRef.value = true
+    isEditingParentRef.value = true
+    editingSubtasksRef.value = [{ id: 's1', title: '第一階段', stage: 1 }, { id: 's2', title: '第二階段', stage: 2 }]
+    const wrapper = render()
+    await flushPromises()
+    fetchSchedulableTasksSpy.mockClear()
+
+    expect(wrapper.text()).toContain('第一階段')
+    const row = wrapper.findAll('.subtask-edit-row').find((r) => r.text().includes('第二階段'))
+    await row!.findAll('button').find((b) => b.text().includes('刪除'))!.trigger('click')
+    await flushPromises()
+
+    expect(onDeleteSubtaskSpy).toHaveBeenCalledWith(editingSubtasksRef.value[1])
+    expect(fetchSchedulableTasksSpy).toHaveBeenCalledTimes(1)
+  })
+
+  it('AC10：編輯主任務時可以選在某個階段前面插入子任務', async () => {
+    isEditModeRef.value = true
+    isEditingParentRef.value = true
+    editingSubtasksRef.value = [{ id: 's1', title: '第一階段', stage: 1 }, { id: 's2', title: '第二階段', stage: 2 }]
+    const wrapper = render()
+    await flushPromises()
+
+    const row = wrapper.findAll('.subtask-edit-row').find((r) => r.text().includes('第二階段'))
+    await row!.findAll('button').find((b) => b.text().includes('插入'))!.trigger('click')
+
+    expect(startAddSubtaskSpy).toHaveBeenCalledWith(2)
+  })
 })

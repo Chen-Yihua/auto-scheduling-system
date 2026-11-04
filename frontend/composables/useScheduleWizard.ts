@@ -4,7 +4,7 @@ import { createSharedComposable } from '@vueuse/core'
 import type { SchedulableTask } from '@/types/schedulableTask'
 import type { SchedulePreferences } from '@/types/schedule'
 import { defaultSchedulePreferences } from '@/types/schedule'
-import { getFriendlyErrorTitle } from '@/utils/errorMessages'
+import { getErrorDetail, getFriendlyErrorTitle } from '@/utils/errorMessages'
 
 export const PRIORITIES = ['Low', 'Medium', 'High'] as const
 export type PriorityKey = (typeof PRIORITIES)[number]
@@ -67,10 +67,10 @@ function useScheduleWizardImpl() {
     return PRIORITIES.flatMap((p) => columns[p])
   }
 
-  // 只排未完成、還沒寫入行事曆的項目
+  // 只排未完成、還沒寫入行事曆的項目；主任務只是容器，不排
   // 沒有 priority 的項目當成 Medium，否則不屬於任何一欄，會從畫面上消失
   function initWizard(currentTasks: SchedulableTask[]) {
-    const pending = currentTasks.filter((t) => t.status !== 'Done' && !t.calendar_event_id)
+    const pending = currentTasks.filter((t) => !t.is_parent && t.status !== 'Done' && !t.calendar_event_id)
     const withDefaultPriority = pending.map((t) => ({ ...t, priority: t.priority ?? 'Medium' }))
     for (const p of PRIORITIES) {
       columns[p] = withDefaultPriority
@@ -108,7 +108,7 @@ function useScheduleWizardImpl() {
     } catch (err) {
       toast.add({
         title: getFriendlyErrorTitle(err, '儲存排序失敗'),
-        description: '伺服器暫時發生錯誤，請稍後再試一次',
+        description: getErrorDetail(err) ?? '伺服器暫時發生錯誤，請稍後再試一次',
         color: 'error',
         icon: 'i-lucide-x',
       })
@@ -155,7 +155,7 @@ function useScheduleWizardImpl() {
     } catch (err) {
       toast.add({
         title: getFriendlyErrorTitle(err, '更新任務失敗'),
-        description: '伺服器暫時發生錯誤，請稍後再試一次',
+        description: getErrorDetail(err) ?? '伺服器暫時發生錯誤，請稍後再試一次',
         color: 'error',
         icon: 'i-lucide-x',
       })

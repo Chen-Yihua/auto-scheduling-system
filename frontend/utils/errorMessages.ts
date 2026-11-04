@@ -5,7 +5,7 @@ type ErrorLike = {
   response?: { status?: number }
   status?: number
   statusCode?: number
-  data?: { error_code?: string }
+  data?: { error_code?: string; detail?: unknown }
 }
 
 function getErrorStatus(error: unknown): number | undefined {
@@ -41,4 +41,10 @@ export function isAlreadyLinkedError(error: unknown): boolean {
 // 確認排程時建議已過期或已確認過會回 409，要重新產生建議
 export function isSuggestionExpiredError(error: unknown): boolean {
   return getErrorStatus(error) === 409
+}
+
+// 後端用 InvalidRequestError 等回傳給使用者看的說明（例如是哪一個階段違反限制）；422 的 detail 是陣列，不顯示
+export function getErrorDetail(error: unknown): string | undefined {
+  const detail = (error as ErrorLike | null | undefined)?.data?.detail
+  return typeof detail === 'string' ? detail : undefined
 }

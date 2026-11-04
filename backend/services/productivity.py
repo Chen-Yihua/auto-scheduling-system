@@ -40,6 +40,8 @@ def _group_counts(items: list[dict], key: str, order: list) -> list[dict]:
 
 
 def build_productivity_summary(items: list[dict], now: datetime, tz_name: str) -> dict:
+    # 主任務只是容器，狀態由子任務算出，計入會重複計算
+    items = [item for item in items if not item.get("is_parent")]
     tz = ZoneInfo(tz_name)
     current_week = _week_start(now, tz)
     week_starts = [current_week - timedelta(weeks=n) for n in range(TREND_WEEKS - 1, -1, -1)]

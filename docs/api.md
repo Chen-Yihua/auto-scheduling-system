@@ -35,11 +35,12 @@
 
 | 方法 | 路徑 | 登入 | Request | Response | 說明 |
 |---|---|---|---|---|---|
-| POST | `/manual-tasks/` | ✅ | `ManualTaskInput`，header `Idempotency-Key`（選填） | `ManualTaskOut`（201） | priority / duration 未填時由 AI 推估；限流 20/分 |
-| GET | `/manual-tasks/me` | ✅ | — | `list[ManualTaskOut]` | 沒有任務回空陣列 |
+| POST | `/manual-tasks/` | ✅ | `ManualTaskInput`，header `Idempotency-Key`（選填） | `ManualTaskWithSubtasksOut`（201） | priority / duration 未填時由 AI 推估；帶 `subtasks`（1～10 個）時建立主任務和依序編號的子任務，整批只算一次請求；限流 20/分 |
+| POST | `/manual-tasks/{task_id}/subtasks` | ✅ | `SubtaskCreate` | `ManualTaskWithSubtasksOut`（201） | 在 `position`（預設最後）插入子任務；對一般任務新增時它會變成主任務；限流 20/分 |
+| GET | `/manual-tasks/me` | ✅ | — | `list[ManualTaskOut]` | 沒有任務回空陣列；主任務和子任務各一筆，主任務的狀態與進度依子任務計算 |
 | GET | `/manual-tasks/{task_id}` | ✅ | — | `ManualTaskOut` | 只能查自己的 |
-| PUT | `/manual-tasks/{task_id}` | ✅ | `ManualTaskUpdate` | `ManualTaskOut` | 部分更新，沒帶的欄位保留原值 |
-| DELETE | `/manual-tasks/{task_id}` | ✅ | — | — | |
+| PUT | `/manual-tasks/{task_id}` | ✅ | `ManualTaskUpdate` | `ManualTaskOut` | 部分更新，沒帶的欄位保留原值；主任務只能改標題、描述、截止日；違反階段之間的優先序或截止日限制回 400 |
+| DELETE | `/manual-tasks/{task_id}` | ✅ | — | — | 主任務連同子任務一起刪；主任務和子任務會先刪掉子任務在 Google Calendar 上還沒開始的事件（需要時 Google 授權失效回 401、Google 暫時失敗回 502，任務都保留）；主任務只剩一個子任務時不能刪那個子任務（400） |
 
 ## 排程
 
@@ -48,9 +49,9 @@
 | 方法 | 路徑 | 登入 | Request | Response | 說明 |
 |---|---|---|---|---|---|
 | GET | `/schedule/tasks` | ✅ | — | `list[SchedulableTaskOut]` | 手動任務和外部平台項目的統一清單 |
-| PUT | `/schedule/reorder` | ✅ | `ScheduleReorderInput` | `list[SchedulableTaskOut]` | 拖拉排序的結果 |
-| PATCH | `/schedule/tasks/fields` | ✅ | `ScheduleTaskFieldsUpdate` | — | 截止日期、所需時長 |
-| PATCH | `/schedule/tasks/done` | ✅ | `ScheduleTaskDoneUpdate` | — | 標記完成或取消完成 |
+| PUT | `/schedule/reorder` | ✅ | `ScheduleReorderInput` | `list[SchedulableTaskOut]` | 拖拉排序的結果；讓後面階段的優先序高於前面階段時回 400 |
+| PATCH | `/schedule/tasks/fields` | ✅ | `ScheduleTaskFieldsUpdate` | — | 截止日期、所需時長；子任務違反階段之間的截止日限制回 400 |
+| PATCH | `/schedule/tasks/done` | ✅ | `ScheduleTaskDoneUpdate` | — | 標記完成或取消完成；主任務回 400 |
 | POST | `/schedule/suggest` | ✅ | `SchedulePreferences` | `ScheduleSuggestion` | 產生建議並存成快照，不寫入行事曆 |
 | POST | `/schedule/confirm` | ✅ | — | `ScheduleConfirmResult` | 把快照寫入 Google Calendar；快照過期回 409 |
 

@@ -8,10 +8,12 @@ import { useScheduleWizard, PRIORITIES, type PriorityKey } from '~/composables/u
 import AppHeader from '~/components/header/AppHeader.vue'
 import LoginRequiredCard from '~/components/LoginRequiredCard.vue'
 import { priorityLabel } from '~/utils/labels'
+import { stageMoveBlockReason } from '~/utils/stages'
 import type { SchedulableTask } from '~/types/schedulableTask'
 import type { BlockedRecurringRule, BlockedException } from '~/types/schedule'
 
 const router = useRouter()
+const toast = useToast()
 const { isSignedIn } = useUser()
 const { tasks: schedulableTasks, fetchSchedulableTasks } = useSchedulableTasks()
 const { fetchScheduleSuggestion } = useSchedule()
@@ -52,16 +54,29 @@ function onDragStart(column: PriorityKey, index: number) {
   dragSource.value = { column, index }
 }
 
-function onDropOnRow(targetColumn: PriorityKey, targetIndex: number) {
+// 違反階段限制的拖拉在前端直接擋下，不移動也不送出
+function moveIfAllowed(targetColumn: PriorityKey, targetIndex: number) {
   if (!dragSource.value) return
-  moveTask(dragSource.value.column, dragSource.value.index, targetColumn, targetIndex)
+  const { column, index } = dragSource.value
   dragSource.value = null
+  const reason = stageMoveBlockReason(columns, schedulableTasks.value, column, index, targetColumn, targetIndex)
+  if (reason) {
+    toast.add({ title: '不能這樣排', description: reason, color: 'warning', icon: 'i-lucide-alert-triangle' })
+    return
+  }
+  moveTask(column, index, targetColumn, targetIndex)
+}
+
+function onDropOnRow(targetColumn: PriorityKey, targetIndex: number) {
+  moveIfAllowed(targetColumn, targetIndex)
 }
 
 function onDropOnColumnEnd(targetColumn: PriorityKey) {
-  if (!dragSource.value) return
-  moveTask(dragSource.value.column, dragSource.value.index, targetColumn, columns[targetColumn].length)
-  dragSource.value = null
+  moveIfAllowed(targetColumn, columns[targetColumn].length)
+}
+
+function stageLabel(task: SchedulableTask): string {
+  return `${task.parent_title ?? ''} · 階段 ${task.stage}/${task.stage_count}`
 }
 
 async function handleConfirmOrder() {
@@ -192,7 +207,10 @@ function onExceptionEndInput(exception: BlockedException, event: Event) {
               >
                 <UIcon name="i-lucide-grip-vertical" class="w-4 h-4 text-gray-400 flex-shrink-0" />
                 <UIcon :name="sourceIcon[task.source]" class="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
-                <span class="text-sm truncate flex-1">{{ task.title }}</span>
+                <div class="min-w-0 flex-1">
+                  <p class="text-sm truncate">{{ task.title }}</p>
+                  <p v-if="task.parent_id" class="text-xs text-gray-400 truncate">{{ stageLabel(task) }}</p>
+                </div>
               </div>
             </div>
 
@@ -325,6 +343,7 @@ function onExceptionEndInput(exception: BlockedException, event: Event) {
               {{ priorityLabel(task.priority) }}
             </UBadge>
             <span class="text-sm font-medium truncate">{{ task.title }}</span>
+            <span v-if="task.parent_id" class="text-xs text-gray-400 truncate">{{ stageLabel(task) }}</span>
           </div>
           <div class="flex flex-wrap gap-4">
             <label class="text-xs text-gray-500 dark:text-gray-400 flex flex-col gap-1">

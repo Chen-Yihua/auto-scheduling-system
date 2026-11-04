@@ -45,6 +45,23 @@ async def create_calendar_event(access_token: str, calendar_id: str, summary: st
         return res.json()
 
 
+async def get_calendar_event(access_token: str, calendar_id: str, event_id: str) -> dict:
+    url = f"https://www.googleapis.com/calendar/v3/calendars/{calendar_id}/events/{event_id}"
+    headers = {"Authorization": f"Bearer {access_token}"}
+    async with httpx.AsyncClient(timeout=GOOGLE_HTTP_TIMEOUT) as client:
+        res = await client.get(url, headers=headers)
+        res.raise_for_status()
+        return res.json()
+
+
+async def delete_calendar_event(access_token: str, calendar_id: str, event_id: str) -> None:
+    url = f"https://www.googleapis.com/calendar/v3/calendars/{calendar_id}/events/{event_id}"
+    headers = {"Authorization": f"Bearer {access_token}"}
+    async with httpx.AsyncClient(timeout=GOOGLE_HTTP_TIMEOUT) as client:
+        res = await client.delete(url, headers=headers)
+        res.raise_for_status()
+
+
 def compute_free_times(busy: list[dict], window_start: str, window_end: str) -> list[dict]:
     """從時間窗扣掉 busy 時段，回傳空檔 [{"start", "end"}]。時間都是 ISO UTC 字串。"""
 

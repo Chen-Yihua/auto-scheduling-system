@@ -16,6 +16,8 @@ vi.stubGlobal('useUser',         () => ({ user: ref({ id: 'u1' }) }))
 vi.stubGlobal('useToast',        () => toastSpy)
 vi.stubGlobal('useRuntimeConfig',() => ({ public: { apiBaseUrl: 'http://localhost:8000' } }))
 vi.stubGlobal('$fetch',          fetchSpy)
+// useGoogleCalendarAuth 用到 Nuxt 的 useState
+vi.stubGlobal('useState',        (_key: string, init: () => unknown) => ref(init()))
 
 // ======== 共用工具 ========
 function fakeTask(id = 't1'): Task {
@@ -547,5 +549,184 @@ describe('useTaskForm', () => {
 
     expect(toastSpy.add).toHaveBeenCalledWith(expect.objectContaining({ title: '刪除失敗', color: 'error' }))
     expect(ctx.showEditModal.value).toBe(true)
+  })
+
+  // ---------- 階段任務 ----------
+
+  // FetchError 的形狀：狀態碼和後端的 detail
+  const httpError = (status: number, detail: string) => Object.assign(new Error(detail), { status, data: { detail } })
+
+  function fillStagedForm(ctx: ReturnType<typeof useTaskForm>) {
+    ctx.resetForm()
+    ctx.state.title = '期末報告'
+    ctx.state.description = '資料結構'
+    ctx.addSubtaskRow()
+    ctx.addSubtaskRow()
+    ctx.state.subtasks[0]!.title = '蒐集資料'
+    ctx.state.subtasks[0]!.priority = 'High'
+    ctx.state.subtasks[0]!.duration = '30'
+    ctx.state.subtasks[0]!.due_date = '2030-01-05'
+    ctx.state.subtasks[1]!.title = '寫初稿'
+  }
+
+  const parentTask = (subtaskCount = 2): Task => ({
+    ...fakeTask('p1'), priority: null, duration: null, is_parent: true,
+    progress: { done: 0, total: subtaskCount },
+  })
+  const subtaskOf = (parentId: string, stage: number): Task => ({
+    ...fakeTask(`${parentId}-s${stage}`), parent_id: parentId, stage, title: `階段${stage}`,
+  })
+
+  it('AC2：不加子任務時，送出的內容和現在一樣（帶 status，沒有 subtasks）', async () => {
+    const ctx = useTaskForm()
+    ctx.resetForm()
+    ctx.state.title = '一般任務'
+    ctx.state.priority = 'Low'
+
+    await submitAndFlushTimers(() => ctx.onSubmit(submitEvent(ctx.state)))
+
+    const body = fetchSpy.mock.calls[0]![1].body
+    expect(body).toMatchObject({ title: '一般任務', status: 'To Do', priority: 'Low' })
+    expect(body).not.toHaveProperty('subtasks')
+  })
+
+  it('AC1：加了子任務時，送出主任務的標題、描述、截止日和依順序排列的子任務；主任務不帶優先序、時長、提醒、狀態', async () => {
+    const ctx = useTaskForm()
+    fillStagedForm(ctx)
+    fetchSpy.mockResolvedValueOnce({ id: 'p1', is_parent: true, subtasks: [], priority_adjusted_stages: [] })
+
+    await submitAndFlushTimers(() => ctx.onSubmit(submitEvent(ctx.state)))
+
+    const body = fetchSpy.mock.calls[0]![1].body
+    expect(Object.keys(body).sort()).toEqual(['description', 'due_date', 'subtasks', 'title'])
+    expect(body.subtasks).toEqual([
+      { title: '蒐集資料', priority: 'High', duration: 30, due_date: new Date(2030, 0, 5).toISOString() },
+      { title: '寫初稿', priority: null, duration: null, due_date: null },
+    ])
+  })
+
+  it('最多只能加 10 個子任務列', () => {
+    const ctx = useTaskForm()
+    ctx.resetForm()
+    for (let i = 0; i < 12; i++) ctx.addSubtaskRow()
+
+    expect(ctx.state.subtasks).toHaveLength(10)
+  })
+
+  it('AC6：有階段的優先序被自動調整時，建立成功的提示說明是哪些階段', async () => {
+    const ctx = useTaskForm()
+    fillStagedForm(ctx)
+    fetchSpy.mockResolvedValueOnce({ id: 'p1', is_parent: true, subtasks: [{}, {}], priority_adjusted_stages: [2] })
+
+    await submitAndFlushTimers(() => ctx.onSubmit(submitEvent(ctx.state)))
+
+    const toast = toastSpy.add.mock.calls[0]![0]
+    expect(toast.title).toContain('2 個階段')
+    expect(toast.description).toContain('階段 2')
+  })
+
+  it('AC4：一次建立失敗時保留整份表單（含子任務），並顯示後端說明的原因', async () => {
+    const ctx = useTaskForm()
+    fillStagedForm(ctx)
+    fetchSpy.mockRejectedValueOnce(httpError(400, '階段 2 的截止日不能晚於主任務的截止日'))
+    vi.spyOn(console, 'error').mockImplementationOnce(() => {})
+
+    await ctx.onSubmit(submitEvent(ctx.state))
+
+    expect(ctx.state.title).toBe('期末報告')
+    expect(ctx.state.subtasks.map((s) => s.title)).toEqual(['蒐集資料', '寫初稿'])
+    expect(toastSpy.add).toHaveBeenCalledWith(expect.objectContaining({
+      color: 'error', description: '階段 2 的截止日不能晚於主任務的截止日',
+    }))
+  })
+
+  it('AC12：對一般任務新增第 1 個子任務時，表單預先填入原本的優先序和時長', () => {
+    const ctx = useTaskForm()
+    ctx.startEditTask({ ...fakeTask('plain'), priority: 'High', duration: 90 })
+
+    ctx.startAddSubtask()
+
+    expect(ctx.subtaskDraft.priority).toBe('High')
+    expect(ctx.subtaskDraft.duration).toBe(90)
+    expect(ctx.subtaskDraft.position).toBe(1)
+  })
+
+  it('AC13：已完成或已寫入行事曆的一般任務不能拆成階段，並說明原因', () => {
+    const ctx = useTaskForm()
+    ctx.startEditTask({ ...fakeTask('done'), status: 'Done' })
+    expect(ctx.splitBlockedReason.value).toContain('已完成')
+
+    ctx.startEditTask({ ...fakeTask('scheduled'), calendar_event_id: 'ev-1' })
+    expect(ctx.splitBlockedReason.value).toContain('行事曆')
+  })
+
+  it('AC10：在主任務指定的位置插入子任務，送到 POST /manual-tasks/{id}/subtasks', async () => {
+    const ctx = useTaskForm()
+    ctx.all_tasks.value = [parentTask(), subtaskOf('p1', 1), subtaskOf('p1', 2)]
+    ctx.startEditTask(ctx.all_tasks.value[0]!)
+    ctx.startAddSubtask(2)
+    ctx.subtaskDraft.title = '插入的階段'
+    ctx.subtaskDraft.priority = 'Medium'
+    fetchSpy.mockResolvedValueOnce({ id: 'p1', is_parent: true, subtasks: [], priority_adjusted_stages: [] })
+    fetchSpy.mockResolvedValueOnce([parentTask(3)])
+
+    await ctx.onAddSubtask()
+
+    expect(fetchSpy).toHaveBeenNthCalledWith(1, 'http://localhost:8000/manual-tasks/p1/subtasks', expect.objectContaining({
+      method: 'POST',
+      body: { title: '插入的階段', priority: 'Medium', duration: null, due_date: null, position: 2 },
+    }))
+  })
+
+  it('AC19：編輯主任務只送出標題、描述、截止日', async () => {
+    const ctx = useTaskForm()
+    ctx.startEditTask(parentTask())
+    ctx.state.title = '新標題'
+
+    await submitAndFlushTimers(() => ctx.onEdit(submitEvent(ctx.state)))
+
+    const body = fetchSpy.mock.calls[0]![1].body
+    expect(Object.keys(body).sort()).toEqual(['description', 'due_date', 'title'])
+  })
+
+  it('AC28：刪除主任務的確認文字寫出會一起刪除幾個子任務', async () => {
+    const ctx = useTaskForm()
+    const confirmSpy = vi.fn((_message: string) => false)
+    vi.stubGlobal('window', Object.assign({}, globalThis.window, { confirm: confirmSpy }))
+    ctx.all_tasks.value = [parentTask(3), subtaskOf('p1', 1), subtaskOf('p1', 2), subtaskOf('p1', 3)]
+    ctx.startEditTask(ctx.all_tasks.value[0]!)
+
+    await ctx.onDelete()
+
+    expect(confirmSpy.mock.calls[0]![0]).toContain('3 個子任務')
+  })
+
+  it('AC32：刪除時 Google 授權失效（401）→ 沿用重新連接 Google Calendar 的提示', async () => {
+    const ctx = useTaskForm()
+    vi.stubGlobal('window', Object.assign({}, globalThis.window, { confirm: () => true }))
+    ctx.startEditTask(parentTask())
+    fetchSpy.mockRejectedValueOnce(httpError(401, 'Google 授權已失效，請重新連接 Google Calendar'))
+    vi.spyOn(console, 'error').mockImplementationOnce(() => {})
+
+    await ctx.onDelete()
+
+    expect(toastSpy.add).toHaveBeenCalledWith(expect.objectContaining({
+      title: 'Google Calendar 授權已失效',
+      actions: [expect.objectContaining({ label: '重新連接 Google Calendar' })],
+    }))
+  })
+
+  it('AC30 / AC33：刪除子任務被擋或刪事件失敗時，顯示後端說明的原因（例如改刪主任務、請重試）', async () => {
+    const ctx = useTaskForm()
+    vi.stubGlobal('window', Object.assign({}, globalThis.window, { confirm: () => true }))
+    fetchSpy.mockRejectedValueOnce(httpError(400, '主任務只剩這一個子任務，不能刪除；要刪除請改刪主任務'))
+    vi.spyOn(console, 'error').mockImplementationOnce(() => {})
+
+    await ctx.onDeleteSubtask(subtaskOf('p1', 1))
+
+    expect(fetchSpy).toHaveBeenCalledWith('http://localhost:8000/manual-tasks/p1-s1', expect.objectContaining({ method: 'DELETE' }))
+    expect(toastSpy.add).toHaveBeenCalledWith(expect.objectContaining({
+      color: 'error', description: '主任務只剩這一個子任務，不能刪除；要刪除請改刪主任務',
+    }))
   })
 })

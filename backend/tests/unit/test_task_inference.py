@@ -151,3 +151,72 @@ async def test_infer_missing_task_fields_keeps_valid_fields_when_reason_is_not_t
     result = await task_inference.infer_missing_task_fields("期末報告", "整理資料並簡報")
 
     assert result == {"priority": "High", "duration": 90, "reason": ""}
+
+
+# ---------- 階段任務：一次推斷多個子任務 ----------
+
+_SUBTASKS = [
+    {"title": "蒐集資料", "description": "", "inference_hint": None},
+    {"title": "寫初稿", "description": "至少五頁", "inference_hint": "老師很嚴格"},
+]
+
+
+@pytest.mark.asyncio
+async def test_ac5_subtasks_are_inferred_in_one_call_with_parent_title_and_description(monkeypatch):
+    """AC5：多個子任務只呼叫一次 Gemini，prompt 帶主任務的標題和描述，以及每個子任務的內容。"""
+    calls = []
+
+    def fake_generate(**kwargs):
+        calls.append(kwargs)
+        return MagicMock(text=json.dumps([
+            {"priority": "High", "duration_minutes": 60, "reason": "先做"},
+            {"priority": "Medium", "duration_minutes": 120, "reason": "比較久"},
+        ]))
+
+    monkeypatch.setattr(task_inference.client.models, "generate_content", fake_generate)
+
+    result = await task_inference.infer_missing_subtask_fields("期末報告", "資料結構課", _SUBTASKS)
+
+    assert len(calls) == 1
+    prompt = calls[0]["contents"]
+    for text in ("期末報告", "資料結構課", "蒐集資料", "寫初稿", "至少五頁", "老師很嚴格"):
+        assert text in prompt
+    assert result == [
+        {"priority": "High", "duration": 60, "reason": "先做"},
+        {"priority": "Medium", "duration": 120, "reason": "比較久"},
+    ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("response", [
+    RuntimeError("API 掛了"),
+    "不是 JSON",
+    json.dumps([{"priority": "High", "duration_minutes": 60, "reason": "只回了一筆"}]),
+    json.dumps([
+        {"priority": "High", "duration_minutes": 60, "reason": "ok"},
+        {"priority": "Urgent", "duration_minutes": 60, "reason": "不合法的 priority"},
+    ]),
+])
+async def test_ac5_any_failure_falls_back_to_defaults_for_all_subtasks(monkeypatch, response):
+    """AC5：呼叫失敗、格式錯誤、筆數不對或有值不合法 → 全部子任務套用預設值（中、60 分鐘），不丟例外。"""
+    def fake_generate(**kwargs):
+        if isinstance(response, Exception):
+            raise response
+        return MagicMock(text=response)
+
+    monkeypatch.setattr(task_inference.client.models, "generate_content", fake_generate)
+
+    result = await task_inference.infer_missing_subtask_fields("期末報告", "", _SUBTASKS)
+
+    assert [(r["priority"], r["duration"]) for r in result] == [("Medium", 60), ("Medium", 60)]
+
+
+@pytest.mark.asyncio
+async def test_no_subtask_needs_inference_does_not_call_gemini(monkeypatch):
+    """沒有子任務需要推斷 → 不呼叫 Gemini。"""
+    def fail_if_called(**kwargs):
+        raise AssertionError("不該呼叫 Gemini")
+
+    monkeypatch.setattr(task_inference.client.models, "generate_content", fail_if_called)
+
+    assert await task_inference.infer_missing_subtask_fields("期末報告", "", []) == []

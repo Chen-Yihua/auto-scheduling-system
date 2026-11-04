@@ -56,6 +56,12 @@ class SchedulableTaskOut(BaseModel):
     sort_order: Optional[int] = None
     calendar_event_id: Optional[str] = None
     url: Optional[str] = None
+    # 階段任務：parent_id 是主任務的組合 id；stage_count 是主任務的子任務總數
+    is_parent: bool = False
+    parent_id: Optional[str] = None
+    parent_title: Optional[str] = None
+    stage: Optional[int] = None
+    stage_count: Optional[int] = None
 
 
 class ScheduleReorderItem(BaseModel):

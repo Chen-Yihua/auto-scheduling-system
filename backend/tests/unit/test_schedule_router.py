@@ -394,3 +394,208 @@ async def test_update_schedule_task_done_delegates_to_crud(monkeypatch):
 
     assert captured == {"user_id": "test_user_123", "task_id": "moodle:https://m/1", "done": True}
     assert result == {"task_id": "moodle:https://m/1", "done": True}
+
+
+# ---------- 階段任務（用記憶體資料庫，測 router 與 crud 的串接）----------
+
+from core.database import db
+from core.errors import InvalidRequestError
+import services.google_calendar as calendar_service
+
+STAGE_USER = {"sub": "schedule_stage_user"}
+
+
+async def _insert_stage_tasks(parent_due=None, stages=(("High", None), ("Medium", None))):
+    await db.manual_tasks.insert_one({
+        "_id": "sp", "user_id": STAGE_USER["sub"], "title": "主任務", "description": "",
+        "is_parent": True, "due_date": parent_due, "inferred_fields": [],
+    })
+    for index, (priority, due) in enumerate(stages, start=1):
+        await db.manual_tasks.insert_one({
+            "_id": f"ss{index}", "user_id": STAGE_USER["sub"], "title": f"階段{index}", "description": "",
+            "parent_id": "sp", "stage": index, "status": "To Do", "priority": priority,
+            "duration": 60, "due_date": due,
+        })
+
+
+@pytest_asyncio.fixture
+async def stage_tasks():
+    yield _insert_stage_tasks
+    await db.manual_tasks.delete_many({"user_id": STAGE_USER["sub"]})
+
+
+@pytest.mark.asyncio
+async def test_ac17_marking_parent_done_via_schedule_api_is_rejected(stage_tasks):
+    """AC17：主任務的狀態依子任務計算，對主任務呼叫 PATCH /schedule/tasks/done 回 400。"""
+    await stage_tasks()
+
+    with pytest.raises(InvalidRequestError):
+        await schedule_router.update_schedule_task_done(
+            ScheduleTaskDoneUpdate(task_id="manual:sp", done=True), clerk_user=STAGE_USER,
+        )
+
+
+@pytest.mark.asyncio
+async def test_ac18_later_stage_can_be_marked_done_before_earlier_stage(stage_tasks):
+    """AC18：第 1 階段還沒完成，也可以先把第 2 階段標成完成。"""
+    await stage_tasks()
+
+    await schedule_router.update_schedule_task_done(
+        ScheduleTaskDoneUpdate(task_id="manual:ss2", done=True), clerk_user=STAGE_USER,
+    )
+
+    assert (await db.manual_tasks.find_one({"_id": "ss2"}))["status"] == "Done"
+
+
+@pytest.mark.asyncio
+async def test_ac20_reorder_that_makes_later_stage_higher_priority_is_rejected_and_nothing_changes(stage_tasks):
+    """AC20：拖拉排序讓第 2 階段（中）變成比第 1 階段（高）更高 → 400，所有任務的優先序和順序都不變。"""
+    await stage_tasks(stages=(("Medium", None), ("Medium", None)))
+
+    with pytest.raises(InvalidRequestError) as exc_info:
+        await schedule_router.reorder_schedule_tasks(
+            ScheduleReorderInput(items=[
+                {"task_id": "manual:ss2", "priority": "High"},
+                {"task_id": "manual:ss1", "priority": "Medium"},
+            ]),
+            clerk_user=STAGE_USER,
+        )
+
+    assert "階段 2" in exc_info.value.detail
+    docs = {d["_id"]: d for d in await db.manual_tasks.find({"user_id": STAGE_USER["sub"], "parent_id": "sp"}).to_list(length=None)}
+    assert docs["ss2"]["priority"] == "Medium"
+    assert docs["ss2"].get("sort_order") is None
+
+
+@pytest.mark.asyncio
+async def test_ac20_fields_update_that_puts_stage_due_date_before_previous_stage_is_rejected(stage_tasks):
+    """AC20：排程精靈把第 2 階段的截止日改到第 1 階段之前 → 400，截止日不變。"""
+    stage1_due = datetime(2030, 1, 10, tzinfo=timezone.utc)
+    await stage_tasks(stages=(("High", stage1_due), ("High", None)))
+
+    with pytest.raises(InvalidRequestError) as exc_info:
+        await schedule_router.update_schedule_task_fields(
+            ScheduleTaskFieldsUpdate(task_id="manual:ss2", due_date=datetime(2030, 1, 5, tzinfo=timezone.utc)),
+            clerk_user=STAGE_USER,
+        )
+
+    assert "階段 2" in exc_info.value.detail
+    assert (await db.manual_tasks.find_one({"_id": "ss2"}))["due_date"] is None
+
+
+@pytest.mark.asyncio
+async def test_ac20_fields_update_that_puts_stage_after_parent_due_date_is_rejected(stage_tasks):
+    """AC20 / AC8：排程精靈把子任務的截止日改到晚於主任務 → 400。"""
+    await stage_tasks(parent_due=datetime(2030, 1, 10, tzinfo=timezone.utc))
+
+    with pytest.raises(InvalidRequestError):
+        await schedule_router.update_schedule_task_fields(
+            ScheduleTaskFieldsUpdate(task_id="manual:ss1", due_date=datetime(2030, 2, 1, tzinfo=timezone.utc)),
+            clerk_user=STAGE_USER,
+        )
+
+
+@pytest.mark.asyncio
+async def test_ac24_suggest_asks_google_for_latest_time_of_previous_stage_event(monkeypatch):
+    """AC24：前一個階段已排入行事曆 → 產生建議時向 Google 查事件最新的結束時間，後面的階段排在它之後。"""
+    async def mock_get_tasks(user_id):
+        return [
+            {"id": "manual:s1", "title": "階段1", "priority": "High", "status": "To Do",
+             "calendar_event_id": "ev-1", "parent_id": "manual:p", "stage": 1, "duration": 60},
+            {"id": "manual:s2", "title": "階段2", "priority": "High", "status": "To Do",
+             "calendar_event_id": None, "parent_id": "manual:p", "stage": 2, "duration": 60},
+        ]
+
+    async def mock_get_free_slots(user_id):
+        return [{"start": "2030-01-01T09:00:00Z", "end": "2030-01-01T18:00:00Z"}]
+
+    asked = []
+
+    async def mock_event_ends(user_id, event_ids):
+        asked.append(event_ids)
+        return {"ev-1": datetime(2030, 1, 1, 15, 0, tzinfo=timezone.utc)}
+
+    monkeypatch.setattr(schedule_router, "get_all_schedulable_items", mock_get_tasks)
+    monkeypatch.setattr(schedule_router, "get_free_slots_for_user", mock_get_free_slots)
+    monkeypatch.setattr(schedule_router, "get_calendar_event_ends", mock_event_ends)
+
+    result = await schedule_router.suggest_schedule(preferences=SchedulePreferences(), clerk_user=mock_user)
+
+    assert asked == [["ev-1"]]
+    assert result["scheduled"][0]["task_id"] == "manual:s2"
+    assert result["scheduled"][0]["start"] == datetime(2030, 1, 1, 15, 0, tzinfo=timezone.utc)
+
+
+@pytest.mark.asyncio
+async def test_suggest_does_not_call_google_events_when_no_stage_waits_on_a_calendar_event(monkeypatch):
+    """沒有子任務在等已排入行事曆的前一個階段 → 不多打 Google 的 events.get。"""
+    async def mock_get_tasks(user_id):
+        return [{"id": "t1", "title": "任務", "priority": "High", "status": "To Do", "due_date": None}]
+
+    async def mock_get_free_slots(user_id):
+        return [{"start": "2030-01-01T09:00:00Z", "end": "2030-01-01T10:00:00Z"}]
+
+    async def fail_if_called(*args, **kwargs):
+        raise AssertionError("不該查事件")
+
+    monkeypatch.setattr(schedule_router, "get_all_schedulable_items", mock_get_tasks)
+    monkeypatch.setattr(schedule_router, "get_free_slots_for_user", mock_get_free_slots)
+    monkeypatch.setattr(schedule_router, "get_calendar_event_ends", fail_if_called)
+
+    result = await schedule_router.suggest_schedule(preferences=SchedulePreferences(), clerk_user=mock_user)
+
+    assert [i["task_id"] for i in result["scheduled"]] == ["t1"]
+
+
+@pytest.mark.asyncio
+async def test_ac26_confirm_skips_later_stage_when_previous_stage_write_fails(monkeypatch, clean_snapshot):
+    """AC26：確認排程時第 1 階段寫入 Google 失敗 → 第 2 階段不寫入，原因寫前一個階段寫入失敗；其他任務照寫。"""
+    import httpx
+
+    await cache_set(
+        schedule_router._suggestion_snapshot_key(mock_user["sub"]),
+        [
+            _snapshot_item("manual:s1", "階段1", "2030-01-01T09:00:00+00:00", "2030-01-01T10:00:00+00:00"),
+            _snapshot_item("manual:s2", "階段2", "2030-01-01T10:00:00+00:00", "2030-01-01T11:00:00+00:00"),
+            _snapshot_item("manual:other", "其他", "2030-01-01T11:00:00+00:00", "2030-01-01T12:00:00+00:00"),
+        ],
+        60,
+    )
+
+    async def mock_get_tasks(user_id):
+        return [
+            {"id": "manual:s1", "title": "階段1", "status": "To Do", "calendar_event_id": None, "parent_id": "manual:p", "stage": 1},
+            {"id": "manual:s2", "title": "階段2", "status": "To Do", "calendar_event_id": None, "parent_id": "manual:p", "stage": 2},
+            {"id": "manual:other", "title": "其他", "status": "To Do", "calendar_event_id": None},
+        ]
+
+    async def mock_get_free_slots(user_id, use_cache=True):
+        return [{"start": "2030-01-01T08:00:00Z", "end": "2030-01-01T18:00:00Z"}]
+
+    async def mock_token(user_id):
+        return "token", "primary"
+
+    written = []
+
+    async def mock_create_event(access_token, calendar_id, summary, start, end):
+        if summary == "階段1":
+            request = httpx.Request("POST", "https://example.com")
+            raise httpx.HTTPStatusError("error", request=request, response=httpx.Response(500, request=request))
+        written.append(summary)
+        return {"id": f"ev-{summary}"}
+
+    async def mock_set_event_id(user_id, task_id, event_id):
+        pass
+
+    monkeypatch.setattr(schedule_router, "get_all_schedulable_items", mock_get_tasks)
+    monkeypatch.setattr(schedule_router, "get_free_slots_for_user", mock_get_free_slots)
+    monkeypatch.setattr(calendar_service, "_get_access_token_and_primary_calendar_id", mock_token)
+    monkeypatch.setattr(calendar_service, "create_calendar_event", mock_create_event)
+    monkeypatch.setattr(calendar_service, "set_calendar_event_id_for_composite", mock_set_event_id)
+
+    result = await schedule_router.confirm_schedule(clerk_user=mock_user)
+
+    assert written == ["其他"]
+    reasons = {f["task_id"]: f["reason"] for f in result["failed"]}
+    assert reasons["manual:s2"] == "前一個階段寫入失敗"
+    assert "manual:s1" in reasons

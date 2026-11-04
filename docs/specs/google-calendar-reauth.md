@@ -2,7 +2,7 @@
 
 - 狀態：已核准
 - issue：無（開發者直接回報）
-- PR：（建立後填入）
+- PR：#22
 
 ## 現象
 Google Calendar 的 token 失效、需要重新連接時，首頁同時跳出兩個 toast：「Google Calendar 資料暫時無法取得／伺服器暫時連不上 Google 或發生錯誤，請稍後再試一次」。使用者照著等、稍後再試，問題也不會好，因為實際上要重新連接 Google Calendar。
@@ -43,12 +43,15 @@ Google Calendar 的 token 失效、需要重新連接時，首頁同時跳出兩
 ## 回歸測試
 | AC | 測試 | 改程式前是否失敗 |
 |---|---|---|
-| AC1 | `frontend/tests/composables/useGoogleCalendar.test.ts`：401 時只跳一個 toast，toast 有重新連接按鈕，按下後導到 Google 授權網址；`needsReconnect` 為 true。`frontend/tests/components/GoogleCalendarEmbed.test.ts`：`needsReconnect` 時顯示「授權已失效」文字 | 是 |
-| AC2 | `backend/tests/unit/test_google_oauth.py`：`unauthorized_client` → `ReauthRequiredError`，不呼叫 delete。`backend/tests/unit/test_google_calendar_service.py`：解密失敗 → `ReauthRequiredError`；換新後重試仍 401 → `ReauthRequiredError`。`backend/tests/integration/test_google_calendar_api.py`：`/oauth/calendars` 在 (a)(b)(c) 時回 401 | 是 |
+| AC1 | `frontend/tests/composables/useGoogleCalendar.test.ts`：401 時只跳一個 toast，toast 有重新連接按鈕，按下後導到 Google 授權網址；`needsReconnect` 為 true。`frontend/tests/components/GoogleCalendarEmbed.test.ts`：`needsReconnect` 時顯示「授權已失效」文字。`frontend/tests/components/Dashboard.test.ts`：Dashboard 把 `needsReconnect` 傳給行事曆卡片 | 是 |
+| AC2 | `backend/tests/unit/test_google_oauth.py`：`unauthorized_client` → `ReauthRequiredError`，不呼叫 delete。`backend/tests/unit/test_google_calendar_service.py`：解密失敗 → `ReauthRequiredError`；換新後重試仍 401 → `ReauthRequiredError`。`backend/tests/integration/test_google_calendar_api.py`：`/oauth/calendars` 和 `/schedule/suggest` 在 (a)(b)(c) 時回 401 | 是 |
 | AC3 | 既有測試維持通過（`test_google_oauth.py` 的 invalid_grant、invalid_client、5xx 測試；`useGoogleCalendar.test.ts` 的「稍後再試」測試） | 否（保護既有行為） |
 | AC4 | `useGoogleCalendar.test.ts`：兩次呼叫 `fetchGoogleCalendars` 卻不 await，`$fetch` 的 `/oauth/status`、`/oauth/calendars` 各只被呼叫一次，`toast.add` 最多一次 | 是 |
+| AC4 | `useGoogleCalendar.test.ts`：前一次結束後再呼叫，會重新發請求 | 否（保護用） |
 | AC5 | `frontend/tests/composables/useSchedule.test.ts`：suggest 回 401 時，toast 有重新連接按鈕 | 是 |
 | AC6 | `useGoogleCalendar.test.ts`：先 401，再成功抓取，`needsReconnect` 變回 false、`isConnected` 為 true | 是 |
+| AC6 | `useGoogleCalendar.test.ts`：重新連接前發出的請求還沒回來就重新連接成功，會重新抓取，舊請求晚回來的 401 不會蓋掉新結果、不跳 toast | 是 |
+| AC6 | `frontend/tests/components/GoogleCalendarEmbed.test.ts`：`connect=true` 時顯示行事曆，不顯示「授權已失效」 | 否（保護用） |
 
 ### 實作提示（給 implementer，不是驗收條件）
 - 把 `AccountSettings.vue` 的 `goToGoogleAuth`（組 OAuth 網址）移到 composable（例如 `useGoogleCalendarAuth`），讓 toast 和帳號設定共用同一個函式。

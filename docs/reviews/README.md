@@ -2,7 +2,7 @@
 
 每一輪 `acceptance-reviewer` 的審查結果存一份，檔名 `<功能>-round<N>.md`（`<功能>` 和 `docs/specs/` 裡的規格檔同名），和實作放在同一個 PR。
 
-審查 agent 只能讀、不能寫檔，所以由主 session 存檔：報告原文照貼，處理完後在最後補上「處理結果」。
+審查 agent 只能讀、不能寫檔，所以由主 session 存檔：報告原文照貼，處理完後在最後補上「處理結果」。唯一的例外是涉及安全的內容：repo 是公開的，存檔前照 `/feature` 的「安全問題不公開」改寫成 advisory 編號或一般性的描述。
 
 ## 格式
 
@@ -17,7 +17,7 @@
 
 ## 審查報告
 
-（acceptance-reviewer 的報告原文）
+（acceptance-reviewer 的報告原文；涉及安全的內容已改寫）
 
 ## 處理結果
 

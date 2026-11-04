@@ -27,19 +27,19 @@ bug 簡化格式不用寫「假設」「不適用的情境」「實作計畫」�
 
 - 交給 `feature-implementer`，附上規格檔路徑和分支名稱。
 - 它回報規格有問題時：會影響範圍或驗收條件就照第 3 節「Missing AC」的方式問開發者；不影響就直接回覆它怎麼做。
-- 它回報的「發現但沒處理的問題」，照第 3 節「不阻擋的發現開 issue」處理。
+- 它回報的「發現但沒處理的問題」，照第 3 節「不阻擋的發現開 issue」處理；涉及安全的照「安全問題不公開」處理。
 
 ## 3. 審查
 
-交給 `acceptance-reviewer`，附上規格檔路徑和分支名稱。依每項發現的分類處理：
+交給 `acceptance-reviewer`，附上規格檔路徑和分支名稱。依每項發現的分類處理（涉及安全的，另外遵守下面「安全問題不公開」）：
 
 | 分類 | 處理 |
 |---|---|
 | Implementation Defect（不涉及安全） | 交回 `feature-implementer` 修正 |
 | Implementation Defect（涉及安全） | 暫停，照「Missing AC 的處理」問開發者，不自動修正 |
 | Test Gap（阻擋） | 交回 `feature-implementer` 補測試 |
-| Test Gap（不阻擋）、Improvement Suggestion | 照下面「不阻擋的發現開 issue」自動開 issue，不在這個 PR 修 |
-| 不阻擋、但「涉及安全／架構」是「安全」的發現 | 照下面「安全發現開 private advisory」處理，**不開公開 issue** |
+| Test Gap（不阻擋，不涉及安全）、Improvement Suggestion（不涉及安全） | 照下面「不阻擋的發現開 issue」自動開 issue，不在這個 PR 修 |
+| Test Gap（不阻擋，涉及安全）、Improvement Suggestion（涉及安全） | 照下面「安全問題不公開」開 private advisory，**不開公開 issue** |
 | Missing Acceptance Criteria | 暫停，照下面的步驟處理 |
 
 任何一項涉及**重大架構決策**（新增服務或外部依賴、改變模組分層、改資料庫結構或部署方式），不論分類都暫停，照「Missing AC 的處理」問開發者；決定後寫成 `docs/decisions/` 的 ADR。
@@ -49,7 +49,7 @@ bug 簡化格式不用寫「假設」「不適用的情境」「實作計畫」�
 1. 整理每一項：缺漏的情境、影響範圍（哪些檔案、哪些既有驗收條件）、建議的驗收條件。
 2. 問開發者，並請開發者決定要在這個 PR 補上，還是另開 issue。涉及未定義的產品行為、權限、安全性或資料處理時，只列出選項與各自的影響，不給建議答案，每一項都要開發者明確回答；其他的可以附上建議的驗收條件，讓開發者一次確認。
 3. 這個 PR 補：把確認後的驗收條件寫進規格，在「修改紀錄」記下日期、修改、原因、確認者，交給 `feature-implementer` 實作並補測試。
-4. 另開 issue：用 `gh issue create` 記下缺漏與建議的驗收條件，在規格的「修改紀錄」與 PR 描述附上連結，這項就解除阻擋。
+4. 另開 issue：用 `gh issue create` 記下缺漏與建議的驗收條件，在規格的「修改紀錄」與 PR 描述附上連結，這項就解除阻擋。涉及安全的不開公開 issue，照「安全問題不公開」改開 private advisory。
 
 **不阻擋的發現開 issue：**
 
@@ -59,9 +59,11 @@ bug 簡化格式不用寫「假設」「不適用的情境」「實作計畫」�
 4. 標籤：程式行為不正確（包括原本就有的問題）用 `bug`，其餘（測試補強、可讀性、文件）用 `enhancement`。不加優先度，交給 `/issue-triage`。
 5. 在審查紀錄的「處理結果」寫上 issue 連結。
 
-**安全發現開 private advisory：**
+**安全問題不公開：**
 
-這個 repo 是公開的，漏洞的位置與利用方式不能出現在公開的 issue、PR 描述、commit 或 `docs/reviews/`。
+這個 repo 是公開的。只要一項發現的「涉及安全／架構」是「安全」，不論分類、不論在這個 PR 修還是另外處理、不論漏洞在 main 已有的程式還是這個 PR 新增的程式，漏洞的位置與利用方式都不能出現在公開的 issue、PR 描述、commit 訊息、程式註解或 `docs/reviews/`；只能寫 advisory 編號或一般性的描述（例如「修正權限檢查」）。
+
+要另外處理（不阻擋的發現、Missing AC 選另開）時，開 private advisory：
 
 1. 先查重複：`gh api repos/{owner}/{repo}/security-advisories --jq '.[] | {ghsa_id, summary, state}'`。
 2. 建立草稿 advisory（只有 repo 管理者看得到）：把下面的 JSON 寫進暫存檔（放 scratchpad，不放 repo），再 `gh api -X POST repos/{owner}/{repo}/security-advisories --input <檔案>`。
@@ -73,11 +75,13 @@ bug 簡化格式不用寫「假設」「不適用的情境」「實作計畫」�
      "vulnerabilities": [{"package": {"ecosystem": "other", "name": "auto-scheduling-system"}}]
    }
    ```
-3. 審查紀錄存檔時，這一項的「說明」「依據」「建議」改寫成「安全問題，已建立 private advisory <GHSA 編號>」，不留細節；最後的回報可以附上 advisory 連結。
-4. implementer 回報的問題裡涉及安全的，也走這個規則。
-5. 建立失敗（例如權限不足）時，不要改開公開 issue，停下來問開發者。
+3. 建立失敗（例如權限不足）時，不要改開公開 issue，停下來問開發者。
 
-**每一輪都存檔**：審查完立刻照 `docs/reviews/README.md` 的格式，把報告原文存成 `docs/reviews/<功能>-round<N>.md`；每一項處理完，在檔案最後的「處理結果」寫下處理方式、決定者與 commit / issue，和修正一起 commit 進 PR。
+在這個 PR 修（開發者決定）時：交給 `feature-implementer` 的指示要寫明「commit 訊息、PR 描述、程式註解只寫一般性的描述」；詳細內容放 advisory，或只在給開發者的回報裡說明。
+
+審查紀錄存檔前，檢查**整份報告**（驗收條件表、發現表、補充段落、查證紀錄），所有提到這個安全問題位置或利用方式的地方，都改寫成「安全問題，見 private advisory <GHSA 編號>」或一般性的描述。這是「報告原文照貼」唯一的例外。給開發者的回報可以附 advisory 連結。
+
+**每一輪都存檔**：審查完立刻照 `docs/reviews/README.md` 的格式，把報告原文（涉及安全的內容照「安全問題不公開」改寫）存成 `docs/reviews/<功能>-round<N>.md`；每一項處理完，在檔案最後的「處理結果」寫下處理方式、決定者與 commit / issue，和修正一起 commit 進 PR。
 
 修正後重新審查，直到沒有阻擋的項目為止。同一版規格最多 3 輪，仍有阻擋就停下來回報；開發者修改規格（新增或修改驗收條件）後重新計算。
 

@@ -11,8 +11,8 @@ PR #10 開發時，審查找到的改善建議與原本就有的問題只列在�
 
 - **`/issue-triage`**：只整理 issue 的類型、優先度、相依性與處理順序；開發者確認後才加 `priority:*` 標籤，不開始開發。
 - **`/issue <N>`**：讀 issue 後照 `/feature` 的流程執行，不另寫一套。bug 用簡化規格（重現步驟＋回歸測試），一樣要開發者核准。PR 描述加 `Closes #N`。
-- **不阻擋的審查發現一律自動開 issue**（Improvement Suggestion，包括原本就有的問題，以及不阻擋的 Test Gap），不在當前 PR 順手修。開之前先查重複。
-- **涉及安全的項目一律不公開細節**：repo 是公開的。不論分類、在哪裡修、漏洞是新是舊，位置與利用方式都不出現在公開的 issue、PR 描述、commit、`docs/reviews/`；需要另外處理時開 private security advisory。
+- **不阻擋的審查發現自動開 issue**（Improvement Suggestion，包括原本就有的問題，以及不阻擋的 Test Gap；可被利用的漏洞除外，見下一點），不在當前 PR 順手修。開之前先查重複。
+- **可被利用的漏洞不公開細節**：repo 是公開的。位置與利用方式不出現在公開的 issue、PR 描述、commit、程式註解、規格檔、測試名稱、`docs/reviews/`；另外處理時開 private security advisory。漏洞在 main 已有的程式時，在 advisory 的 temporary private fork 修，不在公開 PR 修；只在 PR 新增的程式時，在同一個 PR 修並只寫一般性的描述。安全相關的規格或流程缺漏不是漏洞，照常公開討論。
 - **暫停的條件**：需求缺漏、未定義的產品行為、涉及安全的 Implementation Defect、重大架構決策，都要問開發者；其他 Implementation Defect 與阻擋的 Test Gap 仍自動交給實作 agent 修。
 - **reviewer 維持只讀**。
 
@@ -22,6 +22,7 @@ PR #10 開發時，審查找到的改善建議與原本就有的問題只列在�
 - **不阻擋的發現在當前 PR 順手修**：等於擴大範圍，而且這些修改沒有經過規格核准。
 - **由開發者逐項決定要不要開 issue**：PR #10 的經驗是容易遺漏；開 issue 的成本低，不需要的會在 `/issue-triage` 時標出來，由開發者關閉。
 - **安全發現也開公開 issue**：漏洞會在修好之前公開。
+- **在公開 PR 修 main 已有的漏洞、只把文字寫模糊**：diff 本身就會洩漏漏洞位置。
 - **讓 reviewer 直接修正**：審查的人自己修，就沒有人審它修的東西。
 - **新增 agent 或 hook**：triage 只是讀取與整理，`/issue` 沿用現有的兩個 agent；合併靠 `.claude/settings.json` 的 deny 規則（`gh pr merge`、`gh api *merge*`）擋下；main 的 ruleset 只要求 PR 與 CI 通過、不要求核准，不能單獨防止 agent 合併。
 
@@ -30,3 +31,4 @@ PR #10 開發時，審查找到的改善建議與原本就有的問題只列在�
 - 每個 PR 可能會開出幾個小 issue，要定期跑 `/issue-triage` 整理。
 - issue 會出現 agent 推測的建議；這些建議要經過 `/issue` 的規格核准才算需求。
 - 本機 gh 2.45 不能用 `gh issue edit`，改標籤用 `gh api`。
+- temporary private fork 不執行 GitHub Actions，在 fork 修漏洞時只能靠本機檢查；合併與公開 advisory 由開發者在 advisory 頁面操作。

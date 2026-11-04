@@ -45,4 +45,12 @@
 
 | # | 處理 | 決定者 | commit / 連結 |
 |---|---|---|---|
-| 1–9 | 待開發者決定 | 開發者 | 待處理 |
+| 1 | 漏洞在 main 已有的程式 → advisory 的 temporary private fork 修；只在本 PR 新增的程式 → 同一個 PR 修，所有公開文字一般化。AC10 範圍加上規格檔與測試名稱，新增 AC11 | 開發者（選「private fork 修 main 的漏洞」「新程式在同一個 PR 修，文字一般化」） | NEXT |
+| 2 | 待開發者在 `.claude/settings.json` 加 deny `Bash(gh api *merge*)` 並 commit | 開發者 | 待處理 |
+| 3 | reviewer 的「涉及安全／架構」分成「漏洞」（可被利用，要保密）與「安全」（規格或流程缺漏，可公開） | 開發者（選「在這個 PR 修」） | NEXT |
+| 4 | 查 advisory 加 `--paginate`；有重複就沿用 GHSA 編號、需要時 PATCH 補充 | 同上 | NEXT |
+| 5 | 處理結果與回報記錄 advisory 編號 | 同上 | NEXT |
+| 6 | 重新審查時由主 session 把原始內容寫進給 reviewer 的指示 | 同上 | NEXT |
+| 7 | implementer 修正或發現漏洞時不必等指示就遵守保密 | 同上 | NEXT |
+| 8 | ADR 0003 補上漏洞例外、程式註解，以及 private fork 的做法 | 同上 | NEXT |
+| 9 | 本機計畫檔同步（AC1–AC11、`gh issue comment`） | 同上 | 計畫檔不在 repo |

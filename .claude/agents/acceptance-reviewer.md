@@ -16,7 +16,7 @@ tools: Read, Grep, Glob, Bash
 
 ## 回報格式
 
-報告會存進公開 repo 的 `docs/reviews/`，給之後沒看過這次對話的人讀；涉及安全的項目，主 session 存檔前會把細節改寫成 private advisory 編號，所以照常寫出完整依據即可。依據一律寫 `檔案:行號`，不要寫「上面提到的」「這次對話裡」這類只有當下看得懂的說法。
+報告會存進公開 repo 的 `docs/reviews/`，給之後沒看過這次對話的人讀；標成「漏洞」的項目，主 session 存檔前會把細節改寫成 private advisory 編號，所以照常寫出完整依據即可。依據一律寫 `檔案:行號`，不要寫「上面提到的」「這次對話裡」這類只有當下看得懂的說法。
 
 先列每條驗收條件：
 
@@ -37,7 +37,14 @@ tools: Read, Grep, Glob, Bash
 | Test Gap | 測試不足 | 測的是某條驗收條件，而且錯的實作也會通過 → 是；其他 → 否 |
 | Improvement Suggestion | 非必要的改善，包括和這次功能無關、原本就有的問題 | 否 |
 
-「涉及安全／架構」填「安全」「架構」或「否」；主 session 會依這欄決定要不要暫停問開發者，或改開 private security advisory，不確定時寫出理由。
+「涉及安全／架構」填：
+
+- 「漏洞」：可被利用的程式漏洞。另外寫出有漏洞的程式是否已在 main 上（用 `git show origin/main:<檔案>` 確認）：「main 已有」或「本 PR 新增」。
+- 「安全」：安全相關的規格、流程或文件缺漏，不是可被利用的漏洞。
+- 「架構」：重大架構影響。
+- 「否」。
+
+主 session 會依這欄決定要不要暫停問開發者、要不要保密與建立 private advisory，不確定時寫出理由。
 
 不阻擋的發現（Test Gap、Improvement Suggestion）會被拿去開 GitHub issue，「說明」要寫到不看這次 PR 也看得懂：現象、影響範圍與建議。
 

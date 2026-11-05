@@ -116,7 +116,7 @@
    - 主任務的狀態與進度計算。
    - 階段鏈的驗證（優先序與截止日），新增子任務、建立後的 PUT、reorder、`/schedule/tasks/fields` 都共用同一個函式。
    - 一次建立：`insert_many` 加寫入失敗時的清除（假設 4）。
-   - 插入或刪除子任務時，調整階段編號。
+   - 插入、刪除子任務只改主任務的 `subtask_ids`，階段編號由陣列位置計算（ADR 0004）。
 3. `services/task_inference.py` 與 `prompts/`：加批次推斷函式，一次推斷多個子任務，參考主任務的標題和描述；失敗時全部套用預設值。
 4. `routers/manual_task.py`：
    - `POST /` 支援 `subtasks`。

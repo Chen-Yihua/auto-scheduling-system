@@ -29,7 +29,7 @@
 
 由開發者交給我決定的細節，以及我為了寫規格另外做的判斷：
 
-1. **資料模型**：不新增 collection，在 `manual_tasks` 加三個欄位：子任務有 `parent_id`、`stage`（從 1 開始的階段編號），主任務有 `is_parent: true`。主任務的狀態與進度在讀取時才計算，不存進資料庫，避免和子任務的狀態不一致。
+1. **資料模型**：不新增 collection。子任務有 `parent_id`；主任務有 `is_parent: true` 和 `subtask_ids`（子任務 id 的陣列），階段編號就是子任務在陣列裡的位置（從 1 開始），由後端計算後放在回應的 `stage`，不存在子任務上（見 [ADR 0004](../decisions/0004-subtask-order-on-parent.md)）。不在任何主任務 `subtask_ids` 裡的子任務，不顯示、不排程、不計入統計。主任務的狀態與進度在讀取時才計算，不存進資料庫，避免和子任務的狀態不一致。
 2. **前一個階段的事件時間（D19）**：產生排程建議時，用 Google Calendar 的 events.get 取得最新的事件時間，不另外存。使用者在 Google 上拖動事件，也會反映到排程。
 3. **沒有截止日的前面階段（D20）**：期限是「下一個階段的期限 − 下一個階段的時長」，從最後一個有截止日的階段往前遞推。這個期限只用在排程，不寫進資料庫，畫面上也不顯示。
 4. **一次建立的原子性（D26）**：測試用的 mongomock 不支援交易。做法是先完成所有驗證與 AI 推斷，再一次 `insert_many`；寫入失敗時，刪掉這次已經寫入的文件。
@@ -92,8 +92,8 @@
 | AC36 | 生產力統計（`/analytics/productivity`）不計入主任務，只算子任務和一般任務 |
 | **登入與資料** | |
 | AC37 | 沒登入時呼叫新增子任務的 API 回 403，沿用現有的登入驗證 |
-| AC38 | `parent_id`、`stage`、`is_parent` 只能由後端寫入；`ManualTaskUpdate` 不接受這三個欄位，client 沒辦法把子任務掛到別人的主任務上，也沒辦法竄改階段編號 |
-| AC39 | 插入或刪除子任務時，任何一步失敗，主任務的子任務數量和階段編號都維持原狀，不留下空號、重號，也不留下沒有子任務的主任務（一般任務轉成主任務的流程也一樣）；同時送出的多個插入請求，不會產生重複的階段編號，也不會超過 10 個 |
+| AC38 | `parent_id`、`stage`、`is_parent`、`subtask_ids` 只能由後端寫入；`ManualTaskUpdate` 不接受這些欄位，client 沒辦法把子任務掛到別人的主任務上，也沒辦法竄改階段編號 |
+| AC39 | 插入或刪除子任務時，任何一步失敗，使用者看到的子任務數量和階段編號都維持原狀，不出現空號、重號，也不出現沒有子任務的主任務（一般任務轉成主任務的流程也一樣）；同時送出的多個插入或刪除請求，不會產生重複的階段編號，也不會超過 10 個或少於 1 個。寫入失敗時留下的、不在 `subtask_ids` 裡的子任務，不顯示、不排程、不計入統計 |
 | AC40 | `POST /manual-tasks/{task_id}/subtasks` 支援 `Idempotency-Key`：帶相同 key 的重送請求回傳第一次的結果，不會重複新增子任務 |
 
 ## 不適用的情境
@@ -162,7 +162,7 @@
 | AC5、AC6 | `tests/unit/test_task_inference.py`（批次推斷、失敗時套用預設值）；`tests/unit/test_manual_task_router.py`（優先序自動調整） |
 | AC7、AC8、AC10、AC19、AC20 | `tests/unit/test_manual_task_crud.py`（階段鏈驗證：插入位置、前後比對）；`tests/unit/test_schedule_router.py`（reorder、fields 被擋下） |
 | AC11–AC15、AC37、AC38 | `tests/integration/test_manual_task_api.py`（新增子任務的成功、10 個上限、轉換、已完成或已排入被擋、子任務不能再拆、別人的任務 404、沒登入 403、Update 不接受這三個欄位） |
-| AC39、AC40 | `tests/unit/test_manual_task_crud.py`（插入、刪除、轉換中途失敗時維持原狀；同時插入不重號、不超過上限）；`tests/integration/test_manual_task_api.py`（新增子任務的 Idempotency-Key 重送） |
+| AC39、AC40 | `tests/unit/test_manual_task_crud.py`（插入、刪除、轉換中途失敗時維持原狀；陣列已滿時插入被擋、只剩 1 個時刪除被擋；不在陣列裡的子任務不出現在列表、排程、統計）；`tests/integration/test_manual_task_api.py`（新增子任務的 Idempotency-Key 重送） |
 | AC16–AC18 | `tests/unit/test_manual_task_crud.py`（狀態計算）；`tests/unit/test_schedule_router.py`（對主任務 set_done 回 400） |
 | AC21–AC25 | `tests/unit/test_scheduler.py`（先後順序、緩衝時間、前一個排不進、已完成、已排入用事件時間、事件不存在、推遞期限、推遞期限適用 24 小時規則） |
 | AC26 | `tests/unit/test_scheduler.py`（`check_suggestion_still_valid`，含前一個階段已完成或已排入時不擋後面的階段）；`tests/unit/test_schedule_router.py`（confirm） |
@@ -188,3 +188,4 @@
 | 2026-11-05 | AC25：推算的期限也適用 24 小時規則，前面的階段跟著提前處理 | 拆成階段後，快到期的工作反而排不進去（審查第 1 輪 #6） | 開發者 |
 | 2026-11-05 | AC26：前一個階段因為已完成或已排入行事曆而沒有寫入時，不擋後面的階段 | 和 AC23 衝突（審查第 1 輪 #8，原本開了 #35，開發者決定在這個 PR 修） | 開發者 |
 | 2026-11-05 | 新增 AC39、AC40：插入、刪除子任務的原子性與 Idempotency-Key | 中途失敗或同時送出會留下空號、重號，讓排程的先後限制失效（審查第 1 輪 #5，原本開了 #34，開發者決定在這個 PR 修） | 開發者 |
+| 2026-11-05 | 假設 1、AC38、AC39：階段順序改成存在主任務的 `subtask_ids`，子任務不存 `stage`；AC39 改成以使用者看到的結果為準 | 原本的編號寫法無法保證原子性與同時操作的正確性（審查第 1 輪 #5，ADR 0004） | 開發者 |

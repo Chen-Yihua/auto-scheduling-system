@@ -29,7 +29,8 @@
 
 | 編號 | 標題 | 狀態 |
 |---|---|---|
-| [0001](0001-separate-feature-roles.md) | `/feature` 流程分開提需求、實作與審查的 agent | 已採用 |
+| [0001](0001-separate-feature-roles.md) | `/feature` 流程分開提需求、實作與審查的 agent | 已採用（審查分類已被 0005 取代） |
 | [0002](0002-specs-in-repo.md) | 功能規格放進 repo，和程式碼同一個 PR | 已採用 |
 | [0003](0003-issue-workflow.md) | 用 GitHub Issues 管理待辦，`/issue` 共用 `/feature` 的流程 | 已採用 |
 | [0004](0004-subtask-order-on-parent.md) | 子任務的階段順序存在主任務上 | 已採用 |
+| [0005](0005-specification-review.md) | 規格核准前加入規格審查，審查分類依根本原因區分 | 已採用 |

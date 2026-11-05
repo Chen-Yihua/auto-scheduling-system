@@ -8,7 +8,7 @@ disable-model-invocation: true
 
 需求：$ARGUMENTS
 
-你是提需求、負責驗收的一方，不自己寫程式。實作交給 `feature-implementer` agent，審查交給 `acceptance-reviewer` agent，兩者只看得到規格檔，所以規格要寫到不看這段對話也能照著做。分工的原因見 `docs/decisions/0001-separate-feature-roles.md`。
+你是提需求、負責驗收的一方，不自己寫程式。規格核准前交給 `specification-reviewer` 審查，實作交給 `feature-implementer`，實作後交給 `acceptance-reviewer` 審查；它們都看不到這段對話，所以規格要寫到不看這段對話也能照著做。分工的原因見 `docs/decisions/0001-separate-feature-roles.md`、`docs/decisions/0005-specification-review.md`。
 
 ## 1. 規格（plan mode）
 
@@ -21,7 +21,19 @@ disable-model-invocation: true
 
 bug 簡化格式不用寫「假設」「不適用的情境」「實作計畫」，也不用逐一列出上面的情境；只要 AC1 對應重現步驟，修正可能影響到的相關行為另外加 AC。
 
-開發者要求修改時，更新整份規格再交一次，直到核准。核准後把規格存成 `docs/specs/<功能>.md`，狀態改為「已核准」。
+**規格審查**（bug 簡化格式不做）：草稿寫好、交給開發者核准前，把 plan 檔的路徑和已決定事項交給 `specification-reviewer`。已決定事項是開發者在這次對話裡回答過的問題與答案，寫進 scratchpad 的一個檔案再把路徑給它，因為它看不到這段對話。依每項發現處理：
+
+| 發現 | 處理 |
+|---|---|
+| Factual Error（修正不改變行為） | 依依據直接改草稿 |
+| Factual Error（修正會改變行為）、Specification Defect、Missing Acceptance Criteria | 涉及產品行為、權限、安全性、資料處理或架構的，照第 3 節「規格問題的處理」第 2 步問開發者；其他的改草稿，在交給開發者時列出 |
+| Improvement Suggestion | 列在交給開發者的訊息裡，由開發者決定要不要採用；規格還沒核准，不開 issue |
+
+- 為了處理發現而新增或改寫驗收條件時，再審查 1 輪；第 2 輪還有阻擋的項目，就整理好問開發者，不繼續自動審查。
+- 交給開發者核准時，規格之外再附上規格審查的摘要：改了什麼、還需要開發者決定什麼、有哪些不採用的建議。
+- 核准後，照 `docs/reviews/README.md` 把每一輪的報告存成 `docs/reviews/<功能>-spec-round<N>.md`，「處理結果」寫上每一項的處理方式與決定者，和規格一起 commit。
+
+開發者要求修改時，更新整份規格再交一次，直到核准；修改只動到措辭、沒有新增或改寫驗收條件時，不必重新審查。核准後把規格存成 `docs/specs/<功能>.md`，狀態改為「已核准」。
 
 ## 2. 實作（核准後自動進行，不再中途詢問）
 
@@ -31,7 +43,7 @@ bug 簡化格式不用寫「假設」「不適用的情境」「實作計畫」�
 
 ## 3. 審查
 
-交給 `acceptance-reviewer` 前先 `git fetch origin main`，附上規格檔路徑和分支名稱；第 2 輪以後再附上前幾輪的審查紀錄路徑。依每項發現處理：
+交給 `acceptance-reviewer` 前先 `git fetch origin main`，附上規格檔路徑、分支名稱與規格審查紀錄的路徑（`docs/reviews/<功能>-spec-round<N>.md`；bug 簡化格式沒有）；第 2 輪以後再附上前幾輪的審查紀錄路徑。依每項發現處理：
 
 分類的定義見 `docs/reviews/README.md`「分類」。依每項發現處理：
 
@@ -103,4 +115,4 @@ bug 簡化格式不用寫「假設」「不適用的情境」「實作計畫」�
 
 ## 4. 回報
 
-PR 連結、驗收表（驗收條件 → 對應的測試 → 結果）、假設清單、規格修改紀錄、每一輪審查紀錄的檔案連結與阻擋項目的處理結果、這次開了或留言了哪些 issue、建立或沿用了哪些 advisory（只寫編號）。給開發者看的回報要附上檔案與測試的連結（`檔案:行號`），不要只寫摘要。PR 描述放同一張驗收表；更新 PR 描述照 CLAUDE.md「開發流程」的方式。
+PR 連結、驗收表（驗收條件 → 對應的測試 → 結果）、假設清單、規格修改紀錄、每一輪規格審查與實作審查紀錄的檔案連結與阻擋項目的處理結果、這次開了或留言了哪些 issue、建立或沿用了哪些 advisory（只寫編號）。給開發者看的回報要附上檔案與測試的連結（`檔案:行號`），不要只寫摘要。PR 描述放同一張驗收表；更新 PR 描述照 CLAUDE.md「開發流程」的方式。

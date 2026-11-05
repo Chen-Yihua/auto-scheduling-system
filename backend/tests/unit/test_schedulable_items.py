@@ -453,9 +453,10 @@ async def test_get_all_schedulable_items_exposes_stage_relationship():
     """AC27 / AC35：子任務帶主任務的組合 id、主任務名稱、階段 k 與總階段數 N；主任務標成 is_parent，狀態依子任務計算。"""
     try:
         await db.manual_tasks.insert_many([
-            {"_id": "p1", "user_id": "sched-user", "title": "期末報告", "is_parent": True},
-            {"_id": "s1", "user_id": "sched-user", "title": "一", "parent_id": "p1", "stage": 1, "status": "Done", "priority": "High"},
-            {"_id": "s2", "user_id": "sched-user", "title": "二", "parent_id": "p1", "stage": 2, "status": "To Do", "priority": "High"},
+            # 順序以 subtask_ids 為準：s2 雖然先寫入，仍是階段 2
+            {"_id": "s2", "user_id": "sched-user", "title": "二", "parent_id": "p1", "status": "To Do", "priority": "High"},
+            {"_id": "p1", "user_id": "sched-user", "title": "期末報告", "is_parent": True, "subtask_ids": ["s1", "s2"]},
+            {"_id": "s1", "user_id": "sched-user", "title": "一", "parent_id": "p1", "status": "Done", "priority": "High"},
         ])
 
         items = {item["id"]: item for item in await schedulable_items.get_all_schedulable_items("sched-user")}

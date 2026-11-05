@@ -406,13 +406,20 @@ async def test_ac38_put_ignores_parent_id_stage_and_is_parent(logged_in_user, st
         stage1 = parent["subtasks"][0]
         response = await ac.put(f"/manual-tasks/{stage1['id']}", json={
             "title": "階段API 改名", "parent_id": "someone-elses-parent", "stage": 9, "is_parent": True,
+            "subtask_ids": ["x"],
         })
+        parent_put = await ac.put(f"/manual-tasks/{parent['id']}", json={"title": "階段API 主任務", "subtask_ids": []})
+        stage1_after = (await ac.get(f"/manual-tasks/{stage1['id']}")).json()
 
     assert response.status_code == 200, response.text
+    assert parent_put.status_code == 200, parent_put.text
     stored = await db.manual_tasks.find_one({"_id": stage1["id"]})
-    assert (stored["title"], stored["parent_id"], stored["stage"], stored.get("is_parent")) == (
-        "階段API 改名", parent["id"], 1, None,
+    assert (stored["title"], stored["parent_id"], stored.get("is_parent"), stored.get("subtask_ids")) == (
+        "階段API 改名", parent["id"], None, None,
     )
+    assert "stage" not in stored
+    assert stage1_after["stage"] == 1
+    assert (await db.manual_tasks.find_one({"_id": parent["id"]}))["subtask_ids"] == [s["id"] for s in parent["subtasks"]]
 
 
 @pytest.mark.asyncio

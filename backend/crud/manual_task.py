@@ -1,13 +1,14 @@
 import logging
 from datetime import datetime, timezone
 from core.database import db
-from schemas.manual_task import ManualTaskOut, StatusEnum
+from schemas.manual_task import MAX_SUBTASKS, ManualTaskOut, StatusEnum
 from core.errors import InvalidRequestError, NotFoundError
 from pymongo.errors import BulkWriteError, DuplicateKeyError, PyMongoError
 
 logger = logging.getLogger(__name__)
 
 PRIORITY_RANK = {"Low": 0, "Medium": 1, "High": 2}
+LAST_SUBTASK_DETAIL = "主任務只剩這一個子任務，不能刪除；要刪除請改刪主任務"
 PRIORITY_LABEL = {"Low": "低", "Medium": "中", "High": "高"}
 
 
@@ -37,15 +38,31 @@ def _with_parent_fields(parent: dict, subtasks: list[dict]) -> dict:
     return parent
 
 
+def _ordered_subtasks(parent: dict, candidates: dict[str, dict]) -> list[dict]:
+    """
+    依主任務 subtask_ids 的順序取出子任務，階段編號是在陣列裡的位置（ADR 0004）。
+    不在陣列裡的子任務（寫入一半失敗留下的）不算。
+    """
+    ordered = []
+    for subtask_id in parent.get("subtask_ids") or []:
+        subtask = candidates.get(subtask_id)
+        if subtask is None or subtask.get("parent_id") != parent["id"]:
+            continue
+        subtask["stage"] = len(ordered) + 1
+        ordered.append(subtask)
+    return ordered
+
+
 def _with_parents_computed(tasks: list[dict]) -> list[dict]:
-    subtasks_by_parent: dict[str, list[dict]] = {}
-    for task in tasks:
-        if task.get("parent_id"):
-            subtasks_by_parent.setdefault(task["parent_id"], []).append(task)
+    """主任務算出狀態與進度、子任務算出階段編號；不在任何主任務順序裡的子任務不回傳。"""
+    by_id = {task["id"]: task for task in tasks}
+    listed_subtask_ids = set()
     for task in tasks:
         if task.get("is_parent"):
-            _with_parent_fields(task, subtasks_by_parent.get(task["id"], []))
-    return tasks
+            subtasks = _ordered_subtasks(task, by_id)
+            listed_subtask_ids.update(s["id"] for s in subtasks)
+            _with_parent_fields(task, subtasks)
+    return [t for t in tasks if not t.get("parent_id") or t["id"] in listed_subtask_ids]
 
 
 def _as_utc(value: datetime | None) -> datetime | None:
@@ -148,9 +165,14 @@ def _is_duplicate_key_error(error: PyMongoError) -> bool:
 
 
 async def get_subtasks(parent_id: str, user_id: str) -> list[dict]:
-    """依階段排序的子任務。"""
-    docs = await db.manual_tasks.find({"user_id": user_id, "parent_id": parent_id}).to_list(length=None)
-    return sorted((_to_task(doc) for doc in docs), key=lambda t: t.get("stage") or 0)
+    """依主任務 subtask_ids 排序的子任務，附上階段編號。"""
+    parent = await db.manual_tasks.find_one({"_id": parent_id, "user_id": user_id})
+    if not parent:
+        return []
+    docs = await db.manual_tasks.find(
+        {"user_id": user_id, "_id": {"$in": parent.get("subtask_ids") or []}}
+    ).to_list(length=None)
+    return _ordered_subtasks(_to_task(parent), {doc["_id"]: _to_task(doc) for doc in docs})
 
 
 async def create_manual_task_with_subtasks(parent: dict, subtasks: list[dict], idempotency_key: str | None = None) -> dict:
@@ -159,10 +181,11 @@ async def create_manual_task_with_subtasks(parent: dict, subtasks: list[dict], i
 
     測試用的 mongomock 不支援交易，所以寫入失敗時刪掉這次已寫入的文件，不留下只有一半的主任務。
     """
-    parent = dict(parent)
+    parent = {**parent, "subtask_ids": [doc["_id"] for doc in subtasks]}
     if idempotency_key:
         parent["idempotency_key"] = idempotency_key
-    docs = [parent, *subtasks]
+    # 主任務放最後：中途失敗時，已寫入的子任務不在任何主任務的順序裡，讀取時不會出現
+    docs = [*subtasks, parent]
     try:
         await db.manual_tasks.insert_many(docs)
     except PyMongoError as e:
@@ -176,62 +199,97 @@ async def create_manual_task_with_subtasks(parent: dict, subtasks: list[dict], i
             raise
         return {**existing, "subtasks": await get_subtasks(existing["id"], existing["user_id"])}
 
-    created_subtasks = [_to_task(dict(doc)) for doc in subtasks]
+    created_subtasks = [{**_to_task(dict(doc)), "stage": stage} for stage, doc in enumerate(subtasks, start=1)]
     created_parent = _with_parent_fields(_to_task(dict(parent)), created_subtasks)
     created_parent.pop("idempotency_key", None)
     return {**created_parent, "subtasks": created_subtasks}
 
 
 async def insert_subtask(
-    parent_id: str, user_id: str, subtask: dict, position: int, idempotency_key: str | None = None,
+    parent_id: str, user_id: str, subtask: dict, position: int,
+    idempotency_key: str | None = None, convert: bool = False,
 ) -> bool:
     """
-    在 position 插入子任務（文件用 _id），原本 position 以後的階段編號加 1。
-    同一個 Idempotency-Key 已經用過時什麼都不改，回傳 False。
+    在 position（從 1 開始）插入子任務（文件用 _id）。convert=True 時同時把一般任務轉成主任務。
+
+    先寫入子任務，再用一次主任務的更新放進 subtask_ids；數量上限、插入位置、可以轉換的條件都寫在
+    那次更新的 filter 裡，同時送出的請求也不會超過上限或產生空號（ADR 0004）。條件不成立時刪掉剛寫入的
+    子任務並丟 400。同一個 Idempotency-Key 已經用過時什麼都不改，回傳 False。
     """
-    doc = {**subtask, "user_id": user_id, "parent_id": parent_id, "stage": position}
+    doc = {**subtask, "user_id": user_id, "parent_id": parent_id}
+    doc.pop("stage", None)
     if idempotency_key:
         doc["idempotency_key"] = idempotency_key
-    # 先寫入再調整編號：重複的 key 在第一步就被唯一索引擋下，不會動到其他階段
+    # 重複的 key 在第一步就被唯一索引擋下，不會動到主任務
     try:
         await db.manual_tasks.insert_one(doc)
     except DuplicateKeyError:
         if idempotency_key:
             return False
         raise
-    await db.manual_tasks.update_many(
-        {"user_id": user_id, "parent_id": parent_id, "stage": {"$gte": position}, "_id": {"$ne": doc["_id"]}},
-        {"$inc": {"stage": 1}},
-    )
-    return True
 
-
-async def convert_to_parent(task_id: str, user_id: str) -> None:
-    """一般任務新增第 1 個子任務後變成主任務：本身的優先序、時長、狀態與 AI 推斷結果都交給子任務。"""
-    await db.manual_tasks.update_one(
-        {"_id": task_id, "user_id": user_id},
-        {
-            "$set": {"is_parent": True, "inferred_fields": [], "updated": datetime.now(timezone.utc)},
+    now = datetime.now(timezone.utc)
+    if convert:
+        condition = {
+            "is_parent": {"$ne": True},
+            "parent_id": None,
+            "status": {"$ne": StatusEnum.done.value},
+            "calendar_event_id": None,
+        }
+        update = {
+            "$set": {"is_parent": True, "subtask_ids": [doc["_id"]], "inferred_fields": [], "updated": now},
+            # 主任務的優先序、時長、狀態與 AI 推斷結果都交給子任務
             "$unset": {
                 "priority": "", "duration": "", "inference_reason": "", "inference_hint": "",
                 "status": "", "completed_at": "",
             },
-        },
-    )
+        }
+        rejected = "這個任務的狀態已經改變（已完成、已排入行事曆或已拆成階段），請重新整理後再試"
+    else:
+        # 用 $and：position 是 MAX_SUBTASKS + 1 時兩個條件是同一個欄位，寫成 dict 的 key 會互相蓋掉
+        array_conditions: list[dict] = [{f"subtask_ids.{MAX_SUBTASKS - 1}": {"$exists": False}}]
+        if position > 1:
+            array_conditions.append({f"subtask_ids.{position - 2}": {"$exists": True}})
+        condition = {"is_parent": True, "$and": array_conditions}
+        update = {
+            "$push": {"subtask_ids": {"$each": [doc["_id"]], "$position": position - 1}},
+            "$set": {"updated": now},
+        }
+        rejected = f"子任務已達 {MAX_SUBTASKS} 個上限，或插入位置已經不存在，請重新整理後再試"
+
+    try:
+        result = await db.manual_tasks.update_one({"_id": parent_id, "user_id": user_id, **condition}, update)
+    except PyMongoError:
+        await db.manual_tasks.delete_one({"_id": doc["_id"]})
+        raise
+    if result.matched_count == 0:
+        await db.manual_tasks.delete_one({"_id": doc["_id"]})
+        raise InvalidRequestError(rejected)
+    return True
 
 
 async def delete_subtask(subtask: dict) -> None:
-    """刪除子任務，後面的階段編號往前遞補。"""
-    await db.manual_tasks.delete_one({"_id": subtask["id"], "user_id": subtask["user_id"]})
-    await db.manual_tasks.update_many(
-        {"user_id": subtask["user_id"], "parent_id": subtask["parent_id"], "stage": {"$gt": subtask["stage"]}},
-        {"$inc": {"stage": -1}},
+    """
+    從主任務的順序移除子任務再刪掉文件。「至少還有 2 個」寫在同一次更新的 filter 裡，
+    同時送出的刪除也不會刪到一個都不剩。
+    """
+    result = await db.manual_tasks.update_one(
+        {
+            "_id": subtask["parent_id"], "user_id": subtask["user_id"],
+            "subtask_ids": subtask["id"], "subtask_ids.1": {"$exists": True},
+        },
+        {"$pull": {"subtask_ids": subtask["id"]}, "$set": {"updated": datetime.now(timezone.utc)}},
     )
+    if result.matched_count == 0:
+        raise InvalidRequestError(LAST_SUBTASK_DETAIL)
+    # 這一步失敗時，子任務已不在順序裡，讀取時不會出現
+    await db.manual_tasks.delete_one({"_id": subtask["id"], "user_id": subtask["user_id"]})
 
 
 async def delete_parent_with_subtasks(parent_id: str, user_id: str) -> None:
-    await db.manual_tasks.delete_many({"user_id": user_id, "parent_id": parent_id})
+    # 先刪主任務：之後刪子任務失敗時，留下的子任務沒有主任務，讀取時不會出現
     await db.manual_tasks.delete_one({"_id": parent_id, "user_id": user_id})
+    await db.manual_tasks.delete_many({"user_id": user_id, "parent_id": parent_id})
 
 
 async def create_manual_task(task: ManualTaskOut, idempotency_key: str | None = None) -> dict:
@@ -271,8 +329,18 @@ async def get_manual_task_by_id(task_id: str, user_id: str):
     if not task:
         raise NotFoundError("Task not found")
     task = _to_task(task)
+    return await _with_stage_fields(task)
+
+
+async def _with_stage_fields(task: dict) -> dict:
+    """主任務算出狀態與進度；子任務算出階段編號，不在主任務順序裡的子任務當作不存在。"""
     if task.get("is_parent"):
-        _with_parent_fields(task, await get_subtasks(task_id, user_id))
+        _with_parent_fields(task, await get_subtasks(task["id"], task["user_id"]))
+    elif task.get("parent_id"):
+        stage = next((s["stage"] for s in await get_subtasks(task["parent_id"], task["user_id"]) if s["id"] == task["id"]), None)
+        if stage is None:
+            raise NotFoundError("Task not found")
+        task["stage"] = stage
     return task
 
 async def get_manual_tasks_by_user_id(user_id: str):
@@ -350,8 +418,11 @@ async def set_calendar_event_id(task_id: str, user_id: str, calendar_event_id: s
 
 async def update_manual_task_by_id(task_id: str, data: dict):
     logger.debug("Updating manual task %s with data=%s", task_id, data)
-    # id 對應 _id，不能更新；主任務的狀態與進度是讀取時算的，不存
-    computed = {"id", "progress", "status"} if data.get("is_parent") else {"id", "progress"}
+    # id 對應 _id，不能更新；狀態（主任務）、進度、階段編號是讀取時算的；
+    # 階段關係只由插入、刪除子任務的流程改，這裡寫回讀到的舊值會蓋掉同時進行的插入或刪除
+    computed = {"id", "progress", "stage", "subtask_ids", "parent_id", "is_parent"}
+    if data.get("is_parent"):
+        computed.add("status")
     fields = {key: value for key, value in data.items() if key not in computed}
     result = await db.manual_tasks.update_one({"_id": task_id}, {"$set": fields})
     if result.modified_count == 0:
@@ -360,8 +431,8 @@ async def update_manual_task_by_id(task_id: str, data: dict):
     if doc is None:
         raise NotFoundError("Task not found")
     task = _to_task(doc)
-    if task.get("is_parent"):
-        _with_parent_fields(task, await get_subtasks(task_id, task["user_id"]))
+    if task.get("is_parent") or task.get("parent_id"):
+        return await _with_stage_fields(task)
     return task
 
 async def delete_manual_task_by_id(task_id: str):

@@ -409,11 +409,12 @@ async def _insert_stage_tasks(parent_due=None, stages=(("High", None), ("Medium"
     await db.manual_tasks.insert_one({
         "_id": "sp", "user_id": STAGE_USER["sub"], "title": "主任務", "description": "",
         "is_parent": True, "due_date": parent_due, "inferred_fields": [],
+        "subtask_ids": [f"ss{index}" for index in range(1, len(stages) + 1)],
     })
     for index, (priority, due) in enumerate(stages, start=1):
         await db.manual_tasks.insert_one({
             "_id": f"ss{index}", "user_id": STAGE_USER["sub"], "title": f"階段{index}", "description": "",
-            "parent_id": "sp", "stage": index, "status": "To Do", "priority": priority,
+            "parent_id": "sp", "status": "To Do", "priority": priority,
             "duration": 60, "due_date": due,
         })
 

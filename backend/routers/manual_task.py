@@ -89,10 +89,7 @@ async def _create_with_subtasks(task_input: ManualTaskInput, user_id: str, idemp
         "is_parent": True,
         "inferred_fields": [],
     }
-    subtask_docs = [
-        {**_subtask_doc(s, user_id, now), "parent_id": parent_id, "stage": stage}
-        for stage, s in enumerate(subtasks, start=1)
-    ]
+    subtask_docs = [{**_subtask_doc(s, user_id, now), "parent_id": parent_id} for s in subtasks]
     created = await manual_task_crud.create_manual_task_with_subtasks(parent, subtask_docs, idempotency_key)
     return {**created, "priority_adjusted_stages": adjusted}
 
@@ -205,12 +202,11 @@ async def add_subtask(
     now = datetime.now(timezone.utc)
     inserted = await manual_task_crud.insert_subtask(
         task_id, user_id, _subtask_doc(new_subtask, user_id, now), position, idempotency_key,
+        convert=not task.get("is_parent"),
     )
     if not inserted:
-        # 同一個 key 的請求同時送達，另一個已經新增成功
+        # 同一個 key 的請求同時送達，另一個已經寫入
         return await _subtask_result_for_key(task_id, user_id, idempotency_key or "")
-    if not task.get("is_parent"):
-        await manual_task_crud.convert_to_parent(task_id, user_id)
 
     parent = await manual_task_crud.get_manual_task_by_id(task_id, user_id)
     return {**await _with_subtasks(parent), "priority_adjusted_stages": adjusted}
@@ -223,7 +219,11 @@ async def _subtask_result_for_key(task_id: str, user_id: str, idempotency_key: s
     if existing.get("parent_id") != task_id:
         raise ConflictError("這個 Idempotency-Key 已經用在其他請求")
     parent = await manual_task_crud.get_manual_task_by_id(task_id, user_id)
-    return await _with_subtasks(parent)
+    result = await _with_subtasks(parent)
+    # 子任務寫入了但還沒放進主任務的順序：同一個 key 的另一個請求還在處理
+    if existing["id"] not in {s["id"] for s in result.get("subtasks", [])}:
+        raise ConflictError("同一個請求還在處理中，請稍後再試")
+    return result
 
 
 @router.get("/me", response_model=list[ManualTaskOut])
@@ -289,7 +289,7 @@ async def delete_manual_task(
         await manual_task_crud.delete_parent_with_subtasks(task_id, user_id)
     elif task.get("parent_id"):
         if len(await manual_task_crud.get_subtasks(task["parent_id"], user_id)) <= 1:
-            raise InvalidRequestError("主任務只剩這一個子任務，不能刪除；要刪除請改刪主任務")
+            raise InvalidRequestError(manual_task_crud.LAST_SUBTASK_DETAIL)
         await delete_upcoming_calendar_events(user_id, [task["calendar_event_id"]] if task.get("calendar_event_id") else [])
         await manual_task_crud.delete_subtask(task)
     else:

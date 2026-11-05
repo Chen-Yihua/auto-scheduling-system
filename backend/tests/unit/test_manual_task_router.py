@@ -336,8 +336,8 @@ async def _add(task_id, **fields):
 
 
 async def _stage_docs(parent_id):
-    docs = await db.manual_tasks.find({"parent_id": parent_id}).sort("stage", 1).to_list(length=None)
-    return docs
+    # 階段順序以主任務的 subtask_ids 為準（ADR 0004）
+    return await manual_task_router.manual_task_crud.get_subtasks(parent_id, STAGE_USER["sub"])
 
 
 @pytest.mark.asyncio
@@ -631,7 +631,7 @@ async def test_ac20_put_subtask_that_breaks_stage_chain_is_rejected_and_unchange
 @pytest.mark.asyncio
 async def test_ac38_update_cannot_change_parent_id_stage_or_is_parent(stage_db, subtask_infer_calls):
     """AC38：ManualTaskUpdate 不接受 parent_id、stage、is_parent，client 不能把子任務掛到別的主任務或改階段編號。"""
-    assert not {"parent_id", "stage", "is_parent"} & set(ManualTaskUpdate.model_fields)
+    assert not {"parent_id", "stage", "is_parent", "subtask_ids"} & set(ManualTaskUpdate.model_fields)
 
 
 # ---------- 刪除 ----------

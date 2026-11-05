@@ -330,9 +330,9 @@ async def test_ac16_reading_parent_returns_computed_status_and_progress_not_stor
     """AC16 / 假設 1：讀取主任務時才依子任務計算狀態與進度；主任務沒有優先序和時長。"""
     collection = manual_task_crud.db.manual_tasks
     await collection.insert_many([
-        {"_id": "ac16-p", "user_id": "alice", "title": "報告", "is_parent": True},
-        {"_id": "ac16-s1", "user_id": "alice", "title": "一", "parent_id": "ac16-p", "stage": 1, "status": "Done", "priority": "High", "duration": 30},
-        {"_id": "ac16-s2", "user_id": "alice", "title": "二", "parent_id": "ac16-p", "stage": 2, "status": "To Do", "priority": "High", "duration": 30},
+        {"_id": "ac16-p", "user_id": "alice", "title": "報告", "is_parent": True, "subtask_ids": ["ac16-s1", "ac16-s2"]},
+        {"_id": "ac16-s1", "user_id": "alice", "title": "一", "parent_id": "ac16-p", "status": "Done", "priority": "High", "duration": 30},
+        {"_id": "ac16-s2", "user_id": "alice", "title": "二", "parent_id": "ac16-p", "status": "To Do", "priority": "High", "duration": 30},
     ])
     try:
         one = await manual_task_crud.get_manual_task_by_id("ac16-p", "alice")
@@ -418,8 +418,8 @@ async def test_ac4_write_failure_removes_documents_already_written():
         await real_insert_one(docs[0])
         raise PyMongoError("寫入中斷")
 
-    parent = {"_id": "ac4-p", "user_id": "alice", "title": "報告", "is_parent": True}
-    subtasks = [{"_id": "ac4-s1", "user_id": "alice", "title": "一", "parent_id": "ac4-p", "stage": 1, "status": "To Do"}]
+    parent = {"_id": "ac4-p", "user_id": "alice", "title": "報告", "is_parent": True, "subtask_ids": ["ac4-s1"]}
+    subtasks = [{"_id": "ac4-s1", "user_id": "alice", "title": "一", "parent_id": "ac4-p", "status": "To Do"}]
     original = collection.insert_many
     collection.insert_many = insert_first_then_fail
     try:
@@ -434,11 +434,12 @@ async def test_ac4_write_failure_removes_documents_already_written():
 # ---------- 階段任務：插入與刪除時調整階段編號（AC10、AC29）----------
 
 async def _insert_chain(prefix, count):
+    subtask_ids = [f"{prefix}-s{i}" for i in range(1, count + 1)]
     await manual_task_crud.db.manual_tasks.insert_many(
-        [{"_id": f"{prefix}-p", "user_id": "alice", "title": "主任務", "is_parent": True}]
+        [{"_id": f"{prefix}-p", "user_id": "alice", "title": "主任務", "is_parent": True, "subtask_ids": subtask_ids}]
         + [
             {"_id": f"{prefix}-s{i}", "user_id": "alice", "title": f"階段{i}", "parent_id": f"{prefix}-p",
-             "stage": i, "status": "To Do", "priority": "Medium", "duration": 30}
+             "status": "To Do", "priority": "Medium", "duration": 30}
             for i in range(1, count + 1)
         ]
     )
@@ -459,6 +460,9 @@ async def test_ac10_inserting_shifts_later_stages_by_one():
         stages = await manual_task_crud.get_subtasks("ac10-p", "alice")
         assert [(s["title"], s["stage"]) for s in stages] == [("階段1", 1), ("插入的", 2), ("階段2", 3), ("階段3", 4)]
         assert stages[1]["parent_id"] == "ac10-p"
+        # ADR 0004：階段編號是在主任務 subtask_ids 裡的位置，不存在子任務上
+        assert (await manual_task_crud.db.manual_tasks.find_one({"_id": "ac10-p"}))["subtask_ids"][1] == "ac10-new"
+        assert await manual_task_crud.db.manual_tasks.count_documents({"_id": {"$regex": "^ac10-"}, "stage": {"$exists": True}}) == 0
     finally:
         await manual_task_crud.db.manual_tasks.delete_many({"_id": {"$regex": "^ac10-"}})
 
@@ -510,3 +514,141 @@ def test_ac6_inferred_priority_is_kept_between_previous_and_next_stage():
     assert manual_task_crud.adjust_inferred_priorities(too_high, inferred_indexes={1}) == [2]
     assert [s["priority"] for s in too_low] == ["High", "Medium", "Medium"]
     assert [s["priority"] for s in too_high] == ["Medium", "Medium", "Low"]
+
+
+# ---------- 階段任務：插入、刪除、轉換的原子性（AC39，ADR 0004）----------
+
+async def _visible_titles(parent_id):
+    return [s["title"] for s in await manual_task_crud.get_subtasks(parent_id, "alice")]
+
+
+def _new_subtask(task_id):
+    return {"_id": task_id, "user_id": "alice", "title": "新的", "status": "To Do", "priority": "Medium", "duration": 30}
+
+
+@pytest.mark.asyncio
+async def test_ac39_insert_into_full_parent_is_rejected_and_leaves_no_trace():
+    """AC39：主任務在寫入當下已經有 10 個子任務（例如另一個請求先放進去）→ 400，數量不超過 10，也不留下新的子任務。"""
+    await _insert_chain("ac39a", 10)
+    try:
+        with pytest.raises(InvalidRequestError):
+            await manual_task_crud.insert_subtask("ac39a-p", "alice", _new_subtask("ac39a-new"), position=11)
+
+        assert len(await _visible_titles("ac39a-p")) == 10
+        assert await manual_task_crud.db.manual_tasks.find_one({"_id": "ac39a-new"}) is None
+    finally:
+        await manual_task_crud.db.manual_tasks.delete_many({"_id": {"$regex": "^ac39a-"}})
+
+
+@pytest.mark.asyncio
+async def test_ac39_insert_position_beyond_current_count_is_rejected():
+    """AC39：插入位置在寫入當下已經不存在（例如另一個請求刪掉了階段）→ 400，不產生空號。"""
+    await _insert_chain("ac39b", 2)
+    try:
+        with pytest.raises(InvalidRequestError):
+            await manual_task_crud.insert_subtask("ac39b-p", "alice", _new_subtask("ac39b-new"), position=4)
+
+        assert await _visible_titles("ac39b-p") == ["階段1", "階段2"]
+    finally:
+        await manual_task_crud.db.manual_tasks.delete_many({"_id": {"$regex": "^ac39b-"}})
+
+
+@pytest.mark.asyncio
+async def test_ac39_failure_updating_parent_keeps_stages_unchanged():
+    """AC39：子任務寫入後、更新主任務順序時失敗 → 使用者看到的子任務數量和階段編號不變，例外照樣往外丟。"""
+    from pymongo.errors import PyMongoError
+
+    await _insert_chain("ac39c", 2)
+    collection = manual_task_crud.db.manual_tasks
+    original = collection.update_one
+
+    async def fail_on_parent(filter, update, **kwargs):
+        if filter.get("_id") == "ac39c-p":
+            raise PyMongoError("寫入中斷")
+        return await original(filter, update, **kwargs)
+
+    collection.update_one = fail_on_parent
+    try:
+        with pytest.raises(PyMongoError):
+            await manual_task_crud.insert_subtask("ac39c-p", "alice", _new_subtask("ac39c-new"), position=1)
+    finally:
+        collection.update_one = original
+    try:
+        assert await _visible_titles("ac39c-p") == ["階段1", "階段2"]
+        listed = [t["id"] for t in await manual_task_crud.get_manual_tasks_by_user_id("alice")]
+        assert "ac39c-new" not in listed
+    finally:
+        await collection.delete_many({"_id": {"$regex": "^ac39c-"}})
+
+
+@pytest.mark.asyncio
+async def test_ac39_converting_task_that_changed_meanwhile_is_rejected_and_unchanged():
+    """AC39：一般任務在轉換當下已經完成（另一個請求改的）→ 400，任務維持一般任務，不留下子任務。"""
+    collection = manual_task_crud.db.manual_tasks
+    await collection.insert_one({"_id": "ac39d-t", "user_id": "alice", "title": "一般", "status": "Done", "priority": "Low"})
+    try:
+        with pytest.raises(InvalidRequestError):
+            await manual_task_crud.insert_subtask("ac39d-t", "alice", _new_subtask("ac39d-new"), position=1, convert=True)
+
+        stored = await collection.find_one({"_id": "ac39d-t"})
+        assert stored.get("is_parent") is None and stored["priority"] == "Low"
+        assert await collection.find_one({"_id": "ac39d-new"}) is None
+    finally:
+        await collection.delete_many({"_id": {"$regex": "^ac39d-"}})
+
+
+@pytest.mark.asyncio
+async def test_ac39_conversion_sets_parent_fields_and_first_subtask_in_one_update():
+    """AC39 / AC12：轉換成主任務時，is_parent、清空的欄位和第一個子任務在同一次更新完成。"""
+    collection = manual_task_crud.db.manual_tasks
+    await collection.insert_one({
+        "_id": "ac39e-t", "user_id": "alice", "title": "一般", "status": "In Progress", "priority": "Low",
+        "duration": 30, "inference_hint": "提醒",
+    })
+    try:
+        await manual_task_crud.insert_subtask("ac39e-t", "alice", _new_subtask("ac39e-new"), position=1, convert=True)
+
+        stored = await collection.find_one({"_id": "ac39e-t"})
+        assert stored["is_parent"] is True and stored["subtask_ids"] == ["ac39e-new"]
+        assert all(field not in stored for field in ("priority", "duration", "inference_hint", "status"))
+    finally:
+        await collection.delete_many({"_id": {"$regex": "^ac39e-"}})
+
+
+@pytest.mark.asyncio
+async def test_ac39_ac30_deleting_when_only_one_stage_remains_is_rejected():
+    """AC39 / AC30：刪除當下主任務只剩一個子任務（另一個請求先刪了）→ 400，至少保留 1 個。"""
+    await _insert_chain("ac39f", 1)
+    try:
+        only = await manual_task_crud.get_manual_task_by_id("ac39f-s1", "alice")
+        with pytest.raises(InvalidRequestError):
+            await manual_task_crud.delete_subtask(only)
+
+        assert await _visible_titles("ac39f-p") == ["階段1"]
+    finally:
+        await manual_task_crud.db.manual_tasks.delete_many({"_id": {"$regex": "^ac39f-"}})
+
+
+@pytest.mark.asyncio
+async def test_ac39_subtask_not_in_parent_order_is_hidden_everywhere():
+    """AC39：不在主任務 subtask_ids 裡的子任務（寫入失敗留下的、主任務已不存在的）不出現在列表、排程清單和查詢。"""
+    import crud.schedulable_items as schedulable_items
+
+    await _insert_chain("ac39g", 1)
+    collection = manual_task_crud.db.manual_tasks
+    await collection.insert_many([
+        {**_new_subtask("ac39g-stray"), "parent_id": "ac39g-p"},
+        {**_new_subtask("ac39g-orphan"), "parent_id": "ac39g-gone"},
+    ])
+    try:
+        listed = {t["id"] for t in await manual_task_crud.get_manual_tasks_by_user_id("alice")}
+        schedulable = {t["id"] for t in await schedulable_items.get_all_schedulable_items("alice")}
+
+        assert "ac39g-s1" in listed
+        assert not {"ac39g-stray", "ac39g-orphan"} & listed
+        assert not {"manual:ac39g-stray", "manual:ac39g-orphan"} & schedulable
+        assert (await manual_task_crud.get_manual_task_by_id("ac39g-p", "alice"))["progress"] == {"done": 0, "total": 1}
+        with pytest.raises(NotFoundError):
+            await manual_task_crud.get_manual_task_by_id("ac39g-stray", "alice")
+    finally:
+        await collection.delete_many({"_id": {"$regex": "^ac39g-"}})

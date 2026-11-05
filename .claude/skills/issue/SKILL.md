@@ -19,7 +19,7 @@ gh issue view <N> --json number,title,body,labels,comments,state
 
 issue 已關閉時停下來，問開發者要不要繼續。
 
-issue 的內容與留言就是需求來源，但不等於已核准的規格：issue 裡寫的「建議的驗收條件」「修法參考」也要寫進規格、經開發者核准。內容不足以寫出驗收條件時，照 `/feature` 第 3 節「Missing AC 的處理」問開發者。
+issue 的內容與留言就是需求來源，但不等於已核准的規格：issue 裡寫的「建議的驗收條件」「修法參考」也要寫進規格、經開發者核准。內容不足以寫出驗收條件時，照 `/feature` 第 3 節「規格問題的處理」問開發者。
 
 ## 2. 照 `/feature` 的流程執行
 

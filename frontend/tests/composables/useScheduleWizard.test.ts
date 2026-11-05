@@ -320,4 +320,16 @@ describe('useScheduleWizard composable', () => {
       'ordered', 'no-order-early', 'no-order-late', 'no-order-no-due',
     ])
   })
+
+  it('AC27：initWizard 不放主任務，只放子任務和一般任務', () => {
+    const ctx = useScheduleWizard()
+    ctx.initWizard([
+      fakeTask({ id: 'manual:p1', priority: null, is_parent: true }),
+      fakeTask({ id: 'manual:s1', priority: 'High', parent_id: 'manual:p1', stage: 1, stage_count: 1 }),
+      fakeTask({ id: 'manual:plain', priority: 'Low' }),
+    ])
+
+    const ids = [...ctx.columns.Low, ...ctx.columns.Medium, ...ctx.columns.High].map((t) => t.id)
+    expect(ids.sort()).toEqual(['manual:plain', 'manual:s1'])
+  })
 })

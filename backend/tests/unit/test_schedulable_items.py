@@ -446,3 +446,25 @@ async def test_completed_at_of_platform_closed_item_stored_as_datetime():
         assert items["jira:100"]["completed_at"] == datetime(2026, 10, 2, 2, 0, tzinfo=timezone.utc)
     finally:
         await _cleanup()
+
+
+@pytest.mark.asyncio
+async def test_get_all_schedulable_items_exposes_stage_relationship():
+    """AC27 / AC35：子任務帶主任務的組合 id、主任務名稱、階段 k 與總階段數 N；主任務標成 is_parent，狀態依子任務計算。"""
+    try:
+        await db.manual_tasks.insert_many([
+            # 順序以 subtask_ids 為準：s2 雖然先寫入，仍是階段 2
+            {"_id": "s2", "user_id": "sched-user", "title": "二", "parent_id": "p1", "status": "To Do", "priority": "High"},
+            {"_id": "p1", "user_id": "sched-user", "title": "期末報告", "is_parent": True, "subtask_ids": ["s1", "s2"]},
+            {"_id": "s1", "user_id": "sched-user", "title": "一", "parent_id": "p1", "status": "Done", "priority": "High"},
+        ])
+
+        items = {item["id"]: item for item in await schedulable_items.get_all_schedulable_items("sched-user")}
+
+        assert items["manual:p1"]["is_parent"] is True
+        assert items["manual:p1"]["status"] == "In Progress"
+        assert {k: items["manual:s2"][k] for k in ("parent_id", "parent_title", "stage", "stage_count")} == {
+            "parent_id": "manual:p1", "parent_title": "期末報告", "stage": 2, "stage_count": 2,
+        }
+    finally:
+        await _cleanup()

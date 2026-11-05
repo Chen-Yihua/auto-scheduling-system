@@ -14,4 +14,10 @@ export interface SchedulableTask {
   sort_order?: number | null
   calendar_event_id?: string | null
   url?: string | null
+  // 階段任務：parent_id 是主任務的組合 id；stage_count 是主任務的子任務總數
+  is_parent?: boolean
+  parent_id?: string | null
+  parent_title?: string | null
+  stage?: number | null
+  stage_count?: number | null
 }

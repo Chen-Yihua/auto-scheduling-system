@@ -160,3 +160,15 @@ def test_summary_includes_generation_time():
     summary = build_productivity_summary([], NOW, "Asia/Taipei")
 
     assert summary["generated_at"] == NOW
+
+
+def test_ac36_parent_tasks_are_not_counted():
+    """AC36：主任務只是容器，不計入統計；子任務和一般任務照算。"""
+    parent = {**_item(status="Done", priority=None, duration=None), "is_parent": True}
+    subtask = {**_item(status="Done", completed_at=NOW), "parent_id": "manual:p", "stage": 1}
+
+    summary = build_productivity_summary([parent, subtask, _item()], NOW, "UTC")
+
+    assert summary["total"] == 2
+    assert summary["done"] == 1
+    assert [row["priority"] for row in summary["by_priority"]] == ["Medium"]

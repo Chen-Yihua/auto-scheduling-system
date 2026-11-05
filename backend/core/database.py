@@ -20,6 +20,8 @@ async def ensure_indexes() -> None:
         unique=True,
         partialFilterExpression={"idempotency_key": {"$type": "string"}},
     )
+    # 查主任務底下的子任務
+    await db.manual_tasks.create_index([("user_id", 1), ("parent_id", 1)])
 
     # unique：同一使用者同時同步兩次時，資料庫才會擋下重複的項目
     # 在函式內 import 以避免循環 import

@@ -646,3 +646,255 @@ def test_check_suggestion_rejects_items_that_changed_since_the_user_saw_them(cur
 
     assert to_write == []
     assert failed == [{"task_id": "t1", "title": "t1", "reason": reason}]
+
+
+# ---------- 階段任務：子任務依階段先後排程 ----------
+
+def _stage(id, parent, stage, priority="Medium", status="To Do", due_date=None, duration=60, calendar_event_id=None, sort_order=None):
+    return {
+        "id": id, "title": id, "priority": priority, "status": status, "due_date": due_date,
+        "duration": duration, "sort_order": sort_order, "calendar_event_id": calendar_event_id,
+        "parent_id": parent, "stage": stage,
+    }
+
+
+def _parent(id):
+    return {"id": id, "title": id, "priority": None, "status": "To Do", "is_parent": True, "calendar_event_id": None}
+
+
+def test_ac21_parent_task_is_never_scheduled():
+    """AC21：主任務只是容器，不會出現在排程建議的 scheduled 或 unscheduled 裡。"""
+    tasks = [_parent("p"), _stage("s1", "p", 1)]
+    free_slots = [_slot("2026-09-10T09:00:00Z", "2026-09-10T12:00:00Z")]
+
+    result = build_schedule_suggestion(tasks, free_slots, now=NOW)
+
+    ids = [i["task_id"] for i in result["scheduled"] + result["unscheduled"]]
+    assert ids == ["s1"]
+
+
+def test_ac21_later_stage_starts_after_previous_stage_ends_plus_buffer_even_if_sorted_first():
+    """AC21：後面階段的 sort_order 比較前面，仍要等前一個階段排好，從它結束加緩衝之後開始。"""
+    tasks = [
+        _stage("s2", "p", 2, sort_order=0),
+        _stage("s1", "p", 1, sort_order=5),
+    ]
+    free_slots = [_slot("2026-09-10T09:00:00Z", "2026-09-10T12:00:00Z")]
+
+    result = build_schedule_suggestion(tasks, free_slots, buffer_minutes=15, now=NOW)
+
+    by_id = {i["task_id"]: i for i in result["scheduled"]}
+    assert by_id["s1"]["start"] == datetime(2026, 9, 10, 9, 0, tzinfo=timezone.utc)
+    assert by_id["s2"]["start"] == datetime(2026, 9, 10, 10, 15, tzinfo=timezone.utc)
+
+
+def test_ac21_time_before_a_later_stage_stays_free_for_other_tasks():
+    """AC21：後面階段被往後推時，它前面空出來的時間仍可以排其他任務。"""
+    tasks = [
+        _stage("s1", "p", 1, priority="High", duration=60),
+        _stage("s2", "p", 2, priority="High", duration=60),
+        _task("other", "其他任務", "Low", duration=30),
+    ]
+    # 第一段只放得下 s1；s2 必須在 s1 之後，第二段的 s2 前面留下 30 分鐘給 other
+    free_slots = [
+        _slot("2026-09-10T09:00:00Z", "2026-09-10T10:00:00Z"),
+        _slot("2026-09-10T09:30:00Z", "2026-09-10T11:30:00Z"),
+    ]
+
+    result = build_schedule_suggestion(tasks, free_slots, now=NOW)
+
+    by_id = {i["task_id"]: i for i in result["scheduled"]}
+    assert by_id["s2"]["start"] == datetime(2026, 9, 10, 10, 0, tzinfo=timezone.utc)
+    assert by_id["other"]["start"] == datetime(2026, 9, 10, 9, 30, tzinfo=timezone.utc)
+
+
+def test_ac22_when_previous_stage_cannot_be_placed_all_later_stages_are_unscheduled():
+    """AC22：第 1 階段排不進去，第 2、3 階段即使放得下也列進無法安排，原因寫前一個階段還沒排入。"""
+    tasks = [
+        _stage("s1", "p", 1, duration=240),
+        _stage("s2", "p", 2, duration=30),
+        _stage("s3", "p", 3, duration=30),
+    ]
+    free_slots = [_slot("2026-09-10T09:00:00Z", "2026-09-10T10:00:00Z")]
+
+    result = build_schedule_suggestion(tasks, free_slots, now=NOW)
+
+    assert result["scheduled"] == []
+    reasons = {i["task_id"]: i["reason"] for i in result["unscheduled"]}
+    assert reasons["s1"] == "沒有足夠的空檔可以安排"
+    assert reasons["s2"] == "前一個階段還沒排入"
+    assert reasons["s3"] == "前一個階段還沒排入"
+
+
+def test_ac23_previous_stage_done_puts_no_ordering_constraint():
+    """AC23：前一個階段已完成，後面的階段直接從最早的空檔開始排。"""
+    tasks = [
+        _stage("s1", "p", 1, status="Done"),
+        _stage("s2", "p", 2),
+    ]
+    free_slots = [_slot("2026-09-10T09:00:00Z", "2026-09-10T10:00:00Z")]
+
+    result = build_schedule_suggestion(tasks, free_slots, now=NOW)
+
+    assert [i["task_id"] for i in result["scheduled"]] == ["s2"]
+    assert result["scheduled"][0]["start"] == datetime(2026, 9, 10, 9, 0, tzinfo=timezone.utc)
+
+
+def test_ac24_previous_stage_on_calendar_uses_latest_event_end_from_google():
+    """AC24：前一個階段已寫入行事曆但沒完成 → 排在 Google 上那個事件（最新時間）結束加緩衝之後。"""
+    tasks = [
+        _stage("s1", "p", 1, calendar_event_id="ev-1"),
+        _stage("s2", "p", 2),
+    ]
+    free_slots = [_slot("2026-09-10T09:00:00Z", "2026-09-10T18:00:00Z")]
+    event_ends = {"ev-1": datetime(2026, 9, 10, 13, 0, tzinfo=timezone.utc)}
+
+    result = build_schedule_suggestion(tasks, free_slots, buffer_minutes=10, now=NOW, previous_event_ends=event_ends)
+
+    assert [i["task_id"] for i in result["scheduled"]] == ["s2"]
+    assert result["scheduled"][0]["start"] == datetime(2026, 9, 10, 13, 10, tzinfo=timezone.utc)
+
+
+def test_ac24_previous_stage_event_no_longer_exists_puts_no_constraint_and_is_not_rescheduled():
+    """AC24：前一個階段的事件已經不存在 → 後面的階段不受限制，前一個階段也不重新排。"""
+    tasks = [
+        _stage("s1", "p", 1, calendar_event_id="ev-gone"),
+        _stage("s2", "p", 2),
+    ]
+    free_slots = [_slot("2026-09-10T09:00:00Z", "2026-09-10T18:00:00Z")]
+
+    result = build_schedule_suggestion(tasks, free_slots, now=NOW, previous_event_ends={"ev-gone": None})
+
+    assert [i["task_id"] for i in result["scheduled"]] == ["s2"]
+    assert result["scheduled"][0]["start"] == datetime(2026, 9, 10, 9, 0, tzinfo=timezone.utc)
+    assert result["unscheduled"] == []
+
+
+def test_ac25_earlier_stage_without_due_date_gets_deadline_derived_from_next_stage():
+    """AC25：前面階段沒截止日、後面有 → 前面階段的期限是「下一個階段的期限 − 下一個階段的時長」。"""
+    tasks = [
+        _stage("s1", "p", 1, duration=60),
+        _stage("s2", "p", 2, duration=120, due_date=datetime(2026, 9, 10, 12, 0, tzinfo=timezone.utc)),
+    ]
+    # s1 最晚要在 10:00（12:00 − 120 分鐘）前結束；09:30 開始的空檔只能 10:30 結束，放不進去
+    free_slots = [_slot("2026-09-10T09:30:00Z", "2026-09-10T18:00:00Z")]
+
+    result = build_schedule_suggestion(tasks, free_slots, now=NOW)
+
+    reasons = {i["task_id"]: i["reason"] for i in result["unscheduled"]}
+    assert reasons["s1"] == "截止日前沒有足夠的空檔"
+    assert reasons["s2"] == "前一個階段還沒排入"
+
+
+def test_ac25_derived_deadline_chains_back_from_last_stage_with_due_date():
+    """AC25：從最後一個有截止日的階段往前遞推；放得進期限就照常排。"""
+    tasks = [
+        _stage("s1", "p", 1, duration=60),
+        _stage("s2", "p", 2, duration=60),
+        _stage("s3", "p", 3, duration=60, due_date=datetime(2026, 9, 10, 12, 0, tzinfo=timezone.utc)),
+    ]
+    free_slots = [_slot("2026-09-10T09:00:00Z", "2026-09-10T18:00:00Z")]
+
+    result = build_schedule_suggestion(tasks, free_slots, now=NOW)
+
+    assert [i["task_id"] for i in result["scheduled"]] == ["s1", "s2", "s3"]
+    assert result["scheduled"][2]["end"] == datetime(2026, 9, 10, 12, 0, tzinfo=timezone.utc)
+
+
+# ---------- 階段任務：確認排程 ----------
+
+def _current_stage(task_id, parent, stage):
+    return {**_current_task(task_id), "parent_id": parent, "stage": stage}
+
+
+def test_ac26_later_stage_is_not_written_when_previous_stage_is_no_longer_valid():
+    """AC26：前一個階段已失效（例如時段被占用）→ 同一個主任務後面的階段也不寫入，原因寫前一個階段寫入失敗。"""
+    scheduled = [_scheduled_item("s1", 9, 10), _scheduled_item("s2", 10, 11), _scheduled_item("other", 10, 11)]
+    current = [_current_stage("s1", "p", 1), _current_stage("s2", "p", 2), _current_task("other")]
+    free_slots = [_slot("2026-09-10T09:30:00Z", "2026-09-10T12:00:00Z")]  # s1 的 9:00 被占了
+
+    to_write, failed = check_suggestion_still_valid(scheduled, current, free_slots, now=CHECK_NOW)
+
+    assert [i["task_id"] for i in to_write] == ["other"]
+    assert {f["task_id"]: f["reason"] for f in failed} == {
+        "s1": "這個時段已被其他行程占用，請重新產生排程",
+        "s2": "前一個階段寫入失敗",
+    }
+
+
+def test_ac26_valid_later_stage_carries_previous_stage_id_so_writer_can_skip_it():
+    """AC26：兩個階段都還有效 → 都寫入，後面的階段標上前一個階段的 id，寫入時前一個失敗才能跳過。"""
+    scheduled = [_scheduled_item("s1", 9, 10), _scheduled_item("s2", 10, 11)]
+    current = [_current_stage("s1", "p", 1), _current_stage("s2", "p", 2)]
+    free_slots = [_slot("2026-09-10T08:00:00Z", "2026-09-10T12:00:00Z")]
+
+    to_write, failed = check_suggestion_still_valid(scheduled, current, free_slots, now=CHECK_NOW)
+
+    assert failed == []
+    assert [i.get("previous_task_id") for i in to_write] == [None, "s1"]
+
+
+def test_ac25_derived_deadline_counts_as_urgent_so_earlier_stage_is_scheduled_first():
+    """
+    AC25：推算的期限也適用 24 小時內優先排的規則。3 小時的空檔、兩個 60 分鐘的 High 一般任務、
+    一個兩階段任務（階段 1 沒截止日、Low；階段 2 Low、3 小時後到期）→ 兩個階段都排進去。
+    """
+    now = datetime(2026, 9, 10, 9, 0, tzinfo=timezone.utc)
+    tasks = [
+        _task("x1", "一般任務一", "High", duration=60),
+        _task("x2", "一般任務二", "High", duration=60),
+        _stage("s1", "p", 1, priority="Low", duration=60),
+        _stage("s2", "p", 2, priority="Low", duration=60, due_date=now + timedelta(hours=3)),
+    ]
+    free_slots = [_slot("2026-09-10T09:00:00Z", "2026-09-10T12:00:00Z")]
+
+    result = build_schedule_suggestion(tasks, free_slots, now=now)
+
+    by_id = {i["task_id"]: i for i in result["scheduled"]}
+    assert by_id["s1"]["start"] == now
+    assert by_id["s2"]["start"] == now + timedelta(hours=1)
+    assert [i["task_id"] for i in result["unscheduled"]] == ["x2"]
+
+
+@pytest.mark.parametrize("previous_task, reason", [
+    (_current_stage("s1", "p", 1) | {"status": "Done"}, "任務已經完成"),
+    (_current_stage("s1", "p", 1) | {"calendar_event_id": "ev-1"}, "任務已經排入行事曆"),
+])
+def test_ac26_previous_stage_done_or_already_on_calendar_does_not_block_later_stage(previous_task, reason):
+    """AC26：前一個階段因為已完成或已排入行事曆而沒有寫入 → 不擋後面的階段，後面的照寫。"""
+    scheduled = [_scheduled_item("s1", 9, 10), _scheduled_item("s2", 10, 11)]
+    current = [previous_task, _current_stage("s2", "p", 2)]
+    free_slots = [_slot("2026-09-10T08:00:00Z", "2026-09-10T12:00:00Z")]
+
+    to_write, failed = check_suggestion_still_valid(scheduled, current, free_slots, now=CHECK_NOW)
+
+    assert [i["task_id"] for i in to_write] == ["s2"]
+    assert failed == [{"task_id": "s1", "title": "s1", "reason": reason}]
+
+
+@pytest.mark.parametrize("current, start_hour, free_slot", [
+    ([_current_stage("s2", "p", 2)], 9, ("08:00", "12:00")),
+    ([_current_stage("s1", "p", 1), _current_stage("s2", "p", 2)], 7, ("06:00", "12:00")),
+])
+def test_ac26_previous_stage_gone_or_time_passed_blocks_later_stage(current, start_hour, free_slot):
+    """AC26：前一個階段的任務已不存在或時段已經過了 → 後面的階段也不寫入（快照記著每一筆屬於哪個主任務）。"""
+    scheduled = [
+        _scheduled_item("s1", start_hour, start_hour + 1) | {"parent_id": "p"},
+        _scheduled_item("s2", 10, 11) | {"parent_id": "p"},
+    ]
+    free_slots = [_slot(f"2026-09-10T{free_slot[0]}:00Z", f"2026-09-10T{free_slot[1]}:00Z")]
+
+    to_write, failed = check_suggestion_still_valid(scheduled, current, free_slots, now=CHECK_NOW)
+
+    assert to_write == []
+    assert {f["task_id"]: f["reason"] for f in failed}["s2"] == "前一個階段寫入失敗"
+
+
+def test_ac26_scheduled_items_remember_their_parent_for_the_confirm_snapshot():
+    """AC26：排程建議的每一筆帶 parent_id 存進快照，前一個階段被刪掉後確認時仍知道要擋哪些階段。"""
+    tasks = [_stage("s1", "p", 1), _task("t", "一般任務", "Low")]
+    free_slots = [_slot("2026-09-10T09:00:00Z", "2026-09-10T12:00:00Z")]
+
+    result = build_schedule_suggestion(tasks, free_slots, now=NOW)
+
+    assert {i["task_id"]: i["parent_id"] for i in result["scheduled"]} == {"s1": "p", "t": None}

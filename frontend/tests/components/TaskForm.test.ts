@@ -17,6 +17,7 @@ vi.stubGlobal('useUser',         () => ({ user: ref({ id: 'u1' }) }))
 vi.stubGlobal('useToast',        () => toastSpy)
 vi.stubGlobal('useRuntimeConfig',() => ({ public: { apiBaseUrl: 'http://localhost:8000' } }))
 vi.stubGlobal('$fetch',          (...args: unknown[]) => fetchSpy(...args))
+vi.stubGlobal('useState',        (_key: string, init: () => unknown) => ref(init()))
 
 // useSchedulableTasks 明確 import useAuth，stubGlobal 攔不到，要 mock 整個模組
 vi.mock('@clerk/vue', () => ({
@@ -257,5 +258,65 @@ describe('TaskForm.vue (render)', () => {
     await flushPromises()
 
     expect(wrapper.find('.u-modal-stub').attributes('data-open')).toBe('true')
+  })
+
+  // ---------- 階段任務 ----------
+
+  const stagedTasks = () => [
+    {
+      ...fakeSchedulableTasks(1)[0], id: 'manual:p1', title: '期末報告', priority: null,
+      status: 'In Progress', is_parent: true,
+    },
+    ...[1, 2, 3].map((stage) => ({
+      ...fakeSchedulableTasks(1)[0], id: `manual:s${stage}`, title: `階段任務${stage}`,
+      status: stage === 1 ? 'Done' : 'To Do', parent_id: 'manual:p1', parent_title: '期末報告',
+      stage, stage_count: 3,
+    })),
+  ]
+
+  it('AC35：主任務佔一列並顯示進度，子任務預設收合；展開後子任務標上「階段 k/N」', async () => {
+    mockFetchByUrl({ '/manual-tasks/me': [], '/schedule/tasks': stagedTasks() })
+
+    const wrapper = shallowMount(TaskForm, { global: { stubs: uiStubs } })
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('期末報告')
+    expect(wrapper.text()).toContain('1/3')
+    expect(wrapper.text()).not.toContain('階段任務1')
+
+    const expandButton = wrapper.findAll('button').find((b) => b.text().includes('展開'))
+    await expandButton!.trigger('click')
+
+    expect(wrapper.text()).toContain('階段任務2')
+    expect(wrapper.text()).toContain('階段 2/3')
+  })
+
+  it('AC17：主任務的完成按鈕不能按，按了也不會送出請求', async () => {
+    mockFetchByUrl({ '/manual-tasks/me': [], '/schedule/tasks': stagedTasks() })
+
+    const wrapper = shallowMount(TaskForm, { global: { stubs: uiStubs } })
+    await flushPromises()
+    fetchSpy.mockClear()
+
+    const parentRow = wrapper.findAll('.task-row').find((row) => row.text().includes('期末報告'))
+    const doneButton = parentRow!.findAll('button').find((b) => b.text().includes('完成'))
+    expect(doneButton!.attributes('disabled')).toBeDefined()
+    await doneButton!.trigger('click')
+    await flushPromises()
+
+    expect(fetchSpy).not.toHaveBeenCalledWith('http://localhost:8000/schedule/tasks/done', expect.anything())
+  })
+
+  it('假設 14：帶 limit 時主任務算一筆，收合的子任務不另外計算', async () => {
+    const tasks = [...stagedTasks(), ...fakeSchedulableTasks(2)]
+    mockFetchByUrl({ '/manual-tasks/me': [], '/schedule/tasks': tasks })
+
+    const wrapper = shallowMount(TaskForm, { props: { limit: 2 }, global: { stubs: uiStubs } })
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('期末報告')
+    expect(wrapper.text()).toContain('任務0')
+    expect(wrapper.text()).not.toContain('任務1')
+    expect(wrapper.text()).toContain('查看全部（3）')
   })
 })

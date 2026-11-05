@@ -36,7 +36,7 @@ crud、services、platforms 丟 `core/errors.py` 的例外，由 `core/exception
 |---|---|---|
 | `users` | 使用者（由 Clerk webhook 與 `POST /users/` 建立） | Clerk user id |
 | `linkedAccounts` | 外部平台帳號，憑證加密儲存 | `{clerk_id}_{platform}` |
-| `manual_tasks` | 手動建立的任務 | uuid |
+| `manual_tasks` | 手動建立的任務；主任務（`is_parent`，階段順序存在 `subtask_ids`，見 ADR 0004）和子任務（`parent_id`）也存在這裡 | uuid |
 | `github_issues`、`jira_issues`、`moodle_assignments` | 外部平台項目的同步快取，加上使用者設定的排程欄位 | `(user_id, id)` |
 | `googleCalendarTokens` | Google OAuth token | Clerk user id |
 

@@ -1,7 +1,11 @@
 import logging
 from fastapi import APIRouter, Depends, HTTPException
 from core.security import get_current_clerk_user
-from services.google_calendar import get_free_slots_for_user, create_calendar_events_for_scheduled_tasks
+from services.google_calendar import (
+    get_free_slots_for_user,
+    create_calendar_events_for_scheduled_tasks,
+    get_calendar_event_ends,
+)
 from services.scheduler import build_schedule_suggestion, apply_blocked_periods, check_suggestion_still_valid, _parse_iso
 from core.cache import cache_get, cache_set, cache_delete
 from crud.schedulable_items import (
@@ -71,10 +75,25 @@ async def update_schedule_task_done(
     return {"task_id": body.task_id, "done": body.done}
 
 
+def _previous_stage_event_ids(tasks: list[dict]) -> list[str]:
+    """還要排的子任務，它的前一個階段已寫入行事曆但沒完成時，那個事件的 id。"""
+    by_stage = {(t["parent_id"], t["stage"]): t for t in tasks if t.get("parent_id") and t.get("stage")}
+    event_ids = []
+    for t in tasks:
+        if not t.get("parent_id") or not t.get("stage") or t.get("status") == "Done" or t.get("calendar_event_id"):
+            continue
+        previous = by_stage.get((t["parent_id"], t["stage"] - 1))
+        if previous and previous.get("status") != "Done" and previous.get("calendar_event_id"):
+            event_ids.append(previous["calendar_event_id"])
+    return event_ids
+
+
 async def _compute_suggestion(user_id: str, preferences: SchedulePreferences, error_detail: str) -> dict:
     """取得可排程項目和 Google Calendar 空檔，扣掉不工作時段後計算排程建議。"""
     tasks = await get_all_schedulable_items(user_id)
     free_slots = await get_free_slots_for_user(user_id)
+    event_ids = _previous_stage_event_ids(tasks)
+    previous_event_ends = await get_calendar_event_ends(user_id, event_ids) if event_ids else {}
 
     # 資料格式不符預期時回明確的錯誤訊息，而不是沒有說明的 500
     try:
@@ -89,6 +108,7 @@ async def _compute_suggestion(user_id: str, preferences: SchedulePreferences, er
             buffer_minutes=preferences.buffer_minutes,
             daily_max_minutes=preferences.daily_max_minutes,
             tz_name=preferences.timezone,
+            previous_event_ends=previous_event_ends,
         )
     except Exception:
         logger.exception("計算排程建議失敗 user_id=%s", user_id)

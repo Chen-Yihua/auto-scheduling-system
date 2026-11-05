@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { useTaskForm } from '~/composables/useTaskForm'
 import { useSchedulableTasks } from '~/composables/useSchedulableTasks'
-import { onMounted, computed } from 'vue'
+import { onMounted, computed, ref } from 'vue'
 import type { FormSubmitEvent } from '@nuxt/ui'
 import type { SchedulableTask } from '~/types/schedulableTask'
+import type { Task } from '~/types/manualTask'
 import { priorityLabel } from '~/utils/labels'
 
 // 不傳 limit 則顯示全部
@@ -28,15 +29,55 @@ const {
   onEdit,
   onDelete,
   onCancel,
+  maxSubtasks,
+  addSubtaskRow,
+  removeSubtaskRow,
+  isEditingParent,
+  isEditingSubtask,
+  editingSubtasks,
+  splitBlockedReason,
+  subtaskDraft,
+  showSubtaskDraft,
+  startAddSubtask,
+  cancelAddSubtask,
+  onAddSubtask,
+  onDeleteSubtask,
 } = useTaskForm()
+
+// 主任務的優先序、時長、給 AI 的提醒由子任務決定，表單上不顯示
+const hidesOwnSchedulingFields = computed(() => isEditingParent.value || (!isEditMode.value && state.subtasks.length > 0))
 
 // 列表顯示所有來源的項目，但只有手動任務能編輯；all_tasks 用來取得編輯表單需要的完整欄位
 const { tasks: schedulableTasks, loading, fetchSchedulableTasks, toggleDone } = useSchedulableTasks()
 
+// 子任務收在主任務底下，limit 只算最上層（主任務算一筆）
+const topLevelTasks = computed(() => schedulableTasks.value.filter((t) => !t.parent_id))
+const subtasksByParent = computed(() => {
+  const groups: Record<string, SchedulableTask[]> = {}
+  for (const task of schedulableTasks.value) {
+    if (!task.parent_id) continue
+    ;(groups[task.parent_id] ??= []).push(task)
+  }
+  for (const group of Object.values(groups)) group.sort((a, b) => (a.stage ?? 0) - (b.stage ?? 0))
+  return groups
+})
 const displayedTasks = computed(() =>
-  props.limit ? schedulableTasks.value.slice(0, props.limit) : schedulableTasks.value
+  props.limit ? topLevelTasks.value.slice(0, props.limit) : topLevelTasks.value
 )
-const hasMoreTasks = computed(() => !!props.limit && schedulableTasks.value.length > props.limit)
+const hasMoreTasks = computed(() => !!props.limit && topLevelTasks.value.length > props.limit)
+
+const expandedParents = ref(new Set<string>())
+function toggleExpanded(parentId: string) {
+  const next = new Set(expandedParents.value)
+  if (next.has(parentId)) next.delete(parentId)
+  else next.add(parentId)
+  expandedParents.value = next
+}
+
+function progressText(parentId: string): string {
+  const subtasks = subtasksByParent.value[parentId] ?? []
+  return `${subtasks.filter((t) => t.status === 'Done').length}/${subtasks.length}`
+}
 
 const sourceIcon: Record<SchedulableTask['source'], string> = {
   manual: 'i-lucide-list-todo',
@@ -104,6 +145,16 @@ async function handleDelete() {
   await fetchSchedulableTasks()
 }
 
+async function handleAddSubtask() {
+  await onAddSubtask()
+  await fetchSchedulableTasks()
+}
+
+async function handleDeleteSubtask(subtask: Task) {
+  await onDeleteSubtask(subtask)
+  await fetchSchedulableTasks()
+}
+
 // 兩個 fetch 各自處理錯誤，不用再包 try/catch
 onMounted(async () => {
   await waitForUser(user)
@@ -161,8 +212,9 @@ onMounted(async () => {
             />
 
             <div class="flex flex-nowrap items-center mb-4 text-m gap-x-6">
-              <label class="w-26 whitespace-nowrap text-gray-700">優先級</label>
+              <label v-if="!hidesOwnSchedulingFields" class="w-26 whitespace-nowrap text-gray-700">優先級</label>
               <UFormField
+                v-if="!hidesOwnSchedulingFields"
                 name="Priority"
                 size="lg"
                 hint="不確定可留空，AI 會幫你評估"
@@ -202,7 +254,7 @@ onMounted(async () => {
               </UFormField>
             </div>
 
-            <div class="flex flex-nowrap items-center mb-4 text-m gap-x-6">
+            <div v-if="!hidesOwnSchedulingFields" class="flex flex-nowrap items-center mb-4 text-m gap-x-6">
               <label class="w-26 whitespace-nowrap text-gray-700">預估時長</label>
               <UFormField
                 size="lg"
@@ -219,7 +271,7 @@ onMounted(async () => {
               </UFormField>
             </div>
 
-            <div class="flex flex-nowrap items-start mb-4 text-m gap-x-6">
+            <div v-if="!hidesOwnSchedulingFields" class="flex flex-nowrap items-start mb-4 text-m gap-x-6">
               <label class="w-26 whitespace-nowrap text-gray-700 mt-2">給 AI 的提醒</label>
               <UFormField
                 size="lg"
@@ -233,6 +285,108 @@ onMounted(async () => {
                   class="w-full"
                 />
               </UFormField>
+            </div>
+
+            <!-- 新增任務時一起拆成階段 -->
+            <div v-if="!isEditMode" class="space-y-2">
+              <div class="flex items-center justify-between">
+                <span class="text-sm font-semibold text-gray-700">拆成階段（選填）</span>
+                <UButton
+                  type="button"
+                  size="xs"
+                  variant="soft"
+                  icon="i-lucide-plus"
+                  :disabled="state.subtasks.length >= maxSubtasks"
+                  @click="addSubtaskRow"
+                >
+                  新增階段
+                </UButton>
+              </div>
+              <p v-if="state.subtasks.length > 0" class="text-xs text-gray-500">
+                依順序成為階段 1～{{ state.subtasks.length }}（最多 {{ maxSubtasks }} 個）；後面階段的優先級不能高於前面的階段，
+                優先級和時長留空由 AI 評估。
+              </p>
+              <div
+                v-for="(subtask, index) in state.subtasks"
+                :key="index"
+                class="flex flex-wrap items-center gap-2 rounded-md border border-default px-2 py-2"
+              >
+                <span class="text-xs text-gray-500 whitespace-nowrap">階段 {{ index + 1 }}</span>
+                <UInput v-model="subtask.title" placeholder="階段標題" size="sm" class="flex-1 min-w-32" />
+                <USelect v-model="subtask.priority" placeholder="優先級" :items="priorityItems" size="sm" class="w-24" />
+                <UInput v-model="subtask.duration" type="number" min="1" placeholder="分鐘" size="sm" class="w-20" />
+                <UInput v-model="subtask.due_date" type="date" size="sm" class="w-36" />
+                <UButton type="button" size="xs" variant="ghost" color="error" @click="removeSubtaskRow(index)">
+                  移除
+                </UButton>
+              </div>
+            </div>
+
+            <!-- 編輯主任務：列出階段，可以在指定位置插入或刪除 -->
+            <div v-if="isEditingParent" class="space-y-2">
+              <span class="text-sm font-semibold text-gray-700">階段</span>
+              <div
+                v-for="subtask in editingSubtasks"
+                :key="subtask.id"
+                class="subtask-edit-row flex items-center gap-2 rounded-md border border-default px-2 py-1"
+              >
+                <span class="text-xs text-gray-500 whitespace-nowrap">階段 {{ subtask.stage }}</span>
+                <span class="text-sm truncate flex-1">{{ subtask.title }}</span>
+                <UButton
+                  type="button"
+                  size="xs"
+                  variant="ghost"
+                  :disabled="editingSubtasks.length >= maxSubtasks"
+                  @click="startAddSubtask(subtask.stage ?? 1)"
+                >
+                  在前面插入
+                </UButton>
+                <UButton type="button" size="xs" variant="ghost" color="error" @click="handleDeleteSubtask(subtask)">
+                  刪除
+                </UButton>
+              </div>
+              <UButton
+                type="button"
+                size="xs"
+                variant="soft"
+                icon="i-lucide-plus"
+                :disabled="editingSubtasks.length >= maxSubtasks"
+                @click="startAddSubtask()"
+              >
+                新增階段到最後
+              </UButton>
+            </div>
+
+            <!-- 編輯一般任務：可以拆成階段 -->
+            <div v-else-if="isEditMode && !isEditingSubtask && !showSubtaskDraft" class="text-sm">
+              <p v-if="splitBlockedReason" class="text-xs text-gray-500">{{ splitBlockedReason }}</p>
+              <UButton v-else type="button" size="xs" variant="soft" icon="i-lucide-list-tree" @click="startAddSubtask()">
+                拆成階段
+              </UButton>
+            </div>
+
+            <div v-if="showSubtaskDraft" class="space-y-2 rounded-md border border-default px-3 py-3">
+              <p class="text-xs text-gray-500">
+                新增為階段 {{ subtaskDraft.position }}{{ isEditingParent ? '，後面的階段編號會依序加 1' : '；這個任務會變成主任務，本身的優先級和時長改由階段決定' }}
+              </p>
+              <div class="flex flex-wrap items-center gap-2">
+                <UInput v-model="subtaskDraft.title" placeholder="階段標題" size="sm" class="flex-1 min-w-32" />
+                <USelect v-model="subtaskDraft.priority" placeholder="優先級" :items="priorityItems" size="sm" class="w-24" />
+                <UInput v-model="subtaskDraft.duration" type="number" min="1" placeholder="分鐘" size="sm" class="w-20" />
+                <UInput v-model="subtaskDraft.due_date" type="date" size="sm" class="w-36" />
+              </div>
+              <div class="flex justify-end gap-2">
+                <UButton type="button" size="xs" variant="link" @click="cancelAddSubtask">取消</UButton>
+                <UButton
+                  type="button"
+                  size="xs"
+                  :loading="submitting"
+                  :disabled="submitting || !subtaskDraft.title.trim()"
+                  @click="handleAddSubtask"
+                >
+                  新增階段
+                </UButton>
+              </div>
             </div>
 
             <div class="flex items-end space-x-3 mt-2">
@@ -290,53 +444,113 @@ onMounted(async () => {
         目前沒有任務，點擊右上角的編輯圖示新增一個吧
       </div>
       <div v-else class="space-y-2">
-        <div
-          v-for="task in displayedTasks"
-          :key="task.id"
-          class="task-row rounded-lg border border-default px-3 py-2"
-          :class="task.source !== 'manual' ? 'cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800' : ''"
-          @click="task.source === 'manual' ? undefined : openSchedulableTask(task)"
-        >
-          <div class="flex items-center gap-1.5 min-w-0">
-            <UIcon :name="sourceIcon[task.source]" class="w-4 h-4 flex-shrink-0 text-gray-400" />
-            <span class="text-sm font-semibold truncate flex-1">{{ task.title }}</span>
-            <UBadge v-if="task.priority" :color="getPriorityColor(task.priority)" variant="soft" size="sm">
-              {{ priorityLabel(task.priority) }}
-            </UBadge>
-          </div>
-          <div class="flex items-center justify-between gap-2 mt-1">
-            <span v-if="task.due_date" class="text-xs text-gray-500 truncate">
-              截止：{{ compactDueDate(task.due_date) }}
-            </span>
-            <span v-else class="text-xs text-gray-400">無期限</span>
-            <div class="flex items-center gap-1 flex-shrink-0">
-              <UButton
-                v-if="task.source === 'manual'"
-                icon="i-lucide-pencil"
-                size="xs"
-                color="info"
-                variant="ghost"
-                @click.stop="startEditSchedulableTask(task)"
-              >
-                編輯
-              </UButton>
-              <UButton
-                icon="i-lucide-check"
-                size="xs"
-                :color="task.status === 'Done' ? 'neutral' : 'success'"
-                variant="ghost"
-                @click.stop="toggleDone(task)"
-              >
-                {{ task.status === 'Done' ? '取消完成' : '標記完成' }}
-              </UButton>
+        <div v-for="task in displayedTasks" :key="task.id" class="space-y-1">
+          <div
+            class="task-row rounded-lg border border-default px-3 py-2"
+            :class="task.source !== 'manual' ? 'cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800' : ''"
+            @click="task.source === 'manual' ? undefined : openSchedulableTask(task)"
+          >
+            <div class="flex items-center gap-1.5 min-w-0">
+              <UIcon :name="sourceIcon[task.source]" class="w-4 h-4 flex-shrink-0 text-gray-400" />
+              <span class="text-sm font-semibold truncate flex-1">{{ task.title }}</span>
+              <span v-if="task.is_parent" class="text-xs text-gray-500 flex-shrink-0">
+                進度 {{ progressText(task.id) }}
+              </span>
+              <UBadge v-if="task.priority" :color="getPriorityColor(task.priority)" variant="soft" size="sm">
+                {{ priorityLabel(task.priority) }}
+              </UBadge>
+            </div>
+            <div class="flex items-center justify-between gap-2 mt-1">
+              <span v-if="task.due_date" class="text-xs text-gray-500 truncate">
+                截止：{{ compactDueDate(task.due_date) }}
+              </span>
+              <span v-else class="text-xs text-gray-400">無期限</span>
+              <div class="flex items-center gap-1 flex-shrink-0">
+                <UButton
+                  v-if="task.is_parent"
+                  :icon="expandedParents.has(task.id) ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'"
+                  size="xs"
+                  color="neutral"
+                  variant="ghost"
+                  @click.stop="toggleExpanded(task.id)"
+                >
+                  {{ expandedParents.has(task.id) ? '收合階段' : '展開階段' }}
+                </UButton>
+                <UButton
+                  v-if="task.source === 'manual'"
+                  icon="i-lucide-pencil"
+                  size="xs"
+                  color="info"
+                  variant="ghost"
+                  @click.stop="startEditSchedulableTask(task)"
+                >
+                  編輯
+                </UButton>
+                <!-- 主任務的狀態依子任務自動計算，不能手動標記 -->
+                <UButton
+                  icon="i-lucide-check"
+                  size="xs"
+                  :color="task.status === 'Done' ? 'neutral' : 'success'"
+                  variant="ghost"
+                  :disabled="task.is_parent"
+                  :title="task.is_parent ? '依階段的完成狀態自動計算' : undefined"
+                  @click.stop="task.is_parent ? undefined : toggleDone(task)"
+                >
+                  {{ task.status === 'Done' ? '取消完成' : '標記完成' }}
+                </UButton>
+              </div>
             </div>
           </div>
+
+          <template v-if="task.is_parent && expandedParents.has(task.id)">
+            <div
+              v-for="subtask in subtasksByParent[task.id] ?? []"
+              :key="subtask.id"
+              class="task-row subtask-row ml-6 rounded-lg border border-default px-3 py-2"
+            >
+              <div class="flex items-center gap-1.5 min-w-0">
+                <span class="text-xs text-gray-500 flex-shrink-0">
+                  階段 {{ subtask.stage }}/{{ subtask.stage_count }}
+                </span>
+                <span class="text-sm truncate flex-1">{{ subtask.title }}</span>
+                <UBadge v-if="subtask.priority" :color="getPriorityColor(subtask.priority)" variant="soft" size="sm">
+                  {{ priorityLabel(subtask.priority) }}
+                </UBadge>
+              </div>
+              <div class="flex items-center justify-between gap-2 mt-1">
+                <span v-if="subtask.due_date" class="text-xs text-gray-500 truncate">
+                  截止：{{ compactDueDate(subtask.due_date) }}
+                </span>
+                <span v-else class="text-xs text-gray-400">無期限</span>
+                <div class="flex items-center gap-1 flex-shrink-0">
+                  <UButton
+                    icon="i-lucide-pencil"
+                    size="xs"
+                    color="info"
+                    variant="ghost"
+                    @click.stop="startEditSchedulableTask(subtask)"
+                  >
+                    編輯
+                  </UButton>
+                  <UButton
+                    icon="i-lucide-check"
+                    size="xs"
+                    :color="subtask.status === 'Done' ? 'neutral' : 'success'"
+                    variant="ghost"
+                    @click.stop="toggleDone(subtask)"
+                  >
+                    {{ subtask.status === 'Done' ? '取消完成' : '標記完成' }}
+                  </UButton>
+                </div>
+              </div>
+            </div>
+          </template>
         </div>
       </div>
 
       <template v-if="hasMoreTasks" #footer>
         <NuxtLink to="/tasks" class="text-sm text-primary hover:underline">
-          查看全部（{{ schedulableTasks.length }}）
+          查看全部（{{ topLevelTasks.length }}）
         </NuxtLink>
       </template>
     </UCard>

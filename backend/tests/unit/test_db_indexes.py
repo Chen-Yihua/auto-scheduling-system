@@ -32,6 +32,8 @@ async def test_ensure_indexes_creates_expected_indexes(monkeypatch):
         unique=True,
         partialFilterExpression={"idempotency_key": {"$type": "string"}},
     )
+    # 查主任務底下的子任務
+    manual_tasks_mock.assert_any_call([("user_id", 1), ("parent_id", 1)])
 
     for platform_mock in (github_issues_mock, jira_issues_mock, moodle_assignments_mock):
         platform_mock.assert_called_once_with([("user_id", 1), ("id", 1)], unique=True)

@@ -3,12 +3,17 @@
 
 id 加上來源前綴（例如 "github:42"）：不同平台的 id 可能重複，前綴也用來決定要寫回哪個 collection。
 """
+from collections import Counter
 from datetime import datetime, timezone
+from core.errors import InvalidRequestError
 from crud.manual_task import (
     completed_at_after_status_change,
+    get_manual_task_by_id,
     get_manual_tasks_by_user_id,
     reorder_manual_tasks,
     set_calendar_event_id,
+    update_manual_task_by_id,
+    validate_task_change,
 )
 from platforms import PLATFORMS
 
@@ -62,10 +67,16 @@ def _normalize_external(source: str, doc: dict) -> dict:
 async def get_all_schedulable_items(user_id: str) -> list[dict]:
     """取得使用者所有可排程項目（手動任務和外部平台項目）。"""
     manual_tasks = await get_manual_tasks_by_user_id(user_id)
-    items = [
-        {**t, "source": SOURCE_MANUAL, "id": make_composite_id(SOURCE_MANUAL, t["id"]), "url": None}
-        for t in manual_tasks
-    ]
+    titles = {t["id"]: t.get("title") for t in manual_tasks}
+    stage_counts = Counter(t["parent_id"] for t in manual_tasks if t.get("parent_id"))
+    items = []
+    for t in manual_tasks:
+        item = {**t, "source": SOURCE_MANUAL, "id": make_composite_id(SOURCE_MANUAL, t["id"]), "url": None}
+        if t.get("parent_id"):
+            item["parent_id"] = make_composite_id(SOURCE_MANUAL, t["parent_id"])
+            item["parent_title"] = titles.get(t["parent_id"])
+            item["stage_count"] = stage_counts[t["parent_id"]]
+        items.append(item)
 
     for source, platform in PLATFORMS.items():
         docs = await platform.collection.find({"user_id": user_id}).to_list(length=None)
@@ -96,8 +107,10 @@ async def update_scheduling_fields(user_id: str, composite_id: str, data: dict):
     """設定單一項目的排程欄位（due_date、duration）。"""
     source, raw_id = parse_composite_id(composite_id)
     if source == SOURCE_MANUAL:
-        from crud.manual_task import get_manual_task_by_id, update_manual_task_by_id
         task = await get_manual_task_by_id(raw_id, user_id)
+        if task.get("is_parent") and "duration" in data:
+            raise InvalidRequestError("主任務沒有時長，請修改子任務")
+        await validate_task_change(task, data)
         task.update({"updated": datetime.now(timezone.utc)})
         task.update(data)
         await update_manual_task_by_id(raw_id, task)
@@ -113,8 +126,9 @@ async def set_done(user_id: str, composite_id: str, done: bool):
     """
     source, raw_id = parse_composite_id(composite_id)
     if source == SOURCE_MANUAL:
-        from crud.manual_task import get_manual_task_by_id, update_manual_task_by_id
         task = await get_manual_task_by_id(raw_id, user_id)
+        if task.get("is_parent"):
+            raise InvalidRequestError("主任務的狀態依子任務自動計算，不能手動標記完成")
         now = datetime.now(timezone.utc)
         status = "Done" if done else "To Do"
         task["completed_at"] = completed_at_after_status_change(task.get("status"), task.get("completed_at"), status, now)

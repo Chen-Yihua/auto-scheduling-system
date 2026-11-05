@@ -476,3 +476,131 @@ async def test_create_calendar_events_network_error_marks_task_as_failed(monkeyp
 
     assert result["confirmed"] == []
     assert result["failed"][0]["task_id"] == "t1"
+
+
+# ========== 階段任務：刪除還沒開始的事件 ==========
+
+DELETE_NOW = datetime(2030, 1, 1, 12, 0, tzinfo=timezone.utc)
+
+
+def _http_error(status):
+    request = httpx.Request("GET", "https://example.com")
+    return httpx.HTTPStatusError("error", request=request, response=httpx.Response(status, request=request))
+
+
+def _event(start_iso):
+    return {"id": "ev", "status": "confirmed", "start": {"dateTime": start_iso}, "end": {"dateTime": start_iso}}
+
+
+@pytest.fixture
+def google_events(monkeypatch):
+    """假的 Google 事件：events 是 event_id → 事件或要丟的例外；記錄實際刪掉哪些。"""
+    state = {"events": {}, "delete_errors": {}, "deleted": []}
+    _mock_token_and_primary_calendar(monkeypatch)
+
+    async def mock_get_event(access_token, calendar_id, event_id):
+        value = state["events"][event_id]
+        if isinstance(value, Exception):
+            raise value
+        return value
+
+    async def mock_delete_event(access_token, calendar_id, event_id):
+        error = state["delete_errors"].get(event_id)
+        if error:
+            raise error
+        state["deleted"].append(event_id)
+
+    monkeypatch.setattr(calendar_service, "get_calendar_event", mock_get_event)
+    monkeypatch.setattr(calendar_service, "delete_calendar_event", mock_delete_event)
+    return state
+
+
+@pytest.mark.asyncio
+async def test_ac28_only_events_that_have_not_started_are_deleted(google_events):
+    """AC28：還沒開始的事件刪掉；已經開始或已經過去的事件保留。"""
+    google_events["events"] = {
+        "future": _event("2030-01-02T09:00:00Z"),
+        "started": _event("2030-01-01T11:30:00Z"),
+        "past": _event("2029-12-30T09:00:00Z"),
+    }
+
+    await calendar_service.delete_upcoming_calendar_events("uid123", ["future", "started", "past"], now=DELETE_NOW)
+
+    assert google_events["deleted"] == ["future"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", [404, 410])
+async def test_ac31_event_already_gone_counts_as_deleted(google_events, status):
+    """AC31：查詢或刪除時 Google 回 404 / 410（事件已經不存在）→ 當作刪除成功，不丟錯誤。"""
+    google_events["events"] = {"gone": _http_error(status), "racing": _event("2030-01-02T09:00:00Z")}
+    google_events["delete_errors"] = {"racing": _http_error(status)}
+
+    await calendar_service.delete_upcoming_calendar_events("uid123", ["gone", "racing"], now=DELETE_NOW)
+
+
+@pytest.mark.asyncio
+async def test_ac32_not_connected_requires_reconnect(monkeypatch):
+    """AC32：需要刪事件但沒有連接 Google → 回 401 要求重新連接（前端沿用重新連接提示）。"""
+    async def mock_find_one(query):
+        return None
+
+    monkeypatch.setattr(google_tokens.db.googleCalendarTokens, "find_one", mock_find_one)
+
+    with pytest.raises(ReauthRequiredError):
+        await calendar_service.delete_upcoming_calendar_events("uid123", ["ev-1"], now=DELETE_NOW)
+
+
+@pytest.mark.asyncio
+async def test_ac32_revoked_authorization_requires_reconnect(google_events):
+    """AC32：Google 授權失效（刪事件時回 401）→ ReauthRequiredError。"""
+    google_events["events"] = {"ev-1": _http_error(401)}
+
+    with pytest.raises(ReauthRequiredError):
+        await calendar_service.delete_upcoming_calendar_events("uid123", ["ev-1"], now=DELETE_NOW)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("error", [_http_error(500), _http_error(429), httpx.ConnectError("連不上")])
+async def test_ac33_failure_midway_asks_to_retry_and_keeps_already_deleted_events_deleted(google_events, error):
+    """AC33：刪到一半 Google 5xx / 429 / 網路錯誤 → 丟 502 提示重試；已經刪掉的事件不復原。"""
+    google_events["events"] = {"a": _event("2030-01-02T09:00:00Z"), "b": _event("2030-01-02T10:00:00Z")}
+    google_events["delete_errors"] = {"b": error}
+
+    with pytest.raises(ExternalServiceError) as exc_info:
+        await calendar_service.delete_upcoming_calendar_events("uid123", ["a", "b"], now=DELETE_NOW)
+
+    assert "重試" in exc_info.value.detail
+    assert google_events["deleted"] == ["a"]
+
+
+@pytest.mark.asyncio
+async def test_no_events_to_delete_does_not_call_google(monkeypatch):
+    """假設 11：要刪的子任務都沒有行事曆事件 → 完全不呼叫 Google，沒連接也能刪。"""
+    async def fail_if_called(*args, **kwargs):
+        raise AssertionError("不該呼叫 Google")
+
+    monkeypatch.setattr(google_tokens.db.googleCalendarTokens, "find_one", fail_if_called)
+    monkeypatch.setattr(calendar_service, "fetch_google_calendar_list", fail_if_called)
+
+    await calendar_service.delete_upcoming_calendar_events("uid123", [], now=DELETE_NOW)
+
+
+# ========== 階段任務：前一個階段事件的最新時間 ==========
+
+@pytest.mark.asyncio
+async def test_ac24_event_ends_come_from_google_and_missing_events_map_to_none(google_events):
+    """AC24：事件的結束時間以 Google 上最新的為準；已不存在（404 / 410 / 已取消）的事件回 None。"""
+    google_events["events"] = {
+        "moved": {"status": "confirmed", "start": {"dateTime": "2030-01-02T13:00:00Z"}, "end": {"dateTime": "2030-01-02T14:30:00+08:00"}},
+        "gone": _http_error(404),
+        "cancelled": {"status": "cancelled"},
+    }
+
+    ends = await calendar_service.get_calendar_event_ends("uid123", ["moved", "gone", "cancelled"])
+
+    assert ends == {
+        "moved": datetime(2030, 1, 2, 6, 30, tzinfo=timezone.utc),
+        "gone": None,
+        "cancelled": None,
+    }

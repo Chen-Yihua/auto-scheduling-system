@@ -1,11 +1,12 @@
 """以使用者為單位操作 Google Calendar，access_token 過期時自動換新重試。"""
 import logging
+from datetime import datetime, timezone
 
 import httpx
 from core.errors import AppError, ExternalServiceError, InvalidRequestError, NotFoundError, ReauthRequiredError
 
 from core.cache import cache_get, cache_set
-from crud.google_tokens import get_google_calendar_token
+from crud.google_tokens import get_google_calendar_token, is_google_calendar_connected
 from services.google_oauth import GOOGLE_REAUTH_DETAIL, refresh_google_calendar_token
 from crud.schedulable_items import set_calendar_event_id_for_composite
 from services.google_calendar_client import (
@@ -13,12 +14,20 @@ from services.google_calendar_client import (
     fetch_freebusy,
     compute_free_times,
     create_calendar_event,
+    delete_calendar_event,
+    get_calendar_event,
 )
 
 logger = logging.getLogger(__name__)
 
 # 夠短讓行事曆的變更很快反映，又能避免短時間內重複呼叫 Google API
 FREE_SLOTS_CACHE_TTL_SECONDS = 60
+
+PREVIOUS_STAGE_WRITE_FAILED = "前一個階段寫入失敗"
+DELETE_RETRY_DETAIL = "刪除 Google Calendar 事件失敗，請稍後重試"
+
+# 事件已經不存在
+_EVENT_GONE_STATUSES = {404, 410}
 
 
 def _google_error(e: httpx.HTTPStatusError, detail: str) -> AppError:
@@ -129,7 +138,12 @@ async def create_calendar_events_for_scheduled_tasks(clerk_id: str, scheduled: l
 
     confirmed = []
     failed = []
+    failed_ids = set()
     for task in scheduled:
+        if task.get("previous_task_id") in failed_ids:
+            failed_ids.add(task["task_id"])
+            failed.append({"task_id": task["task_id"], "title": task["title"], "reason": PREVIOUS_STAGE_WRITE_FAILED})
+            continue
         start_iso = task["start"].isoformat().replace("+00:00", "Z")
         end_iso = task["end"].isoformat().replace("+00:00", "Z")
         try:
@@ -138,6 +152,7 @@ async def create_calendar_events_for_scheduled_tasks(clerk_id: str, scheduled: l
             )
         except (httpx.HTTPStatusError, httpx.RequestError):
             logger.exception("寫入 Google Calendar 失敗 task_id=%s", task["task_id"])
+            failed_ids.add(task["task_id"])
             failed.append({
                 "task_id": task["task_id"],
                 "title": task["title"],
@@ -153,3 +168,77 @@ async def create_calendar_events_for_scheduled_tasks(clerk_id: str, scheduled: l
         })
 
     return {"confirmed": confirmed, "failed": failed}
+
+
+def _parse_event_time(value: dict | None) -> datetime | None:
+    text = (value or {}).get("dateTime")
+    if not text:
+        return None
+    return datetime.fromisoformat(text.replace("Z", "+00:00")).astimezone(timezone.utc)
+
+
+async def get_calendar_event_ends(clerk_id: str, event_ids: list[str]) -> dict[str, datetime | None]:
+    """
+    事件在 Google 上最新的結束時間（使用者可能在 Google 上拖動過）。
+    事件已不存在（404 / 410 或已取消）時是 None。
+    """
+    if not event_ids:
+        return {}
+    access_token, calendar_id = await _get_access_token_and_primary_calendar_id(clerk_id)
+
+    ends: dict[str, datetime | None] = {}
+    for event_id in event_ids:
+        try:
+            event = await get_calendar_event(access_token, calendar_id, event_id)
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code in _EVENT_GONE_STATUSES:
+                ends[event_id] = None
+                continue
+            raise _google_error(e, "取得行事曆事件失敗")
+        except httpx.RequestError as e:
+            logger.error("連線 Google Calendar API 失敗: %s", e)
+            raise ExternalServiceError("無法連線至 Google，請稍後再試")
+        ends[event_id] = None if event.get("status") == "cancelled" else _parse_event_time(event.get("end"))
+    return ends
+
+
+def _delete_error(e: httpx.HTTPStatusError) -> AppError:
+    status = e.response.status_code
+    if status == 401:
+        return ReauthRequiredError(GOOGLE_REAUTH_DETAIL)
+    if status >= 500 or status == 429:
+        logger.warning("刪除 Google Calendar 事件失敗: %s %s", status, e.response.text)
+        return ExternalServiceError(DELETE_RETRY_DETAIL)
+    return _google_error(e, "刪除 Google Calendar 事件失敗")
+
+
+async def delete_upcoming_calendar_events(clerk_id: str, event_ids: list[str], now: datetime | None = None) -> None:
+    """
+    刪除開始時間晚於現在的事件，已經開始或過去的保留；事件已不存在（404 / 410）當作刪除成功。
+
+    沒有連接或授權失效丟 ReauthRequiredError；Google 5xx、429 或連不上丟 ExternalServiceError。
+    中途失敗時已刪掉的事件不復原，呼叫端要等這裡成功才刪任務，重試時已刪的事件會走 404 / 410。
+    """
+    if not event_ids:
+        return
+    now = now or datetime.now(timezone.utc)
+    if not await is_google_calendar_connected(clerk_id):
+        raise ReauthRequiredError(GOOGLE_REAUTH_DETAIL)
+    access_token, calendar_id = await _get_access_token_and_primary_calendar_id(clerk_id)
+
+    for event_id in event_ids:
+        try:
+            event = await get_calendar_event(access_token, calendar_id, event_id)
+            if event.get("status") == "cancelled":
+                continue
+            start = _parse_event_time(event.get("start"))
+            if start is None or start <= now:
+                continue
+            await delete_calendar_event(access_token, calendar_id, event_id)
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code in _EVENT_GONE_STATUSES:
+                continue
+            raise _delete_error(e)
+        except httpx.RequestError as e:
+            logger.error("連線 Google Calendar API 失敗: %s", e)
+            raise ExternalServiceError(DELETE_RETRY_DETAIL)

@@ -10,6 +10,9 @@ vi.mock('@clerk/vue', () => ({
   useUser: () => ({ isSignedIn: isSignedInRef }),
 }))
 
+const toastSpy = { add: vi.fn() }
+vi.stubGlobal('useToast', () => toastSpy)
+
 const pushSpy = vi.fn()
 vi.mock('vue-router', () => ({
   useRouter: () => ({ push: pushSpy }),
@@ -113,7 +116,9 @@ describe('pages/schedule.vue', () => {
     preferencesRef.value = { blocked_recurring: [], blocked_exceptions: [], buffer_minutes: 0, daily_max_minutes: null }
     schedulableTasksRef.value = []
     pushSpy.mockClear()
-    fetchSchedulableTasksSpy.mockClear()
+    toastSpy.add.mockClear()
+    // mockReset：其他測試設的 mockImplementation 會在掛載時改掉 schedulableTasksRef
+    fetchSchedulableTasksSpy.mockReset()
     fetchScheduleSuggestionSpy.mockClear()
     initWizardSpy.mockClear()
     moveTaskSpy.mockClear()
@@ -297,6 +302,70 @@ describe('pages/schedule.vue', () => {
     expect(updateDurationSpy).toHaveBeenCalledWith('a', null)
   })
 
+  // ---------- 階段任務 ----------
+
+  const stage = (n: number, priority: 'Low' | 'Medium' | 'High') => fakeTask({
+    id: `manual:s${n}`, title: `階段任務${n}`, priority,
+    parent_id: 'manual:p1', parent_title: '期末報告', stage: n, stage_count: 2,
+  })
+
+  it('AC27：子任務標上主任務名稱和「階段 k/N」', () => {
+    columnsRef.Medium = [stage(1, 'Medium'), stage(2, 'Medium')]
+    schedulableTasksRef.value = [...columnsRef.Medium]
+
+    const wrapper = render()
+
+    expect(wrapper.text()).toContain('期末報告 · 階段 2/2')
+  })
+
+  it('AC27：拖到別欄會讓後面的階段優先序高於前面的階段 → 擋下並提示原因，不移動', async () => {
+    columnsRef.Medium = [stage(1, 'Medium'), stage(2, 'Medium')]
+    schedulableTasksRef.value = [...columnsRef.Medium]
+
+    const wrapper = render()
+    await wrapper.findAll('.cursor-move')[1]!.trigger('dragstart') // 階段 2
+    await wrapper.findAll('[class*="min-h-"]')[2]!.trigger('drop') // 丟到 High 欄
+
+    expect(moveTaskSpy).not.toHaveBeenCalled()
+    expect(toastSpy.add).toHaveBeenCalledWith(expect.objectContaining({ description: expect.stringContaining('階段 2') }))
+  })
+
+  it('AC27：同一欄內把後面的階段拖到前面的階段上面 → 擋下並提示原因', async () => {
+    columnsRef.Medium = [stage(1, 'Medium'), stage(2, 'Medium')]
+    schedulableTasksRef.value = [...columnsRef.Medium]
+
+    const wrapper = render()
+    const rows = wrapper.findAll('.cursor-move')
+    await rows[1]!.trigger('dragstart') // 階段 2
+    await rows[0]!.trigger('drop') // 丟到階段 1 上面
+
+    expect(moveTaskSpy).not.toHaveBeenCalled()
+    expect(toastSpy.add).toHaveBeenCalledTimes(1)
+  })
+
+  it('AC27：把前面的階段拖到比後面階段更低的欄 → 擋下並提示原因，不移動', async () => {
+    columnsRef.Medium = [stage(1, 'Medium'), stage(2, 'Medium')]
+    schedulableTasksRef.value = [...columnsRef.Medium]
+
+    const wrapper = render()
+    await wrapper.findAll('.cursor-move')[0]!.trigger('dragstart') // 階段 1
+    await wrapper.findAll('[class*="min-h-"]')[0]!.trigger('drop') // 丟到 Low 欄
+
+    expect(moveTaskSpy).not.toHaveBeenCalled()
+    expect(toastSpy.add).toHaveBeenCalledWith(expect.objectContaining({ description: expect.stringContaining('階段 2') }))
+  })
+
+  it('AC27：不違反階段限制的拖拉照常移動（後面的階段拖到較低的欄）', async () => {
+    columnsRef.Medium = [stage(1, 'Medium'), stage(2, 'Medium')]
+    schedulableTasksRef.value = [...columnsRef.Medium]
+
+    const wrapper = render()
+    await wrapper.findAll('.cursor-move')[1]!.trigger('dragstart')
+    await wrapper.findAll('[class*="min-h-"]')[0]!.trigger('drop') // 丟到 Low 欄
+
+    expect(moveTaskSpy).toHaveBeenCalledWith('Medium', 1, 'Low', 0)
+    expect(toastSpy.add).not.toHaveBeenCalled()
+  })
 })
 
 function flushMicrotasks() {

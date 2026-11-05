@@ -625,6 +625,32 @@ describe('useTaskForm', () => {
     expect(toast.description).toContain('階段 2')
   })
 
+  it('AC6：往上、往下的調整都說明是哪些階段，文字不能只寫「比前一個階段高」', async () => {
+    const ctx = useTaskForm()
+    fillStagedForm(ctx)
+    fetchSpy.mockResolvedValueOnce({ id: 'p1', is_parent: true, subtasks: [{}, {}], priority_adjusted_stages: [1, 2] })
+
+    await submitAndFlushTimers(() => ctx.onSubmit(submitEvent(ctx.state)))
+
+    const description = toastSpy.add.mock.calls[0]![0].description
+    expect(description).toContain('階段 1、2')
+    expect(description).toContain('前後階段')
+  })
+
+  it('AC10 / AC6：插入的階段優先序被調整時，提示說明是哪個階段', async () => {
+    const ctx = useTaskForm()
+    ctx.all_tasks.value = [parentTask(), subtaskOf('p1', 1), subtaskOf('p1', 2)]
+    ctx.startEditTask(ctx.all_tasks.value[0]!)
+    ctx.startAddSubtask(2)
+    ctx.subtaskDraft.title = '插入的階段'
+    fetchSpy.mockResolvedValueOnce({ id: 'p1', is_parent: true, subtasks: [], priority_adjusted_stages: [2] })
+    fetchSpy.mockResolvedValueOnce([parentTask(3)])
+
+    await ctx.onAddSubtask()
+
+    expect(toastSpy.add).toHaveBeenCalledWith(expect.objectContaining({ description: expect.stringContaining('階段 2') }))
+  })
+
   it('AC4：一次建立失敗時保留整份表單（含子任務），並顯示後端說明的原因', async () => {
     const ctx = useTaskForm()
     fillStagedForm(ctx)

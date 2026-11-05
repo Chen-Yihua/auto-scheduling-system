@@ -331,6 +331,7 @@ def _sub(title, **fields):
 async def _add(task_id, **fields):
     return await manual_task_router.add_subtask(
         request=MagicMock(), task_id=task_id, subtaskInput=SubtaskCreate(**fields), clerk_user=STAGE_USER,
+        idempotency_key=None,
     )
 
 
@@ -510,8 +511,8 @@ async def test_ac11_parent_with_ten_subtasks_cannot_get_more(stage_db, subtask_i
 async def _insert_plain_task(task_id, **fields):
     doc = {
         "_id": task_id, "user_id": STAGE_USER["sub"], "title": "一般任務", "description": "說明",
-        "status": "To Do", "priority": "High", "duration": 90, "inferred_fields": ["priority"],
-        "inference_reason": "AI 理由", "calendar_event_id": None,
+        "status": "In Progress", "priority": "High", "duration": 90, "inferred_fields": ["priority"],
+        "inference_reason": "AI 理由", "inference_hint": "給 AI 的提醒", "calendar_event_id": None,
     }
     doc.update(fields)
     await db.manual_tasks.insert_one(doc)
@@ -529,7 +530,11 @@ async def test_ac12_first_subtask_turns_plain_task_into_parent_and_clears_own_fi
     assert [(s["title"], s["stage"]) for s in result["subtasks"]] == [("第一階段", 1)]
     stored = await db.manual_tasks.find_one({"_id": "plain-1"})
     assert stored["is_parent"] is True
-    assert stored.get("priority") is None and stored.get("duration") is None and stored.get("inference_reason") is None
+    for field in ("priority", "duration", "inference_reason", "inference_hint", "status", "completed_at"):
+        assert stored.get(field) is None, field
+    assert stored["inferred_fields"] == []
+    # 原本是 In Progress，轉換後依子任務（To Do）計算
+    assert result["status"] == "To Do"
 
 
 @pytest.mark.asyncio
@@ -698,3 +703,26 @@ async def test_ac34_deleting_plain_task_does_not_touch_calendar(stage_db, delete
 
     assert deleted_events == []
     assert await db.manual_tasks.find_one({"_id": "plain-3"}) is None
+
+
+@pytest.mark.asyncio
+async def test_ac6_inferred_priority_lower_than_user_filled_next_stage_is_raised(stage_db, subtask_infer_calls):
+    """AC6：一次建立時階段 1 交給 AI（推斷成中）、階段 2 使用者填高 → 階段 1 調成高，建立成功並回報被調整的階段。"""
+    subtask_infer_calls["replies"] = [{"priority": "Medium", "duration": 30, "reason": "AI"}]
+
+    result = await _create_staged([_sub("一", duration=30), _sub("二", priority="High", duration=30)])
+
+    assert [s["priority"] for s in result["subtasks"]] == ["High", "High"]
+    assert result["priority_adjusted_stages"] == [1]
+
+
+@pytest.mark.asyncio
+async def test_ac10_inferred_priority_of_inserted_subtask_is_raised_to_next_stage(stage_db, subtask_infer_calls):
+    """AC10 / AC6：插在中間、AI 推斷的優先序比後一個階段低 → 調成和後一個階段一樣，不回 400。"""
+    parent = await _three_stage_parent(subtask_infer_calls)  # 高、中、低
+    subtask_infer_calls["replies"] = [{"priority": "Low", "duration": 40, "reason": "AI"}]
+
+    result = await _add(parent["id"], title="AI 來填", position=2)
+
+    assert [d["priority"] for d in await _stage_docs(parent["id"])] == ["High", "Medium", "Medium", "Low"]
+    assert result["priority_adjusted_stages"] == [2]

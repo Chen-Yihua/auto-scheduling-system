@@ -391,11 +391,11 @@ async def test_ac15_add_subtask_to_other_users_task_returns_404(logged_in_user):
 
 @pytest.mark.asyncio
 async def test_ac37_add_subtask_requires_login():
-    """AC37：沒登入呼叫新增子任務的 API → 被現有的登入驗證擋下（和其他 endpoint 相同的 401/403），不會進到函式裡。"""
+    """AC37：沒登入呼叫新增子任務的 API → 403，沿用現有的登入驗證。"""
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         response = await ac.post("/manual-tasks/any-id/subtasks", json=_api_sub("階段"))
 
-    assert response.status_code in (401, 403)
+    assert response.status_code == 403
 
 
 @pytest.mark.asyncio
@@ -413,3 +413,18 @@ async def test_ac38_put_ignores_parent_id_stage_and_is_parent(logged_in_user, st
     assert (stored["title"], stored["parent_id"], stored["stage"], stored.get("is_parent")) == (
         "階段API 改名", parent["id"], 1, None,
     )
+
+
+@pytest.mark.asyncio
+async def test_ac40_add_subtask_retry_with_same_idempotency_key_returns_first_result(logged_in_user, stage_cleanup):
+    """AC40：新增子任務帶相同 Idempotency-Key 重送 → 回傳第一次的結果，不會重複新增子任務。"""
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        parent = (await ac.post("/manual-tasks/", json=_staged_payload([_api_sub("一")]))).json()
+        headers = {"Idempotency-Key": "ac40-key"}
+        first = await ac.post(f"/manual-tasks/{parent['id']}/subtasks", json=_api_sub("二"), headers=headers)
+        second = await ac.post(f"/manual-tasks/{parent['id']}/subtasks", json=_api_sub("二"), headers=headers)
+
+    assert first.status_code == 201, first.text
+    assert second.status_code == 201, second.text
+    assert [s["id"] for s in second.json()["subtasks"]] == [s["id"] for s in first.json()["subtasks"]]
+    assert await db.manual_tasks.count_documents({"parent_id": parent["id"]}) == 2

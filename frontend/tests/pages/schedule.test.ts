@@ -343,6 +343,18 @@ describe('pages/schedule.vue', () => {
     expect(toastSpy.add).toHaveBeenCalledTimes(1)
   })
 
+  it('AC27：把前面的階段拖到比後面階段更低的欄 → 擋下並提示原因，不移動', async () => {
+    columnsRef.Medium = [stage(1, 'Medium'), stage(2, 'Medium')]
+    schedulableTasksRef.value = [...columnsRef.Medium]
+
+    const wrapper = render()
+    await wrapper.findAll('.cursor-move')[0]!.trigger('dragstart') // 階段 1
+    await wrapper.findAll('[class*="min-h-"]')[0]!.trigger('drop') // 丟到 Low 欄
+
+    expect(moveTaskSpy).not.toHaveBeenCalled()
+    expect(toastSpy.add).toHaveBeenCalledWith(expect.objectContaining({ description: expect.stringContaining('階段 2') }))
+  })
+
   it('AC27：不違反階段限制的拖拉照常移動（後面的階段拖到較低的欄）', async () => {
     columnsRef.Medium = [stage(1, 'Medium'), stage(2, 'Medium')]
     schedulableTasksRef.value = [...columnsRef.Medium]

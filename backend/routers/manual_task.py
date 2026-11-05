@@ -1,7 +1,7 @@
 import logging
 from fastapi import APIRouter, Depends, Header, Request
 from crud import manual_task as manual_task_crud
-from core.errors import InvalidRequestError
+from core.errors import ConflictError, InvalidRequestError
 from services.google_calendar import delete_upcoming_calendar_events
 from services.task_inference import infer_missing_subtask_fields, infer_missing_task_fields
 from schemas.manual_task import (
@@ -165,13 +165,19 @@ async def add_subtask(
     task_id: str,
     subtaskInput: SubtaskCreate,
     clerk_user: dict = Depends(get_current_clerk_user),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key", max_length=100),
 ):
     """
     在主任務的 position 插入子任務（預設放最後），後面的階段編號加 1。
     對一般任務新增第 1 個子任務時，它會變成主任務。回應是主任務並附上所有子任務。
+    帶相同 Idempotency-Key 的重送請求回傳第一次新增後的主任務，不會重複新增。
     """
     user_id = clerk_user["sub"]
     task = await manual_task_crud.get_manual_task_by_id(task_id, user_id)
+    if idempotency_key:
+        existing = await _subtask_result_for_key(task_id, user_id, idempotency_key)
+        if existing:
+            return existing
     if task.get("parent_id"):
         raise InvalidRequestError("子任務不能再拆成子任務")
     if task.get("is_parent"):
@@ -196,13 +202,28 @@ async def add_subtask(
     adjusted = manual_task_crud.adjust_inferred_priorities(chain, {position - 1} if inferred_priority else set())
     manual_task_crud.validate_stage_priorities(chain)
 
+    now = datetime.now(timezone.utc)
+    inserted = await manual_task_crud.insert_subtask(
+        task_id, user_id, _subtask_doc(new_subtask, user_id, now), position, idempotency_key,
+    )
+    if not inserted:
+        # 同一個 key 的請求同時送達，另一個已經新增成功
+        return await _subtask_result_for_key(task_id, user_id, idempotency_key or "")
     if not task.get("is_parent"):
         await manual_task_crud.convert_to_parent(task_id, user_id)
-    now = datetime.now(timezone.utc)
-    await manual_task_crud.insert_subtask(task_id, user_id, _subtask_doc(new_subtask, user_id, now), position)
 
     parent = await manual_task_crud.get_manual_task_by_id(task_id, user_id)
     return {**await _with_subtasks(parent), "priority_adjusted_stages": adjusted}
+
+
+async def _subtask_result_for_key(task_id: str, user_id: str, idempotency_key: str) -> dict | None:
+    existing = await manual_task_crud.get_manual_task_by_idempotency_key(user_id, idempotency_key)
+    if existing is None:
+        return None
+    if existing.get("parent_id") != task_id:
+        raise ConflictError("這個 Idempotency-Key 已經用在其他請求")
+    parent = await manual_task_crud.get_manual_task_by_id(task_id, user_id)
+    return await _with_subtasks(parent)
 
 
 @router.get("/me", response_model=list[ManualTaskOut])

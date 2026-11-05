@@ -238,7 +238,8 @@ def build_schedule_suggestion(
     ]
 
     def sort_key(t):
-        due = _due_as_utc(t.get("due_date"))
+        # 推算的期限也算緊急：否則後面的階段快到期時，前面的階段反而排在其他任務之後
+        due = _due_as_utc(t.get("due_date")) or derived_deadlines.get(t["id"])
         if due is not None and due <= now + URGENT_WINDOW:
             return (0, due)
         priority_rank = PRIORITY_ORDER.get(t.get("priority"), len(PRIORITY_ORDER))
@@ -319,6 +320,8 @@ def build_schedule_suggestion(
                 "priority": task["priority"],
                 "start": start,
                 "end": end,
+                # 回應不帶出，存進確認用的快照：前一個階段被刪掉後，確認時才知道後面的階段屬於哪個主任務
+                "parent_id": task.get("parent_id"),
             })
             scheduled_end[task["id"]] = end
             if daily_max_minutes is not None:
@@ -368,34 +371,40 @@ def check_suggestion_still_valid(
     """
     now = now or datetime.now(timezone.utc)
     tasks_by_id = {t["id"]: t for t in current_tasks}
-    ids_by_stage = {key: t["id"] for t in current_tasks if (key := _stage_key(t, 0))}
-    snapshot_ids = {item["task_id"] for item in scheduled}
     slots = [(_parse_iso(s["start"]), _parse_iso(s["end"])) for s in free_slots if s.get("start") and s.get("end")]
 
     to_write = []
     failed = []
-    failed_ids = set()
+    blocked_parents = set()
+    last_written_by_parent: dict[str, str] = {}
     for item in scheduled:
         task = tasks_by_id.get(item["task_id"])
-        previous_key = _stage_key(task, -1) if task else None
-        previous_id = ids_by_stage.get(previous_key) if previous_key else None
+        parent_id = item.get("parent_id") or (task.get("parent_id") if task else None)
+        # 「已經完成」「已經排入行事曆」不用寫入，但不代表後面的階段排錯了，不擋
+        blocks_later_stages = True
         if task is None:
             reason = "任務已不存在"
         elif task.get("status") == "Done":
             reason = "任務已經完成"
+            blocks_later_stages = False
         elif task.get("calendar_event_id"):
             reason = "任務已經排入行事曆"
+            blocks_later_stages = False
         elif item["start"] < now:
             reason = "這個時段已經過了，請重新產生排程"
         elif not any(s_start <= item["start"] and item["end"] <= s_end for s_start, s_end in slots):
             reason = "這個時段已被其他行程占用，請重新產生排程"
-        elif previous_id in failed_ids:
+        elif parent_id in blocked_parents:
             reason = PREVIOUS_STAGE_WRITE_FAILED
         else:
-            # 前一個階段也在這次要寫入時標上它，寫入 Google 時前一個失敗就跳過
-            to_write.append({**item, "previous_task_id": previous_id} if previous_id in snapshot_ids else item)
+            # 同一個主任務前面的階段也在這次寫入時標上它，寫入 Google 時前一個失敗就跳過
+            previous_id = last_written_by_parent.get(parent_id) if parent_id else None
+            to_write.append({**item, "previous_task_id": previous_id} if previous_id else item)
+            if parent_id:
+                last_written_by_parent[parent_id] = item["task_id"]
             continue
-        failed_ids.add(item["task_id"])
+        if parent_id and blocks_later_stages:
+            blocked_parents.add(parent_id)
         failed.append({"task_id": item["task_id"], "title": item["title"], "reason": reason})
 
     return to_write, failed

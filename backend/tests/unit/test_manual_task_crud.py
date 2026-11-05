@@ -489,3 +489,24 @@ async def test_ac28_deleting_parent_removes_all_its_subtasks_only():
         assert [d["_id"] for d in remaining] == ["ac28-other"]
     finally:
         await manual_task_crud.db.manual_tasks.delete_many({"_id": {"$regex": "^ac28-"}})
+
+
+def test_ac6_inferred_priority_lower_than_next_stage_is_raised_to_next():
+    """AC6：AI 推斷的優先序比後一個階段（使用者填的）低 → 調成和後一個階段一樣，不讓建立失敗。"""
+    stages = [_stage("Low"), _stage("High")]
+
+    adjusted = manual_task_crud.adjust_inferred_priorities(stages, inferred_indexes={0})
+
+    assert [s["priority"] for s in stages] == ["High", "High"]
+    assert adjusted == [1]
+
+
+def test_ac6_inferred_priority_is_kept_between_previous_and_next_stage():
+    """AC6 / AC10：插在中間的階段，推斷值要落在前後兩個階段之間（前 ≥ 自己 ≥ 後）。"""
+    too_low = [_stage("High"), _stage("Low"), _stage("Medium")]
+    too_high = [_stage("Medium"), _stage("High"), _stage("Low")]
+
+    assert manual_task_crud.adjust_inferred_priorities(too_low, inferred_indexes={1}) == [2]
+    assert manual_task_crud.adjust_inferred_priorities(too_high, inferred_indexes={1}) == [2]
+    assert [s["priority"] for s in too_low] == ["High", "Medium", "Medium"]
+    assert [s["priority"] for s in too_high] == ["Medium", "Medium", "Low"]

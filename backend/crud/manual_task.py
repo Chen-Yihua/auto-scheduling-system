@@ -98,16 +98,23 @@ def validate_stage_chain(parent_due_date: datetime | None, stages: list[dict]) -
 
 def adjust_inferred_priorities(stages: list[dict], inferred_indexes: set[int]) -> list[int]:
     """
-    AI 推斷的優先序比前一個階段高時，調成和前一個階段一樣；使用者填的不動，交給 validate_stage_priorities。
-    依序處理，前一個被調低時後面的會跟著比對調低後的值。回傳被調整的階段編號。
+    AI 推斷的優先序要落在前後兩個階段之間：比前一個階段高就調成前一個，比後面使用者填的最高值低就調成那個值。
+    使用者填的不動，彼此衝突時交給 validate_stage_priorities。依序處理，前一個被調整時後面的會比對調整後的值。
+    回傳被調整的階段編號。
     """
     adjusted = []
     for index in sorted(inferred_indexes):
-        if index == 0:
-            continue
-        previous = stages[index - 1]["priority"]
-        if _rank(stages[index]["priority"]) > _rank(previous):
-            stages[index]["priority"] = previous
+        priority = stages[index]["priority"]
+        # 後面推斷的階段之後只會被調到不高於這個階段，所以下限只看使用者填的
+        later_fixed = [s["priority"] for i, s in enumerate(stages) if i > index and i not in inferred_indexes]
+        floor = max(later_fixed, key=_rank) if later_fixed else None
+        ceiling = stages[index - 1]["priority"] if index > 0 else None
+        if ceiling is not None and _rank(priority) > _rank(ceiling):
+            priority = ceiling
+        elif floor is not None and _rank(priority) < _rank(floor):
+            priority = floor
+        if priority != stages[index]["priority"]:
+            stages[index]["priority"] = priority
             adjusted.append(index + 1)
     return adjusted
 
@@ -175,13 +182,28 @@ async def create_manual_task_with_subtasks(parent: dict, subtasks: list[dict], i
     return {**created_parent, "subtasks": created_subtasks}
 
 
-async def insert_subtask(parent_id: str, user_id: str, subtask: dict, position: int) -> None:
-    """在 position 插入子任務（文件用 _id），原本 position 以後的階段編號加 1。"""
+async def insert_subtask(
+    parent_id: str, user_id: str, subtask: dict, position: int, idempotency_key: str | None = None,
+) -> bool:
+    """
+    在 position 插入子任務（文件用 _id），原本 position 以後的階段編號加 1。
+    同一個 Idempotency-Key 已經用過時什麼都不改，回傳 False。
+    """
+    doc = {**subtask, "user_id": user_id, "parent_id": parent_id, "stage": position}
+    if idempotency_key:
+        doc["idempotency_key"] = idempotency_key
+    # 先寫入再調整編號：重複的 key 在第一步就被唯一索引擋下，不會動到其他階段
+    try:
+        await db.manual_tasks.insert_one(doc)
+    except DuplicateKeyError:
+        if idempotency_key:
+            return False
+        raise
     await db.manual_tasks.update_many(
-        {"user_id": user_id, "parent_id": parent_id, "stage": {"$gte": position}},
+        {"user_id": user_id, "parent_id": parent_id, "stage": {"$gte": position}, "_id": {"$ne": doc["_id"]}},
         {"$inc": {"stage": 1}},
     )
-    await db.manual_tasks.insert_one({**subtask, "user_id": user_id, "parent_id": parent_id, "stage": position})
+    return True
 
 
 async def convert_to_parent(task_id: str, user_id: str) -> None:
@@ -190,7 +212,10 @@ async def convert_to_parent(task_id: str, user_id: str) -> None:
         {"_id": task_id, "user_id": user_id},
         {
             "$set": {"is_parent": True, "inferred_fields": [], "updated": datetime.now(timezone.utc)},
-            "$unset": {"priority": "", "duration": "", "inference_reason": "", "status": "", "completed_at": ""},
+            "$unset": {
+                "priority": "", "duration": "", "inference_reason": "", "inference_hint": "",
+                "status": "", "completed_at": "",
+            },
         },
     )
 

@@ -832,3 +832,69 @@ def test_ac26_valid_later_stage_carries_previous_stage_id_so_writer_can_skip_it(
 
     assert failed == []
     assert [i.get("previous_task_id") for i in to_write] == [None, "s1"]
+
+
+def test_ac25_derived_deadline_counts_as_urgent_so_earlier_stage_is_scheduled_first():
+    """
+    AC25：推算的期限也適用 24 小時內優先排的規則。3 小時的空檔、兩個 60 分鐘的 High 一般任務、
+    一個兩階段任務（階段 1 沒截止日、Low；階段 2 Low、3 小時後到期）→ 兩個階段都排進去。
+    """
+    now = datetime(2026, 9, 10, 9, 0, tzinfo=timezone.utc)
+    tasks = [
+        _task("x1", "一般任務一", "High", duration=60),
+        _task("x2", "一般任務二", "High", duration=60),
+        _stage("s1", "p", 1, priority="Low", duration=60),
+        _stage("s2", "p", 2, priority="Low", duration=60, due_date=now + timedelta(hours=3)),
+    ]
+    free_slots = [_slot("2026-09-10T09:00:00Z", "2026-09-10T12:00:00Z")]
+
+    result = build_schedule_suggestion(tasks, free_slots, now=now)
+
+    by_id = {i["task_id"]: i for i in result["scheduled"]}
+    assert by_id["s1"]["start"] == now
+    assert by_id["s2"]["start"] == now + timedelta(hours=1)
+    assert [i["task_id"] for i in result["unscheduled"]] == ["x2"]
+
+
+@pytest.mark.parametrize("previous_task, reason", [
+    (_current_stage("s1", "p", 1) | {"status": "Done"}, "任務已經完成"),
+    (_current_stage("s1", "p", 1) | {"calendar_event_id": "ev-1"}, "任務已經排入行事曆"),
+])
+def test_ac26_previous_stage_done_or_already_on_calendar_does_not_block_later_stage(previous_task, reason):
+    """AC26：前一個階段因為已完成或已排入行事曆而沒有寫入 → 不擋後面的階段，後面的照寫。"""
+    scheduled = [_scheduled_item("s1", 9, 10), _scheduled_item("s2", 10, 11)]
+    current = [previous_task, _current_stage("s2", "p", 2)]
+    free_slots = [_slot("2026-09-10T08:00:00Z", "2026-09-10T12:00:00Z")]
+
+    to_write, failed = check_suggestion_still_valid(scheduled, current, free_slots, now=CHECK_NOW)
+
+    assert [i["task_id"] for i in to_write] == ["s2"]
+    assert failed == [{"task_id": "s1", "title": "s1", "reason": reason}]
+
+
+@pytest.mark.parametrize("current, start_hour, free_slot", [
+    ([_current_stage("s2", "p", 2)], 9, ("08:00", "12:00")),
+    ([_current_stage("s1", "p", 1), _current_stage("s2", "p", 2)], 7, ("06:00", "12:00")),
+])
+def test_ac26_previous_stage_gone_or_time_passed_blocks_later_stage(current, start_hour, free_slot):
+    """AC26：前一個階段的任務已不存在或時段已經過了 → 後面的階段也不寫入（快照記著每一筆屬於哪個主任務）。"""
+    scheduled = [
+        _scheduled_item("s1", start_hour, start_hour + 1) | {"parent_id": "p"},
+        _scheduled_item("s2", 10, 11) | {"parent_id": "p"},
+    ]
+    free_slots = [_slot(f"2026-09-10T{free_slot[0]}:00Z", f"2026-09-10T{free_slot[1]}:00Z")]
+
+    to_write, failed = check_suggestion_still_valid(scheduled, current, free_slots, now=CHECK_NOW)
+
+    assert to_write == []
+    assert {f["task_id"]: f["reason"] for f in failed}["s2"] == "前一個階段寫入失敗"
+
+
+def test_ac26_scheduled_items_remember_their_parent_for_the_confirm_snapshot():
+    """AC26：排程建議的每一筆帶 parent_id 存進快照，前一個階段被刪掉後確認時仍知道要擋哪些階段。"""
+    tasks = [_stage("s1", "p", 1), _task("t", "一般任務", "Low")]
+    free_slots = [_slot("2026-09-10T09:00:00Z", "2026-09-10T12:00:00Z")]
+
+    result = build_schedule_suggestion(tasks, free_slots, now=NOW)
+
+    assert {i["task_id"]: i["parent_id"] for i in result["scheduled"]} == {"s1": "p", "t": None}

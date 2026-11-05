@@ -190,13 +190,17 @@ function useTaskFormImpl() {
         return Number.isFinite(n) ? n : null
     }
 
+    // 後端會把 AI 推斷的優先序調到前後階段之間，往上、往下都有可能
+    function adjustedStagesText(adjusted: number[]): string | undefined {
+        if (!adjusted.length) return undefined
+        return `AI 判斷的優先序和前後階段衝突，已把階段 ${adjusted.join('、')} 調成落在前後階段之間`
+    }
+
     function buildStagedSummary(result: TaskWithSubtasks): { title: string; description?: string } {
         const adjusted = result.priority_adjusted_stages ?? []
         return {
             title: `已建立主任務和 ${result.subtasks?.length ?? 0} 個階段`,
-            description: adjusted.length
-                ? `AI 判斷的優先序比前一個階段高，已把階段 ${adjusted.join('、')} 調成和前一個階段相同`
-                : undefined,
+            description: adjustedStagesText(adjusted),
         }
     }
 
@@ -370,7 +374,7 @@ function useTaskFormImpl() {
             const adjusted = result.priority_adjusted_stages ?? []
             toast.add({
                 title: '已新增階段',
-                description: adjusted.length ? `AI 判斷的優先序比前一個階段高，已調成和前一個階段相同` : undefined,
+                description: adjustedStagesText(adjusted),
                 color: 'success',
                 icon: 'i-lucide-check',
             })

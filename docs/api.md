@@ -36,7 +36,7 @@
 | 方法 | 路徑 | 登入 | Request | Response | 說明 |
 |---|---|---|---|---|---|
 | POST | `/manual-tasks/` | ✅ | `ManualTaskInput`，header `Idempotency-Key`（選填） | `ManualTaskWithSubtasksOut`（201） | priority / duration 未填時由 AI 推估；帶 `subtasks`（1～10 個）時建立主任務和依序編號的子任務，整批只算一次請求；限流 20/分 |
-| POST | `/manual-tasks/{task_id}/subtasks` | ✅ | `SubtaskCreate` | `ManualTaskWithSubtasksOut`（201） | 在 `position`（預設最後）插入子任務；對一般任務新增時它會變成主任務；限流 20/分 |
+| POST | `/manual-tasks/{task_id}/subtasks` | ✅ | `SubtaskCreate`，header `Idempotency-Key`（選填） | `ManualTaskWithSubtasksOut`（201） | 在 `position`（預設最後）插入子任務；對一般任務新增時它會變成主任務；相同 `Idempotency-Key` 重送回傳第一次的結果；限流 20/分 |
 | GET | `/manual-tasks/me` | ✅ | — | `list[ManualTaskOut]` | 沒有任務回空陣列；主任務和子任務各一筆，主任務的狀態與進度依子任務計算 |
 | GET | `/manual-tasks/{task_id}` | ✅ | — | `ManualTaskOut` | 只能查自己的 |
 | PUT | `/manual-tasks/{task_id}` | ✅ | `ManualTaskUpdate` | `ManualTaskOut` | 部分更新，沒帶的欄位保留原值；主任務只能改標題、描述、截止日；違反階段之間的優先序或截止日限制回 400 |

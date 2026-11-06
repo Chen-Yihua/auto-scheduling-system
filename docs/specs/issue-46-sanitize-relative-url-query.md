@@ -2,7 +2,7 @@
 
 - 狀態：已核准
 - issue：[#46](https://github.com/Chen-Yihua/auto-scheduling-system/issues/46)
-- PR：（實作後補上）
+- PR：[#49](https://github.com/Chen-Yihua/auto-scheduling-system/pull/49)
 
 ## 現象
 開發者開 PR 或合併到 `main` 後，`frontend-e2e-test` 的 Clerk 登入遇到錯誤時，測試會把登入期間的診斷（導覽、console error、pageerror）和重試標記印進公開的 CI log。console 訊息裡如果有帶 query string 的相對路徑網址（例如 ofetch 的 `FetchError: [GET] "/v1/client?__clerk_db_jwt=dvb_xxx#h"`），`?`、`#` 之後的內容會原樣印出；query 裡如果有 token，就會公開。目前 e2e 只開首頁，首頁的 API 呼叫都沒有帶 query，還沒有實際外洩。

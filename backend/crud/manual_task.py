@@ -416,6 +416,13 @@ async def set_calendar_event_id(task_id: str, user_id: str, calendar_event_id: s
         {"$set": {"calendar_event_id": calendar_event_id, "updated": datetime.now(timezone.utc)}},
     )
 
+async def clear_calendar_event_id(task_id: str, user_id: str, calendar_event_id: str) -> None:
+    """事件已從 Google 刪掉、任務卻留下時呼叫，讓任務能重新排程。只清還指向這個事件的任務。"""
+    await db.manual_tasks.update_one(
+        {"_id": task_id, "user_id": user_id, "calendar_event_id": calendar_event_id},
+        {"$set": {"calendar_event_id": None, "updated": datetime.now(timezone.utc)}},
+    )
+
 async def update_manual_task_by_id(task_id: str, data: dict):
     logger.debug("Updating manual task %s with data=%s", task_id, data)
     # id 對應 _id，不能更新；狀態（主任務）、進度、階段編號是讀取時算的；

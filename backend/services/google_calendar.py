@@ -212,20 +212,22 @@ def _delete_error(e: httpx.HTTPStatusError) -> AppError:
     return _google_error(e, "刪除 Google Calendar 事件失敗")
 
 
-async def delete_upcoming_calendar_events(clerk_id: str, event_ids: list[str], now: datetime | None = None) -> None:
+async def delete_upcoming_calendar_events(clerk_id: str, event_ids: list[str], now: datetime | None = None) -> list[str]:
     """
     刪除開始時間晚於現在的事件，已經開始或過去的保留；事件已不存在（404 / 410）當作刪除成功。
+    回傳這次真的刪掉的事件 id。
 
     沒有連接或授權失效丟 ReauthRequiredError；Google 5xx、429 或連不上丟 ExternalServiceError。
     中途失敗時已刪掉的事件不復原，呼叫端要等這裡成功才刪任務，重試時已刪的事件會走 404 / 410。
     """
     if not event_ids:
-        return
+        return []
     now = now or datetime.now(timezone.utc)
     if not await is_google_calendar_connected(clerk_id):
         raise ReauthRequiredError(GOOGLE_REAUTH_DETAIL)
     access_token, calendar_id = await _get_access_token_and_primary_calendar_id(clerk_id)
 
+    deleted = []
     for event_id in event_ids:
         try:
             event = await get_calendar_event(access_token, calendar_id, event_id)
@@ -235,6 +237,7 @@ async def delete_upcoming_calendar_events(clerk_id: str, event_ids: list[str], n
             if start is None or start <= now:
                 continue
             await delete_calendar_event(access_token, calendar_id, event_id)
+            deleted.append(event_id)
         except httpx.HTTPStatusError as e:
             if e.response.status_code in _EVENT_GONE_STATUSES:
                 continue
@@ -242,3 +245,4 @@ async def delete_upcoming_calendar_events(clerk_id: str, event_ids: list[str], n
         except httpx.RequestError as e:
             logger.error("連線 Google Calendar API 失敗: %s", e)
             raise ExternalServiceError(DELETE_RETRY_DETAIL)
+    return deleted

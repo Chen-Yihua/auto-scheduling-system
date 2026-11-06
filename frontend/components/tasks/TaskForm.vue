@@ -150,9 +150,18 @@ async function handleAddSubtask() {
   await fetchSchedulableTasks()
 }
 
+// 一次只送一個刪除：同時刪最後兩個階段時，後到的會被「只剩一個」擋下
+const deletingSubtask = ref(false)
+
 async function handleDeleteSubtask(subtask: Task) {
-  await onDeleteSubtask(subtask)
-  await fetchSchedulableTasks()
+  if (deletingSubtask.value) return
+  deletingSubtask.value = true
+  try {
+    await onDeleteSubtask(subtask)
+    await fetchSchedulableTasks()
+  } finally {
+    deletingSubtask.value = false
+  }
 }
 
 // 兩個 fetch 各自處理錯誤，不用再包 try/catch
@@ -341,7 +350,14 @@ onMounted(async () => {
                 >
                   在前面插入
                 </UButton>
-                <UButton type="button" size="xs" variant="ghost" color="error" @click="handleDeleteSubtask(subtask)">
+                <UButton
+                  type="button"
+                  size="xs"
+                  variant="ghost"
+                  color="error"
+                  :disabled="deletingSubtask"
+                  @click="handleDeleteSubtask(subtask)"
+                >
                   刪除
                 </UButton>
               </div>

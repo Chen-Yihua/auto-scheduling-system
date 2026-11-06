@@ -290,8 +290,15 @@ async def delete_manual_task(
     elif task.get("parent_id"):
         if len(await manual_task_crud.get_subtasks(task["parent_id"], user_id)) <= 1:
             raise InvalidRequestError(manual_task_crud.LAST_SUBTASK_DETAIL)
-        await delete_upcoming_calendar_events(user_id, [task["calendar_event_id"]] if task.get("calendar_event_id") else [])
-        await manual_task_crud.delete_subtask(task)
+        event_id = task.get("calendar_event_id")
+        deleted_event_ids = await delete_upcoming_calendar_events(user_id, [event_id] if event_id else [])
+        try:
+            await manual_task_crud.delete_subtask(task)
+        except InvalidRequestError:
+            # 同時刪除時預檢擋不住，事件已刪但任務被留下；不清掉的話這個階段永遠不會再被排入
+            if event_id in deleted_event_ids:
+                await manual_task_crud.clear_calendar_event_id(task_id, user_id, event_id)
+            raise
     else:
         await manual_task_crud.delete_manual_task_by_id(task_id)
     return {"task ID": task_id,"deleted": True}

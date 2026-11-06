@@ -40,7 +40,7 @@
 ## 回歸測試
 | AC | 測試 | 改程式前是否失敗 |
 |---|---|---|
-| AC1、AC2、AC3 | 新的登入輔助函式（例如 `frontend/tests/e2e/support/signInWithRetry.ts`）的 unit 測試，放在主 vitest 設定會跑到的位置（`tests/e2e/**` 被主設定排除）；用假的 `signIn` 模擬：第 1 次丟 `Execution context was destroyed` 後成功 → 成功並印 1 行標記；連續 3 次都丟 → 失敗且錯誤訊息保留；丟其他錯誤 → 不重試直接失敗；丟 `Execution context was destroyed` 但重新載入後已經是登入狀態 → 成功、不再呼叫 `signIn`、仍印重試標記；檢查登入狀態時第 1 次丟 `Execution context was destroyed`、第 2 次回傳已登入 → 成功；其他錯誤直接失敗與重試用完時都有印診斷 | 是（函式還不存在）；「重新載入後已登入」在 2026-11-06 第 1 筆修改前會失敗；「檢查時又遇到導覽」在第 2 筆修改前會失敗 |
+| AC1、AC2、AC3 | 新的登入輔助函式（例如 `frontend/tests/e2e/support/signInWithRetry.ts`）的 unit 測試，放在主 vitest 設定會跑到的位置（`tests/e2e/**` 被主設定排除）；用假的 `signIn` 模擬：第 1 次丟 `Execution context was destroyed` 後成功 → 成功並印 1 行標記；連續 3 次都丟 → 失敗且錯誤訊息保留；丟其他錯誤 → 不重試直接失敗；丟 `Execution context was destroyed` 但重新載入後已經是登入狀態 → 成功、不再呼叫 `signIn`、仍印重試標記；檢查登入狀態時第 1 次丟 `Execution context was destroyed`、第 2 次回傳已登入 → 成功；重新載入後等待頁面載入時第 1 次丟 `Execution context was destroyed`、第 2 次成功且已登入 → 成功；其他錯誤直接失敗與重試用完時都有印診斷 | 是（函式還不存在）；「重新載入後已登入」在 2026-11-06 第 1 筆修改前會失敗；「檢查時又遇到導覽」在第 2 筆修改前會失敗 |
 | AC4、AC5 | 同一組 unit 測試：記錄導覽時網址帶 query、hash、email 時，印出的內容只有 host＋path，不含 email 與 token | 是（函式還不存在） |
 | AC1～AC4 整體 | CI 的 `frontend-e2e-test` 通過；無法穩定重現，所以不要求改程式前失敗。合併後從 log 的重試標記觀察發生次數 | 不適用（間歇性） |
 

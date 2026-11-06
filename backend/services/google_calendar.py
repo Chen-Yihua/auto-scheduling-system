@@ -187,7 +187,6 @@ async def get_calendar_event_ends(clerk_id: str, event_ids: list[str]) -> dict[s
     access_token, calendar_id = await _get_access_token_and_primary_calendar_id(clerk_id)
 
     ends: dict[str, datetime | None] = {}
-    deleted = []
     for event_id in event_ids:
         try:
             event = await get_calendar_event(access_token, calendar_id, event_id)

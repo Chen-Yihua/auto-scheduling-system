@@ -39,9 +39,9 @@
 ## 回歸測試
 | AC | 測試 | 改程式前是否失敗 |
 |---|---|---|
-| AC1 | `backend/tests/unit/test_manual_task_router.py`：兩個刪除用 `asyncio.gather` 同時呼叫 `delete_manual_task`，一個成功、一個 `InvalidRequestError`，留下的子任務會被 `build_schedule_suggestion`（`backend/services/scheduler.py`）排入 | 預期失敗 |
-| AC2 | 同上檔案：被擋下時事件被刪 → `calendar_event_id` 為 None；事件已開始而保留 → 維持原值；原本沒有事件 → 不變；另一個使用者的同 id 文件不受影響 | 「被刪 → None」預期失敗，其餘預期通過（保護既有行為） |
-| AC3 | `frontend/tests/components/TaskForm.actions.test.ts`：刪除請求未完成時，其他階段的刪除按鈕 disabled；成功與失敗後都恢復 | 預期失敗 |
+| AC1 | `backend/tests/unit/test_manual_task_router.py`：兩個刪除用 `asyncio.gather` 同時呼叫 `delete_manual_task`，一個成功、一個 `InvalidRequestError`，留下的子任務會被 `build_schedule_suggestion`（`backend/services/scheduler.py`）排入 | 是 |
+| AC2 | 同上檔案：被擋下時事件被刪 → `calendar_event_id` 為 None；事件已開始而保留 → 維持原值；原本沒有事件 → 不變；另一個使用者的同 id 文件不受影響 | 「被刪 → None」是；其餘三個否（保護既有行為） |
+| AC3 | `frontend/tests/components/TaskForm.actions.test.ts`：刪除請求未完成時，其他階段的刪除按鈕 disabled；成功與失敗後都恢復 | 是（成功、失敗兩種都失敗） |
 
 ## 修改紀錄
 | 日期 | 修改 | 原因 | 確認者 |

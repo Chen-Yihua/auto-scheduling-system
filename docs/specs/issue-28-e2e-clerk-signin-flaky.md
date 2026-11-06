@@ -2,7 +2,7 @@
 
 - 狀態：已核准
 - issue：[#28](https://github.com/Chen-Yihua/auto-scheduling-system/issues/28)
-- PR：（實作後補上）
+- PR：#45
 
 ## 現象
 開發者開 PR 或合併到 `main` 後，`frontend-e2e-test` 的登入測試間歇性失敗，錯誤是 `Failed to sign in with email ***: page.evaluate: Execution context was destroyed, most likely because of a navigation.`。這是 `main` ruleset 的必要檢查：PR 因此不能合併，要手動重跑；`main` 上失敗時 `deploy-frontend` 會被跳過。2026-11-02 之後至少出現 10 次（記錄在 #28 的本文與留言），PR #43 的 run 42225862928 連續 3 次失敗，程式碼和前一個通過的 commit 完全相同。
@@ -26,7 +26,7 @@
 ## 驗收條件
 | # | 條件 | 類型 |
 |---|---|---|
-| AC1 | 登入時遇到 `Execution context was destroyed` 錯誤，測試要等頁面載入完成（Clerk 重新 loaded）後重新登入，最多重試 2 次；重試後登入成功時，測試照原本的檢查繼續並通過 | 開發者可觀察 |
+| AC1 | 登入時遇到 `Execution context was destroyed` 錯誤，測試要等頁面載入完成（Clerk 重新 loaded）後先檢查登入狀態：已經登入（`window.Clerk.user` 有值）就當作登入成功，不再呼叫登入；還沒登入才重新登入，最多重試 2 次。登入成功後，測試照原本的檢查繼續並通過 | 開發者可觀察 |
 | AC2 | 其他登入錯誤（找不到使用者、金鑰錯誤、逾時等）不重試，照原本的錯誤讓測試失敗；重試 2 次後仍失敗時，測試失敗，錯誤訊息保留原本的內容 | 不變條件（重試不能掩蓋其他失敗） |
 | AC3 | 每次重試都在 CI log 印出一行標記（第幾次重試、錯誤訊息），讓之後能從 log 統計這個錯誤的發生次數 | 開發者可觀察 |
 | AC4 | 從開啟頁面開始記錄 main frame 的整頁導覽、瀏覽器 console 的 error 與 pageerror、clerk-js 版本（`window.Clerk.version`）；登入發生錯誤（包括會重試的）或登入後等待逾時時，把這些記錄印到 CI log | 開發者可觀察 |
@@ -40,10 +40,11 @@
 ## 回歸測試
 | AC | 測試 | 改程式前是否失敗 |
 |---|---|---|
-| AC1、AC2、AC3 | 新的登入輔助函式（例如 `frontend/tests/e2e/support/signInWithRetry.ts`）的 unit 測試，放在主 vitest 設定會跑到的位置（`tests/e2e/**` 被主設定排除）；用假的 `signIn` 模擬：第 1 次丟 `Execution context was destroyed` 後成功 → 成功並印 1 行標記；連續 3 次都丟 → 失敗且錯誤訊息保留；丟其他錯誤 → 不重試直接失敗 | 是（函式還不存在） |
+| AC1、AC2、AC3 | 新的登入輔助函式（例如 `frontend/tests/e2e/support/signInWithRetry.ts`）的 unit 測試，放在主 vitest 設定會跑到的位置（`tests/e2e/**` 被主設定排除）；用假的 `signIn` 模擬：第 1 次丟 `Execution context was destroyed` 後成功 → 成功並印 1 行標記；連續 3 次都丟 → 失敗且錯誤訊息保留；丟其他錯誤 → 不重試直接失敗；丟 `Execution context was destroyed` 但重新載入後已經是登入狀態 → 成功、不再呼叫 `signIn`、仍印重試標記 | 是（函式還不存在）；「重新載入後已登入」這一條在 2026-11-06 的修改前會失敗 |
 | AC4、AC5 | 同一組 unit 測試：記錄導覽時網址帶 query、hash、email 時，印出的內容只有 host＋path，不含 email 與 token | 是（函式還不存在） |
 | AC1～AC4 整體 | CI 的 `frontend-e2e-test` 通過；無法穩定重現，所以不要求改程式前失敗。合併後從 log 的重試標記觀察發生次數 | 不適用（間歇性） |
 
 ## 修改紀錄
 | 日期 | 修改 | 原因 | 確認者 |
 |---|---|---|---|
+| 2026-11-06 | AC1：重新載入後先檢查登入狀態，已經登入就不再呼叫登入；回歸測試表補上「重新載入後已登入」的情境 | PR #45 第一次 CI 遇到導覽錯誤後重試，重新登入被 Clerk 以 `You're already signed in.` 拒絕：導覽發生時第一次登入已經完成，照原本的 AC1 重試永遠不會成功（Specification Defect）。影響檢查：AC2（其他錯誤不重試、次數用完保留原錯誤）、AC3（重試標記照印）、AC4、AC5 不用改；「不做」不變；回歸測試表更新 AC1 那一列 | 開發者 |

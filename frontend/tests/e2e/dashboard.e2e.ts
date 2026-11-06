@@ -101,6 +101,7 @@ describe('Dashboard（真實瀏覽器 E2E）', () => {
           await page.waitForLoadState('load')
           await clerk.loaded({ page })
         },
+        isSignedIn: () => page.evaluate(() => !!(window as unknown as { Clerk?: { user?: unknown } }).Clerk?.user),
         onError: async (error) => {
           diagnostics.setClerkVersion(await readClerkVersion(page))
           console.error(diagnostics.format('登入錯誤：' + (error instanceof Error ? error.message : String(error))))

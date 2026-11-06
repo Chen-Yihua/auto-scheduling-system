@@ -33,6 +33,7 @@ export function sanitizeForLog(text: string, secrets: string[]): string {
 export async function signInWithRetry(options: {
   signIn: () => Promise<void>
   waitForReady: () => Promise<void>
+  isSignedIn: () => Promise<boolean>
   onError: (error: unknown) => Promise<void>
   log: (line: string) => void
   secrets: string[]
@@ -51,6 +52,8 @@ export async function signInWithRetry(options: {
         `${RETRY_MARKER} 第 ${attempt + 1}/${maxRetries} 次重試：${sanitizeForLog(errorMessage(error), options.secrets)}`,
       )
       await options.waitForReady()
+      // 導覽可能發生在 setActive 之後：這時已經登入，再登入會被 Clerk 以 already signed in 拒絕
+      if (await options.isSignedIn()) return
     }
   }
 }

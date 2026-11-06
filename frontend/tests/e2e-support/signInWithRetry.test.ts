@@ -11,19 +11,21 @@ const NAVIGATION_ERROR = new Error(
   `Failed to sign in with email ${EMAIL}: page.evaluate: Execution context was destroyed, most likely because of a navigation.`,
 )
 
-function setup(signIn: () => Promise<void>) {
+function setup(signIn: () => Promise<void>, signedInAfterReload = false) {
   const lines: string[] = []
   const waitForReady = vi.fn(async () => {})
+  const isSignedIn = vi.fn(async () => signedInAfterReload)
   const onError = vi.fn(async () => {})
   const run = () =>
     signInWithRetry({
       signIn,
       waitForReady,
+      isSignedIn,
       onError,
       log: (line) => lines.push(line),
       secrets: [EMAIL],
     })
-  return { lines, waitForReady, onError, run }
+  return { lines, waitForReady, isSignedIn, onError, run }
 }
 
 describe('signInWithRetry', () => {
@@ -39,6 +41,17 @@ describe('signInWithRetry', () => {
     expect(markers).toHaveLength(1)
     expect(markers[0]).toContain('1/2')
     expect(markers[0]).toContain('Execution context was destroyed')
+  })
+
+  it('AC1、AC3：遇到導覽後重新載入時已經是登入狀態（第一次登入其實已完成）→ 成功、不再呼叫 signIn，仍印重試標記', async () => {
+    const signIn = vi.fn().mockRejectedValueOnce(NAVIGATION_ERROR)
+    const { lines, waitForReady, run } = setup(signIn, true)
+
+    await run()
+
+    expect(signIn).toHaveBeenCalledTimes(1)
+    expect(waitForReady).toHaveBeenCalledTimes(1)
+    expect(lines.filter((line) => line.startsWith('[e2e][signin-retry]'))).toHaveLength(1)
   })
 
   it('AC2：連續 3 次都遇到導覽（重試 2 次仍失敗）→ 測試失敗，錯誤訊息保留原本的內容', async () => {

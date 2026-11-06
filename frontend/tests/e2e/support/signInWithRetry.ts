@@ -21,7 +21,10 @@ function sanitizeUrl(raw: string): string {
 }
 
 export function sanitizeForLog(text: string, secrets: string[]): string {
-  let result = text.replace(/\b[a-z][a-z0-9+.-]*:\/\/[^\s"'<>`)\]]+/gi, sanitizeUrl)
+  let result = text
+    .replace(/\b[a-z][a-z0-9+.-]*:\/\/[^\s"'<>`)\]]+/gi, sanitizeUrl)
+    // 相對路徑網址（例如 ofetch 的 FetchError）同樣不能留 query／hash；前面不能接字元，避免把 and/or? 當成網址
+    .replace(/(?<![\w.~-])(\/[^\s"'<>`()[\]?#]*)[?#][^\s"'<>`)\]]+/g, '$1')
   for (const secret of secrets.filter(Boolean)) {
     result = result.split(secret).join('[redacted]').split(encodeURIComponent(secret)).join('[redacted]')
   }

@@ -205,3 +205,34 @@ describe('sanitizeForLog', () => {
     expect(sanitizeForLog('hello other@example.org', [])).not.toContain('other@example.org')
   })
 })
+
+// 對應規格 docs/specs/issue-46-sanitize-relative-url-query.md
+describe('sanitizeForLog：相對路徑網址（#46）', () => {
+  it('#46 AC1：ofetch 格式的相對路徑網址只留 path，query 與 hash 的 token 不印出', () => {
+    const output = sanitizeForLog('FetchError: [GET] "/v1/client?__clerk_db_jwt=dvb_xxx#h": 404', [])
+
+    expect(output).toContain('"/v1/client"')
+    expect(output).not.toContain('dvb_xxx')
+    expect(output).not.toContain('?')
+    expect(output).not.toContain('#h')
+  })
+
+  it('#46 AC1：相對路徑網址的 query 與 hash 拿到空白為止', () => {
+    const output = sanitizeForLog('Failed GET /oauth/callback?code=abc#state=xyz (retry)', [])
+
+    expect(output).toContain('/oauth/callback')
+    expect(output).not.toContain('code=abc')
+    expect(output).not.toContain('state=xyz')
+    expect(output).toContain('(retry)')
+  })
+
+  it('#46 AC2：完整網址照舊只留 host＋path', () => {
+    expect(sanitizeForLog('load https://a.b/c?x=1#y done', [])).toBe('load a.b/c done')
+  })
+
+  it('#46 AC3：不是網址的 ?、#、沒有 query 的路徑與 stack trace 原樣保留', () => {
+    const text = '為什麼失敗? 見 #28 at /_nuxt/app.js:19:22'
+
+    expect(sanitizeForLog(text, [])).toBe(text)
+  })
+})

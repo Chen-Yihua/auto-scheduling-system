@@ -517,16 +517,16 @@ def google_events(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_ac28_only_events_that_have_not_started_are_deleted(google_events):
-    """AC28：還沒開始的事件刪掉；已經開始或已經過去的事件保留。"""
+    """AC28：還沒開始的事件刪掉；已經開始或已經過去的事件保留。回傳真的刪掉的事件，呼叫端靠它判斷要不要清 calendar_event_id。"""
     google_events["events"] = {
         "future": _event("2030-01-02T09:00:00Z"),
         "started": _event("2030-01-01T11:30:00Z"),
         "past": _event("2029-12-30T09:00:00Z"),
     }
 
-    await calendar_service.delete_upcoming_calendar_events("uid123", ["future", "started", "past"], now=DELETE_NOW)
+    deleted = await calendar_service.delete_upcoming_calendar_events("uid123", ["future", "started", "past"], now=DELETE_NOW)
 
-    assert google_events["deleted"] == ["future"]
+    assert google_events["deleted"] == deleted == ["future"]
 
 
 @pytest.mark.asyncio

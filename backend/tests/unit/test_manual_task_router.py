@@ -311,6 +311,7 @@ def deleted_events(monkeypatch):
 
     async def fake_delete(user_id, event_ids):
         calls.append(list(event_ids))
+        return list(event_ids)
 
     monkeypatch.setattr(manual_task_router, "delete_upcoming_calendar_events", fake_delete)
     return calls
@@ -703,6 +704,124 @@ async def test_ac34_deleting_plain_task_does_not_touch_calendar(stage_db, delete
 
     assert deleted_events == []
     assert await db.manual_tasks.find_one({"_id": "plain-3"}) is None
+
+
+async def _delete_concurrently(monkeypatch, subtask_ids):
+    """同時刪除多個子任務，回傳 (成功的 id, 被擋下的 id, 被擋下的例外)。"""
+    import asyncio
+
+    real_delete_subtask = manual_task_router.manual_task_crud.delete_subtask
+    arrived = []
+    all_arrived = asyncio.Event()
+
+    # 等所有請求都通過數量預檢、刪完事件才一起寫入，重現同時送出的時序
+    async def delete_subtask_after_all_arrive(subtask):
+        arrived.append(subtask["id"])
+        if len(arrived) == len(subtask_ids):
+            all_arrived.set()
+        await asyncio.wait_for(all_arrived.wait(), timeout=1)
+        await real_delete_subtask(subtask)
+
+    monkeypatch.setattr(manual_task_router.manual_task_crud, "delete_subtask", delete_subtask_after_all_arrive)
+    results = await asyncio.gather(
+        *(manual_task_router.delete_manual_task(i, clerk_user=STAGE_USER) for i in subtask_ids),
+        return_exceptions=True,
+    )
+    succeeded = [i for i, r in zip(subtask_ids, results) if isinstance(r, dict)]
+    blocked = [(i, r) for i, r in zip(subtask_ids, results) if isinstance(r, InvalidRequestError)]
+    assert len(succeeded) + len(blocked) == len(subtask_ids), results
+    return succeeded, [i for i, _ in blocked], [r for _, r in blocked]
+
+
+async def _two_stage_parent(event_ids=(None, None)):
+    parent = await _create_staged([_sub("階段1", priority="High", duration=30), _sub("階段2", priority="Low", duration=30)])
+    ids = [s["id"] for s in parent["subtasks"]]
+    for subtask_id, event_id in zip(ids, event_ids):
+        if event_id:
+            await db.manual_tasks.update_one({"_id": subtask_id}, {"$set": {"calendar_event_id": event_id}})
+    return parent, ids
+
+
+@pytest.mark.asyncio
+async def test_issue37_ac1_concurrent_deletes_of_last_two_stages_leave_one_that_is_still_scheduled(
+    stage_db, subtask_infer_calls, deleted_events, monkeypatch,
+):
+    """AC1：剩兩個階段且都有未來事件時同時刪兩個 → 一個成功、一個 400（提示不變），留下的階段之後產生排程會被排入。"""
+    from crud.schedulable_items import SOURCE_MANUAL, get_all_schedulable_items, make_composite_id
+    from services.scheduler import build_schedule_suggestion
+
+    parent, ids = await _two_stage_parent(("ev-1", "ev-2"))
+
+    succeeded, blocked, errors = await _delete_concurrently(monkeypatch, ids)
+
+    assert (len(succeeded), len(blocked)) == (1, 1)
+    assert errors[0].detail == manual_task_router.manual_task_crud.LAST_SUBTASK_DETAIL
+    assert [d["id"] for d in await _stage_docs(parent["id"])] == blocked
+
+    tasks = await get_all_schedulable_items(STAGE_USER["sub"])
+    free_slots = [{"start": "2030-01-10T09:00:00Z", "end": "2030-01-10T12:00:00Z"}]
+    suggestion = build_schedule_suggestion(tasks, free_slots, now=datetime(2030, 1, 1, tzinfo=timezone.utc))
+    assert [s["task_id"] for s in suggestion["scheduled"]] == [make_composite_id(SOURCE_MANUAL, blocked[0])]
+
+
+@pytest.mark.asyncio
+async def test_issue37_ac2_blocked_subtask_whose_event_was_deleted_has_event_id_cleared(
+    stage_db, subtask_infer_calls, deleted_events, monkeypatch,
+):
+    """AC2：被「只剩一個」擋下、但這次請求已刪掉它的事件 → calendar_event_id 清成 None，否則永遠不會再被排入。"""
+    _, ids = await _two_stage_parent(("ev-1", "ev-2"))
+
+    _, blocked, _ = await _delete_concurrently(monkeypatch, ids)
+
+    assert (await db.manual_tasks.find_one({"_id": blocked[0]}))["calendar_event_id"] is None
+
+
+@pytest.mark.asyncio
+async def test_issue37_ac2_blocked_subtask_whose_started_event_was_kept_keeps_event_id(
+    stage_db, subtask_infer_calls, monkeypatch,
+):
+    """AC2：被擋下、事件已經開始或過去而保留 → calendar_event_id 維持原值，和 Google 上的事件一致。"""
+    _, ids = await _two_stage_parent(("ev-1", "ev-2"))
+
+    async def keep_started_events(user_id, event_ids):
+        return []
+
+    monkeypatch.setattr(manual_task_router, "delete_upcoming_calendar_events", keep_started_events)
+
+    _, blocked, _ = await _delete_concurrently(monkeypatch, ids)
+
+    expected = {ids[0]: "ev-1", ids[1]: "ev-2"}[blocked[0]]
+    assert (await db.manual_tasks.find_one({"_id": blocked[0]}))["calendar_event_id"] == expected
+
+
+@pytest.mark.asyncio
+async def test_issue37_ac2_blocked_subtask_without_event_is_unchanged(
+    stage_db, subtask_infer_calls, deleted_events, monkeypatch,
+):
+    """AC2：被擋下的子任務原本就沒有事件 → calendar_event_id 不變。"""
+    _, ids = await _two_stage_parent()
+    before = {i: (await db.manual_tasks.find_one({"_id": i})).get("calendar_event_id") for i in ids}
+
+    _, blocked, _ = await _delete_concurrently(monkeypatch, ids)
+
+    assert (await db.manual_tasks.find_one({"_id": blocked[0]})).get("calendar_event_id") == before[blocked[0]]
+
+
+@pytest.mark.asyncio
+async def test_issue37_ac2_clearing_event_id_does_not_touch_other_users_task(
+    stage_db, subtask_infer_calls, deleted_events, monkeypatch,
+):
+    """AC2：被擋下時只改這個使用者的這個子任務；別的使用者記著同一個事件 id 的任務不受影響。"""
+    _, ids = await _two_stage_parent(("ev-1", "ev-2"))
+    for i, event_id in enumerate(("ev-1", "ev-2")):
+        await db.manual_tasks.insert_one({"_id": f"issue37-other-{i}", "user_id": "someone_else", "calendar_event_id": event_id})
+    try:
+        await _delete_concurrently(monkeypatch, ids)
+
+        others = await db.manual_tasks.find({"user_id": "someone_else"}).sort("_id").to_list(length=None)
+        assert [d["calendar_event_id"] for d in others] == ["ev-1", "ev-2"]
+    finally:
+        await db.manual_tasks.delete_many({"user_id": "someone_else"})
 
 
 @pytest.mark.asyncio

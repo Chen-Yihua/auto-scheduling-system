@@ -182,6 +182,32 @@ describe('TaskForm.vue 接線邏輯', () => {
     expect(fetchSchedulableTasksSpy).toHaveBeenCalledTimes(1)
   })
 
+  it.each([
+    ['成功', (finish: { resolve: () => void; reject: (e: Error) => void }) => finish.resolve()],
+    ['失敗', (finish: { resolve: () => void; reject: (e: Error) => void }) => finish.reject(new Error('刪除失敗'))],
+  ])('#37 AC3：一個階段刪除中，所有階段的「刪除」都停用；刪除%s後恢復', async (_, settle) => {
+    isEditModeRef.value = true
+    isEditingParentRef.value = true
+    editingSubtasksRef.value = [{ id: 's1', title: '第一階段', stage: 1 }, { id: 's2', title: '第二階段', stage: 2 }]
+    let finish!: { resolve: () => void; reject: (e: Error) => void }
+    onDeleteSubtaskSpy.mockImplementation(() => new Promise<void>((resolve, reject) => { finish = { resolve, reject } }))
+    // 失敗的情境會讓點擊處理丟出例外，接住避免變成未處理的錯誤
+    const wrapper = shallowMount(TaskForm, { global: { stubs, config: { errorHandler: () => {} } } })
+    await flushPromises()
+    const deleteButtons = () => wrapper.findAll('.subtask-edit-row').map((r) => r.findAll('button').find((b) => b.text().includes('刪除'))!)
+
+    await deleteButtons()[0]!.trigger('click')
+
+    expect(deleteButtons().map((b) => b.attributes('disabled'))).toEqual(['', ''])
+    await deleteButtons()[1]!.trigger('click')
+    expect(onDeleteSubtaskSpy).toHaveBeenCalledTimes(1)
+
+    settle(finish)
+    await flushPromises()
+
+    expect(deleteButtons().map((b) => b.attributes('disabled'))).toEqual([undefined, undefined])
+  })
+
   it('AC10：編輯主任務時可以選在某個階段前面插入子任務', async () => {
     isEditModeRef.value = true
     isEditingParentRef.value = true

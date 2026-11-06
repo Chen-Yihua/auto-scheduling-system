@@ -19,7 +19,7 @@ gh issue view <N> --json number,title,body,labels,comments,state
 
 issue 已關閉時停下來，問開發者要不要繼續。
 
-issue 的內容與留言就是需求來源，但不等於已核准的規格：issue 裡寫的「建議的驗收條件」「修法參考」也要寫進規格、經開發者核准。內容不足以寫出驗收條件時，照 `/feature` 第 3 節「Missing AC 的處理」問開發者。
+issue 的內容與留言就是需求來源，但不等於已核准的規格：issue 裡寫的「建議的驗收條件」「修法參考」也要寫進規格、經開發者核准。內容不足以寫出驗收條件時，照 `/feature` 第 3 節「規格問題的處理」問開發者。
 
 ## 2. 照 `/feature` 的流程執行
 
@@ -30,7 +30,7 @@ issue 的內容與留言就是需求來源，但不等於已核准的規格：is
 | 規格檔 | `docs/specs/issue-<N>-<簡短名稱>.md`，開頭寫來源 issue 連結 |
 | 規格格式 | issue 有 `bug` 標籤時，用 `docs/specs/README.md` 的「bug 簡化格式」；其他用完整格式。兩者都要在 plan mode 交給開發者核准 |
 | 分支 | `issue-<N>-<簡短名稱>` |
-| 審查紀錄 | `docs/reviews/issue-<N>-<簡短名稱>-round<M>.md` |
+| 審查紀錄 | `docs/reviews/issue-<N>-<簡短名稱>-round<M>.md`；規格審查是 `docs/reviews/issue-<N>-<簡短名稱>-spec-round<M>.md`（bug 簡化格式不做規格審查） |
 | PR 描述 | 交給 `feature-implementer` 時明確要求 PR 描述加上 `Closes #<N>`；每次更新 PR 描述後（包括 `/feature` 第 4 節放驗收表時），用 `gh api repos/{owner}/{repo}/pulls/<PR> --jq .body` 確認描述裡有；沒有就以目前的描述為基礎補上一行，再 `gh api -X PATCH`，不要只送 `Closes #<N>` 把整份描述蓋掉。合併後 issue 會自動關閉 |
 
 開發中發現和這個 issue 無關的問題，照 `/feature` 的「不阻擋的發現開 issue」規則開新 issue（可被利用的漏洞照「漏洞的處理」，不開 issue），不在這個 PR 修。

@@ -4,7 +4,7 @@
 
 ## 指標
 
-主要指標是 **Missing AC**：審查或開發者在規格核准後才發現、規格沒寫到的情境。只看數量不夠，每一項都要標嚴重程度：
+主要指標是 **Missing AC**：審查或開發者在規格核准後才發現、規格沒寫到或互相矛盾的情境，也就是 [docs/reviews/README.md](../../reviews/README.md)「分類」裡的 Missing Acceptance Criteria 與 Specification Defect，依根本原因認定。Factual Error（規格寫錯現有行為）是寫規格時沒查證，另外計算。只看數量不夠，每一項都要標嚴重程度：
 
 | 嚴重程度 | 定義 |
 |---|---|
@@ -12,7 +12,9 @@
 | Major | 使用者在一般操作下會遇到的行為缺漏或錯誤，但有替代做法 |
 | Minor | 少見的邊緣情境、訊息文字、操作細節 |
 
-其他指標用來判斷代價與副作用，定義見 [TEMPLATE.md](TEMPLATE.md)：需求釐清輪數、人工介入次數、Review 輪數、假設被否決數量、需求變更次數、Token、開發時間。
+其他指標用來判斷代價與副作用，定義見 [TEMPLATE.md](TEMPLATE.md)：需求釐清輪數、人工介入次數、規格審查發現、Review 輪數、假設被否決數量、需求變更次數、Token、開發時間。
+
+規格核准前有規格審查（[ADR 0005](../../decisions/0005-specification-review.md)），兩個流程都會經過，所以比較仍然公平；但導入前後的紀錄不能直接比較，紀錄裡要寫「流程版本」。`staged-tasks` 是導入前唯一的一筆。
 
 如果 Missing AC 沒有下降、只有釐清輪數和時間增加，就表示 grilling 只是延長了訪談。
 

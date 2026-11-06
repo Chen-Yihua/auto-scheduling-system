@@ -25,22 +25,17 @@ tools: Read, Grep, Glob, Bash
 
 ## 回報格式
 
-報告會存進公開 repo 的 `docs/reviews/<功能>-spec-round<N>.md`，給之後沒看過這次對話的人讀；依據一律寫 `檔案:行號`，引用規格時寫 AC 或假設的編號，不要寫「上面提到的」「這次對話裡」這類只有當下看得懂的說法。
+報告會由主 session 整理進公開 repo 的 `docs/reviews/specification/<功能>.md`，給之後沒看過這次對話、也不熟悉這段程式碼的人讀。結構照 `docs/reviews/README.md`「報告格式」：Summary、Problem Details、Technical Evidence；每項發現的類型、嚴重程度、阻擋合併、涉及安全／架構、開發者決策、確定程度照同一份文件「分類」分開判斷。規格審查只會用到 Factual Error、Specification Defect、Missing AC、Improvement Suggestion。
 
-先列查證紀錄，實作後的 `acceptance-reviewer` 會以它為準，不再重查：
+Problem Details 的「影響」寫出影響哪些驗收條件與假設；「建議」寫出建議的驗收條件與理由。Factual Error 的證據附上現有行為的依據；Specification Defect 寫出互相衝突的是哪幾條。
+
+Technical Evidence 的檢查表是下面兩項，實作後的 `acceptance-reviewer` 會以它們為準，不再重查：
+
+查證紀錄：
 
 | 規格中的事實（AC／假設編號） | 結果（正確／錯誤／無法查證） | 依據（檔案:行號） |
 |---|---|---|
 
-再列每項發現：
+已接受的風險：規格或已決定事項裡明確接受、你也同意不必處理的風險，實作後的審查不會再把它當成新發現。
 
-| # | 分類 | 阻擋 | 涉及安全／架構 | 說明 | 依據（檔案:行號、AC／假設編號） | 建議 |
-|---|---|---|---|---|---|---|
-
-分類、阻擋規則與「涉及安全／架構」的定義見 `docs/reviews/README.md`「分類」，依根本原因分類；規格審查只會用到 Factual Error、Specification Defect、Missing Acceptance Criteria、Improvement Suggestion。
-
-每項規格的問題要寫出：問題的情境、影響哪些驗收條件與假設、建議的驗收條件與理由，以及是否涉及「未定義的產品行為、權限、安全性、資料處理、架構」。Factual Error 附上現有行為的依據；Specification Defect 寫出互相衝突的是哪幾條。只寫你的觀察與建議，不要把建議寫成已確認的需求。
-
-最後列出「已接受的風險」：規格或已決定事項裡明確接受、你也同意不必處理的風險，實作後的審查不會再把它當成新發現。
-
-第 2 輪以後會附上前幾輪的紀錄：發現和前幾輪的某一項出自同一個根本原因時，在「說明」寫明「與第 N 輪 #M 同一根本原因」。
+第 2 輪以後會附上前幾輪的報告，用來判斷是否同一根本原因。

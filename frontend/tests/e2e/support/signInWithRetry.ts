@@ -40,20 +40,27 @@ export async function signInWithRetry(options: {
   maxRetries?: number
 }): Promise<void> {
   const maxRetries = options.maxRetries ?? 2
-  for (let attempt = 0; ; attempt++) {
+  let retries = 0
+  let afterNavigation = false
+  for (;;) {
     try {
+      if (afterNavigation) {
+        await options.waitForReady()
+        // 導覽可能發生在 setActive 之後：這時已經登入，再登入會被 Clerk 以 already signed in 拒絕
+        if (await options.isSignedIn()) return
+        afterNavigation = false
+      }
       await options.signIn()
       return
     } catch (error) {
       await options.onError(error)
       const isNavigation = errorMessage(error).includes(NAVIGATION_ERROR)
-      if (!isNavigation || attempt >= maxRetries) throw error
+      if (!isNavigation || retries >= maxRetries) throw error
+      retries++
       options.log(
-        `${RETRY_MARKER} 第 ${attempt + 1}/${maxRetries} 次重試：${sanitizeForLog(errorMessage(error), options.secrets)}`,
+        `${RETRY_MARKER} 第 ${retries}/${maxRetries} 次重試：${sanitizeForLog(errorMessage(error), options.secrets)}`,
       )
-      await options.waitForReady()
-      // 導覽可能發生在 setActive 之後：這時已經登入，再登入會被 Clerk 以 already signed in 拒絕
-      if (await options.isSignedIn()) return
+      afterNavigation = true
     }
   }
 }

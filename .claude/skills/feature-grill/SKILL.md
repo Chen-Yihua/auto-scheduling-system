@@ -66,7 +66,7 @@ D 項確認之後，任何階段（寫規格、規格審查、實作回報、實
 
 複製 `docs/experiments/feature-grill/TEMPLATE.md` 到 `docs/experiments/feature-grill/records/<功能>-feature-grill.md`，照模板裡每個欄位的說明填寫。
 
-- 數字從規格的「修改紀錄」、`docs/reviews/<功能>-spec-round<N>.md`、`docs/reviews/<功能>-round<N>.md`、`<功能>-decisions.md`、這次對話的問答輪數計算，不要估算；拿不到的數字寫「無資料」與原因。
+- 數字從規格的「修改紀錄」、`docs/reviews/specification/<功能>.md`、`docs/reviews/implementation/<功能>.md`、`<功能>-decisions.md`、這次對話的問答輪數計算，不要估算；拿不到的數字寫「無資料」與原因。
 - Missing AC 的嚴重程度由你依模板的定義提出，開發者確認後才算數。
 - Token 與時間從這個 session 的 transcript 計算，不用請開發者執行 `/cost`：`~/.claude/projects/<專案目錄>/` 底下包含這次 `/feature-grill` 指令的 `.jsonl`，每筆 assistant 訊息有 `message.usage` 與 `timestamp`。從 `/feature-grill` 開始的那筆算起，同一個 `message.id` 只算一次，`isSidechain` 為 true 的不算；subagent 的用量取 Agent 工具回報的數字。
 - 紀錄檔不要放進這個功能的 PR：實驗紀錄最後一起用另一個 PR 提交。

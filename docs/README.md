@@ -7,6 +7,7 @@
 | [api.md](api.md) | 後端 API 一覽 | 新增、刪除 endpoint，或改了路徑、登入需求、限流 |
 | [decisions/](decisions/) | 架構決策紀錄（ADR）：為什麼這樣做、放棄了什麼 | 做了之後的人會想問「為什麼不用 X」的決定 |
 | [specs/](specs/) | 功能規格：需求、假設、驗收條件與修改紀錄 | 每個用 `/feature` 開發的功能一份；驗收條件有任何修改都要同步更新 |
+| [issues.md](issues.md) | GitHub issue 的寫法：情境與技術背景兩層 | issue 的欄位或寫法改變時 |
 | [reviews/](reviews/) | 規格審查與實作審查的最終結果：發現、分類、開發者決策與處理結果 | 每個功能的每種審查一份，每輪審查完更新 |
 | [experiments/](experiments/) | 開發流程的實驗：目的、指標與紀錄 | 開始新的流程實驗，或實驗結束整理結果時 |
 

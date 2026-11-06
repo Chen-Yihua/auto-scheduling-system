@@ -4,6 +4,13 @@ import { describe, it, expect } from 'vitest'
 import { setup, createPage, url } from '@nuxt/test-utils/e2e'
 import { clerkSetup, clerk } from '@clerk/testing/playwright'
 import type { Page } from 'playwright-core'
+import {
+  attachSignInDiagnostics,
+  createSignInDiagnostics,
+  readClerkVersion,
+  signInWithRetry,
+  type SignInDiagnostics,
+} from './support/signInWithRetry'
 
 await setup({
   rootDir: fileURLToPath(new URL('../..', import.meta.url)),
@@ -36,7 +43,7 @@ function assertClerkKeysLookRight(publishableKey?: string, secretKey?: string) {
 }
 
 // 除錯用；只印 cookie 名稱和網址路徑，避免 token 出現在公開的 CI log
-async function printPostSignInDiagnostics(page: Page, redirects: string[]) {
+async function printPostSignInDiagnostics(page: Page, redirects: string[], diagnostics: SignInDiagnostics) {
   type ClerkInBrowser = { loaded?: boolean; user?: unknown; session?: unknown }
   const clerkState = await page
     .evaluate(() => {
@@ -54,6 +61,8 @@ async function printPostSignInDiagnostics(page: Page, redirects: string[]) {
   console.error(
     '[e2e] 登入後診斷：' + JSON.stringify({ clerkState, addTaskButtonCount, cookieNames, redirects }, null, 2),
   )
+  diagnostics.setClerkVersion(await readClerkVersion(page))
+  console.error(diagnostics.format('登入後等待逾時'))
 }
 
 describe('Dashboard（真實瀏覽器 E2E）', () => {
@@ -80,9 +89,26 @@ describe('Dashboard（真實瀏覽器 E2E）', () => {
       // clerk.signIn 的 email 模式固定讀 CLERK_SECRET_KEY 這個環境變數名稱
       process.env.CLERK_SECRET_KEY = secretKey
 
-      const page = await createPage('/')
+      const emailAddress = process.env.E2E_CLERK_TEST_EMAIL!
+      const diagnostics = createSignInDiagnostics({ secrets: [emailAddress] })
+      const page = await createPage()
+      attachSignInDiagnostics(page, diagnostics)
       // clerk.signIn 要求先 goto 過一個會載入 Clerk 的頁面，才能繼續
-      await clerk.signIn({ page, emailAddress: process.env.E2E_CLERK_TEST_EMAIL! })
+      await page.goto(url('/'), { waitUntil: 'hydration' })
+      await signInWithRetry({
+        signIn: () => clerk.signIn({ page, emailAddress }),
+        waitForReady: async () => {
+          await page.waitForLoadState('load')
+          await clerk.loaded({ page })
+        },
+        isSignedIn: () => page.evaluate(() => !!(window as unknown as { Clerk?: { user?: unknown } }).Clerk?.user),
+        onError: async (error) => {
+          diagnostics.setClerkVersion(await readClerkVersion(page))
+          console.error(diagnostics.format('登入錯誤：' + (error instanceof Error ? error.message : String(error))))
+        },
+        log: (line) => console.warn(line),
+        secrets: [emailAddress],
+      })
 
       const redirects: string[] = []
       page.on('response', (response) => {
@@ -98,7 +124,7 @@ describe('Dashboard（真實瀏覽器 E2E）', () => {
         // 按鈕變成可按才代表登入完成
         await page.waitForSelector('button[aria-label="新增任務"]:not([disabled])', { timeout: 30_000 })
       } catch (error) {
-        await printPostSignInDiagnostics(page, redirects)
+        await printPostSignInDiagnostics(page, redirects, diagnostics)
         throw error
       }
 

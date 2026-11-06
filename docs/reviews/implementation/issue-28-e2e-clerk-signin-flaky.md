@@ -2,12 +2,12 @@
 
 - 規格：[docs/specs/issue-28-e2e-clerk-signin-flaky.md](../../specs/issue-28-e2e-clerk-signin-flaky.md)
 - PR：#45
-- 輪數：2（第 1 輪 2026-11-06 `2ce4787`；第 2 輪 2026-11-06 `a34f4f3`）
-- 最終結果：仍有阻擋（#5 補測試中，待第 3 輪審查）
+- 輪數：3（第 1 輪 2026-11-06 `2ce4787`；第 2 輪 2026-11-06 `a34f4f3`；第 3 輪 2026-11-06 `eaa86d4`）
+- 最終結果：仍有阻擋（#6 補測試中，待第 4 輪審查；根本原因「重試後兩步的測試不完整」已連續 2 輪阻擋）
 
 ## 摘要
 
-- 發現：5 項（Missing AC 1、Implementation Defect 1、Test Gap 2、Improvement Suggestion 1；Minor 4、Info 1）
+- 發現：6 項（Missing AC 1、Implementation Defect 1、Test Gap 3、Improvement Suggestion 1；Minor 5、Info 1）
 - 開發者決策：2 項（#1 在這個 PR 補 AC1；#2 另開 #46）
 - 尚未處理：1 項（#2，#46）
 
@@ -19,7 +19,8 @@
 | 2 | 1 | 相對路徑網址的 query string／hash 沒有被清掉，會印進 CI log | Implementation Defect | Minor | 是 | 安全 | 只清絕對網址 | 另開 issue，這個 PR 不修 | 開發者 | [#46](https://github.com/Chen-Yihua/auto-scheduling-system/issues/46) |
 | 3 | 1 | 不重試、重試用完的錯誤會不會印診斷，沒有測試 | Test Gap | Minor | 是 | 否 | AC4 失敗路徑沒測 | 交回實作補測試 | 規則 | `a34f4f3` |
 | 4 | 1 | 診斷沒有登入開始／失敗的時間點 | Improvement Suggestion | Info | 否 | 否 | — | 在 #28 留言 | 規則（不阻擋的發現，已有相同問題時留言） | [#28 留言](https://github.com/Chen-Yihua/auto-scheduling-system/issues/28#issuecomment-6688627170) |
-| 5 | 2 | 重新載入後「等待頁面載入」遇到導覽的行為沒有測試 | Test Gap | Minor | 是 | 否 | 重試後兩步的測試不完整 | 交回實作補測試；規格回歸測試表補上這個情境（文件同步） | 規則 | （修正後補上） |
+| 5 | 2 | 重新載入後「等待頁面載入」遇到導覽的行為沒有測試 | Test Gap | Minor | 是 | 否 | 重試後兩步的測試不完整 | 交回實作補測試；規格回歸測試表補上這個情境（文件同步） | 規則 | `eaa86d4` |
+| 6 | 3 | 重新載入後的兩步又遇到導覽時，沒有斷言「等待頁面載入」會再執行一次 | Test Gap | Minor | 是 | 否 | 重試後兩步的測試不完整 | 交回實作補斷言；規格回歸測試表的「改程式前是否失敗」補上（文件同步） | 規則 | （修正後補上） |
 
 ## 問題說明
 
@@ -47,6 +48,12 @@
 - 問題：AC1 規定等待與檢查兩步遇到導覽都算重試，但測試只讓檢查那一步丟錯，等待那一步固定成功；只在檢查那一步加重試的錯誤寫法也會通過。
 - 影響：程式目前正確，測試保護不到 AC1、AC3、AC4 的這個情境。
 - 技術原因：`frontend/tests/e2e-support/signInWithRetry.test.ts:19` 的 `setup()` 把 `waitForReady` 固定成一定成功。
+
+### #6 重新載入後的兩步又遇到導覽時，沒有斷言「等待頁面載入」會再執行一次
+
+- 問題：兩個測試都沒有斷言 `waitForReady` 第 2 次有被呼叫；第二次導覽後跳過等待、直接檢查登入狀態的錯誤寫法也會通過。
+- 影響：程式目前正確，測試保護不到 AC1「等頁面載入完成後才檢查」。
+- 技術原因：與 #5 同一根本原因，#5 的修正沒補完（`frontend/tests/e2e-support/signInWithRetry.test.ts:58-71`、`:73-89`）。
 
 ## 開發者決策
 

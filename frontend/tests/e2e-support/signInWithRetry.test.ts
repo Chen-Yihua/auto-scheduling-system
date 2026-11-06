@@ -45,7 +45,8 @@ describe('signInWithRetry', () => {
   it('AC1、AC3：遇到導覽後重新載入時已經是登入狀態（第一次登入其實已完成）→ 成功、不再呼叫 signIn，仍印重試標記', async () => {
     const signIn = vi.fn().mockRejectedValueOnce(NAVIGATION_ERROR)
     const isSignedIn = vi.fn(async () => true)
-    const { lines, waitForReady, run } = setup(signIn, isSignedIn)
+    const waitForReady = vi.fn(async () => {})
+    const { lines, run } = setup(signIn, isSignedIn, waitForReady)
 
     await run()
 

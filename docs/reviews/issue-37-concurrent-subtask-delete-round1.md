@@ -47,6 +47,6 @@
 
 | # | 處理 | 決定者 | 根本原因 | commit / issue / advisory 編號 |
 |---|---|---|---|---|
-| 1 | 交回實作修正：刪掉多餘的 `deleted = []` | 規則（阻擋的 Implementation Defect） | 誤加的無用變數 | （修正後補上） |
-| 2 | 「改程式前是否失敗」欄改成實作 agent 改程式前實際跑出的結果 | 主 session（文件同步） | — | （修正後補上） |
+| 1 | 交回實作修正：刪掉多餘的 `deleted = []` | 規則（阻擋的 Implementation Defect） | 誤加的無用變數 | `a4ea082` |
+| 2 | 「改程式前是否失敗」欄改成實作 agent 改程式前實際跑出的結果 | 主 session（文件同步） | — | `a4ea082` |
 | 3 | 在既有的 #42 留言補充（同一類：任務記著已不存在的事件），不另開 issue | 規則（不阻擋的發現開 issue，已有相同問題時留言） | — | [#42 留言](https://github.com/Chen-Yihua/auto-scheduling-system/issues/42#issuecomment-6684748738) |

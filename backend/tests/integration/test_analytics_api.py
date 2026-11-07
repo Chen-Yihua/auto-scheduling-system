@@ -5,6 +5,7 @@ from httpx import AsyncClient
 from httpx._transports.asgi import ASGITransport
 
 from main import app
+from core.datetimes import to_utc_datetime
 import routers.analytics as analytics_router
 
 
@@ -35,7 +36,7 @@ async def test_get_productivity_summary(monkeypatch, logged_in_user):
 @pytest.mark.asyncio
 async def test_get_productivity_summary_includes_generated_at_in_utc(monkeypatch, logged_in_user):
     """AC18：回應帶 generated_at，是 UTC 時間，不受傳入的 timezone 影響。"""
-    from datetime import datetime, timedelta, timezone
+    from datetime import datetime, timezone
 
     async def mock_get_items(user_id):
         return []
@@ -48,9 +49,9 @@ async def test_get_productivity_summary_includes_generated_at_in_utc(monkeypatch
     after = datetime.now(timezone.utc)
 
     assert res.status_code == status.HTTP_200_OK, res.text
-    generated_at = datetime.fromisoformat(res.json()["generated_at"].replace("Z", "+00:00"))
-    assert generated_at.utcoffset() == timedelta(0)
-    assert before <= generated_at <= after
+    raw = res.json()["generated_at"]
+    assert raw.endswith("Z") or raw.endswith("+00:00"), raw
+    assert before <= to_utc_datetime(raw) <= after
 
 
 @pytest.mark.asyncio

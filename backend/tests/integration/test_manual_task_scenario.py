@@ -2,12 +2,16 @@
 情境測試：透過 HTTP 依序操作任務，用 mongomock 確認跨步驟的資料一致性。
 clerk_id 用這個檔案獨有的值，避免和其他測試共用的資料庫互相影響。
 """
+from datetime import datetime, timezone
+
 import pytest
 from fastapi import status
 from httpx import AsyncClient
 from httpx._transports.asgi import ASGITransport
 
 from main import app
+from core.database import db
+from core.datetimes import to_utc_datetime
 from core.security import get_current_clerk_user
 
 SCENARIO_USER = {"sub": "scenario_user_manual_task"}
@@ -210,4 +214,106 @@ async def test_staged_task_delete_parent_fails_midway_then_retry_succeeds(monkey
             assert (await ac.get("/manual-tasks/me")).json() == []
     finally:
         await db.googleCalendarTokens.delete_many({"_id": SCENARIO_USER["sub"]})
+        await db.manual_tasks.delete_many({"user_id": SCENARIO_USER["sub"]})
+
+
+def _assert_utc_string(value, expected: datetime):
+    """回應的時間字串要明確標示 UTC（Z 或 +00:00），而且和資料庫存的是同一個時間點。"""
+    assert isinstance(value, str)
+    assert value.endswith("Z") or value.endswith("+00:00"), value
+    assert to_utc_datetime(value) == expected
+
+
+async def _stored(task_id: str) -> dict:
+    doc = await db.manual_tasks.find_one({"_id": task_id})
+    assert doc is not None
+    return doc
+
+
+@pytest.mark.asyncio
+async def test_manual_task_times_read_from_db_are_utc():
+    """AC4：任務從資料庫讀出後回應（ManualTaskOut）的 due_date、created、updated、completed_at 帶 UTC 時區，時間值和存的相同。"""
+    due = datetime(2030, 1, 9, 16, 0, tzinfo=timezone.utc)
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+            create_res = await ac.post("/manual-tasks/", json={
+                "title": "情境測試：時區", "description": "", "status": "To Do",
+                "priority": "Medium", "duration": 30, "due_date": "2030-01-09T16:00:00Z",
+            })
+            assert create_res.status_code == status.HTTP_201_CREATED, create_res.text
+            task_id = create_res.json()["id"]
+
+            done_res = await ac.put(f"/manual-tasks/{task_id}", json={"status": "Done"})
+            assert done_res.status_code == status.HTTP_200_OK, done_res.text
+            stored = await _stored(task_id)
+
+            [listed] = [t for t in (await ac.get("/manual-tasks/me")).json() if t["id"] == task_id]
+            single = (await ac.get(f"/manual-tasks/{task_id}")).json()
+
+        for task in (done_res.json(), listed, single):
+            _assert_utc_string(task["due_date"], due)
+            for field in ("created", "updated", "completed_at"):
+                _assert_utc_string(task[field], to_utc_datetime(stored[field]))
+    finally:
+        await db.manual_tasks.delete_many({"user_id": SCENARIO_USER["sub"]})
+
+
+@pytest.mark.asyncio
+async def test_staged_task_times_read_from_db_are_utc():
+    """AC4：新增子任務的回應（ManualTaskWithSubtasksOut）從資料庫讀出主任務與子任務，due_date、created、updated 帶 UTC 時區，時間值和存的相同。"""
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+            create_res = await ac.post("/manual-tasks/", json={
+                "title": "情境測試：階段時區", "description": "", "due_date": "2030-01-20T16:00:00Z",
+                "subtasks": [{
+                    "title": "階段一", "priority": "Medium", "duration": 30, "due_date": "2030-01-09T16:00:00Z",
+                }],
+            })
+            assert create_res.status_code == status.HTTP_201_CREATED, create_res.text
+            parent_id = create_res.json()["id"]
+
+            add_res = await ac.post(f"/manual-tasks/{parent_id}/subtasks", json={
+                "title": "階段二", "priority": "Medium", "duration": 30, "due_date": "2030-01-10T16:00:00Z",
+            })
+            assert add_res.status_code == status.HTTP_201_CREATED, add_res.text
+
+        parent = add_res.json()
+        assert len(parent["subtasks"]) == 2
+        for task in (parent, *parent["subtasks"]):
+            stored = await _stored(task["id"])
+            _assert_utc_string(task["due_date"], to_utc_datetime(stored["due_date"]))
+            for field in ("created", "updated"):
+                _assert_utc_string(task[field], to_utc_datetime(stored[field]))
+        assert to_utc_datetime(parent["subtasks"][0]["due_date"]) == datetime(2030, 1, 9, 16, 0, tzinfo=timezone.utc)
+    finally:
+        await db.manual_tasks.delete_many({"user_id": SCENARIO_USER["sub"]})
+
+
+@pytest.mark.asyncio
+async def test_editing_task_without_changing_due_date_keeps_due_date():
+    """AC7：讀出任務 → 截止日原樣（前端的 ...000Z 格式）連同新標題送回 → 資料庫裡的截止日不變，不會早 8 小時。"""
+    due = datetime(2030, 1, 9, 16, 0, tzinfo=timezone.utc)
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+            create_res = await ac.post("/manual-tasks/", json={
+                "title": "情境測試：編輯", "description": "", "status": "To Do",
+                "priority": "Medium", "duration": 30, "due_date": "2030-01-09T16:00:00Z",
+            })
+            assert create_res.status_code == status.HTTP_201_CREATED, create_res.text
+            task_id = create_res.json()["id"]
+
+            [listed] = [t for t in (await ac.get("/manual-tasks/me")).json() if t["id"] == task_id]
+            _assert_utc_string(listed["due_date"], due)
+
+            # 前端用 new Date(due_date).toISOString() 送出
+            form_due = to_utc_datetime(listed["due_date"])
+            assert form_due is not None
+            update_res = await ac.put(f"/manual-tasks/{task_id}", json={
+                "title": "情境測試：編輯（改標題）",
+                "due_date": form_due.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+            })
+            assert update_res.status_code == status.HTTP_200_OK, update_res.text
+
+        assert to_utc_datetime((await _stored(task_id))["due_date"]) == due
+    finally:
         await db.manual_tasks.delete_many({"user_id": SCENARIO_USER["sub"]})

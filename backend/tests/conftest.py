@@ -20,7 +20,8 @@ os.environ.setdefault("DISABLE_RATE_LIMIT", "true")
 @pytest.fixture(scope="session", autouse=True)
 def override_mongodb():
     # mongomock 是同步的，程式碼會 await 結果，所以要用 mongomock_motor
-    mock_client = AsyncMongoMockClient()
+    # 和正式環境的 client 一樣設 tz_aware，讀出的 datetime 才帶 UTC 時區
+    mock_client = AsyncMongoMockClient(tz_aware=True)
     test_db = mock_client["auto_scheduling_db"]
 
     # 覆蓋你要用到的 collection

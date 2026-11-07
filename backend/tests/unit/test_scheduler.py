@@ -2,7 +2,7 @@ from datetime import date, datetime, timedelta, timezone
 
 import pytest
 
-from services.scheduler import build_schedule_suggestion, apply_blocked_periods, check_suggestion_still_valid, _parse_iso, _sortable_due_date
+from services.scheduler import build_schedule_suggestion, apply_blocked_periods, check_suggestion_still_valid, _sortable_due_date
 
 
 def _task(id, title, priority, status="To Do", due_date=None, duration=None, sort_order=None, calendar_event_id=None):
@@ -264,24 +264,12 @@ def test_task_missing_required_field_is_skipped_not_crashed():
     assert result["unscheduled"] == []
 
 
-def test_parse_iso_passes_through_existing_datetime_unchanged():
-    """_parse_iso 收到已經是 datetime 的值 → 原樣回傳，不重新解析。"""
-    # 空檔目前都是 ISO 字串，但函式也支援直接傳 datetime，這個情況要單獨測
-    dt = datetime(2026, 9, 10, 9, 0, tzinfo=timezone.utc)
-
-    result = _parse_iso(dt)
-
-    assert result is dt
-
-
-def test_sortable_due_date_strips_timezone_from_aware_datetime():
-    """有時區的 due_date 排序前要去掉時區資訊，才能跟沒有時區的日期比較。"""
+def test_sortable_due_date_puts_missing_due_date_last():
+    """排序用的截止日帶 UTC 時區，沒有截止日的排在任何截止日之後。"""
     aware = datetime(2026, 9, 10, 9, 0, tzinfo=timezone.utc)
 
-    result = _sortable_due_date(aware)
-
-    assert result == datetime(2026, 9, 10, 9, 0)
-    assert result.tzinfo is None
+    assert _sortable_due_date(aware) == aware
+    assert _sortable_due_date(None) > _sortable_due_date(aware)
 
 
 def test_slot_missing_start_or_end_is_skipped_not_crashed():

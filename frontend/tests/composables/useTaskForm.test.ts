@@ -359,6 +359,18 @@ describe('useTaskForm', () => {
     )
   })
 
+  it('AC7：收到帶 Z 的截止日、不改截止日直接儲存，PUT 送出的是同一個時間點（台北時區不會早 8 小時）', async () => {
+    const ctx = useTaskForm()
+    ctx.startEditTask({ ...fakeTask('t3'), due_date: '2030-01-09T16:00:00Z' })
+    ctx.state.title = '只改標題'
+
+    await submitAndFlushTimers(() => ctx.onEdit(submitEvent(ctx.state)))
+
+    const [, options] = fetchSpy.mock.calls[0]
+    expect(options.method).toBe('PUT')
+    expect(options.body.due_date).toBe('2030-01-09T16:00:00.000Z')
+  })
+
   // ---------- 刪除任務 ----------
   it('onDelete 會 DELETE 任務並刷新列表', async () => {
     const ctx = useTaskForm()

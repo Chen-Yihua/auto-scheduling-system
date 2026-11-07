@@ -35,9 +35,9 @@ pytest                     # 全部（CI 用這個）
 
 | 模組 | crud / 邏輯 | router | api | 其他 |
 |---|---|---|---|---|
-| github / jira / moodle | ✅（`_platform`） | ✅（共用 `test_platform_router.py`） | ✅ | `test_platform_sync.py` |
+| github / jira / moodle | ✅（`_platform`） | ✅（共用 `test_platform_router.py`） | ✅ | `test_platform_sync.py`、`test_platform_datetimes_scenario.py` |
 | google calendar | ✅（`test_google_tokens.py`） | ✅ | ✅ | `test_google_calendar_service.py`、`_client` |
-| schedule | ✅（`test_scheduler.py`） | ✅ | ✅ | |
+| schedule | ✅（`test_scheduler.py`） | ✅ | ✅ | `_scenario` |
 | analytics | ✅（`test_productivity.py`） | — | ✅ | `_scenario` |
 | linked account | ✅ | ✅ | ✅ | `_scenario`、`_secrets` |
 | manual task | ✅ | ✅ | ✅ | `_scenario`、`test_task_inference.py` |
@@ -54,7 +54,8 @@ pytest                     # 全部（CI 用這個）
   `test_unhandled_error_handling.py`（兜底：沒預期的例外回帶 CORS 的 JSON 500）、
   `test_cors.py`、`test_rate_limit.py`。
 - `unit/`（不走 HTTP）：`test_security.py`（登入驗證）、`test_cache.py`、`test_crypto.py`、
-  `test_db_indexes.py`、`test_platform_sync.py`、`test_logging.py`、`test_ci_env_requirements.py` 等。
+  `test_db_indexes.py`、`test_platform_sync.py`、`test_logging.py`、`test_ci_env_requirements.py`、
+  `test_datetimes.py`（時間轉成帶時區的 UTC）等。
 
 ## 共用工具
 

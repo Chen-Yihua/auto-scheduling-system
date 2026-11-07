@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from core.datetimes import to_utc_datetime
 import httpx
 
 # httpx 預設 5 秒（含 DNS 查詢），DNS 偶爾較慢時第一次呼叫會逾時，所以放寬
@@ -65,12 +66,11 @@ async def delete_calendar_event(access_token: str, calendar_id: str, event_id: s
 def compute_free_times(busy: list[dict], window_start: str, window_end: str) -> list[dict]:
     """從時間窗扣掉 busy 時段，回傳空檔 [{"start", "end"}]。時間都是 ISO UTC 字串。"""
 
-    fmt = lambda s: datetime.fromisoformat(s.replace("Z", "+00:00"))
-    start = fmt(window_start)
-    end   = fmt(window_end)
+    start = to_utc_datetime(window_start)
+    end   = to_utc_datetime(window_end)
 
     intervals = sorted([
-        (fmt(i["start"]), fmt(i["end"]))
+        (to_utc_datetime(i["start"]), to_utc_datetime(i["end"]))
         for i in busy
     ], key=lambda x: x[0])
 

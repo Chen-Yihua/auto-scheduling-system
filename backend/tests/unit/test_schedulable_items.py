@@ -318,7 +318,7 @@ async def test_set_calendar_event_id_for_composite_external_item():
 @pytest.mark.asyncio
 async def test_set_done_manual_task_records_and_clears_completed_at():
     """標記完成寫入當下時間；已完成的再標一次保留原本的時間；取消完成清空。"""
-    done_at = datetime(2026, 10, 1)
+    done_at = datetime(2026, 10, 1, tzinfo=timezone.utc)
     try:
         await db.manual_tasks.insert_one({
             "_id": "t1", "user_id": "sched-user", "title": "任務", "description": "d",
@@ -421,7 +421,7 @@ async def test_completed_at_of_reopened_item_marked_done_by_user_uses_user_time(
 
         items = {item["id"]: item for item in await schedulable_items.get_all_schedulable_items("sched-user")}
 
-        assert items["github:1"]["completed_at"].replace(tzinfo=timezone.utc) == marked_at
+        assert items["github:1"]["completed_at"] == marked_at
         assert items["github:2"]["completed_at"] is None
     finally:
         await _cleanup()

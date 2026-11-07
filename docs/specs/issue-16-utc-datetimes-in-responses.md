@@ -2,7 +2,7 @@
 
 - 狀態：已核准
 - issue：[#16](https://github.com/Chen-Yihua/auto-scheduling-system/issues/16)
-- PR：（實作後補上）
+- PR：[#54](https://github.com/Chen-Yihua/auto-scheduling-system/pull/54)
 
 ## 背景
 

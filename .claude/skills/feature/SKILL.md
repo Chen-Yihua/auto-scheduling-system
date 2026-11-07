@@ -12,16 +12,14 @@ disable-model-invocation: true
 
 ## 1. 規格（plan mode）
 
-先進入 plan mode，自己讀程式碼，照 `docs/specs/README.md` 的格式寫規格交給開發者核准（由 `/issue` 進來時，需求來自 issue；bug 用「bug 簡化格式」）：
+先進入 plan mode，自己讀程式碼，照 `docs/specs/README.md` 的格式寫規格交給開發者核准（由 `/issue` 進來時，需求來自 issue；修 bug 的寫法見同一份文件的「修 bug 時」）：
 
 - **需求／不做**：要做什麼、明確排除什麼。
 - **假設**：程式碼看不出來、由你判斷的業務規則，逐條列出。只有無法合理假設、而且會影響整體方向的問題才先問。
 - **驗收條件**：編號 AC1、AC2…，「在 X 情況下，系統要 Y」，每條都要能驗證。逐一想過失敗、空資料、載入中、未登入／無權限、資料處理、安全性；不適用的寫進「不適用的情境」並說明原因。
 - **計畫與測試對應**：要改的檔案、步驟、每條驗收條件對應的測試。
 
-bug 簡化格式不用寫「假設」「不適用的情境」「實作計畫」，也不用逐一列出上面的情境；只要 AC1 對應重現步驟，修正可能影響到的相關行為另外加 AC。
-
-**規格審查**（bug 簡化格式不做）：草稿寫好、交給開發者核准前，把 plan 檔的路徑和已決定事項交給 `specification-reviewer`。已決定事項是開發者在這次對話裡回答過的問題與答案，寫進 scratchpad 的一個檔案再把路徑給它，因為它看不到這段對話。依每項發現處理：
+**規格審查**：草稿寫好、交給開發者核准前，把 plan 檔的路徑和已決定事項交給 `specification-reviewer`。已決定事項是開發者在這次對話裡回答過的問題與答案，寫進 scratchpad 的一個檔案再把路徑給它，因為它看不到這段對話。依每項發現處理：
 
 | 發現 | 處理 |
 |---|---|
@@ -43,7 +41,7 @@ bug 簡化格式不用寫「假設」「不適用的情境」「實作計畫」�
 
 ## 3. 審查
 
-交給 `acceptance-reviewer` 前先 `git fetch origin main`，附上規格檔路徑、分支名稱與規格審查紀錄的路徑（`docs/reviews/specification/<功能>.md`；bug 簡化格式沒有）；第 2 輪以後再附上實作審查紀錄的路徑（`docs/reviews/implementation/<功能>.md`）。
+交給 `acceptance-reviewer` 前先 `git fetch origin main`，附上規格檔路徑、分支名稱與規格審查紀錄的路徑（`docs/reviews/specification/<功能>.md`）；第 2 輪以後再附上實作審查紀錄的路徑（`docs/reviews/implementation/<功能>.md`）。
 
 分類的定義見 `docs/reviews/README.md`「分類」。依每項發現處理：
 

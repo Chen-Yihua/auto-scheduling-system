@@ -1,7 +1,7 @@
 # API 回應的時間沒有時區：規格審查紀錄
 
 - 規格：[docs/specs/issue-16-utc-datetimes-in-responses.md](../../specs/issue-16-utc-datetimes-in-responses.md)
-- PR：（核准前）
+- PR：#54
 - 輪數：2（第 1 輪 2026-11-07 草稿；第 2 輪 2026-11-07 草稿）
 - 最終結果：第 2 輪仍有阻擋，依 `/feature` 第 1 節不再自動審查；開發者選定後核准。核准前開發者把做法改成 Mongo client `tz_aware=True`，並要求收斂各模組的補時區函式，改版後的做法沒有再經過規格審查（主要風險由 AC6 的既有測試驗證）
 

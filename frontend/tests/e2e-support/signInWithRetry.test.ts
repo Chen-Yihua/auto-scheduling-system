@@ -7,6 +7,7 @@ import {
   sanitizeError,
   sanitizeForLog,
   toSafeNavigationUrl,
+  withSanitizedErrors,
 } from '../e2e/support/signInWithRetry'
 
 const EMAIL = 'e2e-user@example.com'
@@ -31,16 +32,6 @@ function setup(
       secrets: [EMAIL],
     })
   return { lines, waitForReady, isSignedIn, onError, run }
-}
-
-// e2e 測試函式最外層會用 sanitizeError 清理往上丟的錯誤
-async function rejectionAfterOuterCleanup(run: () => Promise<void>): Promise<unknown> {
-  return run().then(
-    () => {
-      throw new Error('預期登入失敗')
-    },
-    (error: unknown) => sanitizeError(error, [EMAIL]),
-  )
 }
 
 function expectOriginalMessageWithEmailRedacted(error: unknown, original: string) {
@@ -121,7 +112,7 @@ describe('signInWithRetry', () => {
     const signIn = vi.fn().mockRejectedValue(navigationError)
     const { lines, onError, run } = setup(signIn)
 
-    const error = await rejectionAfterOuterCleanup(run)
+    const error = await withSanitizedErrors([EMAIL], run)().catch((error: unknown) => error)
 
     expect(error).toBe(navigationError)
     expectOriginalMessageWithEmailRedacted(error, NAVIGATION_ERROR.message)
@@ -138,7 +129,7 @@ describe('signInWithRetry', () => {
     const isSignedIn = vi.fn(async () => true)
     const { lines, onError, run } = setup(signIn, isSignedIn, waitForReady)
 
-    const error = await rejectionAfterOuterCleanup(run)
+    const error = await withSanitizedErrors([EMAIL], run)().catch((error: unknown) => error)
 
     expect(error).toBe(navigationError)
     expectOriginalMessageWithEmailRedacted(error, NAVIGATION_ERROR.message)
@@ -160,7 +151,7 @@ describe('signInWithRetry', () => {
       const isSignedIn = failingStep === 'isSignedIn' ? vi.fn().mockRejectedValue(otherError) : vi.fn(async () => true)
       const { lines, onError, run } = setup(signIn, isSignedIn, waitForReady)
 
-      const error = await rejectionAfterOuterCleanup(run)
+      const error = await withSanitizedErrors([EMAIL], run)().catch((error: unknown) => error)
 
       expect(error, failingStep).toBe(otherError)
       expectOriginalMessageWithEmailRedacted(error, otherMessage)
@@ -181,7 +172,7 @@ describe('signInWithRetry', () => {
     const signIn = vi.fn().mockRejectedValue(otherError)
     const { lines, waitForReady, onError, run } = setup(signIn)
 
-    const error = await rejectionAfterOuterCleanup(run)
+    const error = await withSanitizedErrors([EMAIL], run)().catch((error: unknown) => error)
 
     expect(error).toBe(otherError)
     expectOriginalMessageWithEmailRedacted(error, otherMessage)
@@ -360,6 +351,21 @@ describe('createDiagnosticLogger（#46）', () => {
   })
 })
 
+describe('withSanitizedErrors（#46）', () => {
+  it('#46 AC2：包住的函式丟出帶 query 與 email 的錯誤時，reject 出來的是清理過的同一個錯誤', async () => {
+    const error = new TypeError(`GET https://h/a?t=1 ${EMAIL}`)
+
+    const rejected = await withSanitizedErrors([EMAIL], async () => {
+      throw error
+    })().catch((reason: unknown) => reason)
+
+    expect(rejected).toBe(error)
+    expect(error.message).toBe('GET h/a [redacted]')
+    expect(error.stack).not.toContain('t=1')
+    expect(error.stack).not.toContain(EMAIL)
+  })
+})
+
 describe('sanitizeError（#46）', () => {
   it('#46 AC2：清理 message、stack 與兩層 cause，回傳同一個物件、類型不變', () => {
     const inner = new Error(`inner /v1/c?t=3 ${EMAIL}`)
@@ -376,6 +382,15 @@ describe('sanitizeError（#46）', () => {
     expect(middle.message).toBe('middle h/b')
     expect(middle.cause).toBe(inner)
     expect(inner.message).toBe('inner /v1/c [redacted]')
+  })
+
+  it('#46 AC2：cause 是字串時也清理', () => {
+    const error = new Error('outer', { cause: `GET /v1/a?t=1 ${EMAIL}` })
+
+    sanitizeError(error, [EMAIL])
+
+    const cause = error.cause instanceof Error ? error.cause.message : String(error.cause)
+    expect(cause).toBe('GET /v1/a [redacted]')
   })
 
   it('#46 AC2：不是 Error 的值轉成字串清理後包成 Error', () => {

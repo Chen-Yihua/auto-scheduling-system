@@ -99,6 +99,17 @@ export function sanitizeError(error: unknown, secrets: string[], seen = new Set<
   return error
 }
 
+// e2e 的測試函式都要包這層：測試函式丟出的錯誤會連同 stack、cause 印進公開的 CI log
+export function withSanitizedErrors(secrets: string[], test: () => Promise<void>) {
+  return async () => {
+    try {
+      await test()
+    } catch (error) {
+      throw sanitizeError(error, secrets)
+    }
+  }
+}
+
 type LogWriter = Pick<Console, 'info' | 'warn' | 'error'>
 
 export function createDiagnosticLogger(options: { secrets: string[]; write?: LogWriter }) {

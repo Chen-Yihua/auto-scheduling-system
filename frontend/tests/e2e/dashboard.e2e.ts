@@ -9,10 +9,10 @@ import {
   createDiagnosticLogger,
   createSignInDiagnostics,
   readClerkVersion,
-  sanitizeError,
   sanitizeForLog,
   signInWithRetry,
   toSafeNavigationUrl,
+  withSanitizedErrors,
   type SignInDiagnostics,
 } from './support/signInWithRetry'
 
@@ -26,17 +26,6 @@ await setup({
 const hasClerkTestUser = !!process.env.E2E_CLERK_TEST_EMAIL
 const secrets = [process.env.E2E_CLERK_TEST_EMAIL ?? '']
 const logger = createDiagnosticLogger({ secrets })
-
-// 測試函式丟出的錯誤會連同 stack、cause 印進公開的 CI log
-function withSanitizedErrors(test: () => Promise<void>) {
-  return async () => {
-    try {
-      await test()
-    } catch (error) {
-      throw sanitizeError(error, secrets)
-    }
-  }
-}
 
 // 金鑰設定錯誤時 Clerk 只會報 infinite redirect loop，所以先檢查並指出是哪個 secret 有問題
 function assertClerkKeysLookRight(publishableKey?: string, secretKey?: string) {
@@ -83,7 +72,7 @@ async function printPostSignInDiagnostics(page: Page, redirects: string[], diagn
 }
 
 describe('Dashboard（真實瀏覽器 E2E）', () => {
-  it('訪客未登入時，版面跟登入後一樣，需要登入的區塊只顯示提示、新增任務按鈕不能按', withSanitizedErrors(async () => {
+  it('訪客未登入時，版面跟登入後一樣，需要登入的區塊只顯示提示、新增任務按鈕不能按', withSanitizedErrors(secrets, async () => {
     const page = await createPage('/')
     await page.waitForSelector('text=登入後即可查看與新增你的任務')
 
@@ -97,7 +86,7 @@ describe('Dashboard（真實瀏覽器 E2E）', () => {
 
   it.skipIf(!hasClerkTestUser)(
     '用真的 Clerk 測試帳號登入後，看得到主畫面、不再顯示登入提示',
-    withSanitizedErrors(async () => {
+    withSanitizedErrors(secrets, async () => {
       const publishableKey = process.env.NUXT_PUBLIC_CLERK_PUBLISHABLE_KEY
       const secretKey = process.env.NUXT_CLERK_SECRET_KEY
       assertClerkKeysLookRight(publishableKey, secretKey)

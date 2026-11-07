@@ -75,7 +75,7 @@ PR #49 第 1 版只用正規表示式處理 `scheme://` 與 `/` 開頭的網址�
 | AC | 測試 |
 |---|---|
 | AC1 | `frontend/tests/e2e-support/signInWithRetry.test.ts`：logger 的 `info`／`warn`／`error` 傳入帶 query 的網址、email、JWT，`write` 收到的內容都已清理；PR 描述附上 `grep -rn "console\." frontend/tests/e2e/` 的結果，只剩 logger 內部 |
-| AC2 | 同檔：`sanitizeError` 對 `message`、`stack`、兩層 `cause` 都清理，仍是原本的錯誤類型；不是 `Error` 的值會包成清理過的 `Error`。#28 既有的 AC2 測試（`signInWithRetry.test.ts:95`、`:106`、`:121`、`:142`）改名稱，斷言改成丟出的錯誤經過外層清理後 `message` 含 `[redacted]`、不含測試帳號 email |
+| AC2 | 同檔：`sanitizeError` 對 `message`、`stack`、兩層 `cause`（含字串 `cause`）都清理，仍是原本的錯誤類型；不是 `Error` 的值會包成清理過的 `Error`。外層包裝 `withSanitizedErrors` 放在 support 檔並直接測試：包住的函式丟出帶 query 與 email 的錯誤時，reject 出來的錯誤已清理；PR 描述附上 `dashboard.e2e.ts` 每個 `it(` 都用 `withSanitizedErrors` 的檢查結果。#28 既有的 AC2 測試（`signInWithRetry.test.ts:95`、`:106`、`:121`、`:142`）改名稱，斷言改成丟出的錯誤經過外層清理後 `message` 含 `[redacted]`、不含測試帳號 email |
 | AC3 | 同檔，比對完整輸出：每個分隔（空白、`"`、`'`、`` ` ``、`<`、`>`、字面 `\n`、字面 `\t`）、每個起點（`=`、`:`、`(`、`[`、`{`、`,`、中文）、尾端每個去掉的字元至少一例；`[GET] "/v1/client?__clerk_db_jwt=dvb_xxx#h": 404` → `[GET] "/v1/client": 404`；`/wiki/Foo_(bar)?token=x` → `/wiki/Foo_(bar)` |
 | AC4 | 同檔：AC4 列的每個例子比對完整輸出；`toSafeNavigationUrl('about:blank')` → `about:`、`toSafeNavigationUrl('data:text/html,<p>x</p>')` → `data:` |
 | AC5 | 同檔：AC5 列的每個例子比對完整輸出 |

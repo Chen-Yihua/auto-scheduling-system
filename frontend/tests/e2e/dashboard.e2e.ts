@@ -6,9 +6,13 @@ import { clerkSetup, clerk } from '@clerk/testing/playwright'
 import type { Page } from 'playwright-core'
 import {
   attachSignInDiagnostics,
+  createDiagnosticLogger,
   createSignInDiagnostics,
   readClerkVersion,
+  sanitizeError,
+  sanitizeForLog,
   signInWithRetry,
+  toSafeNavigationUrl,
   type SignInDiagnostics,
 } from './support/signInWithRetry'
 
@@ -20,6 +24,19 @@ await setup({
 // 需要 Clerk 測試環境的使用者（E2E_CLERK_TEST_EMAIL）；沒設定時（本機、fork 的 PR）跳過。
 // 用 sign-in ticket 而不是密碼：密碼模式遇到額外驗證時會悄悄失敗，ticket 模式會直接報錯。
 const hasClerkTestUser = !!process.env.E2E_CLERK_TEST_EMAIL
+const secrets = [process.env.E2E_CLERK_TEST_EMAIL ?? '']
+const logger = createDiagnosticLogger({ secrets })
+
+// 測試函式丟出的錯誤會連同 stack、cause 印進公開的 CI log
+function withSanitizedErrors(test: () => Promise<void>) {
+  return async () => {
+    try {
+      await test()
+    } catch (error) {
+      throw sanitizeError(error, secrets)
+    }
+  }
+}
 
 // 金鑰設定錯誤時 Clerk 只會報 infinite redirect loop，所以先檢查並指出是哪個 secret 有問題
 function assertClerkKeysLookRight(publishableKey?: string, secretKey?: string) {
@@ -39,7 +56,7 @@ function assertClerkKeysLookRight(publishableKey?: string, secretKey?: string) {
   }
   // 公開金鑰的內容就是這個 Clerk 專案的網域（公開資訊，不是機密），印出來方便跟 dashboard 對照
   const domain = Buffer.from(publishableKey.split('_')[2] ?? '', 'base64').toString().replace(/\$$/, '')
-  console.info(`[e2e] 使用的 Clerk 專案：${domain}`)
+  logger.info(`[e2e] 使用的 Clerk 專案：${domain}`)
 }
 
 // 除錯用；只印 cookie 名稱和網址路徑，避免 token 出現在公開的 CI log
@@ -55,18 +72,18 @@ async function printPostSignInDiagnostics(page: Page, redirects: string[], diagn
         hasSession: !!clerk?.session,
       }
     })
-    .catch((error: unknown) => ({ error: String(error) }))
+    .catch((error: unknown) => ({ error: sanitizeForLog(String(error), secrets) }))
   const cookieNames = (await page.context().cookies()).map((cookie) => cookie.name).sort()
   const addTaskButtonCount = await page.getByRole('button', { name: '新增任務' }).count()
-  console.error(
+  logger.error(
     '[e2e] 登入後診斷：' + JSON.stringify({ clerkState, addTaskButtonCount, cookieNames, redirects }, null, 2),
   )
   diagnostics.setClerkVersion(await readClerkVersion(page))
-  console.error(diagnostics.format('登入後等待逾時'))
+  logger.error(diagnostics.format('登入後等待逾時'))
 }
 
 describe('Dashboard（真實瀏覽器 E2E）', () => {
-  it('訪客未登入時，版面跟登入後一樣，需要登入的區塊只顯示提示、新增任務按鈕不能按', async () => {
+  it('訪客未登入時，版面跟登入後一樣，需要登入的區塊只顯示提示、新增任務按鈕不能按', withSanitizedErrors(async () => {
     const page = await createPage('/')
     await page.waitForSelector('text=登入後即可查看與新增你的任務')
 
@@ -76,11 +93,11 @@ describe('Dashboard（真實瀏覽器 E2E）', () => {
     expect(await page.locator('button[aria-label="新增任務"][disabled]').count()).toBe(1)
 
     await page.close()
-  })
+  }))
 
   it.skipIf(!hasClerkTestUser)(
     '用真的 Clerk 測試帳號登入後，看得到主畫面、不再顯示登入提示',
-    async () => {
+    withSanitizedErrors(async () => {
       const publishableKey = process.env.NUXT_PUBLIC_CLERK_PUBLISHABLE_KEY
       const secretKey = process.env.NUXT_CLERK_SECRET_KEY
       assertClerkKeysLookRight(publishableKey, secretKey)
@@ -90,7 +107,7 @@ describe('Dashboard（真實瀏覽器 E2E）', () => {
       process.env.CLERK_SECRET_KEY = secretKey
 
       const emailAddress = process.env.E2E_CLERK_TEST_EMAIL!
-      const diagnostics = createSignInDiagnostics({ secrets: [emailAddress] })
+      const diagnostics = createSignInDiagnostics({ secrets })
       const page = await createPage()
       attachSignInDiagnostics(page, diagnostics)
       // clerk.signIn 要求先 goto 過一個會載入 Clerk 的頁面，才能繼續
@@ -104,17 +121,16 @@ describe('Dashboard（真實瀏覽器 E2E）', () => {
         isSignedIn: () => page.evaluate(() => !!(window as unknown as { Clerk?: { user?: unknown } }).Clerk?.user),
         onError: async (error) => {
           diagnostics.setClerkVersion(await readClerkVersion(page))
-          console.error(diagnostics.format('登入錯誤：' + (error instanceof Error ? error.message : String(error))))
+          logger.error(diagnostics.format('登入錯誤：' + (error instanceof Error ? error.message : String(error))))
         },
-        log: (line) => console.warn(line),
-        secrets: [emailAddress],
+        log: (line) => logger.warn(line),
+        secrets,
       })
 
       const redirects: string[] = []
       page.on('response', (response) => {
         if (response.status() >= 300 && response.status() < 400 && redirects.length < 30) {
-          const target = new URL(response.url())
-          redirects.push(`${response.status()} ${target.host}${target.pathname}`)
+          redirects.push(`${response.status()} ${toSafeNavigationUrl(response.url())}`)
         }
       })
 
@@ -132,6 +148,6 @@ describe('Dashboard（真實瀏覽器 E2E）', () => {
       expect(bodyText).not.toContain('登入後即可查看')
 
       await page.close()
-    },
+    }),
   )
 })

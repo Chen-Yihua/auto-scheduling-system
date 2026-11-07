@@ -6,7 +6,8 @@ from services.google_calendar import (
     create_calendar_events_for_scheduled_tasks,
     get_calendar_event_ends,
 )
-from services.scheduler import build_schedule_suggestion, apply_blocked_periods, check_suggestion_still_valid, _parse_iso
+from services.scheduler import build_schedule_suggestion, apply_blocked_periods, check_suggestion_still_valid
+from core.datetimes import to_utc_datetime
 from core.cache import cache_get, cache_set, cache_delete
 from crud.schedulable_items import (
     get_all_schedulable_items,
@@ -153,7 +154,7 @@ async def confirm_schedule(
     if snapshot is None:
         raise HTTPException(status_code=409, detail="排程建議已過期，請重新產生")
 
-    scheduled = [{**item, "start": _parse_iso(item["start"]), "end": _parse_iso(item["end"])} for item in snapshot]
+    scheduled = [{**item, "start": to_utc_datetime(item["start"]), "end": to_utc_datetime(item["end"])} for item in snapshot]
     current_tasks = await get_all_schedulable_items(user_id)
     free_slots = await get_free_slots_for_user(user_id, use_cache=False)
     to_write, invalid = check_suggestion_still_valid(scheduled, current_tasks, free_slots)

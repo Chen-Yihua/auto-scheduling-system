@@ -1,8 +1,9 @@
 """從可排程項目算出工作效率統計：現況（完成率、工時、逾期）和近幾週的完成趨勢。"""
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timedelta
 from typing import Optional
 from zoneinfo import ZoneInfo
 
+from core.datetimes import to_utc_datetime
 from crud.schedulable_items import SOURCE_MANUAL
 from platforms import PLATFORMS
 
@@ -10,15 +11,6 @@ TREND_WEEKS = 8
 
 SOURCE_ORDER = [SOURCE_MANUAL, *PLATFORMS]
 PRIORITY_ORDER = ["High", "Medium", "Low", None]
-
-
-def _as_utc(value: Optional[datetime]) -> Optional[datetime]:
-    # Mongo 讀出的 datetime 不帶時區但存的是 UTC，不補上會無法和帶時區的時間比較
-    if value is None:
-        return None
-    if value.tzinfo is None:
-        return value.replace(tzinfo=timezone.utc)
-    return value
 
 
 def _week_start(moment: datetime, tz: ZoneInfo) -> date:
@@ -52,7 +44,7 @@ def build_productivity_summary(items: list[dict], now: datetime, tz_name: str) -
 
     for item in items:
         duration = item.get("duration")
-        due_date = _as_utc(item.get("due_date"))
+        due_date = to_utc_datetime(item.get("due_date"))
 
         if item["status"] != "Done":
             remaining_minutes += duration or 0
@@ -62,7 +54,7 @@ def build_productivity_summary(items: list[dict], now: datetime, tz_name: str) -
 
         done += 1
         done_minutes += duration or 0
-        completed_at = _as_utc(item.get("completed_at"))
+        completed_at = to_utc_datetime(item.get("completed_at"))
         if completed_at is None:
             untracked_done += 1
             continue

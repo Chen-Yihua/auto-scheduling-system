@@ -6,6 +6,7 @@ import httpx
 from core.errors import AppError, ExternalServiceError, InvalidRequestError, NotFoundError, ReauthRequiredError
 
 from core.cache import cache_get, cache_set
+from core.datetimes import to_utc_datetime
 from crud.google_tokens import get_google_calendar_token, is_google_calendar_connected
 from services.google_oauth import GOOGLE_REAUTH_DETAIL, refresh_google_calendar_token
 from crud.schedulable_items import set_calendar_event_id_for_composite
@@ -171,10 +172,7 @@ async def create_calendar_events_for_scheduled_tasks(clerk_id: str, scheduled: l
 
 
 def _parse_event_time(value: dict | None) -> datetime | None:
-    text = (value or {}).get("dateTime")
-    if not text:
-        return None
-    return datetime.fromisoformat(text.replace("Z", "+00:00")).astimezone(timezone.utc)
+    return to_utc_datetime((value or {}).get("dateTime"))
 
 
 async def get_calendar_event_ends(clerk_id: str, event_ids: list[str]) -> dict[str, datetime | None]:

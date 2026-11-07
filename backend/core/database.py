@@ -4,7 +4,8 @@ import os
 MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017")
 DB_NAME   = os.getenv("MONGO_DB",  "auto_scheduling_db")
 
-client = AsyncMongoClient(MONGO_URI)
+# MongoDB 的日期只存 UTC、不存時區；不設 tz_aware 讀出的 datetime 不帶時區，回應序列化時就沒有 Z
+client = AsyncMongoClient(MONGO_URI, tz_aware=True)
 db = client[DB_NAME]
 
 

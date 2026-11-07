@@ -1,6 +1,7 @@
 import logging
 from datetime import datetime, timezone
 from core.database import db
+from core.datetimes import to_utc_datetime
 from schemas.manual_task import MAX_SUBTASKS, ManualTaskOut, StatusEnum
 from core.errors import InvalidRequestError, NotFoundError
 from pymongo.errors import BulkWriteError, DuplicateKeyError, PyMongoError
@@ -65,15 +66,6 @@ def _with_parents_computed(tasks: list[dict]) -> list[dict]:
     return [t for t in tasks if not t.get("parent_id") or t["id"] in listed_subtask_ids]
 
 
-def _as_utc(value: datetime | None) -> datetime | None:
-    # Mongo 讀回的 datetime 不帶時區但存的是 UTC，要補上才能和請求帶來的時間比較
-    if value is None:
-        return None
-    if value.tzinfo is None:
-        return value.replace(tzinfo=timezone.utc)
-    return value.astimezone(timezone.utc)
-
-
 def _rank(priority) -> int:
     return PRIORITY_RANK.get(priority, PRIORITY_RANK["Medium"])
 
@@ -83,11 +75,11 @@ def validate_stage_due_dates(parent_due_date: datetime | None, stages: list[dict
     stages 依階段順序排列。有填截止日時：子任務不能晚於主任務，後面的階段不能早於前面的階段。
     沒填截止日的階段不參與比對。
     """
-    parent_due = _as_utc(parent_due_date)
+    parent_due = to_utc_datetime(parent_due_date)
     latest_due = None
     latest_due_stage = 0
     for number, stage in enumerate(stages, start=1):
-        due = _as_utc(stage.get("due_date"))
+        due = to_utc_datetime(stage.get("due_date"))
         if due is None:
             continue
         if parent_due is not None and due > parent_due:

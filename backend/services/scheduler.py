@@ -1,6 +1,8 @@
 import logging
-from datetime import datetime, time, timedelta, timezone
+from datetime import MAXYEAR, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
+
+from core.datetimes import to_utc_datetime
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +34,7 @@ def _derived_deadlines(tasks: list[dict], by_stage: dict[tuple, dict], default_m
     def deadline_of(task: dict) -> datetime | None:
         if task["id"] in memo:
             return memo[task["id"]]
-        result = _due_as_utc(task.get("due_date"))
+        result = to_utc_datetime(task.get("due_date"))
         if result is None:
             key = _stage_key(task, 1)
             following = by_stage.get(key) if key else None
@@ -52,37 +54,17 @@ def _derived_deadlines(tasks: list[dict], by_stage: dict[tuple, dict], default_m
     return derived
 
 
-def _parse_iso(value) -> datetime:
-    if isinstance(value, datetime):
-        return value
-    return datetime.fromisoformat(value.replace("Z", "+00:00"))
+_NO_DUE_DATE = datetime(MAXYEAR, 12, 31, 23, 59, 59, 999999, tzinfo=timezone.utc)
 
 
 def _sortable_due_date(due) -> datetime:
-    """排序用：去掉 tzinfo 避免 aware/naive 混合比較出錯，幾小時的誤差不影響先後。"""
-    if due is None:
-        return datetime.max.replace(tzinfo=None)
-    if due.tzinfo is not None:
-        return due.replace(tzinfo=None)
-    return due
-
-
-def _due_as_utc(due) -> datetime | None:
-    """轉成 aware UTC。pymongo 讀回的 naive datetime 本來就是 UTC。"""
-    if due is None:
-        return None
-    if isinstance(due, str):
-        due = _parse_iso(due)
-    if due.tzinfo is None:
-        return due.replace(tzinfo=timezone.utc)
-    return due.astimezone(timezone.utc)
+    """排序用：沒有截止日的排在最後。"""
+    return to_utc_datetime(due) or _NO_DUE_DATE
 
 
 def _to_local_wall_time(value: datetime, zone: ZoneInfo) -> datetime:
     """轉成使用者當地的牆上時間（naive），才能跟「22:00」這類設定比較。naive 視為 UTC。"""
-    if value.tzinfo is None:
-        value = value.replace(tzinfo=timezone.utc)
-    return value.astimezone(zone).replace(tzinfo=None)
+    return to_utc_datetime(value).astimezone(zone).replace(tzinfo=None)
 
 
 def _local_wall_time_to_utc_iso(value: datetime, zone: ZoneInfo) -> str:
@@ -170,8 +152,8 @@ def apply_blocked_periods(
         if not s.get("start") or not s.get("end"):
             continue
         parsed.append((
-            _to_local_wall_time(_parse_iso(s["start"]), zone),
-            _to_local_wall_time(_parse_iso(s["end"]), zone),
+            _to_local_wall_time(to_utc_datetime(s["start"]), zone),
+            _to_local_wall_time(to_utc_datetime(s["end"]), zone),
         ))
     if not parsed:
         return []
@@ -187,8 +169,8 @@ def apply_blocked_periods(
             if not e.get("start") or not e.get("end"):
                 continue
             blocks.append((
-                _to_local_wall_time(_parse_iso(e["start"]), zone),
-                _to_local_wall_time(_parse_iso(e["end"]), zone),
+                _to_local_wall_time(to_utc_datetime(e["start"]), zone),
+                _to_local_wall_time(to_utc_datetime(e["end"]), zone),
             ))
 
     remaining = sorted(_subtract_intervals(parsed, blocks), key=lambda t: t[0])
@@ -239,7 +221,7 @@ def build_schedule_suggestion(
 
     def sort_key(t):
         # 推算的期限也算緊急：否則後面的階段快到期時，前面的階段反而排在其他任務之後
-        due = _due_as_utc(t.get("due_date")) or derived_deadlines.get(t["id"])
+        due = to_utc_datetime(t.get("due_date")) or derived_deadlines.get(t["id"])
         if due is not None and due <= now + URGENT_WINDOW:
             return (0, due)
         priority_rank = PRIORITY_ORDER.get(t.get("priority"), len(PRIORITY_ORDER))
@@ -264,7 +246,7 @@ def build_schedule_suggestion(
         if not s.get("start") or not s.get("end"):
             logger.warning("排程建議跳過缺少 start/end 的空檔: %s", s)
             continue
-        valid_slots.append({"start": _parse_iso(s["start"]), "end": _parse_iso(s["end"])})
+        valid_slots.append({"start": to_utc_datetime(s["start"]), "end": to_utc_datetime(s["end"])})
 
     slots = sorted(valid_slots, key=lambda s: s["start"])
 
@@ -297,7 +279,7 @@ def build_schedule_suggestion(
             return
         task_minutes = task.get("duration") or task_duration_minutes
         duration = timedelta(minutes=task_minutes)
-        due = _due_as_utc(task.get("due_date")) or derived_deadlines.get(task["id"])
+        due = to_utc_datetime(task.get("due_date")) or derived_deadlines.get(task["id"])
         deadline = due if due is not None and due > now else None
         missed_deadline = False
         for index, slot in enumerate(slots):
@@ -371,7 +353,7 @@ def check_suggestion_still_valid(
     """
     now = now or datetime.now(timezone.utc)
     tasks_by_id = {t["id"]: t for t in current_tasks}
-    slots = [(_parse_iso(s["start"]), _parse_iso(s["end"])) for s in free_slots if s.get("start") and s.get("end")]
+    slots = [(to_utc_datetime(s["start"]), to_utc_datetime(s["end"])) for s in free_slots if s.get("start") and s.get("end")]
 
     to_write = []
     failed = []

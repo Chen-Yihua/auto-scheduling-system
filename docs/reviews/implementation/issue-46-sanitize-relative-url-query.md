@@ -2,8 +2,8 @@
 
 - 規格：[docs/specs/issue-46-sanitize-relative-url-query.md](../../specs/issue-46-sanitize-relative-url-query.md)
 - PR：#49
-- 輪數：2（第 1 輪 2026-11-07 `76d3458`；第 2 輪 2026-11-07 `1ee3af8`）
-- 最終結果：仍有阻擋（#4 補測試中，待第 3 輪審查）
+- 輪數：2（第 1 輪 2026-11-07 `76d3458`；第 2 輪 2026-11-07 `1ee3af8`；第 3 輪 2026-11-07 `7885604`）
+- 最終結果：沒有阻擋項目（第 3 輪沒有發現）
 
 ## 摘要
 
@@ -18,7 +18,7 @@
 | 1 | 1 | 「不是網址的 `?`」的兩條規則沒有測試 | Test Gap | Minor | 是 | 否 | AC3 分辨規則沒測 | 規格改寫後由新規格 AC5 的完整輸出測試涵蓋，交回實作 | 規則 | `1ee3af8` |
 | 2 | 1 | AC1 與 AC3 在「`/路徑?` 後面緊接非空白字元」時衝突 | Specification Defect | Minor | 是 | 否 | 網址邊界與 AC3 衝突 | 規格改寫：安全優先（新規格假設 1、AC6） | 開發者 | 規格 2026-11-07 修改紀錄 |
 | 3 | 1 | 其他相對網址形式（路徑含括號、`./`、沒寫 scheme 的 host）的 query 仍會印出 | Missing AC | Minor | 是 | 安全 | 相對網址形式沒定義完 | 規格改寫：開發者提出用 `new URL()` 並封裝輸出，其他格式在這個 PR 一起處理（新規格 AC3、AC4） | 開發者 | 規格 2026-11-07 修改紀錄 |
-| 4 | 2 | 外層錯誤清理的包裝函式與非 Error 的 `cause` 沒有被測到 | Test Gap | Minor | 是 | 安全 | 外層錯誤清理沒測 | 交回實作：`withSanitizedErrors` 移到 support 檔並直接測試、補字串 `cause` 測試；規格測試對應同步（文件同步） | 規則 | （修正後補上） |
+| 4 | 2 | 外層錯誤清理的包裝函式與非 Error 的 `cause` 沒有被測到 | Test Gap | Minor | 是 | 安全 | 外層錯誤清理沒測 | 交回實作：`withSanitizedErrors` 移到 support 檔並直接測試、補字串 `cause` 測試；規格測試對應同步（文件同步） | 規則 | `7885604` |
 | 5 | 2 | vitest 印出的 `actual`／`expected` diff 與其他屬性沒有清理 | Improvement Suggestion | Minor | 否 | 安全 | — | 開 issue | 規則 | [#50](https://github.com/Chen-Yihua/auto-scheduling-system/issues/50) |
 | 6 | 2 | 非 Error 的 `cause` 轉成 `[object Object]` | Improvement Suggestion | Info | 否 | 否 | — | 開 issue | 規則 | [#51](https://github.com/Chen-Yihua/auto-scheduling-system/issues/51) |
 

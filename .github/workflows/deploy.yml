@@ -91,10 +91,11 @@ jobs:
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY_JSON }}
       - uses: google-github-actions/setup-gcloud@v2
+      # --suppress-logs：service account 沒有專案 Viewer 權限，串流 log 會讓指令失敗；建置 log 在 GCP 主控台的 Cloud Build 看
       - name: Build and push image
         working-directory: backend
         run: |
-          gcloud builds submit --tag "asia-east1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/autoscheduling/backend-server:${{ github.sha }}" .
+          gcloud builds submit --suppress-logs --tag "asia-east1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/autoscheduling/backend-server:${{ github.sha }}" .
       # 不帶 --set-env-vars：它會先清掉 Cloud Run 上所有環境變數，GitHub 沒有的 secret 會變成空值；
       # 後端的環境變數在 Cloud Run 上管理，不帶參數時部署會保留現有設定
       - name: Deploy to Cloud Run

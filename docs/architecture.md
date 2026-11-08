@@ -10,7 +10,7 @@
 | 前端 server route | Nitro（`frontend/server/api/`） | Vercel | 代理 LeetCode GraphQL：瀏覽器直接呼叫會被 CORS 擋下 |
 | 後端 | FastAPI | Docker → Google Cloud Run | 任務、外部平台同步、排程、帳號連結 |
 | 資料庫 | MongoDB | — | 持久化資料 |
-| 快取 | Redis（選用） | — | 限流計數、短期快取；未設定 `REDIS_URL` 時改用記憶體，多個 instance 之間不共用 |
+| 快取 | Redis（選用） | — | 限流計數、短期快取、排程建議的快照（30 分鐘）；未設定 `REDIS_URL` 時改用記憶體，多個 instance 之間不共用 |
 | 身分驗證 | Clerk | — | 前端登入；後端以 JWKS 驗證每個請求的 JWT |
 
 Hacker News 不經過後端，由瀏覽器直接呼叫公開 API。
@@ -24,7 +24,7 @@ routers/     HTTP 進出：驗證登入、組回應；只有這層用 HTTPExcept
    ├── services/    商業邏輯（排程計算、AI 推估、Google Calendar、工作效率統計）
    └── platforms/   外部平台 adapter（GitHub、Jira、Moodle），由 PLATFORMS 註冊表統一產生路由
    │
-core/        共用：資料庫連線、加密、限流、快取、錯誤型別與全域例外處理
+core/        共用：資料庫連線（讀出的 datetime 一律帶 UTC 時區）、加密、限流、快取、錯誤型別與全域例外處理
 schemas/     Pydantic 模型：API 的 request / response 格式
 ```
 
@@ -46,6 +46,6 @@ crud、services、platforms 丟 `core/errors.py` 的例外，由 `core/exception
 
 **可排程項目**：`crud/schedulable_items.py` 把手動任務和三個平台的項目統一成同一種格式，id 加上來源前綴（例如 `github:42`）。排程精靈、標記完成和工作效率統計都用這份清單。
 
-**排程建議與確認**：`POST /schedule/suggest` 以 Google Calendar 空檔扣掉不工作時段後計算建議，並把結果存成快照；`POST /schedule/confirm` 只寫入快照內容，不重新計算，同一份快照只能確認一次。
+**排程建議與確認**：`POST /schedule/suggest` 以 Google Calendar 空檔扣掉不工作時段後計算建議，並把結果存成快照（存在快取，不存 MongoDB）；`POST /schedule/confirm` 只寫入快照內容，不重新計算，同一份快照只能確認一次。
 
 **AI**：Gemini 用於推估任務的優先度與所需時間（建立任務時未填才呼叫，有限流），以及 GitHub PR 摘要機器人（`POST /webhook`，結果貼到 Discord，供本專案自己的開發流程使用）。

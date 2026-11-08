@@ -1,6 +1,7 @@
 # <功能名稱>：<流程> 實驗紀錄
 
 - 流程：`/feature` | `/feature-grill`
+- 等級：輕量 | 標準 | 高風險（ADR 0007 以前的流程沒有等級，寫「無」）
 - 實驗類型：探索性 | 比較（另一份：`records/<功能>-<另一個流程>.md`，本次是第 1 次／第 2 次做）
 - 起始 commit：`<git rev-parse HEAD>`
 - 流程版本：`<git log -1 --format=%h -- .claude>`（skill 與 agent 定義最後一次修改的 commit；不同版本的紀錄不能直接比較）

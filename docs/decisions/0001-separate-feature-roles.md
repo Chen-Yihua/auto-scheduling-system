@@ -1,6 +1,6 @@
 # 0001. `/feature` 流程分開提需求、實作與審查的 agent
 
-- 狀態：已採用（審查分類已被 [0005](0005-specification-review.md) 取代）
+- 狀態：已採用（審查分類已被 [0005](0005-specification-review.md) 取代；文字修正等級由主 session 直接修改，見 [0007](0007-process-depth-by-risk.md)）
 - 日期：2026-11-02
 
 ## 背景

@@ -41,6 +41,7 @@ cd frontend && npm run lint && npm run typecheck && npm run test
 | 開 issue（`gh issue create`） | [docs/issues.md](docs/issues.md)（情境與技術背景兩層） |
 | 開發新功能（`/feature`） | [docs/specs/README.md](docs/specs/README.md)（規格格式） |
 | 了解整體架構、做架構層級的決定 | [docs/architecture.md](docs/architecture.md)、[docs/decisions/](docs/decisions/) |
+| 整理、刪除或標記取代 `docs/` 的文件 | [docs/README.md](docs/README.md)「生命週期」（規格、審查紀錄、ADR 只標記取代，不刪除） |
 
 ## 跨前後端的連動
 

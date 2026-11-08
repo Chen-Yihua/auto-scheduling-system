@@ -81,11 +81,9 @@ jobs:
       - run: npx playwright install --with-deps chromium chromium-headless-shell
       - run: npm run test:e2e
 
-  # 暫停部署到 Cloud Run：要恢復時把下面的 if 換回
-  # github.ref == 'refs/heads/main' && github.event_name == 'push'
   deploy-backend:
     needs: backend-test
-    if: false
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -97,6 +95,8 @@ jobs:
         working-directory: backend
         run: |
           gcloud builds submit --tag "asia-east1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/autoscheduling/backend-server:${{ github.sha }}" .
+      # 不帶 --set-env-vars：它會先清掉 Cloud Run 上所有環境變數，GitHub 沒有的 secret 會變成空值；
+      # 後端的環境變數在 Cloud Run 上管理，不帶參數時部署會保留現有設定
       - name: Deploy to Cloud Run
         run: |
           gcloud run deploy auto-scheduling-backend \
@@ -105,8 +105,7 @@ jobs:
             --region=asia-east1 \
             --allow-unauthenticated \
             --max-instances=3 \
-            --quiet \
-            --set-env-vars="CLERK_ISSUER=${{ secrets.CLERK_ISSUER }},CLERK_JWKS_URL=${{ secrets.CLERK_JWKS_URL }},CLERK_SECRET_KEY=${{ secrets.CLERK_SECRET_KEY }},MONGO_URI=${{ secrets.MONGO_URI }},GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }},GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }},GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }},GOOGLE_REDIRECT_URI=${{ secrets.GOOGLE_REDIRECT_URI }},SECRET_ENCRYPTION_KEY=${{ secrets.SECRET_ENCRYPTION_KEY }},CORS_ALLOWED_ORIGINS=${{ secrets.CORS_ALLOWED_ORIGINS }},DISCORD_MR_WEBHOOK_URL=${{ secrets.DISCORD_MR_WEBHOOK_URL }},DISCORD_MAIN_WEBHOOK_URL=${{ secrets.DISCORD_MAIN_WEBHOOK_URL }},GITHUB_WEBHOOK_SECRET=${{ secrets.GH_WEBHOOK_SECRET }},GITHUB_BOT_TOKEN=${{ secrets.GH_BOT_TOKEN }},REDIS_URL=${{ secrets.REDIS_URL }}"
+            --quiet
 
   deploy-frontend:
     needs: [frontend-test, frontend-e2e-test]

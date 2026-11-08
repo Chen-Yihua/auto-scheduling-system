@@ -112,7 +112,6 @@ jobs:
             --image="$IMAGE" \
             --platform=managed \
             --region=asia-east1 \
-            --allow-unauthenticated \
             --max-instances=3 \
             --quiet
 

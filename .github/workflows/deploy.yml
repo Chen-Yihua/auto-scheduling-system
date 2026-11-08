@@ -85,26 +85,33 @@ jobs:
     needs: backend-test
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
+    # id-token：向 GCP 用 Workload Identity Federation 換短期憑證，不在 repo 存 service account 金鑰
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      IMAGE: asia-east1-docker.pkg.dev/auto-scheduling-503916/autoscheduling/backend-server:${{ github.sha }}
     steps:
       - uses: actions/checkout@v4
       - uses: google-github-actions/auth@v2
         with:
-          credentials_json: ${{ secrets.GCP_SA_KEY_JSON }}
+          workload_identity_provider: projects/290135928889/locations/global/workloadIdentityPools/github-actions-pool/providers/github-actions-provider
+          service_account: gh-deploy-auto-scheduling@auto-scheduling-503916.iam.gserviceaccount.com
       - uses: google-github-actions/setup-gcloud@v2
-      # --suppress-logs：service account 沒有專案 Viewer 權限，串流 log 會讓指令失敗；建置 log 在 GCP 主控台的 Cloud Build 看
+      # 不用 Cloud Build：service account 沒有專案 Viewer 權限，gcloud builds submit 讀不到建置 log 會直接失敗
       - name: Build and push image
-        working-directory: backend
         run: |
-          gcloud builds submit --suppress-logs --tag "asia-east1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/autoscheduling/backend-server:${{ github.sha }}" .
+          gcloud auth configure-docker asia-east1-docker.pkg.dev --quiet
+          docker build -t "$IMAGE" backend
+          docker push "$IMAGE"
       # 不帶 --set-env-vars：它會先清掉 Cloud Run 上所有環境變數，GitHub 沒有的 secret 會變成空值；
       # 後端的環境變數在 Cloud Run 上管理，不帶參數時部署會保留現有設定
       - name: Deploy to Cloud Run
         run: |
           gcloud run deploy auto-scheduling-backend \
-            --image="asia-east1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/autoscheduling/backend-server:${{ github.sha }}" \
+            --image="$IMAGE" \
             --platform=managed \
             --region=asia-east1 \
-            --allow-unauthenticated \
             --max-instances=3 \
             --quiet
 

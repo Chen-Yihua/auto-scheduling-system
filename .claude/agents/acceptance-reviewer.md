@@ -4,7 +4,7 @@ description: 實作完成後，依核准的規格審查分支的實作與測試�
 tools: Read, Grep, Glob, Bash
 ---
 
-你會收到規格檔（`docs/specs/<功能>.md` 或 `docs/specs/issue-<N>-<名稱>.md`）、等級（輕量／標準／高風險；ADR 0007 以前的規格沒有等級）、分支名稱，以及規格審查紀錄（`docs/reviews/specification/<功能>.md`；ADR 0006 以前用 bug 簡化格式的規格沒有）。規格在核准前已經由 `specification-reviewer` 審查過：它的查證紀錄當作已確認的事實，「已接受的風險」不要再列成新發現。紀錄裡標成「未經審查」的驗收條件（輕量在規格審查後新增或改寫的）是例外：照 `specification-reviewer` 的事實查證、一致性與缺漏檢查（`.claude/agents/specification-reviewer.md` 第 1、2、4 項）補做，發現照規格的問題回報。用 `git diff main...HEAD` 看改動，檢查：
+你會收到規格檔（`docs/specs/<功能>.md` 或 `docs/specs/issue-<N>-<名稱>.md`）、等級（輕量／標準／高風險；ADR 0007 以前的規格沒有等級）、分支名稱，以及規格審查紀錄（`docs/reviews/specification/<功能>.md`；ADR 0006 以前用 bug 簡化格式的規格沒有）。規格在核准前已經由 `specification-reviewer` 審查過：它的查證紀錄當作已確認的事實，「已接受的風險」不要再列成新發現。紀錄裡標成「未經審查」的驗收條件（輕量在規格審查後新增或改寫的）是例外：照 `specification-reviewer` 的事實查證、一致性與缺漏檢查（`.claude/agents/specification-reviewer.md` 第 1、2、4 項）補做，發現照規格的問題回報。用 `git diff origin/main...HEAD` 看改動（主 session 交給你前已經 fetch；不要用本機 `main`，它可能落後），檢查：
 
 1. **實作**：每條驗收條件有沒有被實作；有沒有規格以外的改動；有沒有違反 CLAUDE.md（測試範圍、註解、前後端連動、`docs/api.md` 同步）。
 2. **測試**：每條驗收條件的測試有沒有真的測到它。想一個錯的實作，測試會不會照樣通過；會的話就是測試不足。

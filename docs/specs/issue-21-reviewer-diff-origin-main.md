@@ -69,7 +69,7 @@ agent 定義是給 LLM 讀的 Markdown，沒有自動化測試能執行它；用
 
 | AC | 測試 | 改程式前是否失敗 |
 |---|---|---|
-| AC1 | 手動，不改任何分支：取 `origin/main` 的較舊祖先當「落後的本機 `main`」（例如 `OLD=$(git rev-parse origin/main~5)`），在功能分支上比較 `git diff --stat $OLD...HEAD` 與 `git diff --stat origin/main...HEAD` 的檔案數，前者較多；再確認 `acceptance-reviewer.md` 指定的指令是後者 | 是（修正前定義指定的是 `main...HEAD`，本機 `main` 落後時等同前者） |
+| AC1 | 手動，不改任何分支：取 `origin/main` 的較舊祖先當「落後的本機 `main`」（例如 `OLD=$(git rev-parse origin/main~5)`），在功能分支上比較 `git diff --stat $OLD...HEAD` 與 `git diff --stat origin/main...HEAD` 的檔案數，前者較多；`git diff --name-only $OLD...HEAD` 減掉 `git diff --name-only origin/main...HEAD` 後剩下的每個檔案，都在 `git diff --name-only $OLD origin/main` 裡（多出來的就是已合併的改動）；再確認 `acceptance-reviewer.md` 指定的指令是後者。不照 issue 在 worktree 把 `main` 指到舊的 commit：worktree 和主 repo 共用分支，移動 `main` 會改到真正的本機 `main`；用 `$OLD` 代替效果相同 | 是（修正前定義指定的是 `main...HEAD`，本機 `main` 落後時等同前者） |
 | AC2 | `grep -rnE '[^/]main\.\.\.|^main\.\.\.' .claude/` 沒有結果；`grep -rn 'origin/main\.\.\.HEAD' .claude/` 有 `acceptance-reviewer.md` 那一行 | 是（修正前會找到 `acceptance-reviewer.md:7`） |
 | AC3 | 讀 `acceptance-reviewer.md` 的唯讀限制段落沒有被改，修正那一行沒有要求 fetch／pull／checkout；`grep -n 'git fetch origin main' .claude/skills/feature/SKILL.md` 有第 3 節那一行 | 否（保護既有行為） |
 
@@ -77,3 +77,4 @@ agent 定義是給 LLM 讀的 Markdown，沒有自動化測試能執行它；用
 
 | 日期 | 修改 | 原因 | 確認者 |
 |---|---|---|---|
+| 2026-11-08 | 「測試對應」AC1 加上比對多出來的檔案清單，並寫明不用 worktree 的原因；AC 本身不變 | 採用規格審查第 1 輪的建議 #2、#3。影響檢查：AC1–AC3 條文、需求、不做、假設、實作計畫都不用改；只有 AC1 的手動驗證多一步，PR 描述的驗收表要照新步驟重跑 AC1 | 開發者 |

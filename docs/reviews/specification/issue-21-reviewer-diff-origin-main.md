@@ -1,7 +1,7 @@
 # acceptance-reviewer 的審查範圍改以 origin/main 為基準：規格審查紀錄
 
 - 規格：[docs/specs/issue-21-reviewer-diff-origin-main.md](../../specs/issue-21-reviewer-diff-origin-main.md)
-- PR：（核准前）
+- PR：[#58](https://github.com/Chen-Yihua/auto-scheduling-system/pull/58)
 - 等級：標準
 - 輪數：1（第 1 輪 2026-11-08 草稿）
 - 最終結果：沒有阻擋項目

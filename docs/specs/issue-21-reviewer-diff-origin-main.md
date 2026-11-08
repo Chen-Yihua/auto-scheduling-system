@@ -3,7 +3,7 @@
 - 狀態：已核准
 - 等級：標準（改的是 agent 定義裡決定審查範圍的規則，符合「改定義流程或規則的文件裡的規則」；不是只改措辭，所以不是文字修正。改動只在一個檔案，也可以看成「單一範圍的 bug」，但判斷不確定時取較高的等級）
 - issue：[#21](https://github.com/Chen-Yihua/auto-scheduling-system/issues/21)
-- PR：（實作後補上）
+- PR：[#58](https://github.com/Chen-Yihua/auto-scheduling-system/pull/58)
 
 ## 背景
 

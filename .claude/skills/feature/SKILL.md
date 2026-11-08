@@ -80,7 +80,7 @@ disable-model-invocation: true
 | Implementation Defect 標成「安全」 | 暫停，照「規格問題的處理」問開發者，不自動修正 |
 | Test Gap（阻擋） | 交回 `feature-implementer` 補測試 |
 | Factual Error、Specification Defect、Missing Acceptance Criteria | 暫停，照下面「規格問題的處理」 |
-| Test Gap（不阻擋）、Improvement Suggestion（包括標成「安全」的改善建議） | 照下面「不阻擋的發現開 issue」處理，不在這個 PR 修；開發者明確要求在這個 PR 處理時才修，並在處理結果記下決定者 |
+| Test Gap（不阻擋）、Improvement Suggestion（包括標成「安全」的改善建議） | 照下面「不阻擋的發現開 issue」處理，不在這個 PR 修；開發者明確要求在這個 PR 處理時才修：先照「規格問題的處理」第 3 步寫成驗收條件，再交給 `feature-implementer`，並在處理結果記下決定者 |
 
 任何一項涉及**重大架構決策**（新增服務或外部依賴、改變模組分層、改資料庫結構或部署方式；改資料庫結構指新增 collection 或索引、改既有欄位的型別或意義、要轉換既有資料，新增選填欄位不算），不論分類都暫停，照「規格問題的處理」問開發者；決定後寫成 `docs/decisions/` 的 ADR。
 

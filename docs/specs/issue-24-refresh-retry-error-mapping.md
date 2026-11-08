@@ -3,7 +3,7 @@
 - 狀態：已核准
 - 等級：輕量（只在 Google Calendar 這個功能範圍內的 bug：改一個 service 函式的錯誤分類與它的測試，只改變失敗時回的狀態碼。不碰資料一致性：除了換新 token 時寫回的新 token（修正前後相同），例外在其他寫資料庫、刪任務之前就丟出；不碰認證與授權：401 → 重新連接的判斷不變）
 - issue：[#24](https://github.com/Chen-Yihua/auto-scheduling-system/issues/24)
-- PR：（實作後補上）
+- PR：[#60](https://github.com/Chen-Yihua/auto-scheduling-system/pull/60)
 
 ## 背景
 

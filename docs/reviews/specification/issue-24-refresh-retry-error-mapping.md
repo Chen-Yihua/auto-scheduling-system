@@ -1,7 +1,7 @@
 # 換新 Google token 後重試行事曆列表的錯誤分類：規格審查紀錄
 
 - 規格：[docs/specs/issue-24-refresh-retry-error-mapping.md](../../specs/issue-24-refresh-retry-error-mapping.md)
-- PR：（核准前）
+- PR：[#60](https://github.com/Chen-Yihua/auto-scheduling-system/pull/60)
 - 等級：輕量
 - 輪數：1（第 1 輪 2026-11-08 草稿）
 - 最終結果：沒有阻擋項目（#1 由開發者選定，#2 已修正）

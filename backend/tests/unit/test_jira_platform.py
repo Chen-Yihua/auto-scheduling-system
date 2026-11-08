@@ -234,7 +234,7 @@ def test_transform_jira_item_converts_times_to_utc_datetime():
 
 
 def test_jira_completed_at_accepts_stored_datetime_and_old_string():
-    """AC19：資料庫讀出的 resolved_at 可能是新格式（不帶時區的 UTC datetime）或舊的 +0800 字串。"""
+    """AC19：資料庫讀出的 resolved_at 可能是新格式（datetime）或舊的 +0800 字串；不帶時區的 datetime 視為 UTC。"""
     expected = datetime(2026, 10, 2, 2, 0, tzinfo=timezone.utc)
 
     assert jira.JIRA.completed_at({"resolved_at": datetime(2026, 10, 2, 2, 0)}) == expected

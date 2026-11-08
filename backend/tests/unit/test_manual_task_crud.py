@@ -388,8 +388,8 @@ def test_ac8_later_stage_due_before_earlier_stage_is_rejected_even_with_gaps_wit
     assert "階段 3" in exc_info.value.detail
 
 
-def test_ac8_naive_datetimes_from_mongo_compare_with_aware_request_values():
-    """Mongo 讀回的截止日沒有時區（存的是 UTC），要能和請求帶來的有時區時間比較，不能丟 TypeError。"""
+def test_ac8_naive_parent_due_date_compares_with_aware_stage_due_dates():
+    """不帶時區的主任務截止日（舊資料，或請求沒帶時區）視為 UTC，要能和帶時區的階段截止日比較，不能丟 TypeError。"""
     from datetime import datetime
     manual_task_crud.validate_stage_chain(datetime(2030, 1, 10), [_stage(due_date=_d(5)), _stage(due_date=_d(10))])
 

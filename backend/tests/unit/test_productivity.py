@@ -60,8 +60,8 @@ def test_overdue_counts_only_unfinished_items_past_due():
     assert build_productivity_summary(items, NOW, "UTC")["overdue"] == 1
 
 
-def test_naive_datetimes_from_mongo_are_treated_as_utc():
-    """Mongo 讀出來的 datetime 不帶時區（存的是 UTC），要能和帶時區的 now 比較。"""
+def test_naive_datetimes_are_treated_as_utc():
+    """不帶時區的截止日（舊資料，或請求沒帶時區）視為 UTC，要能和帶時區的 now 比較。"""
     items = [_item(status="To Do", due_date=datetime(2026, 11, 4, 11, 0))]
 
     assert build_productivity_summary(items, NOW, "UTC")["overdue"] == 1

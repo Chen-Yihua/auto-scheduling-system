@@ -48,7 +48,8 @@ cd frontend && npm run lint && npm run typecheck && npm run test
 - 新增、刪除 endpoint，或改了路徑、登入需求、限流，要同步更新 `docs/api.md`。
 - 新增服務、MongoDB collection、外部平台，或改變模組分層，要同步更新 `docs/architecture.md`。
 - 改了 `backend/schemas/` 的回應格式，要同步改 `frontend/types/`（手動維護，不會自動產生）。
-- 新增「import 時就必填」的環境變數，要同步更新 `.github/workflows/deploy.yml`、`backend/.env.example`，以及 `backend/tests/unit/test_ci_env_requirements.py`。
+- 新增「import 時就必填」的環境變數，要同步更新 `.github/workflows/deploy.yml` 的 `backend-test`、`backend/.env.example`，以及 `backend/tests/unit/test_ci_env_requirements.py`。
+- 新增後端的環境變數（不論是不是必填），合併前要請開發者先在 Cloud Run 加上：部署只換 image，不會帶入環境變數。不要自己讀取、複製或修改 `.env` 的值。
 
 ## 測試範圍
 

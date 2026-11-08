@@ -1,6 +1,6 @@
 # E2E 的 Clerk 登入間歇性失敗（Execution context was destroyed）
 
-- 狀態：部分被 [issue-46](issue-46-sanitize-relative-url-query.md) 取代（AC5 的網址輸出形式，改依 issue-46 的 AC3–AC6）
+- 狀態：部分被 [issue-46](issue-46-sanitize-relative-url-query.md)（#46）取代（AC5 的「網址只印 host＋path」改依 issue-46 的 AC3–AC6；AC5 其餘部分與 AC1–AC4 仍有效，AC2 已在 #46 的 PR 修改，見修改紀錄）
 - issue：[#28](https://github.com/Chen-Yihua/auto-scheduling-system/issues/28)
 - PR：#45
 

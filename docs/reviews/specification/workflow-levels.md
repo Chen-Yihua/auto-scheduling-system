@@ -94,8 +94,9 @@
 | 背景：issue-16 的留言已補 | 無法查證（reviewer 不能用 `gh`）；主 session 已發佈 | https://github.com/Chen-Yihua/auto-scheduling-system/issues/16#issuecomment-6711210029 |
 | 需求 1–3、不做：等級單一來源、生命週期單一來源、歷史文件只改狀態行 | 正確 | `.claude/skills/feature/SKILL.md` 第 1 節；`docs/README.md`「生命週期」；ADR 0001、0002、0005、0006 與 issue-28 只改第 3 行 |
 | 假設 1、2 | 正確 | `docs/decisions/0007-process-depth-by-risk.md`「放棄的做法」「影響」 |
-| AC1–AC3、AC9 | 第 2 輪部分錯誤（#13–#15），已修改 | 見各項 |
-| AC4–AC8、AC10、AC11 | 正確 | `.claude/skills/feature/SKILL.md`；`docs/reviews/README.md`；`docs/specs/README.md`；`.claude/agents/acceptance-reviewer.md` |
+| AC1、AC3、AC9、AC11 | 第 2 輪查證的是修改前的版本，結果是部分錯誤或範圍不足（AC1、AC9：#13、#17；AC3：#14；AC11：#15、#16）；依建議修改後的版本**未經審查** | 見各項與「已接受的風險」 |
+| AC2 | 規則正確；和它衝突的文件規則已依 #15 修改，AC2 本身沒改 | `.claude/skills/feature/SKILL.md` 第 1 節「規格審查」 |
+| AC4–AC8、AC10 | 正確 | `.claude/skills/feature/SKILL.md`；`docs/reviews/README.md`；`docs/specs/README.md`；`.claude/agents/acceptance-reviewer.md` |
 | AC6：plan 檔位置是 `~/.claude/plans/` | 無法查證 | 執行環境的設定，不在 repo 裡 |
 
 ## 已接受的風險
@@ -106,5 +107,5 @@
 - 新增索引或 collection 屬於重大架構決策，因此是高風險。
 - ADR 0007 以前的規格與審查紀錄不補等級與各輪摘要。
 - 不同等級的實驗紀錄不能直接比較，用 TEMPLATE 的「等級」與「流程版本」區分。
-- 標準在 2 輪之後，開發者修改 AC 時要不要跑第 3 輪沒有定義；這是改動前就有的問題，不在這次的範圍內。
-- 第 2 輪之後依建議修改的 AC1、AC3、AC9、AC11 沒有再經過審查（標準最多 2 輪）。
+- 標準在 2 輪之後，開發者修改 AC 時要不要跑第 3 輪沒有定義；這是改動前就有的問題，不在這次的範圍內，另外整理成後續 issue 的建議。
+- **第 2 輪之後的修改未經審查**：AC1、AC3、AC9、AC11，以及為了它們修改的 `/feature` 第 1 節、`acceptance-reviewer.md`、`docs/specs/README.md`、`docs/reviews/README.md`、ADR 0007（#13–#17 的處理），是照第 2 輪的建議修改的，修改後沒有再經過規格審查，不能視為已通過審查。標準最多審 2 輪，開發者在 2026-11-08 核准規格時接受這項風險。之後第一次用新規則開發時發現問題，照一般流程開 issue。

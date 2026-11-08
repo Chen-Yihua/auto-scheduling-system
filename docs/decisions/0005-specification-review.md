@@ -1,6 +1,6 @@
 # 0005. 規格核准前加入規格審查，審查分類依根本原因區分
 
-- 狀態：已採用（「bug 簡化格式不做規格審查」已被 [0006](0006-bugs-use-full-spec.md) 取代）
+- 狀態：已採用（「bug 簡化格式不做規格審查」已被 [0006](0006-bugs-use-full-spec.md) 取代；「影響」裡的紀錄檔位置在 2026-11-06 改成一份審查一個檔案 `docs/reviews/specification/<功能>.md`，見 [docs/reviews/README.md](../reviews/README.md)）
 - 日期：2026-11-06
 
 ## 背景

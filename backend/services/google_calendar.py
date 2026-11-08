@@ -48,7 +48,13 @@ async def _fetch_calendar_list_after_refresh(access_token: str) -> list[dict]:
         if e.response.status_code == 401:
             logger.warning("換新 token 後 Google Calendar 仍回 401: %s", e.response.text)
             raise ReauthRequiredError(GOOGLE_REAUTH_DETAIL)
+        if e.response.status_code >= 500 or e.response.status_code == 429:
+            raise _google_error(e, "取得行事曆列表失敗")
+        # 其他 4xx 不交給 _google_error：它回 400，前端會把已連接的使用者顯示成未連接（#59）
         raise
+    except httpx.RequestError as e:
+        logger.error("換新 token 後連線 Google Calendar API 失敗: %s", e)
+        raise ExternalServiceError("無法連線至 Google，請稍後再試")
 
 
 async def _get_access_token_and_calendars(clerk_id: str) -> tuple[str, list[dict]]:

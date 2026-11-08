@@ -269,6 +269,11 @@ def _encrypt_with_other_key(plain: str) -> str:
     return Fernet(Fernet.generate_key()).encrypt(plain.encode()).decode()
 
 
+def _http_error(status):
+    request = httpx.Request("GET", "https://example.com")
+    return httpx.HTTPStatusError("error", request=request, response=httpx.Response(status, request=request))
+
+
 def _unauthorized_error() -> httpx.HTTPStatusError:
     request = httpx.Request("GET", "https://example.com")
     return httpx.HTTPStatusError("Unauthorized", request=request, response=httpx.Response(401, request=request))
@@ -341,6 +346,44 @@ async def test_get_free_slots_requires_reauth_when_calendar_list_still_401_after
         await calendar_service.get_free_slots_for_user("uid123")
 
     assert calls == ["expired-token", "new-token"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("retry_error, expected", [
+    (_http_error(500), ExternalServiceError),
+    (_http_error(503), ExternalServiceError),
+    (_http_error(429), ExternalServiceError),
+    (httpx.ConnectError("Google 掛了"), ExternalServiceError),
+    (httpx.ReadTimeout("逾時"), ExternalServiceError),
+    (_http_error(403), httpx.HTTPStatusError),
+], ids=["500", "503", "429", "connect-error", "read-timeout", "403"])
+async def test_get_free_slots_maps_retry_errors_after_token_refresh(monkeypatch, retry_error, expected):
+    """換新 token 後重試行事曆列表：5xx、429、連不上 → 502，和第一次請求一樣（AC1、AC2）；
+    403 照舊丟出原本的例外，不轉成 400，避免前端把已連接顯示成未連接（AC3，見 #59）。"""
+    async def mock_find_one(query):
+        return {"_id": "uid123", "access_token": encrypt_secret("expired-token"), "refresh_token": encrypt_secret("rt")}
+
+    calls = []
+
+    async def mock_fetch_calendar_list(token):
+        calls.append(token)
+        if token == "expired-token":
+            raise _unauthorized_error()
+        raise retry_error
+
+    async def mock_refresh(clerk_id):
+        return "new-token"
+
+    monkeypatch.setattr(google_tokens.db.googleCalendarTokens, "find_one", mock_find_one)
+    monkeypatch.setattr(calendar_service, "fetch_google_calendar_list", mock_fetch_calendar_list)
+    monkeypatch.setattr(calendar_service, "refresh_google_calendar_token", mock_refresh)
+
+    with pytest.raises(expected) as exc_info:
+        await calendar_service.get_free_slots_for_user("uid123")
+
+    assert calls == ["expired-token", "new-token"]
+    if expected is httpx.HTTPStatusError:
+        assert exc_info.value is retry_error
 
 
 # ========== list_calendars_for_user ==========
@@ -481,11 +524,6 @@ async def test_create_calendar_events_network_error_marks_task_as_failed(monkeyp
 # ========== 階段任務：刪除還沒開始的事件 ==========
 
 DELETE_NOW = datetime(2030, 1, 1, 12, 0, tzinfo=timezone.utc)
-
-
-def _http_error(status):
-    request = httpx.Request("GET", "https://example.com")
-    return httpx.HTTPStatusError("error", request=request, response=httpx.Response(status, request=request))
 
 
 def _event(start_iso):

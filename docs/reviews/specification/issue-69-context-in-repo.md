@@ -8,7 +8,7 @@
 
 ## 摘要
 
-- 發現：31 項（第 1 輪 9 項、第 2 輪 13 項、第 3 輪 9 項）：Specification Defect 17、Missing AC 7、Factual Error 2、Improvement Suggestion 5；Major 3、Minor 21、Info 7
+- 發現：31 項（第 1 輪 9 項、第 2 輪 13 項、第 3 輪 9 項）：Specification Defect 15、Missing AC 6、Factual Error 2、Improvement Suggestion 8；Major 3、Minor 21、Info 7
 - 開發者決策：12 項（第 1 輪 #1、#3、#5、#6、#7；第 2 輪 #12–#16、#19、#20）
 - 尚未處理：0 項
 
@@ -89,5 +89,27 @@
 
 ## 尚未處理
 
-| # | 原因 | 後續（issue 編號或「無」） |
+無。
+
+## 查證紀錄（第 3 輪）
+
+| 規格中的事實 | 結果 | 依據（檔案:行號） |
 |---|---|---|
+| `<功能>-grill.md` 不 commit | 正確 | `.claude/skills/feature/SKILL.md:115` |
+| 修改紀錄要求寫 C 編號，所有等級 | 正確 | `.claude/skills/feature/SKILL.md:168`、`docs/specs/README.md:96` |
+| PR #67 的規格有 D9、D11、D12，規格審查紀錄有 D9 | 正確 | `docs/specs/feature-grilling.md:121-122`、`docs/reviews/specification/feature-grilling.md:7` |
+| implementer 的規則只寫「規格檔要一起 commit」，拒絕不對應驗收條件的要求 | 正確 | `.claude/agents/feature-implementer.md:8`、`:15` |
+| 審查紀錄「和修正一起 commit」「和規格一起 commit」沒寫由誰 commit | 正確 | `.claude/skills/feature/SKILL.md:132`、`:203`、`docs/reviews/README.md:11` |
+| 文字修正以外的等級由 implementer 開分支 | 正確 | `.claude/skills/feature/SKILL.md:30-32` |
+| 沒有術語表，產品用詞散在規格與程式碼 | 正確 | `docs/glossary.md` 不存在；`backend/schemas/manual_task.py` |
+| `acceptance-reviewer` 只能跑 git 唯讀指令與測試，讀不到 PR 描述 | 正確 | `.claude/agents/acceptance-reviewer.md:15` |
+| ADR 0008 決定「修改紀錄所有等級都寫 C 編號」，沒有 commit 責任的決定；下一個 ADR 是 0009 | 正確 | `docs/decisions/0008-grilling-without-plan-mode.md:26`、`docs/decisions/` |
+| 判斷 Context 落點的位置 | 正確 | `.claude/skills/feature/SKILL.md:115-117`、`:223`、`docs/README.md:22`、`.claude/agents/specification-reviewer.md:22` |
+| `grill-with-docs`、`domain-modeling`、`GLOSSARY-FORMAT` 的內容（mattpocock/skills `4ae2317`，MIT） | 無法在 repo 查證 | 外部來源；主 session 在規格撰寫時用 `gh api` 讀過原文 |
+
+## 已接受的風險
+
+- 兩個還沒合併的 PR 用不同名稱寫同一個概念時，合併前的對照看不到對方，git 也不會衝突，兩個都可能進 `main`（規格「不適用的情境」併發列）。
+- 不加 C、Q 編號的自動化檢查，靠 reviewer 與主 session 人工確認（開發者決定）。
+- 既有規格與審查紀錄裡的 C／D 編號不回補（開發者決定）。
+- 這個 PR 交辦時新的 agent 規則還沒生效，交辦訊息明寫檔案位置與 `git add` 的路徑。

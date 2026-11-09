@@ -39,3 +39,4 @@
 | [0008](0008-grilling-without-plan-mode.md) | 標準、高風險寫規格前先做需求問答，`/feature` 不用 plan mode | 已採用（修改紀錄寫 C 編號已被 0009 取代） |
 | [0009](0009-docs-delivery-and-glossary.md) | 修改紀錄寫決定與落點、引進術語表、產品文件照交付清單由 implementer commit | 已採用 |
 | [0010](0010-scratchpad-loss-recovery.md) | scratchpad 遺失時以暫存產物為單位恢復，審查不逐一要求特定案例 | 已採用 |
+| [0011](0011-api-error-status-codes.md) | API 錯誤回應：狀態碼表示類別，error_code 表示原因 | 已採用 |

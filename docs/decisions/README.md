@@ -35,4 +35,5 @@
 | [0004](0004-subtask-order-on-parent.md) | 子任務的階段順序存在主任務上 | 已採用 |
 | [0005](0005-specification-review.md) | 規格核准前加入規格審查，審查分類依根本原因區分 | 已採用（bug 不審查的例外已被 0006 取代；紀錄檔位置已改，見 0005 狀態） |
 | [0006](0006-bugs-use-full-spec.md) | bug 也用完整規格格式並做規格審查 | 已採用（文字修正與輕量等級的例外見 0007） |
-| [0007](0007-process-depth-by-risk.md) | 依變更碰到的範圍決定規格與審查的深度 | 已採用 |
+| [0007](0007-process-depth-by-risk.md) | 依變更碰到的範圍決定規格與審查的深度 | 已採用（文字修正在 plan mode 列改動已被 0008 取代） |
+| [0008](0008-grilling-without-plan-mode.md) | 標準、高風險寫規格前先做需求問答，`/feature` 不用 plan mode | 已採用 |

@@ -1,6 +1,16 @@
 # `/feature-grill` 實驗
 
-確認寫規格前先做 grilling 問答（`/feature-grill`），是否真的讓需求理解更完整、降低 Missing AC，而不只是增加訪談時間。正式流程仍是 `/feature`；實驗結束、開發者看過結果並決定前，不把 grilling 整合進正式流程。
+實驗已在 2026-11-09 結束，問答併進了 `/feature`，見下面「結論」。以下的指標與進行方式保留實驗當時的內容。
+
+確認寫規格前先做 grilling 問答（`/feature-grill`），是否真的讓需求理解更完整、降低 Missing AC，而不只是增加訪談時間。
+
+## 結論
+
+- **結束日期**：2026-11-09。
+- **開發者決定提前結束**：原本的規則是實驗結束、開發者看過結果並決定前，不把 grilling 整合進正式流程；開發者在還沒做比較實驗時，決定把問答併進 `/feature`，只用在標準與高風險等級。
+- **證據的限制**：只有一筆探索性紀錄（[records/staged-tasks-feature-grill.md](records/staged-tasks-feature-grill.md)），沒有和 `/feature` 的比較實驗，所以不能說明問答是否降低了 Missing AC。這筆紀錄看得到的是：問答帶出了會大幅改變範圍的決定；8 項 Missing AC 中有 3 項來自在 plan mode 中補問、沒有回到決策樹的決定；plan mode 只能用選單提問。
+- **整合後的規則**：`.claude/skills/feature/SKILL.md` 第 1 節「需求問答」；決定與放棄的做法見 [ADR 0008](../../decisions/0008-grilling-without-plan-mode.md)。
+- **`/feature-grill` 已刪除**：最後一版在 commit `23c56c9` 的 `.claude/skills/feature-grill/SKILL.md`（`git show 23c56c9:.claude/skills/feature-grill/SKILL.md`）。[TEMPLATE.md](TEMPLATE.md) 與 `records/` 引用的 `/feature-grill` 規則（例如「實驗紀錄」的 token 計算）從這一版找。
 
 ## 指標
 
@@ -20,11 +30,11 @@
 
 ## 進行方式
 
-### 探索性實驗（目前階段）
+### 探索性實驗（已結束）
 
 先用 1～2 個功能跑 `/feature-grill`，目的是看流程能不能順利走完、指標拿不拿得到，不和 `/feature` 比較。每個功能填一份紀錄，放在 `records/<功能>-feature-grill.md`。
 
-### 比較實驗
+### 比較實驗（已結束，沒有進行）
 
 同一個功能分別用 `/feature` 和 `/feature-grill` 各做一次時，要避免兩次互相影響：
 
@@ -35,6 +45,6 @@
 
 `/feature` 不會自動填紀錄（不修改正式流程），所以用 `/feature` 的那一次，結束後照模板手動填一份，存成 `records/<功能>-feature.md`。
 
-## 紀錄的提交
+## 紀錄的提交（已結束）
 
 紀錄不放進功能本身的 PR，因為比較實驗中有一個 PR 會被關掉，放在裡面的紀錄會跟著消失。實驗結束後，把 `records/` 和結果整理成一個 PR 提交。

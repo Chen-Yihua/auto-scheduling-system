@@ -81,7 +81,7 @@ bug 也用上面的格式，也做規格審查（[ADR 0006](../decisions/0006-bu
 
 ## 各等級的規格
 
-等級的判斷與各等級的審查見 `/feature` 第 1 節「判斷等級」（[ADR 0007](../decisions/0007-process-depth-by-risk.md)）。草稿是 plan mode 的 plan 檔，核准前不存進這裡，所以狀態「草稿」只會出現在 plan 檔。
+等級的判斷與各等級的審查見 `/feature` 第 1 節「判斷等級」（[ADR 0007](../decisions/0007-process-depth-by-risk.md)）。草稿寫在 scratchpad 的 `<功能>-spec.md`，核准前不存進這裡，所以狀態「草稿」只會出現在 scratchpad 的草稿。
 
 | 等級 | 必要的節 | 可以省略 |
 |---|---|---|

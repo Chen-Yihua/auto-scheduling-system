@@ -1,7 +1,7 @@
 # `/feature` 不用 plan mode，標準、高風險先做需求問答：規格審查紀錄
 
 - 規格：[docs/specs/feature-grilling.md](../../specs/feature-grilling.md)
-- PR：#（待開）
+- PR：#67
 - 等級：標準
 - 輪數：2（第 1 輪 2026-11-09 草稿；第 2 輪 2026-11-09 草稿）
 - 最終結果：第 2 輪仍有阻擋，依 `/feature` 第 1 節不再自動審查；開發者決定後修改、核准。第 2 輪後開發者新增 D9（不用 plan mode），相關需求與 AC 未經規格審查，見「未經審查的驗收條件」

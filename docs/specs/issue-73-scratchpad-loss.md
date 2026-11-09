@@ -44,6 +44,7 @@ scratchpad 裡的每一種暫存產物都由某個步驟產生。以「遺失了
    - 只有需求 1–4 無法處理，而且會造成下列實際風險時才列為發現並阻擋：已核准的決定被推翻、正式文件被憑記憶重寫、開發者沒被告知決定或成果遺失。
    - 這項豁免不擴大到 scratchpad 遺失以外的流程。
    - 規則只在 `/feature`「暫停與接續」定義；`specification-reviewer` 與 `acceptance-reviewer` 各加一句引用它；`docs/reviews/README.md`「分類」加一句例外（Specification Defect、Missing AC 一律阻擋的規則，不適用於被豁免的情況）並指向 `/feature`。
+   - `specification-reviewer` 回報格式裡原有的「已接受的風險」定義，也要包含被豁免的情況，和 `acceptance-reviewer` 一致。
    - `docs/reviews/README.md`：`acceptance-reviewer` 的檢查表加「已接受的風險」（列被豁免的情況，沒有寫「無」）；實作審查紀錄有被豁免或決定不補的項目時，加「## 已接受的風險」一節。
 7. **單一來源**：暫存產物清單只在需求 2 定義。`/feature` 第 1 節開頭的暫存檔列表（`.claude/skills/feature/SKILL.md:20`）、`:301` 的括號列舉、`docs/README.md:23` 暫存那一列的檔名列舉，都改成指向 `/feature` 第 4 節「暫停與接續」的清單。`docs/README.md`「生命週期」的暫停與接續（`:29`）只留一句說明並指向同一節，不再抄一份規則；同一段的「取消」（`:28`）也改成一句說明並指向 `/feature` 第 4 節「取消」。
 8. 新增 ADR 0010，記錄以暫存產物為單位的恢復規則與審查豁免，背景寫明補充 ADR 0009（0009 只寫了舊路徑存在時的接續）；ADR 清單加一列。ADR 0009 不改。
@@ -80,6 +81,7 @@ scratchpad 裡的每一種暫存產物都由某個步驟產生。以「遺失了
 | AC13 | ADR 0010 寫出背景（依時間點列舉補不完、PR #71 連續 3 輪阻擋、補充 ADR 0009）、決定（以暫存產物為單位的恢復、審查豁免）、放棄的做法（繼續逐一補時間點、保留常見情況加通用規則、把 scratchpad 改到 repo 內）；ADR 清單有 0010；ADR 0009 沒有改動 | 不變條件 |
 | AC14 | 所有 skill、agent、文件引用的路徑與節名稱都存在；歷史文件的內文沒有被修改 | 不變條件 |
 | AC15 | PR 描述有 `Closes #73` 與 `Closes #72`，合併後兩個 issue 都會關閉 | 使用者行為 |
+| AC16 | `specification-reviewer.md` 回報格式的「已接受的風險」定義同時包含「規格或 Context 裡明確接受的風險」與「被 `/feature` 第 4 節『審查豁免』豁免的情況」，和 `acceptance-reviewer.md` 的回報格式一致 | 不變條件 |
 
 ## 不適用的情境
 
@@ -118,7 +120,9 @@ scratchpad 裡的每一種暫存產物都由某個步驟產生。以「遺失了
 | AC13 | 讀 ADR 0010、`docs/decisions/README.md`；`git diff origin/main -- docs/decisions/0009-docs-delivery-and-glossary.md` 沒有輸出 |
 | AC14 | `grep` 節名稱與路徑；`git diff --stat` 沒有歷史文件 |
 | AC15 | `gh api repos/{owner}/{repo}/pulls/<PR> --jq .body` 有兩行 `Closes` |
+| AC16 | 讀 `specification-reviewer.md`、`acceptance-reviewer.md` 的回報格式 |
 
 ## 修改紀錄
 | 日期 | 修改 | 原因 | 確認者 |
 |---|---|---|---|
+| 2026-11-09 | 新增 AC16；需求 6 加一點 | 開發者決定在這個 PR 讓 `specification-reviewer` 回報格式的「已接受的風險」定義包含被豁免的情況 → 需求 6、AC16；檢查過 AC11 條文不用改（它要求的引用已存在） | 開發者 |

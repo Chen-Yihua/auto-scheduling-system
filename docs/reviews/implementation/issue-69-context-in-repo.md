@@ -3,12 +3,12 @@
 - 規格：[docs/specs/issue-69-context-in-repo.md](../../specs/issue-69-context-in-repo.md)
 - PR：#71
 - 等級：標準
-- 輪數：3（第 1 輪 2026-11-09 `e8cf227`；第 2 輪 2026-11-09 `42ba500`；第 3 輪 2026-11-09 `09efbcb`）
-- 最終結果：仍有阻擋（#12，修正中）；#11 依開發者決定另開 issue 解除阻擋
+- 輪數：4（第 1 輪 2026-11-09 `e8cf227`；第 2 輪 2026-11-09 `42ba500`；第 3 輪 2026-11-09 `09efbcb`；第 4 輪 2026-11-09 `17ebd7f`，只審第 3 輪 #12 的修正）
+- 最終結果：沒有阻擋項目
 
 ## 摘要
 
-- 發現：13 項（第 1 輪 5 項、第 2 輪 5 項、第 3 輪 3 項）：Specification Defect 4、Missing AC 4、Implementation Defect 1、Improvement Suggestion 4；Minor 11、Info 2
+- 發現：14 項（第 1 輪 5 項、第 2 輪 5 項、第 3 輪 3 項、第 4 輪 1 項）：Specification Defect 4、Missing AC 4、Implementation Defect 1、Improvement Suggestion 5；Minor 11、Info 3
 - 開發者決策：10 項（#1、#2、#3、#5–#8、#11–#13）
 - 尚未處理：0 項
 
@@ -19,6 +19,7 @@
 | 1 | 2026-11-09 `e8cf227` | #1–#5（#1–#4） | 規格新增需求 18–20：PR 編號由 implementer 補、修改既有術語要寫原定義與新定義、舊 scratchpad 不存在時依核准前後處理；規格審查紀錄補齊 |
 | 2 | 2026-11-09 `42ba500` | #6–#10（#6–#8） | 第 1 輪 #1–#4 確認已修正；規格加「更新本 PR 的術語」、PR 還沒建立與文字修正的接續；AC3、AC14 條文對齊；#9 開 issue；#10 紀錄格式補齊 |
 | 3 | 2026-11-09 `09efbcb` | #11–#13（#11、#12） | 第 2 輪 #6、#7 確認已修正，#8 部分修正；同一根本原因連續 3 輪阻擋，停止自動修改；開發者決定 #11、#13 開 [#73](https://github.com/Chen-Yihua/auto-scheduling-system/issues/73)，#12 在這個 PR 修 |
+| 4 | 2026-11-09 `17ebd7f` | #14（無） | 第 3 輪 #12 確認已修正；#73 在規格「不做」、修改紀錄、PR 描述都有寫；#14 開 issue |
 
 ## 發現與處理
 
@@ -36,8 +37,9 @@
 | 9 | 2 | 核准後接續時複製到 scratchpad 的術語表、ADR、審查紀錄的檔名與內容沒有寫 | Improvement Suggestion | Minor | 否 | 否 | — | 開 issue | 主 session | [#72](https://github.com/Chen-Yihua/auto-scheduling-system/issues/72) |
 | 10 | 2 | 實作審查紀錄：阻擋項目 #2、#3 沒有根本原因名稱，#4 沒有問題說明 | Improvement Suggestion | Info | 否 | 否 | — | 主 session 補上根本原因名稱與 #4 的問題說明 | 主 session | 已修正（本紀錄） |
 | 11 | 3 | 核准後、規格審查紀錄 commit 前舊 scratchpad 不見，紀錄草稿找不回來 | Missing AC | Minor | 是 | 否 | 舊 scratchpad 不存在時的接續 | 連續 3 輪阻擋，停止自動修改；依 ADR 0003 的先例另開 issue，這個 PR 不處理 | 開發者 | [#73](https://github.com/Chen-Yihua/auto-scheduling-system/issues/73) |
-| 12 | 3 | 「測試對應」沒有跟著 AC19、AC20 的新情況更新 | Specification Defect | Minor | 是 | 否 | 核准後修改的影響檢查 | 測試對應 AC18–AC20 列補上新情況、修改紀錄補記 | 開發者 | 規格已修改，交給實作 |
+| 12 | 3 | 「測試對應」沒有跟著 AC19、AC20 的新情況更新 | Specification Defect | Minor | 是 | 否 | 核准後修改的影響檢查 | 測試對應 AC18–AC20 列補上新情況、修改紀錄補記 | 開發者 | 已修正（`17ebd7f`） |
 | 13 | 3 | 文字修正核准後接續時，還沒套用的項目會從改動清單消失 | Improvement Suggestion | Minor | 否 | 否 | — | 和 #11 同一個 issue | 開發者 | [#73](https://github.com/Chen-Yihua/auto-scheduling-system/issues/73) |
+| 14 | 4 | AC19 條文少了「更新本 PR 的術語也要對照 `origin/main`」（需求 19、實作、測試對應都有） | Improvement Suggestion | Info | 否 | 否 | — | 開 issue | 主 session | [#74](https://github.com/Chen-Yihua/auto-scheduling-system/issues/74) |
 
 ## 問題說明
 

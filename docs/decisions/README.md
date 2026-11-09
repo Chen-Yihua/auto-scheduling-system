@@ -38,3 +38,4 @@
 | [0007](0007-process-depth-by-risk.md) | 依變更碰到的範圍決定規格與審查的深度 | 已採用（文字修正在 plan mode 列改動已被 0008 取代） |
 | [0008](0008-grilling-without-plan-mode.md) | 標準、高風險寫規格前先做需求問答，`/feature` 不用 plan mode | 已採用（修改紀錄寫 C 編號已被 0009 取代） |
 | [0009](0009-docs-delivery-and-glossary.md) | 修改紀錄寫決定與落點、引進術語表、產品文件照交付清單由 implementer commit | 已採用 |
+| [0010](0010-scratchpad-loss-recovery.md) | scratchpad 遺失時以暫存產物為單位恢復，審查不逐一要求特定案例 | 已採用 |

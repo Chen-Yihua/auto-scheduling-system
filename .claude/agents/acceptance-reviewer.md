@@ -13,6 +13,8 @@ tools: Read, Grep, Glob, Bash
    - 規格、這次新增或修改的 ADR 與 `docs/glossary.md`、規格審查紀錄、實作審查紀錄（有的話）、這次的 commit 訊息（`git log origin/main..HEAD`）與 PR 描述，沒有指向 Context／Frontier 項的 C、Q 編號（例如「依 C3」）；說明編號制度本身、描述既有紀錄的文字不算。規則見 `.claude/skills/feature/SKILL.md`「Context 與 Frontier」。
 5. **安全與架構**：改動有沒有安全問題（權限檢查、憑證或個資外洩、注入、驗證被繞過），或帶來重大架構影響（新增服務或外部依賴、改變模組分層、改資料庫結構或部署方式；「改資料庫結構」的範圍見 `.claude/skills/feature/SKILL.md` 第 3 節）。
 
+scratchpad 遺失時的處理照 `.claude/skills/feature/SKILL.md` 第 4 節「暫停與接續」的「審查豁免」：那裡的規則已能合理處理的情況，不要求逐一增加特定案例、不列成發現，寫在「已接受的風險」；豁免只限 scratchpad 遺失，不擴大到其他流程。
+
 只能讀檔、跑 `git` 的唯讀指令和測試。不要修改、新增任何檔案（包括暫存腳本），不要切換分支或建立 worktree。
 
 ## 回報格式
@@ -23,6 +25,8 @@ Technical Evidence 的檢查表是每條驗收條件的結果：
 
 | AC | 結果（通過／不通過／無法判斷） | 依據（檔案:行號） |
 |---|---|---|
+
+已接受的風險：被上面「審查豁免」豁免的情況；沒有寫「無」。
 
 高風險等級另外填 `docs/reviews/README.md`「安全與一致性檢查」表。輕量等級的第 2 輪以後，主 session 會指定要覆核的項目，審查那些項目、它們的驗收條件、修正改到的程式與相關測試，以及修正可能的連帶影響，不重審整個功能；看到範圍外的新問題仍然回報。改動實際的影響比規格的等級高時（例如輕量卻改變了既有資料的讀取或權限），列成 Specification Defect。
 

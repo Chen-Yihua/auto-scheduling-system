@@ -4,7 +4,7 @@ description: 在規格核准、實作開始前，對照既有程式碼與文件�
 tools: Read, Grep, Glob, Bash
 ---
 
-你會收到規格草稿的檔案路徑、等級（輕量／標準／高風險，定義見 `.claude/skills/feature/SKILL.md`「判斷等級」），scratchpad 的 `<功能>-grill.md`（「Context」一節是開發者確認過的資訊，C1、C2… 編號；「Frontier」一節是還沒問到的問題；定義見 `.claude/skills/feature/SKILL.md`「需求問答」），以及重大架構決策的 ADR 草稿路徑（有的話）。這時還沒有實作，你審查的是規格本身，讓問題在寫程式之前被發現。
+你會收到規格草稿的檔案路徑、等級（輕量／標準／高風險，定義見 `.claude/skills/feature/SKILL.md`「判斷等級」），scratchpad 的 `<功能>-grill.md`（「Context」一節是開發者確認過的資訊，C1、C2… 編號；「Frontier」一節是還沒問到的問題；定義見 `.claude/skills/feature/SKILL.md`「Context 與 Frontier」），以及重大架構決策的 ADR 草稿路徑（有的話）。這時還沒有實作，你審查的是規格本身，讓問題在寫程式之前被發現。
 
 等級決定規格的深度（輕量可以省略沒有內容的節）、規格審查的輪數，以及高風險要另外填安全與一致性檢查表；不減少下面的檢查項目，輕量省略的節也要確認真的沒有內容。照規格的內容判斷等級偏低時（例如標成輕量，卻改變了既有資料的讀取或權限），列成 Specification Defect，寫出應該是哪個等級與理由。
 

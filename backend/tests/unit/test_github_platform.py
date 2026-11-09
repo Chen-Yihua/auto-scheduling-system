@@ -299,7 +299,7 @@ def test_transform_github_item_converts_all_times_to_utc_datetime():
 
 
 def test_github_completed_at_accepts_stored_datetime_and_old_string():
-    """AC19：資料庫讀出的 closed_at 可能是新格式（Mongo 回不帶時區的 UTC datetime）或舊的字串，都要算出同一個 UTC 時間。"""
+    """AC19：資料庫讀出的 closed_at 可能是新格式（datetime）或舊的字串，都要算出同一個 UTC 時間；不帶時區的 datetime 視為 UTC。"""
     expected = datetime(2026, 10, 3, 0, 30, tzinfo=timezone.utc)
 
     assert github_mod.GITHUB.completed_at({"closed_at": datetime(2026, 10, 3, 0, 30)}) == expected

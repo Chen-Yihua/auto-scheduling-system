@@ -3,7 +3,7 @@
 - 狀態：已核准
 - 等級：標準（改 `/feature`、兩個 reviewer、`docs/README.md`、`docs/reviews/README.md` 的流程規則；不改程式碼。不涉及安全、資料一致性，也不是重大架構決策）
 - issue：#73、#72
-- PR：#（待開）
+- PR：#75
 
 ## 背景
 

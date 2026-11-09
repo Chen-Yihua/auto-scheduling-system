@@ -80,6 +80,17 @@ PR #67 之後，`/feature` 用 Context（開發者確認過的資訊，編號 C1
 
 17. 新增 ADR 0009，寫出決定（含需求 1 的 commit 責任）與放棄的做法；ADR 清單加一列。ADR 0008 的狀態行與清單 0008 列註明「修改紀錄寫 C 編號」的部分被 0009 取代，ADR 0008 內文不變。
 
+### 核准後補充（實作審查第 1 輪）
+
+18. **規格的 PR 編號**：`feature-implementer` 用 `gh pr create` 建立 PR 後，把規格開頭的「PR」補上編號，commit、push，並在回報寫出 PR 編號。主 session 收到回報後，以 PR 分支上已 commit 的規格為準，同步更新 scratchpad 的 `<功能>-spec.md`，之後的交付清單不會把 PR 編號蓋回去。
+19. **修改既有術語**：交付清單的術語分成兩種：
+    - **新增**：照需求 3 對照 `origin/main`，有相同或相近的術語時停下來回報。
+    - **修改既有定義（開發者已確認）**：交付清單標明是修改，並寫出術語名稱、原定義與新定義。`feature-implementer` 確認 `origin/main` 上的既有定義和交付清單寫的原定義一致後才修改；不一致時停下來回報，不直接覆蓋。
+    - `feature-implementer` 因術語停下來、開發者決定要修改既有定義後，主 session 在交付清單把該術語改標成「修改既有定義」再交辦。
+20. **舊 scratchpad 不存在時的接續**（取代需求 15「從問答重新開始」那一句）：
+    - 核准前：標準、高風險從需求問答重新開始；輕量從寫規格草稿重新開始。
+    - 核准後：先 `git fetch`，確認 PR 分支的最新狀態，把 PR 分支上最新的規格、術語表、相關 ADR、審查紀錄直接複製到新的 scratchpad（規格存成 `<功能>-spec.md`），建立新的工作上下文；不依記憶重新產生或改寫。C、Q 從 1 重新編號。正式文件仍以 PR 分支為準。
+
 ## 不做
 
 - 不回補既有規格與審查紀錄裡的 C／D 編號（例如 `docs/specs/feature-grilling.md` 的 D9、D11、D12）。
@@ -121,6 +132,9 @@ PR #67 之後，`/feature` 用 Context（開發者確認過的資訊，編號 C1
 | AC15 | 輕量、文字修正的流程不要求寫術語表；文字修正不適用 AC6 | 不變條件 |
 | AC16 | `docs/README.md` 文件表有 `glossary.md` 一列（不加連結，註明建立時機），持續更新列包含它；ADR 0009 寫出背景、決定（含 commit 責任）、放棄的做法（規格加 Context 表、修改紀錄寫「C 編號＋內容」、Context 表附在規格審查紀錄、術語核准前直接寫進工作目錄、問答一開始就開分支、所有 commit 都由 implementer 做、主 session commit 核准後的規格／ADR／術語表修改、拆出獨立 skill）；ADR 清單有 0009，0008 列與 ADR 0008 狀態行只註明「修改紀錄寫 C 編號」被取代，ADR 0008 內文不變 | 不變條件 |
 | AC17 | 所有 skill、agent、文件引用的路徑與節名稱都存在（`docs/glossary.md` 除外：第一個術語合併時才建立）；歷史文件（既有規格、審查紀錄、既有 ADR 內文、實驗紀錄）沒有被修改 | 不變條件 |
+| AC18 | `feature-implementer` 建立 PR 後補上規格的 PR 編號、commit、push 並回報編號；主 session 收到後以 PR 分支上的規格同步 scratchpad 的 `<功能>-spec.md` | 不變條件 |
+| AC19 | 交付清單的術語分成「新增」與「修改既有定義（開發者已確認）」；修改要寫術語名稱、原定義、新定義；`feature-implementer` 只在 `origin/main` 的既有定義和原定義一致時修改，不一致，或新增的術語和 `origin/main` 相同或相近時停下來回報；開發者決定修改後，主 session 改標再交辦 | 不變條件 |
+| AC20 | 舊 scratchpad 不存在時：核准前標準、高風險從需求問答、輕量從規格草稿重新開始；核准後先確認 PR 分支最新狀態，直接複製 PR 分支上的規格、術語表、相關 ADR、審查紀錄到新的 scratchpad，不依記憶重新產生，C、Q 從 1 重新編號；`docs/README.md`「生命週期」同樣寫明 | 使用者行為 |
 
 ## 不適用的情境
 
@@ -170,7 +184,9 @@ PR #67 之後，`/feature` 用 Context（開發者確認過的資訊，編號 C1
 | AC11 | 讀判斷落點的每一處與暫存清單 |
 | AC16 | 讀 `docs/README.md`、ADR 0009、`docs/decisions/README.md`；`git diff` ADR 0008 只有狀態行 |
 | AC17 | `grep` 節名稱與路徑；`git diff --stat` 沒有歷史文件 |
+| AC18–AC20 | 讀 `/feature`、`feature-implementer.md`、`docs/README.md`，走一次：PR 建立後補編號再交付一次規格修改、修改一個既有術語（原定義一致／不一致）、核准前與核准後舊 scratchpad 不存在 |
 
 ## 修改紀錄
 | 日期 | 修改 | 原因 | 確認者 |
 |---|---|---|---|
+| 2026-11-09 | 新增需求 18–20、AC18–AC20；需求 15 的「舊路徑不存在時從問答重新開始」改由需求 20 取代 | 開發者決定：PR 編號由 implementer 建立 PR 後補上，主 session 以 PR 分支同步 scratchpad → 需求 18、AC18；修改既有術語要在交付清單寫原定義與新定義，implementer 確認一致才改 → 需求 19、AC19；舊 scratchpad 不存在時依核准前後分別處理，核准後直接複製 PR 分支上的文件 → 需求 20、AC20。來源：實作審查第 1 輪 #1–#3。檢查過 AC2、AC3、AC10、AC14：AC14 的「從問答重新開始」由 AC20 取代，其他不用改 | 開發者（2026-11-09） |

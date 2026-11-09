@@ -15,8 +15,8 @@
 
 - **修改紀錄寫決定與落點**：規格核准後的修改紀錄，「原因」寫「決定的內容（一句話）＋落點（規格的節或 AC、ADR，或術語表）＋檢查過哪些」，有規格的等級都適用。
 - **C、Q 編號只在 scratchpad 用**：寫進規格、審查紀錄、ADR、術語表、PR 描述、issue、commit 訊息時，不寫指向 Context／Frontier 項的引用，換成決定的內容與落點；說明編號制度本身、描述既有紀錄的文字不算。問答與寫規格階段的決定只留在規格，不記進審查紀錄的「開發者決策」表。檢查分給 `specification-reviewer`（規格與 ADR 草稿）、`acceptance-reviewer`（規格、ADR、術語表、兩份審查紀錄、commit 訊息、PR 描述）與主 session（開 issue 前、回報前確認最後一次審查之後才產生的內容），不加自動化檢查。
-- **術語表**：`docs/glossary.md`，只收產品領域、使用者看得到的概念，格式照 `domain-modeling` 的 `GLOSSARY-FORMAT`（繁體中文），定義在 `/feature`；第一個術語合併時才建立。標準、高風險在核准前確定的術語寫進 scratchpad 的 `<功能>-glossary.md`，核准後由 `feature-implementer` 對照 `origin/main` 後合併，有相同或相近的術語就停下來回報。`/feature` 的需求問答加上兩條用詞規則，`specification-reviewer` 檢查規格用詞和術語表一致。
-- **交付清單**：主 session 把產品文件交給 `feature-implementer` 時，附上每個檔案的 repo 路徑與 scratchpad 來源，術語表另外列出術語名稱；核准後第一次交辦、核准後修改規格／ADR／術語表都用。主 session 核准後不自己把產品文件寫進工作目錄。
+- **術語表**：`docs/glossary.md`，只收產品領域、使用者看得到的概念，格式照 `domain-modeling` 的 `GLOSSARY-FORMAT`（繁體中文），定義在 `/feature`；第一個術語合併時才建立。標準、高風險在核准前確定的術語寫進 scratchpad 的 `<功能>-glossary.md`，核准後由 `feature-implementer` 對照 `origin/main` 後合併：新增的術語在 `origin/main` 有相同或相近的術語，或修改既有定義的術語在 `origin/main` 上的定義和交付清單寫的原定義不一致，就停下來回報。`/feature` 的需求問答加上兩條用詞規則，`specification-reviewer` 檢查規格用詞和術語表一致。
+- **交付清單**：主 session 把產品文件交給 `feature-implementer` 時，附上每個檔案的 repo 路徑與 scratchpad 來源，術語表另外列出術語，分成「新增」與「修改既有定義（開發者已確認）」，修改要寫術語名稱、原定義與新定義；核准後第一次交辦、核准後修改規格／ADR／術語表都用。主 session 核准後不自己把產品文件寫進工作目錄。
 - **commit 責任**：
 
   | 種類 | 檔案 | 誰寫內容 | 誰 commit、push |

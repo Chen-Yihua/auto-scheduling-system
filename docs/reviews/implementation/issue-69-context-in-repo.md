@@ -3,14 +3,14 @@
 - 規格：[docs/specs/issue-69-context-in-repo.md](../../specs/issue-69-context-in-repo.md)
 - PR：#71
 - 等級：標準
-- 輪數：2（第 1 輪 2026-11-09 `e8cf227`；第 2 輪 2026-11-09 `42ba500`）
-- 最終結果：仍有阻擋（#6–#8，規格已修改，交給實作）
+- 輪數：3（第 1 輪 2026-11-09 `e8cf227`；第 2 輪 2026-11-09 `42ba500`；第 3 輪 2026-11-09 `09efbcb`）
+- 最終結果：仍有阻擋（#11、#12）；「舊 scratchpad 不存在時的接續」連續 3 輪阻擋，停止自動修改，等開發者決定
 
 ## 摘要
 
-- 發現：10 項（第 1 輪 5 項、第 2 輪 5 項）：Specification Defect 3、Missing AC 3、Implementation Defect 1、Improvement Suggestion 3；Minor 8、Info 2
+- 發現：13 項（第 1 輪 5 項、第 2 輪 5 項、第 3 輪 3 項）：Specification Defect 4、Missing AC 4、Implementation Defect 1、Improvement Suggestion 4；Minor 11、Info 2
 - 開發者決策：7 項（#1、#2、#3、#5、#6、#7、#8）
-- 尚未處理：0 項
+- 尚未處理：3 項（#11–#13，等開發者決定）
 
 ## 各輪摘要
 
@@ -18,6 +18,7 @@
 |---|---|---|---|
 | 1 | 2026-11-09 `e8cf227` | #1–#5（#1–#4） | 規格新增需求 18–20：PR 編號由 implementer 補、修改既有術語要寫原定義與新定義、舊 scratchpad 不存在時依核准前後處理；規格審查紀錄補齊 |
 | 2 | 2026-11-09 `42ba500` | #6–#10（#6–#8） | 第 1 輪 #1–#4 確認已修正；規格加「更新本 PR 的術語」、PR 還沒建立與文字修正的接續；AC3、AC14 條文對齊；#9 開 issue；#10 紀錄格式補齊 |
+| 3 | 2026-11-09 `09efbcb` | #11–#13（#11、#12） | 第 2 輪 #6、#7 確認已修正，#8 部分修正；同一根本原因連續 3 輪阻擋，停止自動修改 |
 
 ## 發現與處理
 
@@ -29,11 +30,14 @@
 | 4 | 1 | 規格審查紀錄少了「查證紀錄」「已接受的風險」，類型統計不對 | Implementation Defect | Minor | 是 | 否 | — | 主 session 補齊並改正統計 | 主 session | 已修正（`e2c9872`） |
 | 5 | 1 | ADR 0009「放棄的做法」的理由是實作者依背景推的 | Improvement Suggestion | Info | 否 | 否 | — | 主 session 對照問答時提出的取捨，理由一致；開發者接受目前版本，不改、不開 issue | 開發者 | 不處理 |
 
-| 6 | 2 | 核准後但 PR 還沒建立時舊 scratchpad 不存在，以及文字修正的接續，都沒有定義 | Missing AC | Minor | 是 | 否 | 舊 scratchpad 不存在時的接續 | 先找本機與 `origin` 的分支和工作目錄裡的規格，找不到請開發者選擇重寫或取消；文字修正依核准前後處理（需求 20、AC20） | 開發者 | 規格已修改，交給實作 |
-| 7 | 2 | 修改這個 PR 先前交付、`origin/main` 還沒有的術語，兩種標法都不適用 | Missing AC | Minor | 是 | 否 | 修改既有術語 | 新增「更新本 PR 的術語」，確認 PR 分支上的上一版一致才取代（需求 19、AC19） | 開發者 | 規格已修改，交給實作 |
-| 8 | 2 | AC3、AC14 的條文沒有隨 AC19、AC20 收窄；實作計畫沒列需求 18–20 | Specification Defect | Minor | 是 | 否 | 核准後修改的影響檢查 | AC3、AC14 對齊、實作計畫補上、修改紀錄補一列 | 開發者 | 規格已修改，交給實作 |
+| 6 | 2 | 核准後但 PR 還沒建立時舊 scratchpad 不存在，以及文字修正的接續，都沒有定義 | Missing AC | Minor | 是 | 否 | 舊 scratchpad 不存在時的接續 | 先找本機與 `origin` 的分支和工作目錄裡的規格，找不到請開發者選擇重寫或取消；文字修正依核准前後處理（需求 20、AC20） | 開發者 | 已修正（`09efbcb`） |
+| 7 | 2 | 修改這個 PR 先前交付、`origin/main` 還沒有的術語，兩種標法都不適用 | Missing AC | Minor | 是 | 否 | 修改既有術語 | 新增「更新本 PR 的術語」，確認 PR 分支上的上一版一致才取代（需求 19、AC19） | 開發者 | 已修正（`09efbcb`） |
+| 8 | 2 | AC3、AC14 的條文沒有隨 AC19、AC20 收窄；實作計畫沒列需求 18–20 | Specification Defect | Minor | 是 | 否 | 核准後修改的影響檢查 | AC3、AC14 對齊、實作計畫補上、修改紀錄補一列 | 開發者 | 部分修正（`09efbcb`）；測試對應見 #12 |
 | 9 | 2 | 核准後接續時複製到 scratchpad 的術語表、ADR、審查紀錄的檔名與內容沒有寫 | Improvement Suggestion | Minor | 否 | 否 | — | 開 issue | 主 session | [#72](https://github.com/Chen-Yihua/auto-scheduling-system/issues/72) |
 | 10 | 2 | 實作審查紀錄：阻擋項目 #2、#3 沒有根本原因名稱，#4 沒有問題說明 | Improvement Suggestion | Info | 否 | 否 | — | 主 session 補上根本原因名稱與 #4 的問題說明 | 主 session | 已修正（本紀錄） |
+| 11 | 3 | 核准後、規格審查紀錄 commit 前舊 scratchpad 不見，紀錄草稿找不回來 | Missing AC | Minor | 是 | 否 | 舊 scratchpad 不存在時的接續 | 連續 3 輪阻擋，停止自動修改 | 開發者（待決定） | 尚未處理 |
+| 12 | 3 | 「測試對應」沒有跟著 AC19、AC20 的新情況更新 | Specification Defect | Minor | 是 | 否 | 核准後修改的影響檢查 | 待開發者決定 | 開發者（待決定） | 尚未處理 |
+| 13 | 3 | 文字修正核准後接續時，還沒套用的項目會從改動清單消失 | Improvement Suggestion | Minor | 否 | 否 | — | 待開發者決定（預設開 issue） | 開發者（待決定） | 尚未處理 |
 
 ## 問題說明
 
@@ -67,4 +71,8 @@ implementer 遇到 `origin/main` 上「同一個名稱不同定義」就停（`.
 
 ## 尚未處理
 
-無。
+| # | 原因 | 後續（issue 編號或「無」） |
+|---|---|---|
+| 11 | 「舊 scratchpad 不存在時的接續」連續 3 輪阻擋，等開發者決定 | 待定 |
+| 12 | 等開發者確認規格修改 | 待定 |
+| 13 | 不阻擋，等開發者決定開 issue 或在這個 PR 修 | 待定 |

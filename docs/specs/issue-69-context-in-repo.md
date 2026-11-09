@@ -86,10 +86,13 @@ PR #67 之後，`/feature` 用 Context（開發者確認過的資訊，編號 C1
 19. **修改既有術語**：交付清單的術語分成兩種：
     - **新增**：照需求 3 對照 `origin/main`，有相同或相近的術語時停下來回報。
     - **修改既有定義（開發者已確認）**：交付清單標明是修改，並寫出術語名稱、原定義與新定義。`feature-implementer` 確認 `origin/main` 上的既有定義和交付清單寫的原定義一致後才修改；不一致時停下來回報，不直接覆蓋。
-    - `feature-implementer` 因術語停下來、開發者決定要修改既有定義後，主 session 在交付清單把該術語改標成「修改既有定義」再交辦。
+    - **更新本 PR 的術語**：這個 PR 先前交付、`origin/main` 還沒有的術語要改定義時，交付清單標成「更新本 PR 的術語」，寫出術語名稱、這個 PR 上一版的定義與新定義。`feature-implementer` 確認 PR 分支上的定義和上一版一致後才取代；不一致時停下來回報。對 `origin/main` 照「新增」的規則對照。
+    - `feature-implementer` 因術語停下來、開發者決定要修改既有定義後，主 session 在交付清單把該術語改標成「修改既有定義」（或「更新本 PR 的術語」）再交辦。
 20. **舊 scratchpad 不存在時的接續**（取代需求 15「從問答重新開始」那一句）：
     - 核准前：標準、高風險從需求問答重新開始；輕量從寫規格草稿重新開始。
     - 核准後：先 `git fetch`，確認 PR 分支的最新狀態，把 PR 分支上最新的規格、術語表、相關 ADR、審查紀錄直接複製到新的 scratchpad（規格存成 `<功能>-spec.md`），建立新的工作上下文；不依記憶重新產生或改寫。C、Q 從 1 重新編號。正式文件仍以 PR 分支為準。
+    - 核准後、PR 還沒建立：先看本機與 `origin` 有沒有這次的分支，以及分支上或工作目錄中有沒有 `docs/specs/<功能>.md`。找得到就照核准後的方式複製；找不到就告訴開發者核准後的規格已遺失，用「需求問答」的格式請開發者選擇重寫草稿再核准一次，或取消。
+    - 文字修正：核准前從寫改動清單重新開始；核准後以分支上已改的內容為準，重新整理改動清單請開發者確認。
 
 ## 不做
 
@@ -117,7 +120,7 @@ PR #67 之後，`/feature` 用 Context（開發者確認過的資訊，編號 C1
 |---|---|---|
 | AC1 | `/feature`、`feature-implementer.md` 與 ADR 0009 對 commit 責任的描述一致：規格、ADR、術語表與程式碼由 `feature-implementer` commit；規格審查與實作審查紀錄由主 session commit 並 push 到同一個 PR 分支；文字修正由主 session 自己 commit。沒有任何一處寫「所有 commit 都由 implementer 做」或讓 implementer commit 審查紀錄 | 不變條件 |
 | AC2 | 核准後第一次交辦與核准後修改規格、ADR、術語表時，流程要求主 session 附交付清單（repo 路徑、scratchpad 來源、術語名稱）；第一次交辦前在 scratchpad 把規格狀態改成已核准；主 session 核准後不自己把產品文件寫進工作目錄 | 使用者行為（用 agent 的開發者） |
-| AC3 | `feature-implementer` 的規則：照交付清單放檔案、修改規格／ADR／術語表（不因不對應驗收條件而拒絕）；合併術語表前 `git fetch origin main` 並對照 `origin/main`，有相同或相近的術語就停下來回報；只用 `git add <路徑>` 加入清單上的檔案與這次實作改的檔案；工作目錄有歸屬不明的改動時停下來回報、不 commit | 不變條件 |
+| AC3 | `feature-implementer` 的規則：照交付清單放檔案、修改規格／ADR／術語表（不因不對應驗收條件而拒絕）；合併術語表前 `git fetch origin main` 並對照 `origin/main`，新增的術語有相同或相近的就停下來回報（修改既有定義與更新本 PR 的術語見 AC19）；只用 `git add <路徑>` 加入清單上的檔案與這次實作改的檔案；工作目錄有歸屬不明的改動時停下來回報、不 commit | 不變條件 |
 | AC4 | 主 session commit 審查紀錄時，流程要求確認目前分支是這次的 PR 分支、只 `git add` 這次的 `docs/reviews/` 紀錄檔、commit 後 push；規格審查紀錄在 PR 建立後、交給 `acceptance-reviewer` 前 commit，實作審查紀錄在交回 implementer 前已 commit、push；歸屬無法確認就停止並問開發者；`docs/reviews/README.md`、`/feature` 第 1 節與第 3 節不再寫「和規格一起 commit」「和修正一起 commit」 | 不變條件 |
 | AC5 | `feature-implementer` 因術語或歸屬停下來回報時，主 session 用「需求問答」的格式問開發者 | 使用者行為 |
 | AC6 | 照 `/feature`、`docs/specs/README.md` 寫規格修改紀錄時，「原因」要求寫決定的內容、落點（規格的節或 AC、ADR、術語表）與檢查過哪些，不使用 C 編號；有規格的等級都適用 | 不變條件 |
@@ -128,13 +131,13 @@ PR #67 之後，`/feature` 用 Context（開發者確認過的資訊，編號 C1
 | AC11 | 判斷 Context 有沒有落點的每一處都把術語表算成落點；暫存清單與交給 `specification-reviewer` 的內容包含 `<功能>-glossary.md`，暫存清單包含 `<功能>-spec-review.md` | 不變條件 |
 | AC12 | `/feature`「需求問答」有兩條用詞規則；`specification-reviewer` 檢查標準、高風險的規格用詞和 `docs/glossary.md`、`<功能>-glossary.md` 一致 | 不變條件 |
 | AC13 | 核准前取消時，流程要求列出 `<功能>-glossary.md` 的術語請開發者決定；保留時用文字修正 PR，開 PR 前對照 `origin/main`；`docs/README.md`「生命週期」有同樣的規則 | 使用者行為 |
-| AC14 | 暫停時告知 scratchpad 路徑；接續時把舊 scratchpad 裡這次開發的全部暫存檔（含 ADR 草稿與各輪審查報告原文）複製到新的 scratchpad，C、Q 編號接續；舊路徑不存在時告訴開發者並從問答重新開始；`docs/README.md`「生命週期」有同樣的規則 | 使用者行為 |
+| AC14 | 暫停時告知 scratchpad 路徑；接續時把舊 scratchpad 裡這次開發的全部暫存檔（含 ADR 草稿與各輪審查報告原文）複製到新的 scratchpad，C、Q 編號接續（舊路徑不存在時見 AC20）；`docs/README.md`「生命週期」有同樣的規則 | 使用者行為 |
 | AC15 | 輕量、文字修正的流程不要求寫術語表；文字修正不適用 AC6 | 不變條件 |
 | AC16 | `docs/README.md` 文件表有 `glossary.md` 一列（不加連結，註明建立時機），持續更新列包含它；ADR 0009 寫出背景、決定（含 commit 責任）、放棄的做法（規格加 Context 表、修改紀錄寫「C 編號＋內容」、Context 表附在規格審查紀錄、術語核准前直接寫進工作目錄、問答一開始就開分支、所有 commit 都由 implementer 做、主 session commit 核准後的規格／ADR／術語表修改、拆出獨立 skill）；ADR 清單有 0009，0008 列與 ADR 0008 狀態行只註明「修改紀錄寫 C 編號」被取代，ADR 0008 內文不變 | 不變條件 |
 | AC17 | 所有 skill、agent、文件引用的路徑與節名稱都存在（`docs/glossary.md` 除外：第一個術語合併時才建立）；歷史文件（既有規格、審查紀錄、既有 ADR 內文、實驗紀錄）沒有被修改 | 不變條件 |
 | AC18 | `feature-implementer` 建立 PR 後補上規格的 PR 編號、commit、push 並回報編號；主 session 收到後以 PR 分支上的規格同步 scratchpad 的 `<功能>-spec.md` | 不變條件 |
-| AC19 | 交付清單的術語分成「新增」與「修改既有定義（開發者已確認）」；修改要寫術語名稱、原定義、新定義；`feature-implementer` 只在 `origin/main` 的既有定義和原定義一致時修改，不一致，或新增的術語和 `origin/main` 相同或相近時停下來回報；開發者決定修改後，主 session 改標再交辦 | 不變條件 |
-| AC20 | 舊 scratchpad 不存在時：核准前標準、高風險從需求問答、輕量從規格草稿重新開始；核准後先確認 PR 分支最新狀態，直接複製 PR 分支上的規格、術語表、相關 ADR、審查紀錄到新的 scratchpad，不依記憶重新產生，C、Q 從 1 重新編號；`docs/README.md`「生命週期」同樣寫明 | 使用者行為 |
+| AC19 | 交付清單的術語分成「新增」、「修改既有定義（開發者已確認）」與「更新本 PR 的術語」；修改要寫術語名稱、原定義、新定義，`feature-implementer` 只在 `origin/main` 的既有定義和原定義一致時修改；更新本 PR 的術語要寫上一版定義與新定義，只在 PR 分支上的定義和上一版一致時取代；不一致，或新增的術語和 `origin/main` 相同或相近時停下來回報；開發者決定後，主 session 改標再交辦 | 不變條件 |
+| AC20 | 舊 scratchpad 不存在時：核准前標準、高風險從需求問答、輕量從規格草稿重新開始；核准後先確認 PR 分支最新狀態，直接複製 PR 分支上的規格、術語表、相關 ADR、審查紀錄到新的 scratchpad，不依記憶重新產生，C、Q 從 1 重新編號；核准後、PR 還沒建立時，先找本機與 `origin` 的分支和工作目錄裡的規格，找不到就請開發者選擇重寫再核准或取消；文字修正核准前從改動清單、核准後以分支上已改的內容重新整理改動清單；`docs/README.md`「生命週期」同樣寫明 | 使用者行為 |
 
 ## 不適用的情境
 
@@ -168,6 +171,8 @@ PR #67 之後，`/feature` 用 Context（開發者確認過的資訊，編號 C1
 - `docs/decisions/0009-<名稱>.md`（新增）、`docs/decisions/README.md` 清單、ADR 0008 狀態行（需求 17）。
 - `docs/specs/issue-69-context-in-repo.md`（implementer commit）、`docs/reviews/specification/issue-69-context-in-repo.md`、`docs/reviews/implementation/issue-69-context-in-repo.md`（主 session commit）。
 
+- 核准後補充（需求 18–20）：`.claude/agents/feature-implementer.md`（補 PR 編號、三種術語的檢查與停止條件）、`.claude/skills/feature/SKILL.md` 第 2 節（交付清單格式、同步 scratchpad、停下來回報後改標）與第 4 節（暫停與接續）、`docs/README.md`「生命週期」、ADR 0009。
+
 這個 PR 交辦時，新的 agent 規則還沒合併、不會生效，所以交辦訊息明寫檔案要放的位置與要 `git add` 的路徑。
 
 ## 測試對應
@@ -190,3 +195,4 @@ PR #67 之後，`/feature` 用 Context（開發者確認過的資訊，編號 C1
 | 日期 | 修改 | 原因 | 確認者 |
 |---|---|---|---|
 | 2026-11-09 | 新增需求 18–20、AC18–AC20；需求 15 的「舊路徑不存在時從問答重新開始」改由需求 20 取代 | 開發者決定：PR 編號由 implementer 建立 PR 後補上，主 session 以 PR 分支同步 scratchpad → 需求 18、AC18；修改既有術語要在交付清單寫原定義與新定義，implementer 確認一致才改 → 需求 19、AC19；舊 scratchpad 不存在時依核准前後分別處理，核准後直接複製 PR 分支上的文件 → 需求 20、AC20。來源：實作審查第 1 輪 #1–#3。檢查過 AC2、AC3、AC10、AC14：AC14 的「從問答重新開始」由 AC20 取代，其他不用改 | 開發者（2026-11-09） |
+| 2026-11-09 | AC3 限定為新增的術語、AC14 的舊路徑不存在改指向 AC20；需求 19、AC19 加「更新本 PR 的術語」；需求 20、AC20 加核准後 PR 還沒建立、文字修正兩種情況；實作計畫補需求 18–20 的檔案 | 開發者決定：這個 PR 先前交付的術語另外標成「更新本 PR 的術語」，確認分支上的上一版一致才取代 → 需求 19、AC19；PR 還沒建立時先找分支與工作目錄裡的規格，找不到請開發者選擇重寫或取消，文字修正依核准前後處理 → 需求 20、AC20；AC 表要能單獨驗收 → AC3、AC14、實作計畫。來源：實作審查第 2 輪 #6–#8。上一列修改紀錄寫 AC3 不用改，是影響檢查漏掉，這次一併修正。檢查過 AC1、AC2、AC10、AC18 不用改 | 開發者（2026-11-09） |

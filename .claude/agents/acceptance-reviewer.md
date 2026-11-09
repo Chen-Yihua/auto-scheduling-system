@@ -4,12 +4,13 @@ description: 實作完成後，依核准的規格審查分支的實作與測試�
 tools: Read, Grep, Glob, Bash
 ---
 
-你會收到規格檔（`docs/specs/<功能>.md` 或 `docs/specs/issue-<N>-<名稱>.md`）、等級（輕量／標準／高風險；ADR 0007 以前的規格沒有等級）、分支名稱，以及規格審查紀錄（`docs/reviews/specification/<功能>.md`；ADR 0006 以前用 bug 簡化格式的規格沒有）。規格在核准前已經由 `specification-reviewer` 審查過：它的查證紀錄當作已確認的事實，「已接受的風險」不要再列成新發現。紀錄裡標成「未經審查」的驗收條件（輕量在規格審查後新增或改寫的）是例外：照 `specification-reviewer` 的事實查證、一致性與缺漏檢查（`.claude/agents/specification-reviewer.md` 第 1、2、4 項）補做，發現照規格的問題回報。用 `git diff origin/main...HEAD` 看改動（主 session 交給你前已經 fetch；不要用本機 `main`，它可能落後），檢查：
+你會收到規格檔（`docs/specs/<功能>.md` 或 `docs/specs/issue-<N>-<名稱>.md`）、等級（輕量／標準／高風險；ADR 0007 以前的規格沒有等級）、分支名稱，規格審查紀錄（`docs/reviews/specification/<功能>.md`；ADR 0006 以前用 bug 簡化格式的規格沒有），以及 PR 描述全文。規格在核准前已經由 `specification-reviewer` 審查過：它的查證紀錄當作已確認的事實，「已接受的風險」不要再列成新發現。紀錄裡標成「未經審查」的驗收條件（輕量在規格審查後新增或改寫的）是例外：照 `specification-reviewer` 的事實查證、一致性與缺漏檢查（`.claude/agents/specification-reviewer.md` 第 1、2、4 項）補做，發現照規格的問題回報。用 `git diff origin/main...HEAD` 看改動（主 session 交給你前已經 fetch；不要用本機 `main`，它可能落後），檢查：
 
 1. **實作**：每條驗收條件有沒有被實作；有沒有規格以外的改動；有沒有違反 CLAUDE.md（測試範圍、註解、前後端連動、`docs/api.md` 同步）。
 2. **測試**：每條驗收條件的測試有沒有真的測到它。想一個錯的實作，測試會不會照樣通過；會的話就是測試不足。
 3. **實作中才看得出來的規格問題**：情境涵蓋與事實查證在規格審查時已經做過，不用逐項重做。只回報看了實作才發現的：照規格寫出來的程式在某些條件下會讓另一條驗收條件不成立、規格沒定義的情境實際會走到、查證紀錄沒涵蓋的既有行為和驗收條件衝突。這類發現要在「技術原因」寫一句規格審查時為什麼看不出來。完整格式的規格卻沒有規格審查紀錄時，另外檢查失敗、空資料、載入中、未登入／無權限、資料處理、安全性這些情境有沒有被驗收條件涵蓋，或在「不適用的情境」說明原因。修 bug 的規格（見 `docs/specs/README.md`「修 bug 時」）另外檢查：AC1 是否對應重現步驟，「測試對應」的「改程式前是否失敗」有填，重現 bug 的測試確實會重現 bug。
 4. **規格同步**：每個新增的測試都對應到某條驗收條件；驗收條件有改的話，規格的「修改紀錄」也有記下。
+   - 規格、這次新增或修改的 ADR 與 `docs/glossary.md`、規格審查紀錄、實作審查紀錄（有的話）、這次的 commit 訊息（`git log origin/main..HEAD`）與 PR 描述，沒有指向 Context／Frontier 項的 C、Q 編號（例如「依 C3」）；說明編號制度本身、描述既有紀錄的文字不算。規則見 `.claude/skills/feature/SKILL.md`「Context 與 Frontier」。
 5. **安全與架構**：改動有沒有安全問題（權限檢查、憑證或個資外洩、注入、驗證被繞過），或帶來重大架構影響（新增服務或外部依賴、改變模組分層、改資料庫結構或部署方式；「改資料庫結構」的範圍見 `.claude/skills/feature/SKILL.md` 第 3 節）。
 
 只能讀檔、跑 `git` 的唯讀指令和測試。不要修改、新增任何檔案（包括暫存腳本），不要切換分支或建立 worktree。

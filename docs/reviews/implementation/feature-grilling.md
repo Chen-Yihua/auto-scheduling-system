@@ -27,7 +27,6 @@
 | 2 | 1 | `/issue` 第 1 節在讀 `/feature` 前的提問沒規定格式 | Implementation Defect | Minor | 是 | 否 | — | `/issue` 第 1 節的提問照 `/feature` 的文字格式（需求 13、AC4） | 主 session | 已修正（`f857624`） |
 | 3 | 1 | 文字修正的「清理暫存」找不到可對照的地方 | Improvement Suggestion | Info | 否 | 否 | — | 開發者決定在這個 PR 修：對照 PR 的改動與描述（需求 14、AC16） | 開發者 | 已修正（`f857624`） |
 | 4 | 1 | 假設 2 的理由和「修改紀錄的 D 編號只限標準、高風險」不一致 | Improvement Suggestion | Info | 否 | 否 | — | 開發者決定改用 grill-me 的 Context（C 編號）與 Frontier（Q 編號），所有等級共用，修改紀錄一律寫 C 編號（需求 8、12、AC15、AC16） | 開發者 | 已修正（`f857624`） |
-
 | 5 | 2 | Context／Frontier 的定義放在標題寫「標準、高風險」的節裡，輕量與文字修正可能找不到 | Improvement Suggestion | Info | 否 | 否 | — | 開 issue | 主 session | [#68](https://github.com/Chen-Yihua/auto-scheduling-system/issues/68) |
 | 6 | 2 | 修改紀錄引用的 C 編號只存在不 commit 的 scratchpad，repo 裡查不到 | Improvement Suggestion | Info | 否 | 否 | — | 開 issue | 主 session | [#69](https://github.com/Chen-Yihua/auto-scheduling-system/issues/69) |
 

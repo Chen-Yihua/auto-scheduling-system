@@ -5,6 +5,10 @@ from cryptography.fernet import Fernet, InvalidToken
 _KEY_ENV = "SECRET_ENCRYPTION_KEY"
 
 
+class SecretDecryptError(ValueError):
+    """密文解不開（壞掉或是用別的金鑰加密的）。伺服器沒設金鑰等設定錯誤不是這個例外。"""
+
+
 def _get_fernet() -> Fernet:
     key = os.getenv(_KEY_ENV)
     if not key:
@@ -24,7 +28,7 @@ def decrypt_secret(cipher: str) -> str:
     try:
         return _get_fernet().decrypt(cipher.encode()).decode()
     except InvalidToken:
-        raise ValueError("Failed to decrypt secret: invalid token or wrong key")
+        raise SecretDecryptError("Failed to decrypt secret: invalid token or wrong key")
 
 
 def mask_secret(plain: str, visible: int = 4) -> str:

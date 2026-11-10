@@ -5,6 +5,7 @@ import os
 from fastapi import APIRouter, HTTPException, Depends, Header, Request
 from svix.webhooks import Webhook, WebhookVerificationError
 
+from core.errors import AppError, ConflictError
 from crud import user as user_crud
 from schemas.user import UserCreate, UserOut, UserUpdate
 from typing import Optional
@@ -18,18 +19,22 @@ router = APIRouter(prefix="/users", tags=["users"])
 CLERK_WEBHOOK_SIGNING_SECRET = os.getenv("CLERK_WEBHOOK_SIGNING_SECRET")
 
 
+def _invalid_signature() -> AppError:
+    return AppError("Invalid webhook signature", error_code="INVALID_WEBHOOK_SIGNATURE", status_code=401)
+
+
 def _verify_clerk_webhook_signature(raw_body: bytes, headers: dict) -> None:
     """沒設定密鑰、簽章錯誤、header 格式錯誤都回 401。"""
     if not CLERK_WEBHOOK_SIGNING_SECRET:
-        raise HTTPException(status_code=401, detail="Invalid webhook signature")
+        raise _invalid_signature()
     try:
         Webhook(CLERK_WEBHOOK_SIGNING_SECRET).verify(raw_body, headers)
     except WebhookVerificationError:
-        raise HTTPException(status_code=401, detail="Invalid webhook signature")
+        raise _invalid_signature()
     except Exception:
         # header 格式錯誤時 svix 可能丟其他例外（例如 binascii.Error），也當成驗證失敗
         logger.warning("Unexpected error while verifying Clerk webhook signature", exc_info=True)
-        raise HTTPException(status_code=401, detail="Invalid webhook signature")
+        raise _invalid_signature()
 
 @router.get("/me",response_model=UserOut)
 async def get_current_user(
@@ -51,7 +56,7 @@ async def register_user(
 
     existing_user = await user_crud.get_user_by_clerk_id(clerk_id)
     if existing_user:
-        raise HTTPException(status_code=409, detail="User already registered")
+        raise ConflictError("User already registered")
 
     new_user = await user_crud.create_user(
         UserCreate(

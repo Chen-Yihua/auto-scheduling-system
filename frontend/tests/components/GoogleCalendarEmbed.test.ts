@@ -87,4 +87,15 @@ describe('GoogleCalendarEmbed.vue', () => {
     // key 改變要建立新的 iframe 元素，瀏覽器才會重新請求
     expect(wrapper.find('iframe').element).not.toBe(firstIframe)
   })
+
+  it('AC1、AC20：從沒載入成功過又遇到暫時性錯誤（unavailable）→ 顯示暫時無法載入，不顯示尚未連接，也沒有 iframe', () => {
+    const wrapper = mount(GoogleCalendarEmbed, {
+      props: { calendarIds: [], id: 'bar', connect: true, unavailable: true },
+      global: { stubs: uiStubs },
+    })
+
+    expect(wrapper.text()).toContain('Google 行事曆暫時無法載入，請稍後再試')
+    expect(wrapper.text()).not.toContain('尚未連接')
+    expect(wrapper.find('iframe').exists()).toBe(false)
+  })
 })

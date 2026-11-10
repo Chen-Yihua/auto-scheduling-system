@@ -53,7 +53,8 @@ class PlatformAdapter:
     async def fetch_items(self, credentials: dict) -> list[dict]:
         """
         用憑證即時抓資料，並轉成 response_model 的格式。每筆都要有唯一的 "id"。
-        憑證錯誤丟 NonRetryableError（401），平台暫時性失敗丟 UpstreamError（502）；
+        不重試的失敗丟 NonRetryableError（401），平台暫時性失敗丟 UpstreamError（502），
+        回應無法解析丟 InvalidResponseError（500）；三者都帶 error_code（見 platforms/sync.py）。
         其他例外會被當成程式錯誤（500）。
         """
         raise NotImplementedError

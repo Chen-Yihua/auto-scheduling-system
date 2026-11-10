@@ -1,6 +1,6 @@
 """crud/user.py 的函式。"""
 import pytest
-from core.errors import ConflictError, NotFoundError
+from core.errors import ConflictError, InvalidRequestError, NotFoundError
 from pymongo.errors import DuplicateKeyError
 
 import crud.user as user_crud
@@ -72,9 +72,12 @@ async def test_get_user_by_clerk_id_returns_none_when_not_found(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_update_user_by_clerk_id_raises_404_when_no_fields_to_update():
-    """沒有任何要更新的欄位 → 404。"""
-    with pytest.raises(NotFoundError) as exc_info:
+    """沒有任何要更新的欄位 → 維持 404，error_code 是 INVALID_REQUEST。"""
+    with pytest.raises(InvalidRequestError) as exc_info:
         await user_crud.update_user_by_clerk_id("uid123", UserUpdate())
+
+    assert exc_info.value.status_code == 404
+    assert exc_info.value.error_code == "INVALID_REQUEST"
 
 
 

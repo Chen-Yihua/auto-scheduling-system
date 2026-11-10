@@ -2,7 +2,7 @@ import { useAuth } from '@clerk/vue'
 import { createSharedComposable } from '@vueuse/core'
 import type { ScheduleSuggestion, ScheduledTask, UnscheduledTask, ScheduleConfirmResult, SchedulePreferences } from '@/types/schedule'
 import { defaultSchedulePreferences } from '@/types/schedule'
-import { getFriendlyErrorTitle, isAuthError, isNotLinkedError, isSuggestionExpiredError } from '@/utils/errorMessages'
+import { describeError, getFriendlyErrorTitle, isAuthError, isNotLinkedError, isSuggestionExpiredError, logApiError } from '@/utils/errorMessages'
 import { useGoogleCalendar } from '@/composables/useGoogleCalendar'
 import { useGoogleCalendarAuth } from '@/composables/useGoogleCalendarAuth'
 
@@ -47,6 +47,7 @@ function useScheduleImpl() {
     } catch (error) {
       scheduled.value = []
       unscheduled.value = []
+      logApiError('排程建議產生失敗', error)
 
       if (isNotLinkedError(error)) {
         notLinked.value = true
@@ -59,7 +60,7 @@ function useScheduleImpl() {
       }
       toast.add({
         title: getFriendlyErrorTitle(error, '排程建議產生失敗'),
-        description: '伺服器暫時發生錯誤，請稍後再試一次',
+        description: describeError(error, '伺服器暫時發生錯誤，請稍後再試一次'),
         color: 'error',
         icon: 'i-lucide-x',
       })
@@ -70,7 +71,7 @@ function useScheduleImpl() {
   }
 
   // 後端寫入它存的快照，所以不用送內容。結束後重新產生建議以反映最新狀態；
-  // 建議過期（409）時直接重新產生，讓使用者看過再確認
+  // 建議過期時直接重新產生，讓使用者看過再確認；尚未連接在這裡是一般錯誤（這個畫面沒有「尚未連接」狀態）
   const confirmSchedule = async () => {
     confirming.value = true
     try {
@@ -105,6 +106,7 @@ function useScheduleImpl() {
 
       await fetchScheduleSuggestion()
     } catch (error) {
+      logApiError('確認排程失敗', error)
       if (isSuggestionExpiredError(error)) {
         toast.add({
           title: '排程建議已過期',
@@ -115,9 +117,13 @@ function useScheduleImpl() {
         await fetchScheduleSuggestion()
         return
       }
+      if (isAuthError(error)) {
+        toast.add(reauthToast())
+        return
+      }
       toast.add({
         title: getFriendlyErrorTitle(error, '確認排程失敗'),
-        description: '伺服器暫時發生錯誤，請稍後再試一次',
+        description: describeError(error, '伺服器暫時發生錯誤，請稍後再試一次'),
         color: 'error',
         icon: 'i-lucide-x',
       })

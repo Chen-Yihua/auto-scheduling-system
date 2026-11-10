@@ -3,7 +3,7 @@ import hmac
 import json
 import httpx
 import pytest
-from fastapi import HTTPException
+from core.errors import AppError
 from unittest.mock import MagicMock
 
 import routers.pr_review_webhook as webhook_router
@@ -265,7 +265,7 @@ async def test_webhook_rejects_missing_signature(monkeypatch):
     monkeypatch.setattr(webhook_router, "GITHUB_WEBHOOK_SECRET", "correct-secret")
     request = FakeRequest(_pr_payload("opened"))
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(AppError) as exc_info:
         await webhook_router.github_webhook(request, x_hub_signature_256=None, x_github_event="pull_request")
 
     assert exc_info.value.status_code == 401
@@ -278,7 +278,7 @@ async def test_webhook_rejects_wrong_signature(monkeypatch):
     request = FakeRequest(_pr_payload("opened"))
     wrong_signature = _sign("wrong-secret", await request.body())
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(AppError) as exc_info:
         await webhook_router.github_webhook(
             request, x_hub_signature_256=wrong_signature, x_github_event="pull_request"
         )
@@ -292,7 +292,7 @@ async def test_webhook_rejects_everything_when_secret_not_configured(monkeypatch
     monkeypatch.setattr(webhook_router, "GITHUB_WEBHOOK_SECRET", None)
     request = FakeRequest(_pr_payload("opened"))
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(AppError) as exc_info:
         await webhook_router.github_webhook(request, x_hub_signature_256=None, x_github_event="pull_request")
 
     assert exc_info.value.status_code == 401

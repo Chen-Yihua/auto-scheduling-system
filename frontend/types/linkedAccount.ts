@@ -6,4 +6,6 @@ export interface LinkedAccountRecord {
   password?: string
   avatar_url?: string
   username?: string
+  // 已存的憑證無法解密，要重新連結；這時沒有 apiKey、password
+  needs_reauth: boolean
 }

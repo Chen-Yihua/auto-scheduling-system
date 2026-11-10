@@ -1,5 +1,6 @@
 import logging
 from fastapi import APIRouter, Depends, HTTPException
+from core.errors import ConflictError
 from core.security import get_current_clerk_user
 from services.google_calendar import (
     get_free_slots_for_user,
@@ -152,7 +153,7 @@ async def confirm_schedule(
     snapshot_key = _suggestion_snapshot_key(user_id)
     snapshot = await cache_get(snapshot_key)
     if snapshot is None:
-        raise HTTPException(status_code=409, detail="排程建議已過期，請重新產生")
+        raise ConflictError("排程建議已過期，請重新產生", error_code="SUGGESTION_EXPIRED")
 
     scheduled = [{**item, "start": to_utc_datetime(item["start"]), "end": to_utc_datetime(item["end"])} for item in snapshot]
     current_tasks = await get_all_schedulable_items(user_id)

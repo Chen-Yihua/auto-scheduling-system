@@ -2,6 +2,10 @@
 
 「登入」欄為 ✅ 的 endpoint 需要帶 Clerk JWT（`Authorization: Bearer <token>`），沒帶會被擋下（403）。request / response 的欄位定義見 `backend/schemas/` 或後端的 `/docs`。
 
+## 錯誤回應
+
+本後端產生的錯誤回應都是 `{"detail": <給人看的訊息>, "error_code": <原因>}`：狀態碼表示類別，`error_code` 表示具體原因，前端依 `error_code` 判斷畫面，`detail` 只用來顯示。422 的 `detail` 是驗證錯誤的清單，不帶輸入值。`error_code` 的對照表見 [ADR 0011](decisions/0011-api-error-status-codes.md)。過渡期間各 endpoint 的狀態碼維持下面記錄的值，同一個 `error_code` 可能搭配和對照表不同的狀態碼。Cloud Run 自己回的回應與網路錯誤沒有 `error_code`。
+
 ## 使用者
 
 | 方法 | 路徑 | 登入 | Request | Response | 說明 |

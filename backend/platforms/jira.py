@@ -2,10 +2,10 @@
 import logging
 
 import httpx
-from core.errors import AccessDeniedError, ExternalServiceError, ReauthRequiredError
-
-from core.crypto import encrypt_secret, decrypt_secret
-from platforms.sync import NonRetryableError, UpstreamError
+from core.crypto import SecretDecryptError, encrypt_secret, decrypt_secret
+from core.errors import ReauthRequiredError
+from platforms.http_errors import fetch_error, unparsable_verify_response, verify_error, verify_request_error
+from platforms.sync import InvalidResponseError
 from core.datetimes import to_utc_datetime
 from platforms.base import PlatformAdapter, PlatformUserInfo
 from schemas.jira import JiraIssue
@@ -14,8 +14,8 @@ logger = logging.getLogger(__name__)
 
 HTTP_TIMEOUT = httpx.Timeout(10.0)
 
-# 重試也不會成功的狀態碼
-NON_RETRYABLE_STATUS_CODES = {400, 401, 403, 404}
+# 已存的網域回 404：網域可能改了或站台關了
+DOMAIN_GONE_DETAIL = "Jira 網域可能已失效，請到設定確認或重新連結"
 
 # 避免 Jira 一直回傳 nextPageToken 時無限迴圈
 JIRA_MAX_PAGES = 10
@@ -54,12 +54,12 @@ async def fetch_jira_user_issues(api_key: str, domain: str, max_results: int = 1
             response = await client.get(url, headers=_headers(api_key), params=params)
 
             if response.status_code != 200:
-                message = f"Jira API failed: {response.status_code} {response.text}"
-                if response.status_code in NON_RETRYABLE_STATUS_CODES:
-                    raise NonRetryableError(message)
-                raise UpstreamError(message)
+                raise fetch_error(response, "Jira", not_found_detail=DOMAIN_GONE_DETAIL)
 
-            data = response.json()
+            try:
+                data = response.json()
+            except ValueError as e:
+                raise InvalidResponseError(f"Jira 回應不是 JSON: {response.text}") from e
             all_issues.extend(data.get("issues", []))
 
             next_page_token = data.get("nextPageToken")
@@ -100,19 +100,23 @@ async def fetch_jira_userinfo(api_key_base64: str, domain: str) -> PlatformUserI
         async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
             response = await client.get(url, headers=_headers(api_key_base64))
     except httpx.RequestError as e:
-        logger.error("Jira 驗證連線失敗: %s", e)
-        raise ExternalServiceError("無法連線至 Jira，請稍後再試")
+        raise verify_request_error(e, "Jira", check_domain=True)
 
-    if response.status_code == 401:
-        raise ReauthRequiredError("Unauthorized Jira token")
     if response.status_code != 200:
-        raise AccessDeniedError("Invalid Jira token or access denied")
+        raise verify_error(response, "Jira", check_domain=True)
 
-    data = response.json()
+    try:
+        data = response.json()
+    except ValueError:
+        logger.warning("Jira 驗證回應不是 JSON: %s", response.text)
+        raise unparsable_verify_response("Jira")
     return {
         "username": data.get("displayName"),
         "avatar_url": data.get("avatarUrls", {}).get("48x48", ""),
     }
+
+
+STORED_CREDENTIALS_UNREADABLE_DETAIL = "已存的 Jira API Key 無法讀取，請重新輸入完整的憑證"
 
 
 class JiraPlatform(PlatformAdapter):
@@ -140,7 +144,10 @@ class JiraPlatform(PlatformAdapter):
 
     async def fetch_items(self, credentials):
         raw_issues = await fetch_jira_user_issues(credentials["api_key"], credentials["domain"])
-        return [transform_jira_item(issue) for issue in raw_issues]
+        try:
+            return [transform_jira_item(issue) for issue in raw_issues]
+        except (KeyError, TypeError, AttributeError) as e:
+            raise InvalidResponseError(f"Jira 回應缺少欄位: {e!r}") from e
 
     def is_done(self, item):
         return item.get("status_category") == "done"
@@ -161,7 +168,12 @@ class JiraPlatform(PlatformAdapter):
         domain = changes.get("domain") or existing.get("domain")
         api_key = changes.get("apiKey")
         if not api_key and existing.get("apiKey"):
-            api_key = decrypt_secret(existing["apiKey"])
+            try:
+                api_key = decrypt_secret(existing["apiKey"])
+            except SecretDecryptError:
+                # 不刪憑證：正式和開發環境共用 DB，可能是另一個環境用它自己的金鑰加密的
+                logger.warning("已存的 Jira API key 解密失敗 account=%s", existing.get("_id"))
+                raise ReauthRequiredError(STORED_CREDENTIALS_UNREADABLE_DETAIL, status_code=500)
 
         if api_key and domain:
             info = await fetch_jira_userinfo(api_key, domain)

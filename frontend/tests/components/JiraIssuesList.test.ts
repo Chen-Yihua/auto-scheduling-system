@@ -142,4 +142,24 @@ describe('JiraIssuesList.vue', () => {
     expect(cards[2].text()).not.toContain('更新於')
     expect(cards[2].text()).not.toContain('1970')
   })
+
+  it('AC20：帳號檢查失敗而且沒有已知的結果（unavailable）→ 顯示暫時無法載入，不顯示尚未綁定', () => {
+    const wrapper = mount(JiraIssuesList, {
+      props: { issues: [], loading: false, unavailable: true },
+      global: { stubs: uiStubs },
+    })
+
+    expect(wrapper.text()).toContain('暫時無法載入，請稍後再試')
+    expect(wrapper.text()).not.toContain('尚未綁定')
+  })
+
+  it('AC9：憑證無法讀取（needsReauth）→ 顯示要重新連結，不顯示尚未綁定', () => {
+    const wrapper = mount(JiraIssuesList, {
+      props: { issues: [], loading: false, needsReauth: true },
+      global: { stubs: uiStubs },
+    })
+
+    expect(wrapper.text()).toContain('重新連結')
+    expect(wrapper.text()).not.toContain('尚未綁定')
+  })
 })

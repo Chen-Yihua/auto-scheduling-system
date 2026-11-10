@@ -5,6 +5,7 @@ from httpx import AsyncClient
 from httpx._transports.asgi import ASGITransport
 
 from main import app
+from core.errors import InvalidRequestError
 import routers.schedule as schedule_router
 
 
@@ -87,7 +88,7 @@ async def test_get_schedule_suggestion_when_calendar_not_connected(monkeypatch, 
         return []
 
     async def mock_get_free_slots(user_id):
-        raise HTTPException(status_code=400, detail="尚未連接 Google Calendar")
+        raise InvalidRequestError("尚未連接 Google Calendar", error_code="NOT_LINKED")
 
     monkeypatch.setattr(schedule_router, "get_all_schedulable_items", mock_get_tasks)
     monkeypatch.setattr(schedule_router, "get_free_slots_for_user", mock_get_free_slots)
@@ -96,7 +97,7 @@ async def test_get_schedule_suggestion_when_calendar_not_connected(monkeypatch, 
         res = await ac.post("/schedule/suggest", json={})
 
     assert res.status_code == status.HTTP_400_BAD_REQUEST
-    assert res.json() == {"detail": "尚未連接 Google Calendar"}
+    assert res.json() == {"detail": "尚未連接 Google Calendar", "error_code": "NOT_LINKED"}
 
 
 @pytest.mark.asyncio

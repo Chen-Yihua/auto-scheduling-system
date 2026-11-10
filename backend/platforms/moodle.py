@@ -3,28 +3,41 @@ import logging
 import os
 import time
 
+from urllib.parse import urlparse
+
 from core.errors import ExternalServiceError, ReauthRequiredError
 from fastapi.concurrency import run_in_threadpool
 from selenium import webdriver
-from selenium.common.exceptions import WebDriverException
+from selenium.common.exceptions import TimeoutException, WebDriverException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
-from core.crypto import encrypt_secret, decrypt_secret
+from core.crypto import SecretDecryptError, encrypt_secret, decrypt_secret
 from platforms.sync import NonRetryableError, UpstreamError
 from platforms.base import PlatformAdapter
 from schemas.moodle import MoodleAssignment
 
 logger = logging.getLogger(__name__)
 
+MOODLE_HOME_URL = "https://moodle.nccu.edu.tw/my/"
+SSO_LOGIN_HOST = "i.nccu.edu.tw"
+SSO_LOGIN_PATH = "/Login.aspx"
+
+
+def _is_sso_login_page(url: str) -> bool:
+    """帳密錯誤時 SSO 停在登入頁；只比對 host 與 path，query（例如 ReturnUrl）會變。"""
+    parsed = urlparse(url)
+    return parsed.hostname == SSO_LOGIN_HOST and parsed.path == SSO_LOGIN_PATH
+
 
 def _login_to_moodle(username, password):
     """
     用 headless Chrome 完成 SSO 登入，回傳已登入的 driver，呼叫端要自己 quit()。
-    帳密錯誤（登入後沒導向 my/）丟 NonRetryableError。
+    登入後沒導向 my/ 丟 NonRetryableError：停在登入頁是帳密錯誤（REAUTH_REQUIRED），
+    導向別處（例如 SSO 故障）不是帳密錯誤（UPSTREAM_ERROR）。
     """
     opts = Options()
     # 預設是 Debian apt 安裝的路徑，其他環境用環境變數指定
@@ -51,8 +64,12 @@ def _login_to_moodle(username, password):
         time.sleep(4)  # 等待登入後的導向
 
         current_url = driver.current_url
-        if current_url != 'https://moodle.nccu.edu.tw/my/':
-            raise NonRetryableError(f"Moodle 登入失敗，使用者：{username}")
+        if current_url != MOODLE_HOME_URL:
+            if _is_sso_login_page(current_url):
+                raise NonRetryableError(f"Moodle 登入失敗，使用者：{username}", error_code="REAUTH_REQUIRED")
+            raise NonRetryableError(
+                f"Moodle 登入後導向非預期的頁面，使用者：{username}，網址：{current_url}", error_code="UPSTREAM_ERROR",
+            )
 
         return driver
     except Exception:
@@ -62,7 +79,7 @@ def _login_to_moodle(username, password):
 
 
 def verify_moodle_login(username, password) -> bool:
-    """只驗證能不能登入、不爬作業，連結帳號時用。帳密錯誤丟 NonRetryableError。"""
+    """只驗證能不能登入、不爬作業，連結帳號時用。登入失敗丟 NonRetryableError。"""
     driver = _login_to_moodle(username, password)
     driver.quit()
     return True
@@ -174,16 +191,25 @@ class MoodlePlatform(PlatformAdapter):
         # Selenium 是同步阻塞的，放到 thread pool 才不會卡住 event loop
         try:
             return await run_in_threadpool(fetch_moodle_assignments, credentials["username"], credentials["password"])
+        except TimeoutException as e:
+            raise UpstreamError(f"Moodle 爬取逾時: {e}", error_code="UPSTREAM_TIMEOUT") from e
         except WebDriverException as e:
             raise UpstreamError(f"Moodle 爬取失敗: {e}") from e
 
     # 爬不到提交狀態，沿用預設的 is_done，只靠使用者手動標記完成
 
     async def _verify(self, username: str, password: str) -> None:
+        # 狀態碼維持目前的值：登入失敗 401，Selenium 錯誤 502
         try:
             await run_in_threadpool(verify_moodle_login, username, password)
-        except NonRetryableError:
-            raise ReauthRequiredError("Moodle 帳號或密碼錯誤")
+        except NonRetryableError as e:
+            if e.auth_error:
+                raise ReauthRequiredError("Moodle 帳號或密碼錯誤", error_code="INVALID_CREDENTIALS")
+            logger.warning("Moodle 驗證時登入後導向非預期的頁面: %s", e)
+            raise ReauthRequiredError("Moodle 登入後導向非預期的頁面，請稍後再試", error_code="UPSTREAM_ERROR")
+        except TimeoutException as e:
+            logger.error("Moodle 驗證逾時: %s", e)
+            raise ExternalServiceError("Moodle 回應逾時，請稍後再試", error_code="UPSTREAM_TIMEOUT")
         except WebDriverException as e:
             logger.error("Moodle 驗證發生非預期錯誤: %s", e)
             raise ExternalServiceError("Moodle 服務暫時無法使用，請稍後再試")
@@ -200,7 +226,12 @@ class MoodlePlatform(PlatformAdapter):
         username = changes.get("username") or existing.get("username")
         password = changes.get("password")
         if not password and existing.get("password"):
-            password = decrypt_secret(existing["password"])
+            try:
+                password = decrypt_secret(existing["password"])
+            except SecretDecryptError:
+                # 不刪憑證：正式和開發環境共用 DB，可能是另一個環境用它自己的金鑰加密的
+                logger.warning("已存的 Moodle 密碼解密失敗 account=%s", existing.get("_id"))
+                raise ReauthRequiredError("已存的 Moodle 密碼無法讀取，請重新輸入帳號與密碼", status_code=500)
 
         if username and password:
             await self._verify(username, password)

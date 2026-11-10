@@ -9,6 +9,10 @@ const props = defineProps<{
   syncedAt?: string | null
   authError?: boolean
   notLinked?: boolean
+  // 已存的憑證無法讀取，要重新連結
+  needsReauth?: boolean
+  // 帳號檢查失敗而且沒有已知的結果
+  unavailable?: boolean
   // 不傳則顯示全部
   limit?: number
 }>()
@@ -36,7 +40,21 @@ const openAssignment = (url: string) => {
     <StaleDataBanner :stale="isStale ?? false" :synced-at="syncedAt ?? null" :auth-error="authError ?? false" platform-label="Moodle" />
 
     <div
-      v-if="notLinked"
+      v-if="unavailable"
+      class="text-center text-sm text-gray-500 dark:text-gray-400 py-6"
+    >
+      暫時無法載入，請稍後再試
+    </div>
+
+    <div
+      v-else-if="needsReauth"
+      class="text-center text-sm text-gray-500 dark:text-gray-400 py-6"
+    >
+      Moodle 憑證無法讀取，請到右上角頭像 → 金鑰重新連結
+    </div>
+
+    <div
+      v-else-if="notLinked"
       class="text-center text-sm text-gray-500 dark:text-gray-400 py-6"
     >
       尚未綁定 Moodle 帳號，請先設定

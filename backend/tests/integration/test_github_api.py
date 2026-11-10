@@ -65,7 +65,7 @@ async def test_get_github_issues(monkeypatch, logged_in_user):
 
 @pytest.mark.asyncio
 async def test_get_github_issues_when_account_not_linked(monkeypatch, logged_in_user):
-    """使用者還沒綁定 GitHub → 400 加說明，前端才能顯示「請先設定帳號」。"""
+    """使用者還沒綁定 GitHub → 400 NOT_LINKED 加說明，前端才能顯示「請先設定帳號」。"""
     class EmptyLinkedAccounts:
         async def find_one(self, *args, **kwargs):
             return None
@@ -76,7 +76,7 @@ async def test_get_github_issues_when_account_not_linked(monkeypatch, logged_in_
         res = await ac.get("/github/issues")
 
     assert res.status_code == status.HTTP_400_BAD_REQUEST
-    assert res.json() == {"detail": "No GitHub token linked"}
+    assert res.json() == {"detail": "No GitHub token linked", "error_code": "NOT_LINKED"}
 
 
 @pytest.mark.asyncio
@@ -87,3 +87,98 @@ async def test_get_github_issues_requires_login():
         res = await ac.get("/github/issues")
 
     assert res.status_code in (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN)
+
+
+# ---------- 需求 5：GitHub 每種錯誤回應的重試、狀態碼、error_code、X-Auth-Error ----------
+import httpx as _httpx
+
+from tests.integration.platform_http_fakes import (  # noqa: F401  clean_platform_data 是 fixture
+    clean_platform_data,
+    UPSTREAM_SECRET_TEXT,
+    link_account,
+    reset_items,
+    response,
+    skip_retry_delay,
+    use_fake_http,
+)
+
+OLD_GITHUB_ITEM = github_platform.transform_github_item({
+    "id": 1, "number": 1, "title": "舊資料", "state": "open",
+    "created_at": "2026-01-01T00:00:00Z", "updated_at": "2026-01-01T00:00:00Z",
+    "html_url": "https://github.com/o/r/issues/1", "user": {"login": "u", "avatar_url": ""},
+    "labels": [], "comments": 0,
+})
+
+# (GitHub 的回應, 嘗試次數, 沒有舊資料時的狀態碼, error_code, 有舊資料時是否設 X-Auth-Error)
+GITHUB_FETCH_CASES = [
+    pytest.param(response(403, {"x-ratelimit-remaining": "0"}), 1, 401, "UPSTREAM_RATE_LIMITED", False, id="403-remaining-0"),
+    pytest.param(response(403, {"retry-after": "30"}), 1, 401, "UPSTREAM_RATE_LIMITED", False, id="403-retry-after"),
+    pytest.param(response(403, json_body={"message": f"You have exceeded a secondary rate limit {UPSTREAM_SECRET_TEXT}"}),
+                 1, 401, "UPSTREAM_RATE_LIMITED", False, id="403-secondary-rate-limit"),
+    pytest.param(response(429), 2, 502, "UPSTREAM_RATE_LIMITED", False, id="429"),
+    pytest.param(response(401), 1, 401, "REAUTH_REQUIRED", True, id="401"),
+    pytest.param(response(403, {"x-ratelimit-remaining": "10"}), 1, 401, "REAUTH_REQUIRED", True, id="403-no-rate-limit"),
+    pytest.param(response(400), 1, 401, "INTERNAL_ERROR", False, id="400"),
+    pytest.param(response(404), 1, 401, "UPSTREAM_ERROR", False, id="404"),
+    pytest.param(response(503), 2, 502, "UPSTREAM_ERROR", False, id="5xx"),
+    pytest.param(response(418), 2, 502, "UPSTREAM_ERROR", False, id="other-4xx"),
+    pytest.param(response(304), 2, 502, "UPSTREAM_ERROR", False, id="3xx"),
+    pytest.param(response(200, content=f"<html>{UPSTREAM_SECRET_TEXT}</html>".encode()), 2, 500, "UPSTREAM_ERROR", False, id="not-json"),
+    pytest.param(_httpx.ConnectError("connection refused"), 2, 502, "UPSTREAM_ERROR", False, id="connect-error"),
+    pytest.param(_httpx.ReadTimeout("timed out"), 2, 502, "UPSTREAM_TIMEOUT", False, id="timeout"),
+]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("outcome, attempts, status_code, error_code, _", GITHUB_FETCH_CASES)
+async def test_github_fetch_error_without_cached_data(monkeypatch, logged_in_user, outcome, attempts, status_code, error_code, _, clean_platform_data):
+    """AC5、AC6、AC22：沒有舊資料時，每種 GitHub 錯誤的重試次數、狀態碼、error_code 照需求 5；detail 不帶 GitHub 回應原文。"""
+    await link_account("github", {"apiKey": "gh-token"})
+    await reset_items(database.db.github_issues, None)
+    skip_retry_delay(monkeypatch)
+    client = use_fake_http(monkeypatch, github_platform, outcome)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        res = await ac.get("/github/issues")
+
+    assert client.calls == attempts
+    assert res.status_code == status_code
+    assert res.json()["error_code"] == error_code
+    assert UPSTREAM_SECRET_TEXT not in res.text
+    if error_code != "REAUTH_REQUIRED":
+        assert "授權已失效" not in res.json()["detail"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("outcome, attempts, _, error_code, auth_error", GITHUB_FETCH_CASES)
+async def test_github_fetch_error_with_cached_data(monkeypatch, logged_in_user, outcome, attempts, _, error_code, auth_error, clean_platform_data):
+    """AC5、AC6：有舊資料時回舊資料；只有憑證失效設 X-Auth-Error（GitHub 用 403 限流不設），重試次數照需求 5。"""
+    await link_account("github", {"apiKey": "gh-token"})
+    await reset_items(database.db.github_issues, OLD_GITHUB_ITEM)
+    skip_retry_delay(monkeypatch)
+    client = use_fake_http(monkeypatch, github_platform, outcome)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        res = await ac.get("/github/issues")
+
+    assert client.calls == attempts
+    assert res.status_code == status.HTTP_200_OK
+    assert res.headers["X-Data-Stale"] == "true"
+    assert ("X-Auth-Error" in res.headers) is auth_error
+
+
+@pytest.mark.asyncio
+async def test_github_fetch_when_credentials_cannot_be_decrypted(monkeypatch, logged_in_user, caplog, clean_platform_data):
+    """AC10：已存的 GitHub 憑證解不開 → 維持 500，REAUTH_REQUIRED；記 warning、不刪憑證。"""
+    import logging
+    await link_account("github", {"apiKey": "gh-token"})
+    await database.db.linkedAccounts.update_one({"_id": "test_user_123_github"}, {"$set": {"apiKey": "broken-cipher"}})
+
+    with caplog.at_level(logging.WARNING):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+            res = await ac.get("/github/issues")
+
+    assert res.status_code == 500
+    assert res.json()["error_code"] == "REAUTH_REQUIRED"
+    assert await database.db.linkedAccounts.find_one({"_id": "test_user_123_github"}) is not None
+    assert any(r.levelno == logging.WARNING for r in caplog.records)

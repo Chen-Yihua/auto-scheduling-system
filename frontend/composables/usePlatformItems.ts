@@ -1,5 +1,6 @@
 import { useAuth } from '@clerk/vue'
-import { getFriendlyErrorTitle, isAuthError } from '@/utils/errorMessages'
+import { watch } from 'vue'
+import { describeError, getFriendlyErrorTitle, isAuthError, isNotLinkedError, logApiError } from '@/utils/errorMessages'
 import type { GitHubIssue } from '@/types/github'
 import type { JiraIssue } from '@/types/jira'
 import type { MoodleAssignment } from '@/types/moodle'
@@ -42,7 +43,7 @@ export const usePlatformItems = <P extends PlatformName>(platform: P) => {
   const toast = useToast()
   const config = useRuntimeConfig()
   const BASE_URL = config.public.apiBaseUrl
-  const { getToken } = useAuth()
+  const { getToken, userId } = useAuth()
   const { keys, fetchKeys } = useLinkedAccount()
 
   const items = ref<PlatformItemTypes[P][]>([])
@@ -50,24 +51,64 @@ export const usePlatformItems = <P extends PlatformName>(platform: P) => {
   const syncedAt = ref<string | null>(null)
   const authError = ref(false)
   const notLinked = ref(false)
+  // 已存的憑證無法讀取（帳號列表的 needs_reauth）：當成已連結，請使用者重新連結
+  const needsReauth = ref(false)
+  // 帳號檢查失敗而且還沒有已知的結果：顯示「暫時無法載入」，不顯示「尚未綁定」
+  const unavailable = ref(false)
   const loading = ref(true)
   // 例如 Jira 要用 domain 組出 issue 連結
   const account = computed(() => keys.value.find(k => k.platform === platform))
 
+  // 最近一次已知的結果只存在記憶體、只屬於 ownerUserId；帳號檢查失敗時維持它
+  let hasKnownResult = false
+  let ownerUserId: string | null = null
+
+  const reset = () => {
+    hasKnownResult = false
+    items.value = []
+    isStale.value = false
+    syncedAt.value = null
+    authError.value = false
+    notLinked.value = false
+    needsReauth.value = false
+    unavailable.value = false
+  }
+
+  // 登出或換成另一個使用者時清掉，不顯示前一個使用者的清單
+  const switchOwner = (current: string | null) => {
+    if (current === ownerUserId) return
+    ownerUserId = current
+    reset()
+  }
+  watch(() => userId?.value ?? null, switchOwner)
+
   const fetchItems = async () => {
     loading.value = true
+    switchOwner(userId?.value ?? null)
     try {
-      // 先確認是否已連結，避免呼叫注定失敗的 API；這個檢查失敗時不跳 toast，顯示成尚未綁定
+      // 先確認是否已連結，避免呼叫注定失敗的 API；這個檢查失敗時不跳 toast，維持最近一次已知的結果
       try {
         await fetchKeys()
       } catch (err) {
-        console.error(`${settings.label} 帳號檢查失敗`, err)
-        notLinked.value = true
+        logApiError(`${settings.label} 帳號檢查失敗`, err)
+        if (!hasKnownResult) unavailable.value = true
         return
       }
+      unavailable.value = false
+
+      if (account.value?.needsReauth) {
+        hasKnownResult = true
+        notLinked.value = false
+        needsReauth.value = true
+        items.value = []
+        return
+      }
+      needsReauth.value = false
 
       if (!account.value?.value) {
+        hasKnownResult = true
         notLinked.value = true
+        items.value = []
         return
       }
       notLinked.value = false
@@ -78,16 +119,22 @@ export const usePlatformItems = <P extends PlatformName>(platform: P) => {
           headers: { Authorization: `Bearer ${token}` },
         })
 
+        hasKnownResult = true
         items.value = res._data ?? []
         isStale.value = res.headers.get('X-Data-Stale') === 'true'
         syncedAt.value = res.headers.get('X-Synced-At')
         authError.value = res.headers.get('X-Auth-Error') === 'true'
       } catch (err) {
-        console.error(`${settings.label} 抓取失敗`, err)
+        logApiError(`${settings.label} 抓取失敗`, err)
+        if (isNotLinkedError(err)) {
+          hasKnownResult = true
+          notLinked.value = true
+          return
+        }
         authError.value = isAuthError(err)
         toast.add({
           title: authError.value ? settings.authFailedTitle : getFriendlyErrorTitle(err, `${settings.label} 資料暫時無法取得`),
-          description: authError.value ? settings.authFailedDescription : settings.fetchFailedDescription,
+          description: authError.value ? settings.authFailedDescription : describeError(err, settings.fetchFailedDescription),
           color: 'error',
           icon: 'i-lucide-x',
         })
@@ -97,5 +144,5 @@ export const usePlatformItems = <P extends PlatformName>(platform: P) => {
     }
   }
 
-  return { items, account, fetchItems, isStale, syncedAt, authError, notLinked, loading }
+  return { items, account, fetchItems, isStale, syncedAt, authError, notLinked, needsReauth, unavailable, loading }
 }

@@ -6,7 +6,7 @@ import JiraIssuesList from '~/components/platforms/JiraIssuesList.vue'
 import LoginRequiredCard from '~/components/LoginRequiredCard.vue'
 
 const { isSignedIn } = useUser()
-const { items, account, fetchItems, isStale, syncedAt, authError, notLinked, loading } = usePlatformItems('jira')
+const { items, account, fetchItems, isStale, syncedAt, authError, notLinked, needsReauth, unavailable, loading } = usePlatformItems('jira')
 
 watch(isSignedIn, (signedIn) => {
   if (signedIn) fetchItems()
@@ -31,6 +31,8 @@ watch(isSignedIn, (signedIn) => {
         :synced-at="syncedAt"
         :auth-error="authError"
         :not-linked="notLinked"
+        :needs-reauth="needsReauth"
+        :unavailable="unavailable"
       />
       <LoginRequiredCard
         v-else-if="isSignedIn === false"

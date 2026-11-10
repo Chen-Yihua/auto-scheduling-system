@@ -1,14 +1,18 @@
 # get_platform_items 的狀態碼、header 和快取；每個案例對三個平台各跑一次。sync 在這裡換成假的
 from datetime import datetime, timezone
 
+import logging
+
 import pytest
-from fastapi import HTTPException, Response
+from fastapi import Response
+from pymongo.errors import OperationFailure, ServerSelectionTimeoutError
 
 from core import cache
 import platforms.router as platform_router
 from core import database
 import httpx
-from platforms.sync import NonRetryableError, UpstreamError
+from platforms.sync import InvalidResponseError, NonRetryableError, UpstreamError
+from core.errors import AppError
 from core.crypto import encrypt_secret
 from platforms.github import GITHUB
 from platforms.jira import JIRA
@@ -99,35 +103,50 @@ async def test_fetches_with_decrypted_credentials_and_returns_items(monkeypatch,
 @pytest.mark.asyncio
 @pytest.mark.parametrize("platform", [GITHUB, JIRA, MOODLE], ids=lambda p: p.name)
 @pytest.mark.parametrize("account", [None, {}], ids=["no-account", "account-without-credentials"])
-async def test_raises_400_when_account_not_linked(monkeypatch, platform, account):
-    """還沒綁定或沒有憑證 → 400 和該平台的說明。"""
+async def test_raises_400_not_linked_when_account_not_linked(monkeypatch, platform, account):
+    """還沒綁定或沒有憑證 → 400 NOT_LINKED 和該平台的說明。"""
     _use_account(monkeypatch, account)
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(AppError) as exc_info:
         await platform_router.get_platform_items(platform, USER_ID, Response())
 
     assert exc_info.value.status_code == 400
+    assert exc_info.value.error_code == "NOT_LINKED"
     assert exc_info.value.detail == platform.not_linked_detail
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("platform, account, _", PLATFORM_CASES)
-async def test_raises_500_when_decrypt_fails(monkeypatch, platform, account, _):
-    """憑證解密失敗（資料壞掉或金鑰不對）→ 500，不能把壞掉的密文拿去打平台。"""
+async def test_raises_500_reauth_required_when_decrypt_fails(monkeypatch, platform, account, _, caplog):
+    """AC10：憑證解不開 → 維持 500，error_code 是 REAUTH_REQUIRED，記 warning；不能把壞掉的密文拿去打平台。"""
     broken = {key: ("not-actually-encrypted" if key in ("apiKey", "password") else value) for key, value in account.items()}
     _use_account(monkeypatch, broken)
 
-    with pytest.raises(HTTPException) as exc_info:
+    with caplog.at_level(logging.WARNING), pytest.raises(AppError) as exc_info:
         await platform_router.get_platform_items(platform, USER_ID, Response())
 
     assert exc_info.value.status_code == 500
-    assert exc_info.value.detail == platform.fetch_failed_detail
+    assert exc_info.value.error_code == "REAUTH_REQUIRED"
+    assert any(r.levelno == logging.WARNING for r in caplog.records)
+
+
+@pytest.mark.asyncio
+async def test_other_credential_errors_are_internal_error_not_reauth(monkeypatch):
+    """AC18：解密以外的例外（例如伺服器沒設加密金鑰）→ 500 INTERNAL_ERROR，不標成要重新連結。"""
+    _use_account(monkeypatch, {"apiKey": encrypt_secret("gh-token")})
+    monkeypatch.delenv("SECRET_ENCRYPTION_KEY")
+
+    with pytest.raises(AppError) as exc_info:
+        await platform_router.get_platform_items(GITHUB, USER_ID, Response())
+
+    assert exc_info.value.status_code == 500
+    assert exc_info.value.error_code == "INTERNAL_ERROR"
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("platform, account, _", PLATFORM_CASES)
-async def test_raises_401_when_credentials_rejected_and_no_cached_data(monkeypatch, platform, account, _):
-    """平台拒絕憑證（token 過期、密碼改了）而且沒有舊資料可退 → 401，提示使用者重新連結。"""
+async def test_raises_401_reauth_when_credentials_rejected_and_no_cached_data(monkeypatch, platform, account, _):
+    """平台拒絕憑證（token 過期、密碼改了）而且沒有舊資料可退 → 401 REAUTH_REQUIRED，提示使用者重新連結。"""
     _use_account(monkeypatch, account)
 
     async def fake_sync(user_id, fetch_fn):
@@ -135,18 +154,44 @@ async def test_raises_401_when_credentials_rejected_and_no_cached_data(monkeypat
 
     monkeypatch.setattr(platform, "sync_items", fake_sync)
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(AppError) as exc_info:
         await platform_router.get_platform_items(platform, USER_ID, Response())
 
     assert exc_info.value.status_code == 401
+    assert exc_info.value.error_code == "REAUTH_REQUIRED"
     assert exc_info.value.detail == platform.auth_failed_detail
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("error_code", ["UPSTREAM_RATE_LIMITED", "INTERNAL_ERROR", "UPSTREAM_ERROR"])
+async def test_non_retryable_errors_other_than_reauth_keep_401_with_their_error_code(monkeypatch, error_code):
+    """AC5、AC6：不重試的限流、400、404 沒有舊資料時仍是 401，但 error_code 照原因，detail 不說授權已失效。"""
+    _use_account(monkeypatch, {"apiKey": encrypt_secret("gh-token")})
+
+    async def fake_sync(user_id, fetch_fn):
+        raise NonRetryableError("GitHub API failed: 403 secret-upstream-text", error_code=error_code)
+
+    monkeypatch.setattr(GITHUB, "sync_items", fake_sync)
+
+    with pytest.raises(AppError) as exc_info:
+        await platform_router.get_platform_items(GITHUB, USER_ID, Response())
+
+    assert exc_info.value.status_code == 401
+    assert exc_info.value.error_code == error_code
+    assert "授權已失效" not in exc_info.value.detail
+    assert "secret-upstream-text" not in exc_info.value.detail
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("platform, account, _", PLATFORM_CASES)
-@pytest.mark.parametrize("error", [UpstreamError("503 Service Unavailable"), httpx.ConnectError("連不上")])
-async def test_raises_502_when_platform_unavailable_and_no_cached_data(monkeypatch, platform, account, _, error):
-    """平台暫時掛掉或連不上，而且沒有舊資料可退 → 502，跟我們自己的 bug（500）區分。"""
+@pytest.mark.parametrize("error, error_code", [
+    (UpstreamError("503 Service Unavailable"), "UPSTREAM_ERROR"),
+    (UpstreamError("429", error_code="UPSTREAM_RATE_LIMITED"), "UPSTREAM_RATE_LIMITED"),
+    (httpx.ConnectError("連不上"), "UPSTREAM_ERROR"),
+    (httpx.ReadTimeout("逾時"), "UPSTREAM_TIMEOUT"),
+], ids=["5xx", "429", "connect-error", "timeout"])
+async def test_raises_502_when_platform_unavailable_and_no_cached_data(monkeypatch, platform, account, _, error, error_code):
+    """平台暫時掛掉、限流或連不上，而且沒有舊資料可退 → 502，error_code 照原因，跟我們自己的 bug（500）區分。"""
     _use_account(monkeypatch, account)
 
     async def fake_sync(user_id, fetch_fn):
@@ -154,17 +199,55 @@ async def test_raises_502_when_platform_unavailable_and_no_cached_data(monkeypat
 
     monkeypatch.setattr(platform, "sync_items", fake_sync)
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(AppError) as exc_info:
         await platform_router.get_platform_items(platform, USER_ID, Response())
 
     assert exc_info.value.status_code == 502
-    assert exc_info.value.detail == platform.fetch_failed_detail
+    assert exc_info.value.error_code == error_code
+
+
+@pytest.mark.asyncio
+async def test_raises_500_upstream_error_when_response_unparsable(monkeypatch):
+    """AC6：回應無法解析而且沒有舊資料 → 維持 500，error_code 是 UPSTREAM_ERROR。"""
+    _use_account(monkeypatch, {"apiKey": encrypt_secret("gh-token")})
+
+    async def fake_sync(user_id, fetch_fn):
+        raise InvalidResponseError("not json")
+
+    monkeypatch.setattr(GITHUB, "sync_items", fake_sync)
+
+    with pytest.raises(AppError) as exc_info:
+        await platform_router.get_platform_items(GITHUB, USER_ID, Response())
+
+    assert exc_info.value.status_code == 500
+    assert exc_info.value.error_code == "UPSTREAM_ERROR"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("error, error_code", [
+    (ServerSelectionTimeoutError("down"), "SERVICE_UNAVAILABLE"),
+    (OperationFailure("bad"), "INTERNAL_ERROR"),
+], ids=["db-unavailable", "db-error"])
+async def test_database_error_during_sync_keeps_500(monkeypatch, error, error_code):
+    """AC6：同步途中資料庫出錯維持 500；連不上是 SERVICE_UNAVAILABLE，其他 INTERNAL_ERROR。"""
+    _use_account(monkeypatch, {"apiKey": encrypt_secret("gh-token")})
+
+    async def fake_sync(user_id, fetch_fn):
+        raise error
+
+    monkeypatch.setattr(GITHUB, "sync_items", fake_sync)
+
+    with pytest.raises(AppError) as exc_info:
+        await platform_router.get_platform_items(GITHUB, USER_ID, Response())
+
+    assert exc_info.value.status_code == 500
+    assert exc_info.value.error_code == error_code
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("platform, account, _", PLATFORM_CASES)
 async def test_raises_500_on_unexpected_sync_error(monkeypatch, platform, account, _):
-    """同步時出現未預期的錯誤 → 500 和固定中文訊息；內部錯誤原因只寫進 log，不回傳給前端。"""
+    """同步時出現未預期的錯誤 → 500 INTERNAL_ERROR 和固定中文訊息；內部錯誤原因只寫進 log，不回傳給前端。"""
     _use_account(monkeypatch, account)
 
     async def fake_sync(user_id, fetch_fn):
@@ -172,10 +255,11 @@ async def test_raises_500_on_unexpected_sync_error(monkeypatch, platform, accoun
 
     monkeypatch.setattr(platform, "sync_items", fake_sync)
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(AppError) as exc_info:
         await platform_router.get_platform_items(platform, USER_ID, Response())
 
     assert exc_info.value.status_code == 500
+    assert exc_info.value.error_code == "INTERNAL_ERROR"
     assert exc_info.value.detail == platform.fetch_failed_detail
 
 

@@ -1,5 +1,6 @@
 import json
 import pytest
+from core.errors import AppError
 from unittest.mock import AsyncMock, patch
 
 from fastapi import HTTPException
@@ -42,7 +43,7 @@ async def test_webhook_rejects_when_secret_not_configured(monkeypatch):
     monkeypatch.setattr(user_router, "CLERK_WEBHOOK_SIGNING_SECRET", None)
     request = FakeRequest({"type": "user.deleted", "data": {"id": "u1"}})
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(AppError) as exc_info:
         await user_router.clerk_webhook(request, **_headers())
 
     assert exc_info.value.status_code == 401
@@ -51,7 +52,7 @@ async def test_webhook_rejects_when_secret_not_configured(monkeypatch):
 @pytest.mark.asyncio
 async def test_webhook_rejects_invalid_signature(monkeypatch):
     """簽章驗證不通過 → 401。"""
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(AppError) as exc_info:
         await _call_webhook(
             monkeypatch,
             {"type": "user.deleted", "data": {"id": "u1"}},
@@ -68,7 +69,7 @@ async def test_webhook_rejects_signature_header_that_is_not_valid_base64(monkeyp
     monkeypatch.setattr(user_router, "CLERK_WEBHOOK_SIGNING_SECRET", "whsec_dGVzdHNlY3JldA==")
     request = FakeRequest({"type": "user.deleted", "data": {"id": "u1"}})
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(AppError) as exc_info:
         await user_router.clerk_webhook(
             request, **_headers(svix_signature="v1,not-valid-base64!!!")
         )
@@ -87,7 +88,7 @@ async def test_webhook_rejects_when_verify_raises_unexpected_exception_type(monk
         raise ValueError("something svix itself didn't expect")
 
     with patch.object(user_router.Webhook, "verify", fake_verify_raises_unexpected):
-        with pytest.raises(HTTPException) as exc_info:
+        with pytest.raises(AppError) as exc_info:
             await user_router.clerk_webhook(request, **_headers())
 
     assert exc_info.value.status_code == 401

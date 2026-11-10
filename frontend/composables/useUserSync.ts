@@ -1,4 +1,5 @@
 import { useAuth } from '@clerk/vue'
+import { logApiError } from '@/utils/errorMessages'
 
 // 登入後確認後端有這個使用者，沒有就建立。
 // 確認失敗只記 console；確定沒有使用者卻建立失敗時才提示使用者。
@@ -9,13 +10,28 @@ type ClerkUserLike = {
   fullName?: string | null
 }
 
-// 沒有狀態碼代表連不上伺服器
-function describeCreateFailure(status?: number): string {
+// 沒有狀態碼代表連不上伺服器；沒有 error_code（例如 Cloud Run 自己回的）時依狀態碼判斷
+function describeCreateFailure(status?: number, errorCode?: string): string {
   if (status === undefined) return '無法連線到伺服器，請確認網路後重新整理頁面'
+  if (errorCode) {
+    if (errorCode === 'RATE_LIMITED' || errorCode === 'UPSTREAM_RATE_LIMITED') return '請求太頻繁，請稍後再重新整理頁面'
+    if (errorCode === 'UNAUTHENTICATED') return '登入狀態驗證失敗，請重新登入後再試'
+    if (errorCode === 'SERVICE_UNAVAILABLE') return '資料庫暫時無法使用，請稍後再重新整理頁面'
+    return '伺服器發生錯誤，請稍後再重新整理頁面'
+  }
   if (status === 429) return '請求太頻繁，請稍後再重新整理頁面'
   if (status === 401 || status === 403) return '登入狀態驗證失敗，請重新登入後再試'
   if (status === 503) return '資料庫暫時無法使用，請稍後再重新整理頁面'
   return '伺服器發生錯誤，請稍後再重新整理頁面'
+}
+
+async function readErrorCode(response: Response): Promise<string | undefined> {
+  try {
+    const body = await response.json()
+    return typeof body?.error_code === 'string' ? body.error_code : undefined
+  } catch {
+    return undefined
+  }
 }
 
 export const useUserSync = () => {
@@ -28,10 +44,10 @@ export const useUserSync = () => {
   let syncedUserId: string | null = null
   let inFlight: Promise<void> | null = null
 
-  const notifyCreateFailed = (status?: number) => {
+  const notifyCreateFailed = (status?: number, errorCode?: string) => {
     toast.add({
       title: '無法建立你的使用者資料',
-      description: describeCreateFailure(status),
+      description: describeCreateFailure(status, errorCode),
       color: 'error',
       icon: 'i-lucide-x',
     })
@@ -42,7 +58,7 @@ export const useUserSync = () => {
     try {
       token = await getToken.value()
     } catch (error) {
-      console.error('取得登入憑證失敗', error)
+      logApiError('取得登入憑證失敗', error)
       return
     }
     const authHeaders = { Authorization: `Bearer ${token}` }
@@ -51,7 +67,7 @@ export const useUserSync = () => {
     try {
       meResponse = await fetch(`${BASE_URL}/users/me`, { method: 'GET', headers: authHeaders })
     } catch (error) {
-      console.error('確認使用者資料失敗', error)
+      logApiError('確認使用者資料失敗', error)
       return
     }
     if (meResponse.ok) {
@@ -73,15 +89,20 @@ export const useUserSync = () => {
           name: clerkUser.fullName,
         }),
       })
-      // 409：其他分頁已建立，不算失敗
-      if (createResponse.ok || createResponse.status === 409) {
+      if (createResponse.ok) {
         syncedUserId = clerkUser.id
         return
       }
-      console.error('建立使用者失敗，狀態碼', createResponse.status)
-      notifyCreateFailed(createResponse.status)
+      const errorCode = await readErrorCode(createResponse)
+      // 已註冊：其他分頁已建立，不算失敗
+      if (errorCode === 'ALREADY_EXISTS' || (!errorCode && createResponse.status === 409)) {
+        syncedUserId = clerkUser.id
+        return
+      }
+      console.error('建立使用者失敗', { status: createResponse.status, error_code: errorCode })
+      notifyCreateFailed(createResponse.status, errorCode)
     } catch (error) {
-      console.error('建立使用者失敗', error)
+      logApiError('建立使用者失敗', error)
       notifyCreateFailed()
     }
   }

@@ -351,3 +351,42 @@ async def test_moodle_fetch_items_scrapes_with_username_and_password(monkeypatch
 
     assert calls == [("stu001", "moodle-pw")]
     assert items == [{"id": "https://moodle/hw1", "title": "HW1"}]
+
+
+@pytest.mark.parametrize("final_url, error_code, auth_error", [
+    ("https://i.nccu.edu.tw/Login.aspx?ReturnUrl=%2fsso_app%2fMoodleSSO2.aspx", "REAUTH_REQUIRED", True),
+    ("https://i.nccu.edu.tw/Login.aspx", "REAUTH_REQUIRED", True),
+    ("https://i.nccu.edu.tw/sso_app/Error.aspx", "UPSTREAM_ERROR", False),
+    ("https://moodle.nccu.edu.tw/maintenance.html", "UPSTREAM_ERROR", False),
+], ids=["login-page-with-query", "login-page", "sso-error-page", "elsewhere"])
+def test_login_to_moodle_only_login_page_counts_as_wrong_credentials(monkeypatch, final_url, error_code, auth_error):
+    """AC7：送出後停在登入頁（host 與 path 相同，忽略 query）才是 REAUTH_REQUIRED；導向別處是 UPSTREAM_ERROR，都不重試。"""
+    driver = _mock_chrome(monkeypatch, final_url)
+
+    with pytest.raises(NonRetryableError) as exc_info:
+        moodle_crud._login_to_moodle("stu123", "pw")
+
+    assert exc_info.value.error_code == error_code
+    assert exc_info.value.auth_error is auth_error
+    driver.quit.assert_called_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("error, error_code", [
+    ("timeout", "UPSTREAM_TIMEOUT"),
+    ("webdriver", "UPSTREAM_ERROR"),
+])
+async def test_moodle_fetch_items_selenium_errors_are_retryable_upstream_errors(monkeypatch, error, error_code):
+    """AC7：Selenium 逾時是 UPSTREAM_TIMEOUT、其他 WebDriver 錯誤是 UPSTREAM_ERROR，都可重試、不算憑證失效。"""
+    from selenium.common.exceptions import TimeoutException, WebDriverException
+    from platforms.sync import UpstreamError
+
+    def fake_fetch(username, password):
+        raise TimeoutException("wait timed out") if error == "timeout" else WebDriverException("chrome crashed")
+
+    monkeypatch.setattr(moodle_crud, "fetch_moodle_assignments", fake_fetch)
+
+    with pytest.raises(UpstreamError) as exc_info:
+        await moodle_crud.MOODLE.fetch_items({"username": "stu123", "password": "pw"})
+
+    assert exc_info.value.error_code == error_code

@@ -17,7 +17,7 @@ import MoodleAssignmentsList from '~/components/platforms/MoodleAssignmentsList.
 const github = reactive(usePlatformItems('github'));
 const jira = reactive(usePlatformItems('jira'));
 const moodle = reactive(usePlatformItems('moodle'));
-const { calendarIds, primaryCalendarId, fetchGoogleCalendars, isConnected, needsReconnect, calendarReloadToken } = useGoogleCalendar();
+const { calendarIds, primaryCalendarId, fetchGoogleCalendars, isConnected, needsReconnect, unavailable: calendarUnavailable, calendarReloadToken } = useGoogleCalendar();
 const { isSignedIn } = useUser();
 const { connecting: googleConnecting, connectedCount: googleConnectedCount } = useGoogleCalendarAuth();
 
@@ -54,9 +54,9 @@ watch(googleConnectedCount, () => {
         <template v-if="isSignedIn">
           <TaskForm :limit="5" />
           <ScheduleSuggestion />
-          <MoodleAssignmentsList :assignments="moodle.items" :loading="moodle.loading" :is-stale="moodle.isStale" :synced-at="moodle.syncedAt" :auth-error="moodle.authError" :not-linked="moodle.notLinked" :limit="5" />
-          <GithubIssuesList :issues="github.items" :loading="github.loading" :is-stale="github.isStale" :synced-at="github.syncedAt" :auth-error="github.authError" :not-linked="github.notLinked" :limit="5" />
-          <JiraIssuesList :issues="jira.items" :loading="jira.loading" :domain="jira.account?.domain" :is-stale="jira.isStale" :synced-at="jira.syncedAt" :auth-error="jira.authError" :not-linked="jira.notLinked" :limit="5" />
+          <MoodleAssignmentsList :assignments="moodle.items" :loading="moodle.loading" :is-stale="moodle.isStale" :synced-at="moodle.syncedAt" :auth-error="moodle.authError" :not-linked="moodle.notLinked" :needs-reauth="moodle.needsReauth" :unavailable="moodle.unavailable" :limit="5" />
+          <GithubIssuesList :issues="github.items" :loading="github.loading" :is-stale="github.isStale" :synced-at="github.syncedAt" :auth-error="github.authError" :not-linked="github.notLinked" :needs-reauth="github.needsReauth" :unavailable="github.unavailable" :limit="5" />
+          <JiraIssuesList :issues="jira.items" :loading="jira.loading" :domain="jira.account?.domain" :is-stale="jira.isStale" :synced-at="jira.syncedAt" :auth-error="jira.authError" :not-linked="jira.notLinked" :needs-reauth="jira.needsReauth" :unavailable="jira.unavailable" :limit="5" />
         </template>
         <template v-else>
           <LoginRequiredCard title="任務列表" icon="i-lucide-list-todo" message="登入後即可查看與新增你的任務" />
@@ -75,6 +75,7 @@ watch(googleConnectedCount, () => {
           :connect="isConnected"
           :connecting="googleConnecting"
           :needs-reconnect="needsReconnect"
+          :unavailable="calendarUnavailable"
           :reload-token="calendarReloadToken"
         />
         <LoginRequiredCard v-else title="Google 行事曆" icon="i-lucide-calendar" message="登入後即可查看 Google 行事曆" />

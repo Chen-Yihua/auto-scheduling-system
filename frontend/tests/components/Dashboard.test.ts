@@ -37,14 +37,18 @@ vi.mock('@/composables/usePlatformItems', () => ({
     syncedAt: ref(null),
     authError: ref(false),
     notLinked: ref(false),
+    needsReauth: ref(false),
+    unavailable: ref(false),
     loading: ref(false),
   }),
 }))
 
 const calendarReloadTokenRef = ref(0)
 const needsReconnectRef = ref(false)
+const calendarUnavailableRef = ref(false)
 vi.stubGlobal('useGoogleCalendar', () => ({
   needsReconnect: needsReconnectRef,
+  unavailable: calendarUnavailableRef,
   calendarIds: ref([]),
   primaryCalendarId: ref(''),
   fetchGoogleCalendars: fetchGoogleCalendarsSpy,
@@ -213,5 +217,16 @@ describe('dashboard/Dashboard.vue', () => {
     await wrapper.vm.$nextTick()
 
     expect(fetchGoogleCalendarsSpy).toHaveBeenCalledTimes(2)
+  })
+
+  it('AC1、AC20：行事曆暫時無法載入時，卡片收到 unavailable', async () => {
+    isSignedInRef.value = true
+    calendarUnavailableRef.value = true
+    const wrapper = mount(Dashboard, { global: { stubs: uiStubs } })
+    activeWrapper = wrapper
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.findComponent({ name: 'GoogleCalendarEmbed' }).props('unavailable')).toBe(true)
+    calendarUnavailableRef.value = false
   })
 })

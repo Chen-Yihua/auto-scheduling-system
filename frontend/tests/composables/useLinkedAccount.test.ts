@@ -323,4 +323,98 @@ describe('useLinkedAccount', () => {
       expect.objectContaining({ title: 'GitHub Key 刪除失敗', color: 'error' }),
     )
   })
+
+  /* ---------- 依 error_code 顯示與憑證無法讀取（#77） ---------- */
+
+  it.each([
+    ['INVALID_CREDENTIALS', 401, 'GitHub token 無效，請確認後重新輸入'],
+    ['INVALID_PLATFORM_DOMAIN', 403, '找不到這個 Jira 網域，請確認網域是否正確'],
+    ['UPSTREAM_ERROR', 403, 'GitHub 暫時無法處理請求，請稍後再試'],
+  ])('AC8：連結失敗（%s）→ 顯示儲存失敗並附上後端的 detail', async (code, status, detail) => {
+    const { keys, openEdit, saveKey } = (await load())()
+    const git = keys.value.find((k) => k.platform === 'github')!
+    openEdit(git)
+    git.inputValue = 'NEWKEY'
+    vi.spyOn(console, 'error').mockImplementationOnce(() => {})
+    fetchSpy.mockRejectedValueOnce({ response: { status }, data: { error_code: code, detail } })
+
+    await saveKey(git)
+
+    expect(toastSpy.add).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'GitHub Key 儲存失敗', description: detail, color: 'error' }),
+    )
+  })
+
+  it('AC12：新增時已綁定（ALREADY_EXISTS）→ 顯示已綁定', async () => {
+    const { keys, openEdit, saveKey } = (await load())()
+    const git = keys.value.find((k) => k.platform === 'github')!
+    openEdit(git)
+    git.inputValue = 'NEWKEY'
+    vi.spyOn(console, 'error').mockImplementationOnce(() => {})
+    fetchSpy.mockRejectedValueOnce({ response: { status: 409 }, data: { error_code: 'ALREADY_EXISTS', detail: 'Linked account already exists' } })
+
+    await saveKey(git)
+
+    expect(toastSpy.add).toHaveBeenCalledWith(expect.objectContaining({ title: 'GitHub Key 已經綁定過，請重新整理頁面' }))
+  })
+
+  it('AC17：連結失敗時 console 只記 status 與 error_code，沒有送出的 apiKey、password 與 JWT', async () => {
+    const { keys, openEdit, saveKey } = (await load())()
+    const moo = keys.value.find((k) => k.platform === 'moodle')!
+    openEdit(moo)
+    moo.inputValue = 'stu'
+    moo.password = 'pw-secret'
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    // ofetch 的 FetchError 帶著 request 與 options（含 body 與 headers）
+    fetchSpy.mockImplementationOnce((url: string, options: unknown) => Promise.reject(Object.assign(new Error('fail'), {
+      request: url, options, response: { status: 401 }, data: { error_code: 'INVALID_CREDENTIALS', detail: 'Moodle 帳號或密碼錯誤' },
+    })))
+
+    await saveKey(moo)
+
+    const logged = JSON.stringify(consoleSpy.mock.calls)
+    expect(consoleSpy).toHaveBeenCalledWith(expect.any(String), { status: 401, error_code: 'INVALID_CREDENTIALS' })
+    expect(logged).not.toContain('pw-secret')
+    expect(logged).not.toContain('jwt')
+    consoleSpy.mockRestore()
+  })
+
+  it('AC9：帳號的憑證無法讀取（needs_reauth）→ 當成已連結；儲存走 PATCH 並送出完整的憑證，成功後不再標記', async () => {
+    fetchSpy.mockResolvedValueOnce([
+      { platform: 'jira', domain: 'team.atlassian.net', username: 'me', needs_reauth: true },
+      { platform: 'github', apiKey: 'GKEY*****', needs_reauth: false },
+    ])
+    const { keys, fetchKeys, openEdit, saveKey } = (await load())()
+    await fetchKeys()
+    const jira = keys.value.find((k) => k.platform === 'jira')!
+    expect(jira.needsReauth).toBe(true)
+    expect(keys.value.find((k) => k.platform === 'github')!.needsReauth).toBe(false)
+
+    openEdit(jira)
+    jira.inputValue = 'NEW-JIRA-KEY'
+    fetchSpy.mockResolvedValueOnce({ success: true })
+    await saveKey(jira)
+
+    const [url, options] = fetchSpy.mock.calls[1]!
+    expect(url).toBe('http://api/users/me/linked-accounts/jira')
+    expect(options.method).toBe('PATCH')
+    expect(options.body).toMatchObject({ apiKey: 'NEW-JIRA-KEY', domain: 'team.atlassian.net' })
+    expect(jira.needsReauth).toBe(false)
+  })
+
+  it('AC9：Moodle 憑證無法讀取時，儲存一定送出帳號與密碼', async () => {
+    fetchSpy.mockResolvedValueOnce([{ platform: 'moodle', username: 'stu', needs_reauth: true }])
+    const { keys, fetchKeys, openEdit, saveKey } = (await load())()
+    await fetchKeys()
+    const moo = keys.value.find((k) => k.platform === 'moodle')!
+
+    openEdit(moo)
+    moo.password = 'new-pw'
+    fetchSpy.mockResolvedValueOnce({ success: true })
+    await saveKey(moo)
+
+    const [, options] = fetchSpy.mock.calls[1]!
+    expect(options.method).toBe('PATCH')
+    expect(options.body).toMatchObject({ username: 'stu', password: 'new-pw' })
+  })
 })

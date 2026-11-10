@@ -2,10 +2,9 @@
 import logging
 
 import httpx
-from core.errors import AccessDeniedError, ExternalServiceError, ReauthRequiredError
-
 from core.crypto import encrypt_secret
-from platforms.sync import NonRetryableError, UpstreamError
+from platforms.http_errors import fetch_error, unparsable_verify_response, verify_error, verify_request_error
+from platforms.sync import InvalidResponseError
 from core.datetimes import to_utc_datetime
 from platforms.base import PlatformAdapter, PlatformUserInfo
 from schemas.github import GitHubIssue
@@ -16,9 +15,6 @@ HTTP_TIMEOUT = httpx.Timeout(10.0)
 
 # 鎖定 API 版本，避免 GitHub 更換預設版本時回傳格式悄悄改變
 GITHUB_API_VERSION = "2022-11-28"
-
-# 重試也不會成功的狀態碼
-NON_RETRYABLE_STATUS_CODES = {400, 401, 403, 404}
 
 # search API 同一查詢最多回 1000 筆，10 頁 x 100 筆剛好拿滿
 GITHUB_MAX_PAGES = 10
@@ -53,11 +49,11 @@ async def fetch_github_user_issues(token: str, per_page: int = 100) -> list:
                 }
                 response = await client.get(url, headers=_headers(token), params=params)
                 if response.status_code != 200:
-                    message = f"GitHub API failed: {response.status_code} {response.text}"
-                    if response.status_code in NON_RETRYABLE_STATUS_CODES:
-                        raise NonRetryableError(message)
-                    raise UpstreamError(message)
-                items = response.json().get("items", [])
+                    raise fetch_error(response, "GitHub")
+                try:
+                    items = response.json().get("items", [])
+                except ValueError as e:
+                    raise InvalidResponseError(f"GitHub 回應不是 JSON: {response.text}") from e
                 all_items.extend(items)
                 if len(items) < per_page:
                     break  # 沒抓滿代表是最後一頁
@@ -93,15 +89,16 @@ async def fetch_github_userinfo(token: str) -> PlatformUserInfo:
         async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
             response = await client.get("https://api.github.com/user", headers=_headers(token))
     except httpx.RequestError as e:
-        logger.error("GitHub 驗證連線失敗: %s", e)
-        raise ExternalServiceError("無法連線至 GitHub，請稍後再試")
+        raise verify_request_error(e, "GitHub")
 
-    if response.status_code == 401:
-        raise ReauthRequiredError("Unauthorized GitHub token")
     if response.status_code != 200:
-        raise AccessDeniedError("Invalid GitHub token or access denied")
+        raise verify_error(response, "GitHub")
 
-    data = response.json()
+    try:
+        data = response.json()
+    except ValueError:
+        logger.warning("GitHub 驗證回應不是 JSON: %s", response.text)
+        raise unparsable_verify_response("GitHub")
     return {
         "username": data.get("login"),
         "avatar_url": data.get("avatar_url"),
@@ -134,7 +131,10 @@ class GithubPlatform(PlatformAdapter):
 
     async def fetch_items(self, credentials):
         raw_items = await fetch_github_user_issues(token=credentials["token"])
-        return [transform_github_item(item) for item in raw_items]
+        try:
+            return [transform_github_item(item) for item in raw_items]
+        except (KeyError, TypeError, AttributeError) as e:
+            raise InvalidResponseError(f"GitHub 回應缺少欄位: {e!r}") from e
 
     def is_done(self, item):
         return item.get("status") == "closed"

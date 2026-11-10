@@ -304,3 +304,67 @@ def test_github_completed_at_accepts_stored_datetime_and_old_string():
 
     assert github_mod.GITHUB.completed_at({"closed_at": datetime(2026, 10, 3, 0, 30)}) == expected
     assert github_mod.GITHUB.completed_at({"closed_at": "2026-10-03T00:30:00Z"}) == expected
+
+
+def _client_returning(response_factory):
+    class MockClient:
+        async def __aenter__(self): return self
+        async def __aexit__(self, *args): pass
+        async def get(self, url, headers=None, params=None):
+            return response_factory(Request("GET", url))
+    return MockClient
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status_code, headers, body, retryable, error_code", [
+    (403, {"x-ratelimit-remaining": "0"}, {"message": "API rate limit exceeded"}, False, "UPSTREAM_RATE_LIMITED"),
+    (403, {"retry-after": "60"}, {"message": "slow down"}, False, "UPSTREAM_RATE_LIMITED"),
+    (403, {}, {"message": "You have exceeded a secondary rate limit. Please wait."}, False, "UPSTREAM_RATE_LIMITED"),
+    (429, {}, {"message": "too many"}, True, "UPSTREAM_RATE_LIMITED"),
+    (401, {}, {"message": "Bad credentials"}, False, "REAUTH_REQUIRED"),
+    (403, {"x-ratelimit-remaining": "42"}, {"message": "Resource not accessible by personal access token"}, False, "REAUTH_REQUIRED"),
+    (400, {}, {"message": "bad"}, False, "INTERNAL_ERROR"),
+    (404, {}, {"message": "Not Found"}, False, "UPSTREAM_ERROR"),
+    (500, {}, {"message": "oops"}, True, "UPSTREAM_ERROR"),
+    (422, {}, {"message": "Validation Failed"}, True, "UPSTREAM_ERROR"),
+    (302, {}, {}, True, "UPSTREAM_ERROR"),
+], ids=["403-remaining-0", "403-retry-after", "403-secondary", "429", "401", "403-no-rate-limit",
+        "400", "404", "500", "other-4xx", "3xx"])
+async def test_fetch_github_classifies_error_responses(monkeypatch, status_code, headers, body, retryable, error_code):
+    """AC5、AC6：GitHub 的錯誤回應依需求 5 分成可否重試與 error_code；只有 REAUTH_REQUIRED 算憑證失效。"""
+    from platforms.sync import UpstreamError
+    monkeypatch.setattr("httpx.AsyncClient", lambda *a, **k: _client_returning(
+        lambda req: Response(status_code=status_code, headers=headers, json=body, request=req))())
+
+    with pytest.raises((NonRetryableError, UpstreamError)) as exc_info:
+        await github_mod.fetch_github_user_issues("fake_token")
+
+    assert isinstance(exc_info.value, UpstreamError if retryable else NonRetryableError)
+    assert exc_info.value.error_code == error_code
+    if isinstance(exc_info.value, NonRetryableError):
+        assert exc_info.value.auth_error is (error_code == "REAUTH_REQUIRED")
+
+
+@pytest.mark.asyncio
+async def test_fetch_github_unparsable_response_is_retryable_invalid_response(monkeypatch):
+    """AC6：回應不是 JSON → 可重試的 InvalidResponseError（沒有舊資料時 500 UPSTREAM_ERROR）。"""
+    from platforms.sync import InvalidResponseError
+    monkeypatch.setattr("httpx.AsyncClient", lambda *a, **k: _client_returning(
+        lambda req: Response(status_code=200, content=b"<html>", request=req))())
+
+    with pytest.raises(InvalidResponseError):
+        await github_mod.fetch_github_user_issues("fake_token")
+
+
+@pytest.mark.asyncio
+async def test_github_fetch_items_missing_field_is_invalid_response(monkeypatch):
+    """AC6：回應少欄位（轉換時 KeyError）→ InvalidResponseError，不是程式錯誤。"""
+    from platforms.sync import InvalidResponseError
+
+    async def fake_fetch(token):
+        return [{"id": 1}]
+
+    monkeypatch.setattr(github_mod, "fetch_github_user_issues", fake_fetch)
+
+    with pytest.raises(InvalidResponseError):
+        await github_mod.GITHUB.fetch_items({"token": "t"})

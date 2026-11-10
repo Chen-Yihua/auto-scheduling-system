@@ -68,7 +68,7 @@ async def test_database_connection_failure_returns_503_in_every_module(monkeypat
     res = await _get(path)
 
     assert res.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
-    assert res.json() == {"detail": DB_UNAVAILABLE_DETAIL}
+    assert res.json() == {"detail": DB_UNAVAILABLE_DETAIL, "error_code": "SERVICE_UNAVAILABLE"}
 
 
 @pytest.mark.asyncio
@@ -97,7 +97,7 @@ async def test_non_connection_database_error_returns_500_without_leaking_details
     res = await _get(path)
 
     assert res.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
-    assert res.json() == {"detail": "伺服器發生錯誤，請稍後再試"}
+    assert res.json() == {"detail": "伺服器發生錯誤，請稍後再試", "error_code": "INTERNAL_ERROR"}
     assert "secret" not in res.text
 
 

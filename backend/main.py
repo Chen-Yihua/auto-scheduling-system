@@ -13,7 +13,18 @@ from slowapi.errors import RateLimitExceeded
 from core.rate_limit import limiter, rate_limit_exceeded_handler
 from pymongo.errors import ConnectionFailure, PyMongoError
 from core.errors import AppError
-from core.exception_handlers import app_error_handler, database_unavailable_handler, database_error_handler, UnhandledExceptionMiddleware
+from core.exception_handlers import (
+    app_error_handler,
+    database_unavailable_handler,
+    database_error_handler,
+    http_exception_handler,
+    redis_error_handler,
+    validation_error_handler,
+    UnhandledExceptionMiddleware,
+)
+from fastapi.exceptions import RequestValidationError
+from redis.exceptions import RedisError
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 
 setup_logging()
@@ -57,6 +68,10 @@ app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)  # pyr
 app.add_exception_handler(ConnectionFailure, database_unavailable_handler)  # pyright: ignore[reportArgumentType]
 app.add_exception_handler(PyMongoError, database_error_handler)  # pyright: ignore[reportArgumentType]
 app.add_exception_handler(AppError, app_error_handler)  # pyright: ignore[reportArgumentType]
+app.add_exception_handler(RedisError, redis_error_handler)  # pyright: ignore[reportArgumentType]
+# 註冊 Starlette 的 HTTPException 才接得到未知路由的 404 與 405；FastAPI 的 HTTPException 是它的子類別
+app.add_exception_handler(StarletteHTTPException, http_exception_handler)  # pyright: ignore[reportArgumentType]
+app.add_exception_handler(RequestValidationError, validation_error_handler)  # pyright: ignore[reportArgumentType]
 
 app.include_router(user.router)
 app.include_router(linked_account.router)

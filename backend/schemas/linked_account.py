@@ -25,3 +25,5 @@ class LinkedAccountOut(BaseModel):
     avatar_url: Optional[str] = None
     domain: Optional[str] = None  # Jira 用
     password: Optional[str] = None  # Moodle 用，已遮罩
+    # 回應時算出來的，不存進資料庫：已存的憑證解不開，要重新連結
+    needs_reauth: bool = False

@@ -158,4 +158,21 @@ describe('useGoogleOAuthCallback', () => {
     expect(toastAddSpy).not.toHaveBeenCalled()
     expect(connecting()).toBe(false)
   })
+
+  it('AC11：後端換 token 失敗時顯示後端的 detail，讓使用者分得出授權碼無效還是 Google 暫時故障', async () => {
+    route.query.code = 'auth-code'
+    fetchSpy.mockRejectedValueOnce({
+      response: { status: 400 },
+      data: { error_code: 'UPSTREAM_ERROR', detail: 'Google 暫時無法處理請求，請稍後再試' },
+    })
+
+    mount(Host)
+    await flushPromises()
+
+    expect(toastAddSpy).toHaveBeenCalledWith(expect.objectContaining({
+      title: '連接 Google Calendar 失敗',
+      description: 'Google 暫時無法處理請求，請稍後再試',
+      color: 'error',
+    }))
+  })
 })

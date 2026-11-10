@@ -1,6 +1,6 @@
 """token 換新和錯誤處理由各功能共用，這裡透過 get_free_slots_for_user 測試。"""
 import pytest
-from core.errors import ExternalServiceError, InvalidRequestError, NotFoundError, ReauthRequiredError
+from core.errors import AppError, ExternalServiceError, InvalidRequestError, NotFoundError, ReauthRequiredError
 import httpx
 from datetime import datetime, timezone
 from cryptography.fernet import Fernet
@@ -355,11 +355,11 @@ async def test_get_free_slots_requires_reauth_when_calendar_list_still_401_after
     (_http_error(429), ExternalServiceError),
     (httpx.ConnectError("Google 掛了"), ExternalServiceError),
     (httpx.ReadTimeout("逾時"), ExternalServiceError),
-    (_http_error(403), httpx.HTTPStatusError),
+    (_http_error(403), AppError),
 ], ids=["500", "503", "429", "connect-error", "read-timeout", "403"])
 async def test_get_free_slots_maps_retry_errors_after_token_refresh(monkeypatch, retry_error, expected):
     """換新 token 後重試行事曆列表：5xx、429、連不上 → 502，和第一次請求一樣（AC1、AC2）；
-    403 照舊丟出原本的例外，不轉成 400，避免前端把已連接顯示成未連接（AC3，見 #59）。"""
+    403 維持 500，依原因帶 error_code（#77 需求 4），不轉成 400。"""
     async def mock_find_one(query):
         return {"_id": "uid123", "access_token": encrypt_secret("expired-token"), "refresh_token": encrypt_secret("rt")}
 
@@ -382,8 +382,8 @@ async def test_get_free_slots_maps_retry_errors_after_token_refresh(monkeypatch,
         await calendar_service.get_free_slots_for_user("uid123")
 
     assert calls == ["expired-token", "new-token"]
-    if expected is httpx.HTTPStatusError:
-        assert exc_info.value is retry_error
+    if retry_error is not None and isinstance(retry_error, httpx.HTTPStatusError) and retry_error.response.status_code == 403:
+        assert exc_info.value.status_code == 500
 
 
 # ========== list_calendars_for_user ==========
@@ -642,3 +642,101 @@ async def test_ac24_event_ends_come_from_google_and_missing_events_map_to_none(g
         "gone": None,
         "cancelled": None,
     }
+
+
+# ========== 需求 4：error_code ==========
+
+def _google_status_error(status_code: int, reason: str | None = None) -> httpx.HTTPStatusError:
+    request = httpx.Request("GET", "https://example.com")
+    errors = [{"reason": reason}] if reason else []
+    response = httpx.Response(status_code, json={"error": {"code": status_code, "errors": errors}}, request=request)
+    return httpx.HTTPStatusError("error", request=request, response=response)
+
+
+def _connected(monkeypatch, calendar_list=None):
+    async def mock_find_one(query):
+        return {"_id": "uid123", "access_token": encrypt_secret("expired-token"), "refresh_token": encrypt_secret("rt")}
+
+    monkeypatch.setattr(google_tokens.db.googleCalendarTokens, "find_one", mock_find_one)
+    if calendar_list is not None:
+        async def mock_fetch_calendar_list(token):
+            return calendar_list
+        monkeypatch.setattr(calendar_service, "fetch_google_calendar_list", mock_fetch_calendar_list)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("retry_error, error_code", [
+    (_google_status_error(403, "rateLimitExceeded"), "UPSTREAM_RATE_LIMITED"),
+    (_google_status_error(403, "insufficientPermissions"), "REAUTH_REQUIRED"),
+    (_google_status_error(400), "INTERNAL_ERROR"),
+    (_google_status_error(404), "UPSTREAM_ERROR"),
+], ids=["403-rate-limit", "403-permission", "400", "other-4xx"])
+async def test_calendar_list_4xx_after_refresh_keeps_500_with_error_code(monkeypatch, retry_error, error_code):
+    """需求 4：換新 token 後再抓行事曆清單遇到 401 以外的 4xx，依 Google 的原因給 error_code，狀態碼維持 500。"""
+    _connected(monkeypatch)
+
+    async def mock_fetch_calendar_list(token):
+        if token == "expired-token":
+            raise _unauthorized_error()
+        raise retry_error
+
+    async def mock_refresh(clerk_id):
+        return "new-token"
+
+    monkeypatch.setattr(calendar_service, "fetch_google_calendar_list", mock_fetch_calendar_list)
+    monkeypatch.setattr(calendar_service, "refresh_google_calendar_token", mock_refresh)
+
+    with pytest.raises(AppError) as exc_info:
+        await calendar_service.get_free_slots_for_user("uid123")
+
+    assert exc_info.value.status_code == 500
+    assert exc_info.value.error_code == error_code
+
+
+@pytest.mark.asyncio
+async def test_no_primary_calendar_has_its_own_error_code(monkeypatch):
+    """需求 4：沒有 primary calendar → 維持 404，NO_PRIMARY_CALENDAR。"""
+    _connected(monkeypatch, calendar_list=[{"id": "other"}])
+
+    with pytest.raises(AppError) as exc_info:
+        await calendar_service.get_free_slots_for_user("uid123")
+
+    assert exc_info.value.status_code == 404
+    assert exc_info.value.error_code == "NO_PRIMARY_CALENDAR"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("error, status_code, error_code", [
+    (_google_status_error(429), 502, "UPSTREAM_RATE_LIMITED"),
+    (_google_status_error(403, "quotaExceeded"), 400, "UPSTREAM_RATE_LIMITED"),
+    (_google_status_error(500), 502, "UPSTREAM_ERROR"),
+    (httpx.ReadTimeout("slow"), 502, "UPSTREAM_TIMEOUT"),
+], ids=["429", "403-quota", "5xx", "timeout"])
+async def test_freebusy_errors_have_error_codes(monkeypatch, error, status_code, error_code):
+    """需求 4：查忙碌時段時的 Google 錯誤也依原因給 error_code，狀態碼不變。"""
+    _connected(monkeypatch, calendar_list=[{"id": "primary-cal-id", "primary": True}])
+
+    async def mock_fetch_freebusy(token, calendar_id):
+        raise error
+
+    monkeypatch.setattr(calendar_service, "fetch_freebusy", mock_fetch_freebusy)
+
+    with pytest.raises(AppError) as exc_info:
+        await calendar_service.get_free_slots_for_user("uid123")
+
+    assert exc_info.value.status_code == status_code
+    assert exc_info.value.error_code == error_code
+
+
+@pytest.mark.asyncio
+async def test_delete_events_without_connection_is_reauth_required(monkeypatch):
+    """需求 4：任務帶著行事曆事件但尚未連接 → REAUTH_REQUIRED（用 NOT_LINKED 前端不會顯示錯誤，刪除會悄悄失敗）。"""
+    async def not_connected(clerk_id):
+        return False
+
+    monkeypatch.setattr(calendar_service, "is_google_calendar_connected", not_connected)
+
+    with pytest.raises(AppError) as exc_info:
+        await calendar_service.delete_upcoming_calendar_events("uid123", ["evt1"])
+
+    assert exc_info.value.error_code == "REAUTH_REQUIRED"

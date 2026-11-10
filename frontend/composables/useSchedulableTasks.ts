@@ -2,7 +2,7 @@ import { ref } from 'vue'
 import { useAuth } from '@clerk/vue'
 import { createSharedComposable } from '@vueuse/core'
 import type { SchedulableTask } from '@/types/schedulableTask'
-import { getFriendlyErrorTitle } from '@/utils/errorMessages'
+import { describeError, getFriendlyErrorTitle, logApiError } from '@/utils/errorMessages'
 
 // 共用狀態：任務列表和排程精靈要看到同一份清單
 function useSchedulableTasksImpl() {
@@ -25,9 +25,10 @@ function useSchedulableTasksImpl() {
         headers: { Authorization: `Bearer ${token}` },
       })
     } catch (error) {
-      console.error(error)
+      logApiError('任務列表載入失敗', error)
       toast.add({
         title: getFriendlyErrorTitle(error, '任務列表載入失敗'),
+        description: describeError(error),
         color: 'error',
         icon: 'i-lucide-x',
       })
@@ -54,6 +55,7 @@ function useSchedulableTasksImpl() {
       task.status = previousStatus
       toast.add({
         title: getFriendlyErrorTitle(error, '更新完成狀態失敗'),
+        description: describeError(error),
         color: 'error',
         icon: 'i-lucide-x',
       })

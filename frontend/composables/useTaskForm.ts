@@ -3,7 +3,7 @@ import { DateFormatter, getLocalTimeZone, fromDate, toZoned, type DateValue } fr
 import { ref, computed, reactive, shallowRef } from 'vue'
 import { createSharedComposable } from '@vueuse/core'
 import type { Task, TaskWithSubtasks } from '~/types/manualTask'
-import { getErrorDetail, getFriendlyErrorTitle, isAuthError } from '@/utils/errorMessages'
+import { getErrorDetail, getFriendlyErrorTitle, isAuthError, logApiError } from '@/utils/errorMessages'
 import { useGoogleCalendarAuth } from '@/composables/useGoogleCalendarAuth'
 
 // 和後端 MAX_SUBTASKS 一致
@@ -165,7 +165,7 @@ function useTaskFormImpl() {
     }
 
     function showError(err: unknown, fallbackTitle: string) {
-        console.error(err)
+        logApiError(fallbackTitle, err)
         toast.add({
             title: getFriendlyErrorTitle(err, fallbackTitle),
             description: getErrorDetail(err),
@@ -176,7 +176,7 @@ function useTaskFormImpl() {
 
     function showDeleteError(err: unknown) {
         if (isAuthError(err)) {
-            console.error(err)
+            logApiError('刪除失敗', err)
             toast.add(reauthToast())
             return
         }
@@ -239,7 +239,7 @@ function useTaskFormImpl() {
             })
             all_tasks.value = res
         } catch (err) {
-            console.error(err)
+            logApiError('任務列表載入失敗', err)
         } finally {
             loading.value = false
         }

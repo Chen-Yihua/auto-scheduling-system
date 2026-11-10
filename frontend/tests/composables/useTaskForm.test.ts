@@ -739,11 +739,11 @@ describe('useTaskForm', () => {
     expect(confirmSpy.mock.calls[0]![0]).toContain('3 個子任務')
   })
 
-  it('AC32：刪除時 Google 授權失效（401）→ 沿用重新連接 Google Calendar 的提示', async () => {
+  it('AC32、AC8：刪除時 Google 授權失效（REAUTH_REQUIRED）→ 沿用重新連接 Google Calendar 的提示', async () => {
     const ctx = useTaskForm()
     vi.stubGlobal('window', Object.assign({}, globalThis.window, { confirm: () => true }))
     ctx.startEditTask(parentTask())
-    fetchSpy.mockRejectedValueOnce(httpError(401, 'Google 授權已失效，請重新連接 Google Calendar'))
+    fetchSpy.mockRejectedValueOnce(Object.assign(httpError(401, 'Google 授權已失效，請重新連接 Google Calendar'), { data: { error_code: 'REAUTH_REQUIRED', detail: 'Google 授權已失效，請重新連接 Google Calendar' } }))
     vi.spyOn(console, 'error').mockImplementationOnce(() => {})
 
     await ctx.onDelete()

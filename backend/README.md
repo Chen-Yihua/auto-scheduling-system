@@ -65,7 +65,8 @@ backend/
 
 ### 錯誤處理
 
-- 只有 router 用 `HTTPException`；crud、services、platforms 丟 `core/errors.py` 的例外，由 `core/exception_handlers.py` 轉成狀態碼。
+- 只有 router 用 `HTTPException`；crud、services、platforms 丟 `core/errors.py` 的例外，由 `core/exception_handlers.py` 轉成 `{"detail", "error_code"}` 的回應。
+- 丟例外前照 [ADR 0011](../docs/decisions/0011-api-error-status-codes.md) 選 `error_code`：類別的預設 `error_code` 不是實際原因時，建構時用 `error_code=` 指定；過渡期間要維持和類別預設不同的狀態碼時，用 `status_code=` 指定。`detail` 只能是固定的文字或使用者自己送出、非機密的值，第三方回應原文只記 log。
 - 資料庫錯誤和未預期的例外不用自己 `try/except`，由全域 handler 回 503 或 500。
 
 ---

@@ -99,8 +99,8 @@ describe('useSchedule composable', () => {
     expect(ctx.hasFetched.value).toBe(true)
   })
 
-  it('尚未連接 Google Calendar（400）→ notLinked 為 true，不跳錯誤 toast', async () => {
-    fetchSpy.mockRejectedValueOnce({ response: { status: 400 } })
+  it('尚未連接 Google Calendar（NOT_LINKED）→ notLinked 為 true，不跳錯誤 toast', async () => {
+    fetchSpy.mockRejectedValueOnce({ response: { status: 400 }, data: { error_code: 'NOT_LINKED' } })
 
     const ctx = useSchedule()
     await ctx.fetchScheduleSuggestion()
@@ -109,8 +109,8 @@ describe('useSchedule composable', () => {
     expect(toastSpy.add).not.toHaveBeenCalled()
   })
 
-  it('授權失效（401）→ 跳出授權失效的 toast', async () => {
-    fetchSpy.mockRejectedValueOnce({ response: { status: 401 } })
+  it('授權失效（REAUTH_REQUIRED）→ 跳出授權失效的 toast', async () => {
+    fetchSpy.mockRejectedValueOnce({ response: { status: 401 }, data: { error_code: 'REAUTH_REQUIRED' } })
 
     const ctx = useSchedule()
     await ctx.fetchScheduleSuggestion()
@@ -121,8 +121,8 @@ describe('useSchedule composable', () => {
     )
   })
 
-  it('AC5：產生建議時授權失效（401）→ toast 和首頁一樣有「重新連接 Google Calendar」按鈕，按下導到 Google 授權頁', async () => {
-    fetchSpy.mockRejectedValueOnce({ response: { status: 401 } })
+  it('AC5：產生建議時授權失效（REAUTH_REQUIRED）→ toast 和首頁一樣有「重新連接 Google Calendar」按鈕，按下導到 Google 授權頁', async () => {
+    fetchSpy.mockRejectedValueOnce({ response: { status: 401 }, data: { error_code: 'REAUTH_REQUIRED' } })
     vi.stubGlobal('location', { href: '' })
 
     const ctx = useSchedule()
@@ -176,8 +176,8 @@ describe('useSchedule composable', () => {
       )
     })
 
-    it('排程建議已過期（409）→ 提示使用者，並自動重新產生一份建議讓他重新確認', async () => {
-      fetchSpy.mockRejectedValueOnce({ response: { status: 409 } })
+    it('排程建議已過期（SUGGESTION_EXPIRED）→ 提示使用者，並自動重新產生一份建議讓他重新確認', async () => {
+      fetchSpy.mockRejectedValueOnce({ response: { status: 409 }, data: { error_code: 'SUGGESTION_EXPIRED' } })
       fetchSpy.mockResolvedValueOnce({ scheduled: [], unscheduled: [] })
 
       const ctx = useSchedule()
@@ -286,6 +286,51 @@ describe('useSchedule composable', () => {
         expect.objectContaining({ title: '確認排程失敗', color: 'error' }),
       )
       expect(ctx.confirming.value).toBe(false)
+    })
+  })
+
+  describe('依 error_code 判斷（#77）', () => {
+    it('AC1、AC12：產生建議時收到 Google 限流（UPSTREAM_RATE_LIMITED，狀態碼 400）→ 不顯示尚未連接，顯示請求太頻繁', async () => {
+      fetchSpy.mockRejectedValueOnce({ response: { status: 400 }, data: { error_code: 'UPSTREAM_RATE_LIMITED', detail: 'Google 請求太頻繁，請稍後再試' } })
+
+      const ctx = useSchedule()
+      await ctx.fetchScheduleSuggestion()
+
+      expect(ctx.notLinked.value).toBe(false)
+      expect(toastSpy.add).toHaveBeenCalledWith(expect.objectContaining({ title: '請求太頻繁，請稍後再試' }))
+    })
+
+    it('AC1：產生建議時收到其他 Google 4xx（UPSTREAM_ERROR，狀態碼 400）→ 不顯示尚未連接，顯示錯誤並附加 detail', async () => {
+      fetchSpy.mockRejectedValueOnce({ response: { status: 400 }, data: { error_code: 'UPSTREAM_ERROR', detail: '取得行事曆列表失敗' } })
+
+      const ctx = useSchedule()
+      await ctx.fetchScheduleSuggestion()
+
+      expect(ctx.notLinked.value).toBe(false)
+      const toast = toastSpy.add.mock.calls[0]![0]
+      expect(toast.title).toBe('排程建議產生失敗')
+      expect(toast.description).toBe('伺服器暫時發生錯誤，請稍後再試一次\n取得行事曆列表失敗')
+    })
+
+    it('AC12：沒有 error_code 的 400（例如不是本後端回的）→ 一般錯誤，不顯示尚未連接', async () => {
+      fetchSpy.mockRejectedValueOnce({ response: { status: 400 } })
+
+      const ctx = useSchedule()
+      await ctx.fetchScheduleSuggestion()
+
+      expect(ctx.notLinked.value).toBe(false)
+      expect(toastSpy.add).toHaveBeenCalledWith(expect.objectContaining({ title: '排程建議產生失敗', description: '伺服器暫時發生錯誤，請稍後再試一次' }))
+    })
+
+    it('AC12：確認排程時收到 NOT_LINKED → 這個畫面沒有尚未連接狀態，當成一般錯誤顯示並附加 detail', async () => {
+      fetchSpy.mockRejectedValueOnce({ response: { status: 400 }, data: { error_code: 'NOT_LINKED', detail: '尚未連接 Google Calendar' } })
+
+      const ctx = useSchedule()
+      await ctx.confirmSchedule()
+
+      const toast = toastSpy.add.mock.calls[0]![0]
+      expect(toast).toMatchObject({ title: '確認排程失敗', color: 'error' })
+      expect(toast.description).toContain('尚未連接 Google Calendar')
     })
   })
 })

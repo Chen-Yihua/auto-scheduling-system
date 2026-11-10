@@ -1,7 +1,7 @@
 import { onScopeDispose, ref } from 'vue'
 import { useAuth } from '@clerk/vue'
 import type { ProductivitySummary } from '@/types/analytics'
-import { getFriendlyErrorTitle } from '@/utils/errorMessages'
+import { describeError, getFriendlyErrorTitle, logApiError } from '@/utils/errorMessages'
 
 const AUTO_REFRESH_MS = 60 * 60 * 1000
 
@@ -29,10 +29,11 @@ export function useProductivity() {
         headers: { Authorization: `Bearer ${token}` },
       })
     } catch (err) {
-      console.error(err)
+      logApiError('工作效率統計載入失敗', err)
       error.value = true
       toast.add({
         title: getFriendlyErrorTitle(err, '工作效率統計載入失敗'),
+        description: describeError(err),
         color: 'error',
         icon: 'i-lucide-x',
       })

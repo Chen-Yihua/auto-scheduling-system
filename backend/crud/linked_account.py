@@ -1,6 +1,6 @@
 import logging
 from core.database import db
-from core.crypto import encrypt_secret, decrypt_secret, mask_secret
+from core.crypto import SecretDecryptError, encrypt_secret, decrypt_secret, mask_secret
 from schemas.linked_account import LinkedAccountCreate
 from platforms import PLATFORMS
 from pymongo.errors import DuplicateKeyError
@@ -14,12 +14,23 @@ SENSITIVE_FIELDS = ("apiKey", "password")
 
 
 def _to_public(account: dict) -> dict:
-    """轉成回傳給前端的格式：敏感欄位遮罩、_id 改成 id。"""
+    """
+    轉成回傳給前端的格式：敏感欄位遮罩、_id 改成 id。
+    憑證解不開時標 needs_reauth、不回傳憑證欄位，不讓整個清單失敗；其他例外（例如沒設金鑰）照常往外丟。
+    """
     account = dict(account)
-    for field in SENSITIVE_FIELDS:
-        if account.get(field):
-            account[field] = mask_secret(decrypt_secret(account[field]))
     account["id"] = account.pop("_id")
+    try:
+        masked = {field: mask_secret(decrypt_secret(account[field])) for field in SENSITIVE_FIELDS if account.get(field)}
+    except SecretDecryptError:
+        # 不刪憑證：正式和開發環境共用 DB，可能是另一個環境用它自己的金鑰加密的
+        logger.warning("linked account 憑證解密失敗 id=%s", account["id"])
+        for field in SENSITIVE_FIELDS:
+            account.pop(field, None)
+        account["needs_reauth"] = True
+        return account
+    account.update(masked)
+    account["needs_reauth"] = False
     return account
 
 
@@ -63,7 +74,8 @@ async def find_linked_account(clerk_id: str, platform: str) -> dict | None:
 async def update_linked_account_by_clerk_id(clerk_id: str, platform: str, data: dict):
     composite_id = f"{clerk_id}_{platform}"
     if not data:
-        return False
+        # 狀態碼維持目前的 404（ADR 0011「過渡期間」），用 error_code 和「帳號不存在」分開
+        raise InvalidRequestError("沒有可更新的欄位", status_code=404)
 
     adapter = PLATFORMS.get(platform)
     if adapter and adapter.needs_reverify(data):

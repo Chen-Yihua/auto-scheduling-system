@@ -1,4 +1,5 @@
 import pytest
+from core.errors import AppError
 import pytest_asyncio
 from datetime import datetime, timezone
 from pydantic import ValidationError
@@ -284,10 +285,11 @@ async def test_confirm_schedule_returns_409_when_suggestion_expired(monkeypatch,
 
     monkeypatch.setattr(schedule_router, "create_calendar_events_for_scheduled_tasks", fail)
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(AppError) as exc_info:
         await schedule_router.confirm_schedule(clerk_user=mock_user)
 
     assert exc_info.value.status_code == 409
+    assert exc_info.value.error_code == "SUGGESTION_EXPIRED"
     assert exc_info.value.detail == "排程建議已過期，請重新產生"
 
 

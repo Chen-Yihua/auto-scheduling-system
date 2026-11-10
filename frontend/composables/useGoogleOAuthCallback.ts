@@ -2,6 +2,7 @@ import { onMounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useAuth } from '@clerk/vue';
 import { useGoogleCalendarAuth } from '~/composables/useGoogleCalendarAuth';
+import { describeError, getFriendlyErrorTitle, logApiError } from '~/utils/errorMessages';
 
 // 處理 Google 授權後導回的 /oauth/callback。這個頁面和首頁相同，授權碼在背景交給後端換 token
 export const useGoogleOAuthCallback = () => {
@@ -58,9 +59,10 @@ export const useGoogleOAuthCallback = () => {
         icon: 'i-lucide-check',
       });
     } catch (err) {
-      console.error('OAuth callback failed', err);
+      logApiError('OAuth callback failed', err);
       toast.add({
-        title: '連接 Google Calendar 失敗',
+        title: getFriendlyErrorTitle(err, '連接 Google Calendar 失敗'),
+        description: describeError(err),
         color: 'error',
         icon: 'i-lucide-x',
       });

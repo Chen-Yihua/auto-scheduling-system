@@ -217,12 +217,12 @@ async def _subtask_result_for_key(task_id: str, user_id: str, idempotency_key: s
     if existing is None:
         return None
     if existing.get("parent_id") != task_id:
-        raise ConflictError("這個 Idempotency-Key 已經用在其他請求")
+        raise ConflictError("這個 Idempotency-Key 已經用在其他請求", error_code="IDEMPOTENCY_KEY_REUSED")
     parent = await manual_task_crud.get_manual_task_by_id(task_id, user_id)
     result = await _with_subtasks(parent)
     # 子任務寫入了但還沒放進主任務的順序：同一個 key 的另一個請求還在處理
     if existing["id"] not in {s["id"] for s in result.get("subtasks", [])}:
-        raise ConflictError("同一個請求還在處理中，請稍後再試")
+        raise ConflictError("同一個請求還在處理中，請稍後再試", error_code="REQUEST_IN_PROGRESS")
     return result
 
 

@@ -29,13 +29,21 @@ def parse_composite_id(composite_id: str) -> tuple[str, str]:
     return source, item_id
 
 
+def _external_id(platform, raw_id: str):
+    try:
+        return platform.id_type(raw_id)
+    except ValueError:
+        # 狀態碼維持目前的 500（ADR 0011「過渡期間」）
+        raise InvalidRequestError("任務 id 格式錯誤", status_code=500)
+
+
 async def _update_external(source: str, raw_id: str, user_id: str, fields: dict) -> None:
     """更新外部平台項目的排程欄位，不認得的來源忽略。"""
     platform = PLATFORMS.get(source)
     if platform is None:
         return
     await platform.collection.update_one(
-        {"id": platform.id_type(raw_id), "user_id": user_id},
+        {"id": _external_id(platform, raw_id), "user_id": user_id},
         {"$set": fields},
     )
 
@@ -139,7 +147,7 @@ async def set_done(user_id: str, composite_id: str, done: bool):
     platform = PLATFORMS.get(source)
     if platform is None:
         return
-    doc = await platform.collection.find_one({"id": platform.id_type(raw_id), "user_id": user_id})
+    doc = await platform.collection.find_one({"id": _external_id(platform, raw_id), "user_id": user_id})
     if doc is None:
         return
     completed_at = None

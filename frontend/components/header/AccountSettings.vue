@@ -5,7 +5,7 @@ import { useGoogleCalendarAuth } from '~/composables/useGoogleCalendarAuth';
 import { UserButton } from '@clerk/vue';
 
 const { keys, fetchKeys, openEdit, cancelEdit, saveKey, deleteKey } = useLinkedAccount();
-const { isConnected: googleCalendarConnected, fetchGoogleCalendars } = useGoogleCalendar();
+const { isConnected: googleCalendarConnected, needsReconnect: googleNeedsReconnect, fetchGoogleCalendars } = useGoogleCalendar();
 
 onMounted(fetchKeys);
 onMounted(fetchGoogleCalendars);
@@ -58,7 +58,28 @@ const copyKey = (platform: string, key: string, isMasked?: boolean) => {
             <span class="font-medium text-base">{{ keyItem.label }}</span>
           </div>
 
-          <template v-if="keyItem.value && !keyItem.editing">
+          <template v-if="keyItem.needsReauth && !keyItem.editing">
+            <p class="text-sm text-red-600 dark:text-red-400 mb-2">憑證無法讀取，請重新連結</p>
+            <div class="flex gap-2 justify-end">
+              <UButton
+                size="sm"
+                variant="outline"
+                color="neutral"
+                @click="() => deleteKey(keyItem)"
+              >
+                刪除
+              </UButton>
+              <UButton
+                size="sm"
+                color="primary"
+                @click="() => openEdit(keyItem)"
+              >
+                重新連結
+              </UButton>
+            </div>
+          </template>
+
+          <template v-else-if="keyItem.value && !keyItem.editing">
             <div class="flex items-center gap-2 mb-2">
               <UAvatar v-if="keyItem.avatar" :src="keyItem.avatar" size="sm" />
               <span v-if="keyItem.username" class="text-sm text-gray-600">{{
@@ -106,7 +127,7 @@ const copyKey = (platform: string, key: string, isMasked?: boolean) => {
                 :type="keyItem.showPassword ? 'text' : 'password'"
                 size="sm"
                 variant="outline"
-                :placeholder="keyItem.platform === 'jira' && keyItem.value ? '留空表示 API Key 不變' : '請輸入 API Token 或 Base64'"
+                :placeholder="keyItem.platform === 'jira' && keyItem.value && !keyItem.needsReauth ? '留空表示 API Key 不變' : '請輸入 API Token 或 Base64'"
                 :ui="{ trailing: 'pe-1', base: 'w-full' }"
               >
                 <template #trailing>
@@ -119,7 +140,7 @@ const copyKey = (platform: string, key: string, isMasked?: boolean) => {
                 </template>
               </UInput>
               <p
-                v-if="keyItem.platform === 'jira' && keyItem.value"
+                v-if="keyItem.platform === 'jira' && keyItem.value && !keyItem.needsReauth"
                 class="text-xs text-gray-400 -mt-1"
               >
                 基於安全考量無法顯示原 API Key；留空即代表 API Key 維持不變
@@ -139,7 +160,7 @@ const copyKey = (platform: string, key: string, isMasked?: boolean) => {
                 :type="keyItem.showPassword ? 'text' : 'password'"
                 size="sm"
                 variant="outline"
-                :placeholder="keyItem.value ? '留空表示密碼不變' : '請輸入 Moodle 密碼'"
+                :placeholder="keyItem.value && !keyItem.needsReauth ? '留空表示密碼不變' : '請輸入 Moodle 密碼'"
                 :ui="{ trailing: 'pe-1', base: 'w-full' }"
               >
                 <template #trailing>
@@ -152,7 +173,7 @@ const copyKey = (platform: string, key: string, isMasked?: boolean) => {
                   </template>
               </UInput>
               <p
-                v-if="keyItem.platform === 'moodle' && keyItem.value"
+                v-if="keyItem.platform === 'moodle' && keyItem.value && !keyItem.needsReauth"
                 class="text-xs text-gray-400 -mt-1"
               >
                 基於安全考量無法顯示原密碼；留空即代表密碼維持不變
@@ -160,7 +181,7 @@ const copyKey = (platform: string, key: string, isMasked?: boolean) => {
 
               <div class="flex gap-2 justify-end">
                 <UButton
-                  v-if="keyItem.value"
+                  v-if="keyItem.value || keyItem.needsReauth"
                   size="sm"
                   variant="outline"
                   color="neutral"
@@ -169,7 +190,7 @@ const copyKey = (platform: string, key: string, isMasked?: boolean) => {
                   取消
                 </UButton>
                 <UButton
-                  v-if="keyItem.value"
+                  v-if="keyItem.value || keyItem.needsReauth"
                   size="sm"
                   variant="outline"
                   color="neutral"
@@ -183,8 +204,8 @@ const copyKey = (platform: string, key: string, isMasked?: boolean) => {
                   :loading="keyItem.loading"
                   :disabled="
                     (keyItem.platform === 'github' && !keyItem.inputValue) ||
-                    (keyItem.platform === 'jira' && (!keyItem.domain || (!keyItem.value && !keyItem.inputValue))) ||
-                    (keyItem.platform === 'moodle' && (!keyItem.inputValue || (!keyItem.value && !keyItem.password)))
+                    (keyItem.platform === 'jira' && (!keyItem.domain || ((!keyItem.value || keyItem.needsReauth) && !keyItem.inputValue))) ||
+                    (keyItem.platform === 'moodle' && (!keyItem.inputValue || ((!keyItem.value || keyItem.needsReauth) && !keyItem.password)))
                   "
                   @click="() => saveKey(keyItem)"
                 >
@@ -197,7 +218,7 @@ const copyKey = (platform: string, key: string, isMasked?: boolean) => {
 
         <div class="flex items-center gap-2">
           <UButton color="primary" icon="i-lucide-calendar" @click="goToGoogleAuth">
-            {{ googleCalendarConnected ? '重新連接 Google Calendar' : '連接 Google Calendar' }}
+            {{ googleCalendarConnected || googleNeedsReconnect ? '重新連接 Google Calendar' : '連接 Google Calendar' }}
           </UButton>
           <UBadge v-if="googleCalendarConnected" color="success" variant="subtle" icon="i-lucide-check">
             已連接

@@ -10,6 +10,10 @@ const props = defineProps<{
   syncedAt?: string | null
   authError?: boolean
   notLinked?: boolean
+  // 已存的憑證無法讀取，要重新連結
+  needsReauth?: boolean
+  // 帳號檢查失敗而且沒有已知的結果
+  unavailable?: boolean
   // 不傳則顯示全部
   limit?: number
 }>()
@@ -42,6 +46,20 @@ const openIssue = (url: string) => {
 
     <div v-if="loading">
       <USkeleton v-for="i in 3" :key="i" class="h-24 mb-4" />
+    </div>
+
+    <div
+      v-else-if="unavailable"
+      class="text-center text-sm text-gray-500 dark:text-gray-400 py-6"
+    >
+      暫時無法載入，請稍後再試
+    </div>
+
+    <div
+      v-else-if="needsReauth"
+      class="text-center text-sm text-gray-500 dark:text-gray-400 py-6"
+    >
+      GitHub 憑證無法讀取，請到右上角頭像 → 金鑰重新連結
     </div>
 
     <div

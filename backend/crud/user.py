@@ -1,7 +1,7 @@
 from core.database import db
 from schemas.user import UserCreate, UserUpdate
 from pymongo.errors import DuplicateKeyError
-from core.errors import ConflictError, NotFoundError
+from core.errors import ConflictError, InvalidRequestError, NotFoundError
 from platforms import PLATFORMS
 
 async def create_user(user: UserCreate) -> dict:
@@ -30,7 +30,8 @@ async def get_user_by_clerk_id(clerk_id: str):
 async def update_user_by_clerk_id(clerk_id: str, data: UserUpdate) -> None:
     filtered_data = data.model_dump(exclude_unset=True)
     if not filtered_data:
-        raise NotFoundError("User not found or no changes made")
+        # 狀態碼維持目前的 404（ADR 0011「過渡期間」）
+        raise InvalidRequestError("沒有可更新的欄位", status_code=404)
 
     result = await db.users.update_one({"_id": clerk_id}, {"$set": filtered_data})
 

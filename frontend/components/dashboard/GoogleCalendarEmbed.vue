@@ -7,6 +7,7 @@ const props = defineProps<{
   connect: boolean;
   connecting?: boolean; // 後端正在完成授權
   needsReconnect?: boolean; // 已連接過，但 token 不能用了
+  unavailable?: boolean; // 沒有可顯示的行事曆，也不知道連接狀態（例如 Google 或伺服器暫時故障）
   // 遞增時強制 iframe 重新載入，否則看不到新寫入的事件
   reloadToken?: number;
 }>();
@@ -30,6 +31,13 @@ const calendarUrl = computed(() => {
     <div v-if="connecting" class="flex justify-center items-center py-6">
       <UIcon name="i-lucide-loader" class="animate-spin w-6 h-6 text-primary" />
       <span class="ml-2 text-primary">正在連接 Google Calendar，請稍候…</span>
+    </div>
+
+    <div
+      v-else-if="unavailable"
+      class="text-center text-sm text-gray-500 dark:text-gray-400 py-6"
+    >
+      Google 行事曆暫時無法載入，請稍後再試
     </div>
 
     <div v-else-if="connect" class="rounded-lg overflow-hidden">

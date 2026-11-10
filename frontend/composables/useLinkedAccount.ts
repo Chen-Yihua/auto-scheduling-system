@@ -2,7 +2,7 @@ import { ref, computed } from 'vue';
 import { useRuntimeConfig } from '#imports';
 import { useUser, useAuth } from '@clerk/vue';
 import { until } from '@vueuse/core';
-import { getFriendlyErrorTitle, isAlreadyLinkedError } from '@/utils/errorMessages';
+import { describeError, getFriendlyErrorTitle, isAlreadyLinkedError, logApiError } from '@/utils/errorMessages';
 import type { LinkedAccountRecord } from '@/types/linkedAccount';
 
 // 各平台共用的形狀，欄位依平台使用
@@ -23,6 +23,8 @@ export interface LinkedAccountKey {
   isMasked: boolean;
   // Jira 用：進入編輯時的 domain，儲存時判斷是否有改
   _originalDomain?: string;
+  // 已連結但已存的憑證無法讀取：儲存時走 PATCH，而且要填完整的憑證
+  needsReauth?: boolean;
 }
 
 interface LinkedAccountPayload {
@@ -93,6 +95,23 @@ export const useLinkedAccount = () => {
       headers: { Authorization: `Bearer ${token}` },
     });
 
+    // 列表裡沒有的平台恢復成未連結：換成另一個使用者時不能沿用前一個使用者的帳號狀態
+    const linkedPlatforms = new Set(list.map((ac) => ac.platform));
+    keys.value
+      .filter((k) => !linkedPlatforms.has(k.platform))
+      .forEach((k) => {
+        // 編輯中的 domain、password 是輸入框的內容，不能清掉
+        if (!k.editing) {
+          k.domain = '';
+          k.password = '';
+        }
+        k.value = '';
+        k.username = undefined;
+        k.avatar = undefined;
+        k.needsReauth = false;
+        k.isMasked = false;
+      });
+
     list.forEach((ac) => {
       const item = keys.value.find((k) => k.platform === ac.platform);
       if (item) {
@@ -104,6 +123,7 @@ export const useLinkedAccount = () => {
         if (item.platform == 'moodle') {  // 取得遮罩過的 moodle 密碼
           item.value = ac.password ?? '';
         }
+        item.needsReauth = ac.needs_reauth === true;
         item.isMasked = true;
       }
     });
@@ -128,7 +148,10 @@ export const useLinkedAccount = () => {
   const saveKey = async (keyItem: LinkedAccountKey) => {
     keyItem.loading = true;
     const token = await getToken.value();
-    const isNew = !keyItem.value;
+    // 憑證無法讀取的帳號仍是已連結，要走 PATCH；POST 會因為已綁定而失敗
+    const isNew = !keyItem.value && !keyItem.needsReauth;
+    // 更新時沒帶新憑證，後端會解開已存的憑證來驗證；憑證無法讀取時一定要送完整的憑證
+    const requiresFullCredentials = isNew || !!keyItem.needsReauth;
     const payload: LinkedAccountPayload = {
       platform: keyItem.platform,
       status: 'connected',
@@ -141,14 +164,14 @@ export const useLinkedAccount = () => {
     else if (keyItem.platform === 'jira') { // 若是 Jira 類型，加上 domain
       payload.domain = keyItem.domain;
       // 編輯時留空代表不修改
-      if (isNew || keyItem.inputValue) {
+      if (requiresFullCredentials || keyItem.inputValue) {
         payload.apiKey = keyItem.inputValue;
       }
     }
     else if (keyItem.platform === 'moodle') { // 若是 Moodle 類型，改成帳號和密碼
       payload.username = keyItem.inputValue;
       // 編輯時留空代表不修改
-      if (isNew || keyItem.password) {
+      if (requiresFullCredentials || keyItem.password) {
         payload.password = keyItem.password;
       }
     }
@@ -190,6 +213,7 @@ export const useLinkedAccount = () => {
       keyItem.inputValue = '';
       keyItem.editing = false;
       keyItem.isMasked = false;
+      keyItem.needsReauth = false;
 
       let title = `${keyItem.label} 儲存成功`;
       if (keyItem.platform === 'moodle' && !isNew) {
@@ -217,11 +241,13 @@ export const useLinkedAccount = () => {
         ...(avatarUrl ? { avatar: { src: avatarUrl } } : {}),
       });
     } catch (err) {
-      console.error(err);
+      logApiError(`${keyItem.label} 儲存失敗`, err);
+      const alreadyLinked = isNew && isAlreadyLinkedError(err);
       toast.add({
-        title: isNew && isAlreadyLinkedError(err)
+        title: alreadyLinked
           ? `${keyItem.label} 已經綁定過，請重新整理頁面`
           : getFriendlyErrorTitle(err, `${keyItem.label} 儲存失敗`),
+        description: alreadyLinked ? undefined : describeError(err),
         color: 'error',
         icon: 'i-lucide-x',
       });
@@ -244,6 +270,7 @@ export const useLinkedAccount = () => {
       keyItem.password = '';
       keyItem.editing = false;
       keyItem.isMasked = false;
+      keyItem.needsReauth = false;
 
       toast.add({
         title: `${keyItem.label} 已刪除`,
@@ -251,9 +278,10 @@ export const useLinkedAccount = () => {
         icon: 'i-lucide-trash-2',
       });
     } catch (err) {
-      console.error(err);
+      logApiError(`${keyItem.label} 刪除失敗`, err);
       toast.add({
         title: getFriendlyErrorTitle(err, `${keyItem.label} 刪除失敗`),
+        description: describeError(err),
         color: 'error',
         icon: 'i-lucide-x',
       });

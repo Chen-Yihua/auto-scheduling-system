@@ -1,16 +1,24 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { ref as vueRef, computed as vueComputed, type Ref } from 'vue'
+import { ref as vueRef, computed as vueComputed, nextTick, type Ref } from 'vue'
 
 // ---------- 載入被測 composable ----------
-import { useGoogleCalendar } from '~/composables/useGoogleCalendar'          /** MOD */
+// 共用狀態（包括最近一次已知的結果）存在模組裡，每個測試重新載入才不會互相影響
+let useGoogleCalendar: typeof import('~/composables/useGoogleCalendar')['useGoogleCalendar']
 
 // ---------- Clerk mock ----------
-vi.mock('@clerk/vue', () => ({
-  useAuth: () => ({
-    getToken: { value: vi.fn().mockResolvedValue('jwt-token') },
-    isLoaded: { value: true },
-  }),
-}))
+// userId 要能切換，測登出／換使用者
+const clerk = vi.hoisted(() => ({ userId: null as unknown as Ref<string | null> }))
+vi.mock('@clerk/vue', async () => {
+  const { ref } = await import('vue')
+  clerk.userId = ref<string | null>('user_a')
+  return {
+    useAuth: () => ({
+      getToken: { value: vi.fn().mockResolvedValue('jwt-token') },
+      isLoaded: { value: true },
+      userId: clerk.userId,
+    }),
+  }
+})
 
 // ---------- Nuxt auto-import 的 ref/computed ----------
 vi.stubGlobal('ref', vueRef)                                         /** MOD */
@@ -43,9 +51,12 @@ const realLocation = window.location
 vi.stubGlobal('$fetch', (...args: unknown[]) => fetchSpy(...args))
 
 describe('useGoogleCalendar composable', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     fetchSpy = vi.fn()
     toastSpy.add.mockClear()
+    vi.resetModules()
+    ;({ useGoogleCalendar } = await import('~/composables/useGoogleCalendar'))
+    if (clerk.userId) clerk.userId.value = 'user_a'
   })
 
   it('成功抓取 Google Calendar 資料並設定 primary', async () => {
@@ -95,7 +106,7 @@ describe('useGoogleCalendar composable', () => {
     expect(toastSpy.add).not.toHaveBeenCalled()
   })
 
-  it('授權狀態檢查本身失敗（例如網路問題）時，安靜降級成未連接，不跳任何 toast，也不會誤打行事曆 API', async () => {
+  it('AC20(3)：授權狀態檢查失敗而且沒有已知的結果 → 暫時無法載入，不顯示「已連接」也不變成「尚未連接」，不跳 toast，也不會誤打行事曆 API', async () => {
     fetchSpy.mockRejectedValueOnce(new Error('網路爆炸'))
 
     const ctx = useGoogleCalendar()
@@ -103,17 +114,21 @@ describe('useGoogleCalendar composable', () => {
 
     expect(fetchSpy).toHaveBeenCalledTimes(1)
     expect(ctx.isConnected.value).toBe(false)
+    expect(ctx.needsReconnect.value).toBe(false)
+    expect(ctx.unavailable.value).toBe(true)
     expect(toastSpy.add).not.toHaveBeenCalled()
   })
 
-  it('已授權但實際抓行事曆清單失敗時，isConnected 為 false 且 toast.add 觸發', async () => {
+  it('AC1(1)：已授權但抓行事曆清單遇到暫時性錯誤、從沒載入成功過 → 帳號設定仍是「已連接」，卡片暫時無法載入，跳 toast', async () => {
     fetchSpy.mockResolvedValueOnce({ connected: true })
     fetchSpy.mockRejectedValueOnce(new Error('boom'))
 
     const ctx = useGoogleCalendar()
     await ctx.fetchGoogleCalendars()
 
-    expect(ctx.isConnected.value).toBe(false)
+    expect(ctx.isConnected.value).toBe(true)
+    expect(ctx.needsReconnect.value).toBe(false)
+    expect(ctx.unavailable.value).toBe(true)
     expect(ctx.calendarIds.value).toEqual([])
     expect(toastSpy.add).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -124,9 +139,9 @@ describe('useGoogleCalendar composable', () => {
     )
   })
 
-  it('已授權但實際呼叫仍拿到 400（狀態剛好變化）時，isConnected 為 false 但不跳錯誤 toast', async () => {
+  it('已授權但實際呼叫仍拿到 NOT_LINKED（狀態剛好變化）時，isConnected 為 false 但不跳錯誤 toast', async () => {
     fetchSpy.mockResolvedValueOnce({ connected: true })
-    fetchSpy.mockRejectedValueOnce({ response: { status: 400 } })
+    fetchSpy.mockRejectedValueOnce({ response: { status: 400 }, data: { error_code: 'NOT_LINKED' } })
 
     const ctx = useGoogleCalendar()
     await ctx.fetchGoogleCalendars()
@@ -135,10 +150,10 @@ describe('useGoogleCalendar composable', () => {
     expect(toastSpy.add).not.toHaveBeenCalled()
   })
 
-  it('AC1：授權失效（401）時，首頁和帳號設定同時抓取也只跳一個「授權已失效」toast，按鈕導到 Google 授權頁', async () => {
+  it('AC1：授權失效（REAUTH_REQUIRED）時，首頁和帳號設定同時抓取也只跳一個「授權已失效」toast，按鈕導到 Google 授權頁', async () => {
     respondByUrl({
       '/oauth/status': async () => ({ connected: true }),
-      '/oauth/calendars': async () => { throw { response: { status: 401 } } },
+      '/oauth/calendars': async () => { throw { response: { status: 401 }, data: { error_code: 'REAUTH_REQUIRED' } } },
     })
     vi.stubGlobal('location', { href: '' })
 
@@ -206,7 +221,7 @@ describe('useGoogleCalendar composable', () => {
 
   it('AC6：授權失效後重新連接、再抓取成功，needsReconnect 變回 false，卡片恢復顯示行事曆', async () => {
     fetchSpy.mockResolvedValueOnce({ connected: true })
-    fetchSpy.mockRejectedValueOnce({ response: { status: 401 } })
+    fetchSpy.mockRejectedValueOnce({ response: { status: 401 }, data: { error_code: 'REAUTH_REQUIRED' } })
 
     const ctx = useGoogleCalendar()
     await ctx.fetchGoogleCalendars()
@@ -236,12 +251,103 @@ describe('useGoogleCalendar composable', () => {
     fetchSpy.mockResolvedValueOnce({ items: [{ id: 'cal1', summary: '主行事曆', primary: true }] })
     await ctx.fetchGoogleCalendars()
 
-    rejectStale({ response: { status: 401 } })
+    rejectStale({ response: { status: 401 }, data: { error_code: 'REAUTH_REQUIRED' } })
     await stale
 
     expect(callsTo('/oauth/calendars')).toBe(2)
     expect(ctx.isConnected.value).toBe(true)
     expect(ctx.needsReconnect.value).toBe(false)
     expect(toastSpy.add).not.toHaveBeenCalled()
+  })
+
+  const loadedOnce = async (ctx: ReturnType<typeof useGoogleCalendar>) => {
+    fetchSpy.mockResolvedValueOnce({ connected: true })
+    fetchSpy.mockResolvedValueOnce({ items: [{ id: 'cal1', summary: '主行事曆', primary: true }] })
+    await ctx.fetchGoogleCalendars()
+  }
+
+  it.each([
+    ['Google 403 限流', { response: { status: 400 }, data: { error_code: 'UPSTREAM_RATE_LIMITED', detail: 'Google 請求太頻繁，請稍後再試' } }, '請求太頻繁，請稍後再試'],
+    ['Google 其他 4xx', { response: { status: 400 }, data: { error_code: 'UPSTREAM_ERROR', detail: '取得行事曆列表失敗' } }, 'Google Calendar 資料暫時無法取得'],
+    ['Google 5xx', { response: { status: 502 }, data: { error_code: 'UPSTREAM_ERROR', detail: 'Google 暫時無法處理請求' } }, 'Google Calendar 資料暫時無法取得'],
+  ])('AC1(1)：曾載入成功後遇到%s → 保留清單照常嵌入、帳號設定維持已連接、不顯示尚未連接', async (_, error, title) => {
+    const ctx = useGoogleCalendar()
+    await loadedOnce(ctx)
+
+    fetchSpy.mockResolvedValueOnce({ connected: true })
+    fetchSpy.mockRejectedValueOnce(error)
+    await ctx.fetchGoogleCalendars()
+
+    expect(ctx.calendarIds.value).toEqual(['cal1'])
+    expect(ctx.isConnected.value).toBe(true)
+    expect(ctx.needsReconnect.value).toBe(false)
+    expect(ctx.unavailable.value).toBe(false)
+    expect(toastSpy.add).toHaveBeenCalledWith(expect.objectContaining({ title, color: 'error' }))
+  })
+
+  it('AC1(2)：權限不足或換新 token 後仍 401（REAUTH_REQUIRED）→ 授權已失效、要重新連接，不顯示尚未連接', async () => {
+    fetchSpy.mockResolvedValueOnce({ connected: true })
+    fetchSpy.mockRejectedValueOnce({ response: { status: 400 }, data: { error_code: 'REAUTH_REQUIRED', detail: 'Google 授權的權限不足' } })
+
+    const ctx = useGoogleCalendar()
+    await ctx.fetchGoogleCalendars()
+
+    expect(ctx.needsReconnect.value).toBe(true)
+    expect(ctx.isConnected.value).toBe(false)
+    expect(ctx.unavailable.value).toBe(false)
+  })
+
+  it('AC20(1)：曾載入成功後授權狀態檢查失敗 → 照常嵌入、帳號設定維持已連接', async () => {
+    const ctx = useGoogleCalendar()
+    await loadedOnce(ctx)
+
+    fetchSpy.mockRejectedValueOnce(new Error('網路爆炸'))
+    await ctx.fetchGoogleCalendars()
+
+    expect(ctx.calendarIds.value).toEqual(['cal1'])
+    expect(ctx.isConnected.value).toBe(true)
+    expect(ctx.unavailable.value).toBe(false)
+  })
+
+  it('AC20(2)：最近一次是授權已失效，之後授權狀態檢查失敗 → 維持授權已失效的畫面', async () => {
+    fetchSpy.mockResolvedValueOnce({ connected: true })
+    fetchSpy.mockRejectedValueOnce({ response: { status: 401 }, data: { error_code: 'REAUTH_REQUIRED' } })
+    const ctx = useGoogleCalendar()
+    await ctx.fetchGoogleCalendars()
+
+    fetchSpy.mockRejectedValueOnce(new Error('網路爆炸'))
+    await ctx.fetchGoogleCalendars()
+
+    expect(ctx.needsReconnect.value).toBe(true)
+    expect(ctx.unavailable.value).toBe(false)
+  })
+
+  it('AC20(2)：最近一次是尚未連接，之後授權狀態檢查失敗 → 維持尚未連接的畫面', async () => {
+    fetchSpy.mockResolvedValueOnce({ connected: false })
+    const ctx = useGoogleCalendar()
+    await ctx.fetchGoogleCalendars()
+
+    fetchSpy.mockRejectedValueOnce(new Error('網路爆炸'))
+    await ctx.fetchGoogleCalendars()
+
+    expect(ctx.isConnected.value).toBe(false)
+    expect(ctx.needsReconnect.value).toBe(false)
+    expect(ctx.unavailable.value).toBe(false)
+  })
+
+  it('AC20：登出再以另一個使用者登入後授權狀態檢查失敗 → 不顯示前一個使用者的行事曆，視為沒有已知的結果', async () => {
+    const ctx = useGoogleCalendar()
+    await loadedOnce(ctx)
+
+    clerk.userId.value = null
+    await nextTick()
+    expect(ctx.calendarIds.value).toEqual([])
+    clerk.userId.value = 'user_b'
+    fetchSpy.mockRejectedValueOnce(new Error('網路爆炸'))
+    await ctx.fetchGoogleCalendars()
+
+    expect(ctx.calendarIds.value).toEqual([])
+    expect(ctx.isConnected.value).toBe(false)
+    expect(ctx.unavailable.value).toBe(true)
   })
 })

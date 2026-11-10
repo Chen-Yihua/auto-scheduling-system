@@ -33,7 +33,7 @@ const uiStubs = {
   UAlert: true,
   NuxtLink: { template: '<a><slot /></a>' },
 }
-const render = (props: { assignments?: MoodleAssignment[]; loading?: boolean; notLinked?: boolean; limit?: number } = {}) =>
+const render = (props: { assignments?: MoodleAssignment[]; loading?: boolean; notLinked?: boolean; needsReauth?: boolean; unavailable?: boolean; limit?: number } = {}) =>
   mount(MoodleAssignmentsList, {
     props: { assignments: [], loading: false, ...props },
     global: { stubs: uiStubs },
@@ -86,5 +86,17 @@ describe('MoodleAssignmentsList.vue', () => {
 
     expect(wrapper.text()).toContain('目前沒有未繳作業')
     expect(wrapper.findAll('.u-card-stub').length).toBe(1)
+  })
+
+  it('AC20：帳號檢查失敗而且沒有已知的結果（unavailable）→ 顯示暫時無法載入，不顯示尚未綁定', () => {
+    const wrapper = render({ unavailable: true })
+    expect(wrapper.text()).toContain('暫時無法載入，請稍後再試')
+    expect(wrapper.text()).not.toContain('尚未綁定')
+  })
+
+  it('AC9：憑證無法讀取（needsReauth）→ 顯示要重新連結，不顯示尚未綁定', () => {
+    const wrapper = render({ needsReauth: true })
+    expect(wrapper.text()).toContain('重新連結')
+    expect(wrapper.text()).not.toContain('尚未綁定')
   })
 })

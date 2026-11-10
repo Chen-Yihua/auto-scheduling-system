@@ -7,6 +7,7 @@ from httpx import AsyncClient
 from httpx._transports.asgi import ASGITransport
 
 from main import app
+from core.errors import InvalidRequestError
 from core import cache
 from core.crypto import encrypt_secret
 from core.database import db
@@ -35,7 +36,7 @@ async def test_get_google_calendar_status(monkeypatch, logged_in_user):
 async def test_get_calendars_when_not_connected(monkeypatch, logged_in_user):
     """使用者還沒授權 Google Calendar → 400 加中文說明。"""
     async def mock_get_token(clerk_id):
-        raise HTTPException(status_code=400, detail="尚未連接 Google Calendar")
+        raise InvalidRequestError("尚未連接 Google Calendar", error_code="NOT_LINKED")
 
     monkeypatch.setattr(calendar_service, "get_google_calendar_token", mock_get_token)
 
@@ -43,7 +44,7 @@ async def test_get_calendars_when_not_connected(monkeypatch, logged_in_user):
         res = await ac.get("/oauth/calendars")
 
     assert res.status_code == status.HTTP_400_BAD_REQUEST
-    assert res.json() == {"detail": "尚未連接 Google Calendar"}
+    assert res.json() == {"detail": "尚未連接 Google Calendar", "error_code": "NOT_LINKED"}
 
 
 @pytest.mark.asyncio
@@ -138,3 +139,107 @@ async def test_schedule_suggest_requires_reauth_when_token_unusable(monkeypatch,
     assert res.status_code == status.HTTP_401_UNAUTHORIZED
     assert "重新連接 Google Calendar" in res.json()["detail"]
     assert deleted == []
+
+
+# ---------- 需求 4：Google 錯誤依原因給 error_code，狀態碼不變（#59） ----------
+UPSTREAM_SECRET_TEXT = "google-raw-text-91c2"
+
+
+def _google_error(status_code: int, reason: str | None = None) -> httpx.HTTPStatusError:
+    request = httpx.Request("GET", "https://www.googleapis.com/calendar/v3/users/me/calendarList")
+    errors = [{"domain": "global", "reason": reason, "message": UPSTREAM_SECRET_TEXT}] if reason else []
+    body = {"error": {"code": status_code, "message": UPSTREAM_SECRET_TEXT, "errors": errors}}
+    return httpx.HTTPStatusError("error", request=request, response=httpx.Response(status_code, json=body, request=request))
+
+
+def _connected_with_calendar_list_error(monkeypatch, error):
+    async def mock_find_one(query):
+        return {"_id": "test_user_123", "access_token": encrypt_secret("at"), "refresh_token": encrypt_secret("rt")}
+
+    async def mock_fetch_calendar_list(token):
+        raise error
+
+    cache._memory_store.clear()
+    monkeypatch.setattr(db.googleCalendarTokens, "find_one", mock_find_one)
+    monkeypatch.setattr(calendar_service, "fetch_google_calendar_list", mock_fetch_calendar_list)
+
+
+# (Google 的錯誤, 狀態碼, error_code)
+GOOGLE_LIST_CASES = [
+    pytest.param(_google_error(403, "rateLimitExceeded"), 400, "UPSTREAM_RATE_LIMITED", id="403-rateLimitExceeded"),
+    pytest.param(_google_error(403, "userRateLimitExceeded"), 400, "UPSTREAM_RATE_LIMITED", id="403-userRateLimitExceeded"),
+    pytest.param(_google_error(403, "quotaExceeded"), 400, "UPSTREAM_RATE_LIMITED", id="403-quotaExceeded"),
+    pytest.param(_google_error(403, "dailyLimitExceeded"), 400, "UPSTREAM_RATE_LIMITED", id="403-dailyLimitExceeded"),
+    pytest.param(_google_error(429, "rateLimitExceeded"), 502, "UPSTREAM_RATE_LIMITED", id="429"),
+    pytest.param(_google_error(403, "insufficientPermissions"), 400, "REAUTH_REQUIRED", id="403-insufficientPermissions"),
+    pytest.param(_google_error(403, "forbidden"), 400, "REAUTH_REQUIRED", id="403-forbidden"),
+    pytest.param(_google_error(403), 400, "UPSTREAM_ERROR", id="403-unknown-reason"),
+    pytest.param(_google_error(404, "notFound"), 400, "UPSTREAM_ERROR", id="other-4xx"),
+    pytest.param(_google_error(400, "badRequest"), 400, "INTERNAL_ERROR", id="400"),
+    pytest.param(_google_error(503), 502, "UPSTREAM_ERROR", id="5xx"),
+    pytest.param(httpx.ConnectError("down"), 502, "UPSTREAM_ERROR", id="connect-error"),
+    pytest.param(httpx.ReadTimeout("slow"), 502, "UPSTREAM_TIMEOUT", id="timeout"),
+]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("error, status_code, error_code", GOOGLE_LIST_CASES)
+async def test_get_calendars_google_error_codes(monkeypatch, logged_in_user, error, status_code, error_code):
+    """AC1、AC2、AC3、AC16：已連接時 Google 回錯誤，GET /oauth/calendars 依原因給 error_code（不是 NOT_LINKED），狀態碼不變；detail 不帶 Google 原文。"""
+    _connected_with_calendar_list_error(monkeypatch, error)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        res = await ac.get("/oauth/calendars")
+
+    body = res.json()
+    assert res.status_code == status_code
+    assert body["error_code"] == error_code
+    assert UPSTREAM_SECRET_TEXT not in res.text
+    if error_code != "REAUTH_REQUIRED":
+        assert "授權已失效" not in body["detail"]
+        assert "權限不足" not in body["detail"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("error, status_code, error_code", GOOGLE_LIST_CASES)
+async def test_schedule_suggest_google_error_codes(monkeypatch, logged_in_user, error, status_code, error_code):
+    """AC1：產生排程建議時 Google 回錯誤，error_code 照原因、不是 NOT_LINKED，狀態碼不變（#59）。"""
+    async def mock_get_tasks(user_id):
+        return []
+
+    monkeypatch.setattr(schedule_router, "get_all_schedulable_items", mock_get_tasks)
+    _connected_with_calendar_list_error(monkeypatch, error)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        res = await ac.post("/schedule/suggest", json={})
+
+    assert res.status_code == status_code
+    assert res.json()["error_code"] == error_code
+
+
+@pytest.mark.asyncio
+async def test_get_calendars_not_linked_has_not_linked_code(monkeypatch, logged_in_user):
+    """AC2：還沒連接 Google → 維持 400，error_code 是 NOT_LINKED。"""
+    async def mock_find_one(query):
+        return None
+
+    monkeypatch.setattr(db.googleCalendarTokens, "find_one", mock_find_one)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        res = await ac.get("/oauth/calendars")
+
+    assert res.status_code == 400
+    assert res.json()["error_code"] == "NOT_LINKED"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("case", ["unauthorized_client", "decrypt_failed", "still_401_after_refresh"])
+async def test_get_calendars_unusable_token_has_reauth_required_code(monkeypatch, logged_in_user, case):
+    """AC1、AC2：token 不能用（含換新後仍 401、解密失敗）→ 維持 401，REAUTH_REQUIRED。"""
+    _token_unusable(monkeypatch, case)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        res = await ac.get("/oauth/calendars")
+
+    assert res.status_code == 401
+    assert res.json()["error_code"] == "REAUTH_REQUIRED"

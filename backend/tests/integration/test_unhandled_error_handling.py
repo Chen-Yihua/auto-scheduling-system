@@ -33,7 +33,7 @@ async def test_unexpected_exception_returns_json_500_without_leaking_details(mon
     res = await _get_me()
 
     assert res.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
-    assert res.json() == {"detail": "伺服器發生未預期的錯誤，請稍後再試"}
+    assert res.json() == {"detail": "伺服器發生未預期的錯誤，請稍後再試", "error_code": "INTERNAL_ERROR"}
     assert "secret" not in res.text
 
 
@@ -70,7 +70,7 @@ async def test_expected_http_errors_are_not_turned_into_500(monkeypatch, logged_
     res = await _get_me()
 
     assert res.status_code == status.HTTP_404_NOT_FOUND
-    assert res.json() == {"detail": "User not found"}
+    assert res.json() == {"detail": "User not found", "error_code": "NOT_FOUND"}
 
 
 @pytest.mark.asyncio

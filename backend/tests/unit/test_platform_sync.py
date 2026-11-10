@@ -314,3 +314,31 @@ async def test_sync_platform_items_non_retryable_error_skips_sleep(monkeypatch):
         )
 
     assert sleep_calls == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("error, expected_auth_error", [
+    (NonRetryableError("401", error_code="REAUTH_REQUIRED"), True),
+    (NonRetryableError("403 rate limit", error_code="UPSTREAM_RATE_LIMITED"), False),
+    (NonRetryableError("400", error_code="INTERNAL_ERROR"), False),
+    (NonRetryableError("404", error_code="UPSTREAM_ERROR"), False),
+], ids=["reauth", "rate-limited", "bad-request", "github-404"])
+async def test_sync_auth_error_follows_error_code_not_retryability(error, expected_auth_error):
+    """AC5、AC6：不重試的錯誤只有憑證失效（REAUTH_REQUIRED）才標 auth_error；限流、400、404 不重試但不標。"""
+    collection = FakeCollection(initial=[
+        {"id": 1, "title": "cached", "user_id": "u1", "synced_at": datetime.now(timezone.utc)}
+    ])
+    call_count = {"n": 0}
+
+    async def fetch():
+        call_count["n"] += 1
+        raise error
+
+    _, stale, _, auth_error = await sync_platform_items(
+        collection=collection, user_id="u1", id_field="id", fetch_fn=fetch,
+        max_attempts=2, retry_delay_seconds=0,
+    )
+
+    assert call_count["n"] == 1
+    assert stale is True
+    assert auth_error is expected_auth_error

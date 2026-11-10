@@ -142,4 +142,29 @@ describe('useUserSync：登入後確認並建立後端使用者', () => {
     expect(fetchSpy).toHaveBeenCalledTimes(4)
     expect(toastSpy.add).toHaveBeenCalledTimes(1) // 沒有新增提示
   })
+
+  describe('依 error_code 判斷（#77）', () => {
+    const withCode = (status: number, errorCode: string) =>
+      ({ ok: false, status, json: async () => ({ detail: 'x', error_code: errorCode }) }) as unknown as Response
+
+    it.each([
+      [403, 'UNAUTHENTICATED', '登入狀態驗證失敗'],
+      [500, 'SERVICE_UNAVAILABLE', '資料庫暫時無法使用'],
+      [503, 'INTERNAL_ERROR', '伺服器發生錯誤'],
+    ])('AC12：建立失敗時依 error_code 說明原因（狀態碼 %i、%s）', async (status, code, expectedText) => {
+      fetchSpy.mockResolvedValueOnce(response(404)).mockResolvedValueOnce(withCode(status, code))
+
+      await useUserSync().ensureUserRecord(clerkUser)
+
+      expect(toastSpy.add.mock.calls[0][0].description).toContain(expectedText)
+    })
+
+    it('AC12：建立時回 ALREADY_EXISTS → 當成已註冊，不跳提示', async () => {
+      fetchSpy.mockResolvedValueOnce(response(404)).mockResolvedValueOnce(withCode(409, 'ALREADY_EXISTS'))
+
+      await useUserSync().ensureUserRecord(clerkUser)
+
+      expect(toastSpy.add).not.toHaveBeenCalled()
+    })
+  })
 })

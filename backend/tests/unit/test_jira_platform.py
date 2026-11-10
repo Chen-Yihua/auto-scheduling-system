@@ -255,3 +255,53 @@ def test_jira_issue_schema_reads_old_string_times_from_database():
     assert old.resolved_at == datetime(2026, 10, 2, 2, 0, tzinfo=timezone.utc)
     assert old_empty.updated_at is None
     assert new.updated_at is None
+
+
+def _jira_client(status_code, headers=None, body=None, content=None):
+    from httpx import Request, Response
+
+    class MockClient:
+        async def __aenter__(self): return self
+        async def __aexit__(self, *args): pass
+        async def get(self, url, headers=None, params=None):
+            if content is not None:
+                return Response(status_code=status_code, content=content, request=Request("GET", url))
+            return Response(status_code=status_code, headers=headers_ or {}, json=body or {}, request=Request("GET", url))
+
+    headers_ = headers
+    return MockClient()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status_code, retryable, error_code", [
+    (401, False, "REAUTH_REQUIRED"),
+    (403, False, "REAUTH_REQUIRED"),
+    (404, False, "REAUTH_REQUIRED"),
+    (400, False, "INTERNAL_ERROR"),
+    (429, True, "UPSTREAM_RATE_LIMITED"),
+    (500, True, "UPSTREAM_ERROR"),
+    (409, True, "UPSTREAM_ERROR"),
+    (301, True, "UPSTREAM_ERROR"),
+])
+async def test_fetch_jira_classifies_error_responses(monkeypatch, status_code, retryable, error_code):
+    """AC6：Jira 的錯誤回應依需求 5 分類；404 算憑證失效，detail 請使用者確認網域。"""
+    from platforms.sync import UpstreamError
+    monkeypatch.setattr("httpx.AsyncClient", lambda *a, **k: _jira_client(status_code, body={"errorMessages": ["x"]}))
+
+    with pytest.raises((NonRetryableError, UpstreamError)) as exc_info:
+        await jira.fetch_jira_user_issues("fake_key", "fake.atlassian.net")
+
+    assert isinstance(exc_info.value, UpstreamError if retryable else NonRetryableError)
+    assert exc_info.value.error_code == error_code
+    if status_code == 404:
+        assert exc_info.value.detail == "Jira 網域可能已失效，請到設定確認或重新連結"
+
+
+@pytest.mark.asyncio
+async def test_fetch_jira_unparsable_response_is_invalid_response(monkeypatch):
+    """AC6：Jira 回應不是 JSON → 可重試的 InvalidResponseError。"""
+    from platforms.sync import InvalidResponseError
+    monkeypatch.setattr("httpx.AsyncClient", lambda *a, **k: _jira_client(200, content=b"<html>"))
+
+    with pytest.raises(InvalidResponseError):
+        await jira.fetch_jira_user_issues("fake_key", "fake.atlassian.net")

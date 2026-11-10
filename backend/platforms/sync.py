@@ -7,13 +7,33 @@ logger = logging.getLogger(__name__)
 
 
 class NonRetryableError(Exception):
-    """重試也沒用的失敗（憑證錯誤、找不到資源），不重試直接退回舊資料。"""
-    pass
+    """
+    重試也沒用的失敗，不重試直接退回舊資料；沒有舊資料時 router 回 401。
+
+    重試、狀態碼和原因分開判斷：error_code 是原因（ADR 0011），只有 REAUTH_REQUIRED 算憑證失效
+    （有舊資料時設 X-Auth-Error）。message 可能帶第三方回應原文，只記 log；detail 會回給前端。
+    """
+
+    def __init__(self, message: str, *, error_code: str = "REAUTH_REQUIRED", detail: str | None = None):
+        super().__init__(message)
+        self.error_code = error_code
+        self.detail = detail
+
+    @property
+    def auth_error(self) -> bool:
+        return self.error_code == "REAUTH_REQUIRED"
 
 
 class UpstreamError(Exception):
-    """外部平台暫時性失敗（5xx、限流、連不上），router 回 502。"""
-    pass
+    """外部平台暫時性失敗（5xx、限流、連不上），會重試；沒有舊資料時 router 回 502。message 只記 log。"""
+
+    def __init__(self, message: str, *, error_code: str = "UPSTREAM_ERROR"):
+        super().__init__(message)
+        self.error_code = error_code
+
+
+class InvalidResponseError(Exception):
+    """外部平台的回應無法解析（不是 JSON、少欄位），會重試；沒有舊資料時 router 回 500。"""
 
 
 async def sync_platform_items(
@@ -74,7 +94,7 @@ async def sync_platform_items(
         # _id 是 MongoDB 的 ObjectId，不能轉成 JSON，新抓的資料也沒有這個欄位，需移除 _id
         for doc in last_synced:
             doc.pop("_id", None)
-        auth_error = isinstance(last_exc, NonRetryableError)
+        auth_error = isinstance(last_exc, NonRetryableError) and last_exc.auth_error
         return last_synced, True, synced_at, auth_error
 
     # 翻頁期間資料有變動時，同一個項目可能出現在兩頁；保留最後一次的內容

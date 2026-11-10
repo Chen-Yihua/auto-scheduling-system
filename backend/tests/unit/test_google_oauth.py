@@ -268,3 +268,48 @@ async def test_refresh_google_calendar_token_requires_reauth_without_deleting_wh
         await google_oauth.refresh_google_calendar_token("uid123")
 
     assert deleted == []
+
+
+# ---------- 需求 4：換新 token 時的 error_code ----------
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status_code, text, http_status, error_code", [
+    (429, '{"error": "rate_limit_exceeded"}', 502, "UPSTREAM_RATE_LIMITED"),
+    (503, "Service Unavailable", 502, "UPSTREAM_ERROR"),
+    (401, '{"error": "invalid_client"}', 500, "INTERNAL_ERROR"),
+    (400, '{"error": "invalid_grant"}', 401, "REAUTH_REQUIRED"),
+    (200, "{}", 400, "UPSTREAM_ERROR"),
+], ids=["429", "5xx", "invalid_client", "invalid_grant", "no-access-token"])
+async def test_refresh_error_codes(monkeypatch, status_code, text, http_status, error_code):
+    """需求 4：換新 token 時 429 是 UPSTREAM_RATE_LIMITED、5xx 與拿不到 access token 是 UPSTREAM_ERROR、
+    invalid_client 是 INTERNAL_ERROR；狀態碼維持目前的值。"""
+    from core.errors import AppError
+    _mock_token_endpoint(monkeypatch, status_code, text)
+
+    with pytest.raises(AppError) as exc_info:
+        await google_oauth.refresh_google_calendar_token("uid123")
+
+    assert exc_info.value.status_code == http_status
+    assert exc_info.value.error_code == error_code
+
+
+@pytest.mark.asyncio
+async def test_refresh_timeout_is_upstream_timeout(monkeypatch):
+    """需求 4：換新 token 逾時 → 維持 502，UPSTREAM_TIMEOUT。"""
+    from core.errors import AppError
+
+    async def mock_find_one(query):
+        return {"_id": "uid123", "refresh_token": encrypt_secret("valid-rt")}
+
+    def handler(request):
+        raise httpx.ReadTimeout("slow", request=request)
+
+    real_client = httpx.AsyncClient
+    monkeypatch.setattr(db.googleCalendarTokens, "find_one", mock_find_one)
+    monkeypatch.setattr(google_oauth.httpx, "AsyncClient", lambda *a, **k: real_client(transport=httpx.MockTransport(handler)))
+
+    with pytest.raises(AppError) as exc_info:
+        await google_oauth.refresh_google_calendar_token("uid123")
+
+    assert exc_info.value.status_code == 502
+    assert exc_info.value.error_code == "UPSTREAM_TIMEOUT"

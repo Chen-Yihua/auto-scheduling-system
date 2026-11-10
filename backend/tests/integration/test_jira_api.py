@@ -66,14 +66,14 @@ async def test_get_jira_issues(monkeypatch, logged_in_user):
 
 @pytest.mark.asyncio
 async def test_get_jira_issues_when_account_not_linked(monkeypatch, logged_in_user):
-    """使用者還沒綁定 Jira → 400 加說明，前端才能顯示「請先設定帳號」。"""
+    """使用者還沒綁定 Jira → 400 NOT_LINKED 加說明，前端才能顯示「請先設定帳號」。"""
     monkeypatch.setattr(database.db, "linkedAccounts", EmptyLinkedAccounts())
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         res = await ac.get("/jira/issues")
 
     assert res.status_code == status.HTTP_400_BAD_REQUEST
-    assert res.json() == {"detail": "No Jira linked account"}
+    assert res.json() == {"detail": "No Jira linked account", "error_code": "NOT_LINKED"}
 
 
 @pytest.mark.asyncio
@@ -84,3 +84,83 @@ async def test_get_jira_issues_requires_login():
         res = await ac.get("/jira/issues")
 
     assert res.status_code in (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN)
+
+
+# ---------- 需求 5：Jira 每種錯誤回應的重試、狀態碼、error_code、X-Auth-Error ----------
+import httpx as _httpx
+
+import platforms.jira as jira_platform
+from tests.integration.platform_http_fakes import (  # noqa: F401  clean_platform_data 是 fixture
+    clean_platform_data,
+    UPSTREAM_SECRET_TEXT,
+    link_account,
+    reset_items,
+    response,
+    skip_retry_delay,
+    use_fake_http,
+)
+
+OLD_JIRA_ITEM = jira_platform.transform_jira_item({"id": "10001", "key": "P-1", "fields": {"summary": "舊資料"}})
+
+JIRA_FETCH_CASES = [
+    pytest.param(response(429), 2, 502, "UPSTREAM_RATE_LIMITED", False, id="429"),
+    pytest.param(response(401), 1, 401, "REAUTH_REQUIRED", True, id="401"),
+    pytest.param(response(403), 1, 401, "REAUTH_REQUIRED", True, id="403"),
+    pytest.param(response(404), 1, 401, "REAUTH_REQUIRED", True, id="404"),
+    pytest.param(response(400), 1, 401, "INTERNAL_ERROR", False, id="400"),
+    pytest.param(response(500), 2, 502, "UPSTREAM_ERROR", False, id="5xx"),
+    pytest.param(response(409), 2, 502, "UPSTREAM_ERROR", False, id="other-4xx"),
+    pytest.param(response(302), 2, 502, "UPSTREAM_ERROR", False, id="3xx"),
+    pytest.param(response(200, content=f"<html>{UPSTREAM_SECRET_TEXT}</html>".encode()), 2, 500, "UPSTREAM_ERROR", False, id="not-json"),
+    pytest.param(_httpx.ConnectError("connection refused"), 2, 502, "UPSTREAM_ERROR", False, id="connect-error"),
+    pytest.param(_httpx.ReadTimeout("timed out"), 2, 502, "UPSTREAM_TIMEOUT", False, id="timeout"),
+]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("outcome, attempts, status_code, error_code, _", JIRA_FETCH_CASES)
+async def test_jira_fetch_error_without_cached_data(monkeypatch, logged_in_user, outcome, attempts, status_code, error_code, _, clean_platform_data):
+    """AC6、AC22：沒有舊資料時，每種 Jira 錯誤的重試次數、狀態碼、error_code 照需求 5；detail 不帶 Jira 回應原文。"""
+    await link_account("jira", {"apiKey": "jira-key", "domain": "team.atlassian.net"})
+    await reset_items(database.db.jira_issues, None)
+    skip_retry_delay(monkeypatch)
+    client = use_fake_http(monkeypatch, jira_platform, outcome)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        res = await ac.get("/jira/issues")
+
+    assert client.calls == attempts
+    assert res.status_code == status_code
+    assert res.json()["error_code"] == error_code
+    assert UPSTREAM_SECRET_TEXT not in res.text
+
+
+@pytest.mark.asyncio
+async def test_jira_fetch_404_asks_to_check_domain(monkeypatch, logged_in_user, clean_platform_data):
+    """AC16：Jira 404 是 REAUTH_REQUIRED，detail 請使用者確認網域或重新連結。"""
+    await link_account("jira", {"apiKey": "jira-key", "domain": "team.atlassian.net"})
+    await reset_items(database.db.jira_issues, None)
+    use_fake_http(monkeypatch, jira_platform, response(404))
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        res = await ac.get("/jira/issues")
+
+    assert res.json() == {"detail": "Jira 網域可能已失效，請到設定確認或重新連結", "error_code": "REAUTH_REQUIRED"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("outcome, attempts, _, error_code, auth_error", JIRA_FETCH_CASES)
+async def test_jira_fetch_error_with_cached_data(monkeypatch, logged_in_user, outcome, attempts, _, error_code, auth_error, clean_platform_data):
+    """AC6：有舊資料時回舊資料；只有 401、403、404 設 X-Auth-Error。"""
+    await link_account("jira", {"apiKey": "jira-key", "domain": "team.atlassian.net"})
+    await reset_items(database.db.jira_issues, OLD_JIRA_ITEM)
+    skip_retry_delay(monkeypatch)
+    client = use_fake_http(monkeypatch, jira_platform, outcome)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        res = await ac.get("/jira/issues")
+
+    assert client.calls == attempts
+    assert res.status_code == status.HTTP_200_OK
+    assert res.headers["X-Data-Stale"] == "true"
+    assert ("X-Auth-Error" in res.headers) is auth_error

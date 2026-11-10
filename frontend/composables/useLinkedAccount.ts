@@ -95,6 +95,23 @@ export const useLinkedAccount = () => {
       headers: { Authorization: `Bearer ${token}` },
     });
 
+    // 列表裡沒有的平台恢復成未連結：換成另一個使用者時不能沿用前一個使用者的帳號狀態
+    const linkedPlatforms = new Set(list.map((ac) => ac.platform));
+    keys.value
+      .filter((k) => !linkedPlatforms.has(k.platform))
+      .forEach((k) => {
+        // 編輯中的 domain、password 是輸入框的內容，不能清掉
+        if (!k.editing) {
+          k.domain = '';
+          k.password = '';
+        }
+        k.value = '';
+        k.username = undefined;
+        k.avatar = undefined;
+        k.needsReauth = false;
+        k.isMasked = false;
+      });
+
     list.forEach((ac) => {
       const item = keys.value.find((k) => k.platform === ac.platform);
       if (item) {

@@ -57,3 +57,11 @@ def test_ignores_blank_entries(monkeypatch):
     """逗號之間的空白項目要忽略，不能變成空字串來源。"""
     monkeypatch.setenv("CORS_ALLOWED_ORIGINS", "https://a.com,,  ,https://b.com")
     assert _get_allowed_origins() == ["https://a.com", "https://b.com"]
+
+
+def test_cross_origin_error_response_exposes_retry_after():
+    """AC5：跨來源的回應帶 Access-Control-Expose-Headers 包含 Retry-After，前端才讀得到限流的等待秒數。"""
+    res = client.get("/health", headers={"Origin": "http://localhost:3000"})
+
+    exposed = [h.strip().lower() for h in res.headers.get("access-control-expose-headers", "").split(",")]
+    assert "retry-after" in exposed

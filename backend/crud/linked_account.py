@@ -74,8 +74,7 @@ async def find_linked_account(clerk_id: str, platform: str) -> dict | None:
 async def update_linked_account_by_clerk_id(clerk_id: str, platform: str, data: dict):
     composite_id = f"{clerk_id}_{platform}"
     if not data:
-        # 狀態碼維持目前的 404（ADR 0011「過渡期間」），用 error_code 和「帳號不存在」分開
-        raise InvalidRequestError("沒有可更新的欄位", status_code=404)
+        raise InvalidRequestError("沒有可更新的欄位")
 
     adapter = PLATFORMS.get(platform)
     if adapter and adapter.needs_reverify(data):

@@ -279,7 +279,7 @@ async def test_confirm_schedule_reports_items_that_can_no_longer_be_written(monk
 
 @pytest.mark.asyncio
 async def test_confirm_schedule_returns_409_when_suggestion_expired(monkeypatch, clean_snapshot):
-    """沒有快照（已過期或已確認）→ 409。"""
+    """沒有快照（已過期或已確認）→ SUGGESTION_EXPIRED（409）。"""
     async def fail(*args, **kwargs):
         raise AssertionError("沒有快照就不該往下做")
 
@@ -288,7 +288,6 @@ async def test_confirm_schedule_returns_409_when_suggestion_expired(monkeypatch,
     with pytest.raises(AppError) as exc_info:
         await schedule_router.confirm_schedule(clerk_user=mock_user)
 
-    assert exc_info.value.status_code == 409
     assert exc_info.value.error_code == "SUGGESTION_EXPIRED"
     assert exc_info.value.detail == "排程建議已過期，請重新產生"
 

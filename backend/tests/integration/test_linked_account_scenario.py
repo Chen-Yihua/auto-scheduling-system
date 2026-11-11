@@ -95,7 +95,7 @@ async def test_github_linked_account_full_lifecycle(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_moodle_linked_account_rejects_wrong_password_and_leaves_nothing_behind(monkeypatch):
-    """Moodle 帳密錯誤 → 401，且沒有寫入任何資料。"""
+    """Moodle 帳密錯誤 → 400 INVALID_CREDENTIALS，且沒有寫入任何資料。"""
     from platforms.sync import NonRetryableError
 
     # 原函式是同步的（透過 run_in_threadpool 呼叫），mock 也要是同步的
@@ -115,7 +115,8 @@ async def test_moodle_linked_account_rejects_wrong_password_and_leaves_nothing_b
                 "password": "wrong-password",
             },
         )
-        assert create_res.status_code == status.HTTP_401_UNAUTHORIZED
+        assert create_res.status_code == status.HTTP_400_BAD_REQUEST
+        assert create_res.json()["error_code"] == "INVALID_CREDENTIALS"
 
         # 驗證失敗不該留下任何殘影資料——沒有任何連結帳號，回 200 + 空陣列，不是 404
         list_res = await ac.get("/users/me/linked-accounts/")

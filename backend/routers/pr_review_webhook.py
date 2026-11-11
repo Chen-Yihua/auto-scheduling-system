@@ -27,6 +27,9 @@ GITHUB_BOT_TOKEN = os.getenv("GITHUB_BOT_TOKEN")
 
 # 驗證 X-Hub-Signature-256（request body 的 HMAC-SHA256），確認請求來自 GitHub
 GITHUB_WEBHOOK_SECRET = os.getenv("GITHUB_WEBHOOK_SECRET")
+if not GITHUB_WEBHOOK_SECRET:
+    # 啟動時記一次就好，請求時不再記，否則每個 webhook 請求都會多一筆 error
+    logger.error("GITHUB_WEBHOOK_SECRET 未設定，GitHub webhook 會一律拒絕")
 
 LLM_TIMEOUT_MS = 30_000
 
@@ -52,12 +55,12 @@ async def _send_discord(url: str, message: dict) -> None:
 
 
 def _invalid_signature() -> AppError:
-    return AppError("Invalid webhook signature", error_code="INVALID_WEBHOOK_SIGNATURE", status_code=401)
+    # 沒設定密鑰也用這個 code（對照表 401，ADR 0011「例外」）：回 500 會讓外部知道伺服器漏了設定
+    return AppError("Invalid webhook signature", error_code="INVALID_WEBHOOK_SIGNATURE")
 
 
-# payload 格式錯誤與貼留言失敗的狀態碼維持目前的 500（ADR 0011「過渡期間」）
 def _invalid_payload() -> InvalidRequestError:
-    return InvalidRequestError("webhook payload 格式錯誤", status_code=500)
+    return InvalidRequestError("webhook payload 格式錯誤")
 
 
 def _verify_github_signature(raw_body: bytes, signature: str | None) -> None:
@@ -183,10 +186,10 @@ async def github_webhook(
                 )
         except httpx.TimeoutException:
             logger.exception("貼 PR 留言逾時 repo=%s pr_number=%s", repo, pr_number)
-            raise ExternalServiceError("GitHub 回應逾時", error_code="UPSTREAM_TIMEOUT", status_code=500)
+            raise ExternalServiceError("GitHub 回應逾時", error_code="UPSTREAM_TIMEOUT")
         except httpx.RequestError:
             logger.exception("貼 PR 留言時連不上 GitHub repo=%s pr_number=%s", repo, pr_number)
-            raise ExternalServiceError("無法連線至 GitHub", status_code=500)
+            raise ExternalServiceError("無法連線至 GitHub")
 
     if action == "closed" and pr.get("merged") and pr["base"]["ref"] == "main":
         pr_title = pr["title"]

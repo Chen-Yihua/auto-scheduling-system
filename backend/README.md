@@ -24,11 +24,12 @@ backend/
 ├── Dockerfile               # 正式環境用的 image（Cloud Run 部署用這個 build）
 ├── core/                    # 跟業務無關的基礎設施
 │   ├── database.py          # Mongo 連線設定、啟動時建索引（ensure_indexes）
-│   ├── security.py          # 驗證 Clerk JWT
+│   ├── security.py          # 驗證 Clerk JWT（取得 JWKS 失敗和 token 無效分開回應）
 │   ├── crypto.py            # 第三方帳密加解密/遮罩
 │   ├── cache.py             # 通用 TTL 快取（Redis，沒設定就退回記憶體）
 │   ├── rate_limit.py        # 流量限制（slowapi），key 用 Authorization header 雜湊
-│   ├── exception_handlers.py # 集中處理錯誤：資料庫連線失敗回 503、其他資料庫錯誤回 500、沒預期的例外回 JSON 500
+│   ├── error_codes.py       # error_code → 狀態碼的對照表（ADR 0011），唯一決定錯誤狀態碼的地方
+│   ├── exception_handlers.py # 集中處理錯誤：所有例外轉成 {detail, error_code}，狀態碼查 error_codes.py
 │   └── logging_config.py    # logging 設定
 ├── schemas/                 # Pydantic 資料結構（輸入/輸出，每個資源分開定義）
 ├── crud/                    # 資料庫讀寫
@@ -66,8 +67,10 @@ backend/
 ### 錯誤處理
 
 - 只有 router 用 `HTTPException`；crud、services、platforms 丟 `core/errors.py` 的例外，由 `core/exception_handlers.py` 轉成 `{"detail", "error_code"}` 的回應。
-- 丟例外前照 [ADR 0011](../docs/decisions/0011-api-error-status-codes.md) 選 `error_code`：類別的預設 `error_code` 不是實際原因時，建構時用 `error_code=` 指定；過渡期間要維持和類別預設不同的狀態碼時，用 `status_code=` 指定。`detail` 只能是固定的文字或使用者自己送出、非機密的值，第三方回應原文只記 log。
-- 資料庫錯誤和未預期的例外不用自己 `try/except`，由全域 handler 回 503 或 500。
+- 丟例外時只選 `error_code`，照 [ADR 0011](../docs/decisions/0011-api-error-status-codes.md) 選原因：類別的預設 `error_code` 不是實際原因時，建構時用 `error_code=` 指定。狀態碼一律由 `core/error_codes.py` 的對照表決定，丟例外的地方不指定；新增原因時同時更新對照表與 ADR 0011，對照表沒有的 `error_code` 會被當成 500 `INTERNAL_ERROR`。`detail` 只能是固定的文字或使用者自己送出、非機密的值，第三方回應原文只記 log。
+- 外部服務限流時用 `core/errors.py` 的 `retry_after_header` 帶出對方的 `Retry-After`（`headers=`）。
+- 資料庫錯誤、Redis 錯誤和未預期的例外不用自己 `try/except`，由全域 handler 處理：資料庫連不上與 Redis 故障回 503，其他資料庫錯誤與未預期的例外回 500。
+- 重送原則：只有暫時性錯誤（沒有回應、逾時、依賴暫時不能用）才重送，重送多少次都不會成功的錯誤（4xx、程式錯誤）不重送；遵守限流，不在限流時重送，對方給了 `Retry-After` 就至少等那麼久。同步呼叫（前端呼叫本後端）每次總共最多 3 次；之後新增非同步工作時，每個工作總共最多 5 次。後端呼叫外部平台的重試另見 `platforms/sync.py`。
 
 ---
 

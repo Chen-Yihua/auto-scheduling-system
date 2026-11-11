@@ -65,7 +65,7 @@ async def test_get_github_issues(monkeypatch, logged_in_user):
 
 @pytest.mark.asyncio
 async def test_get_github_issues_when_account_not_linked(monkeypatch, logged_in_user):
-    """使用者還沒綁定 GitHub → 400 NOT_LINKED 加說明，前端才能顯示「請先設定帳號」。"""
+    """使用者還沒綁定 GitHub → 409 NOT_LINKED 加說明，前端才能顯示「請先設定帳號」。"""
     class EmptyLinkedAccounts:
         async def find_one(self, *args, **kwargs):
             return None
@@ -75,7 +75,7 @@ async def test_get_github_issues_when_account_not_linked(monkeypatch, logged_in_
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         res = await ac.get("/github/issues")
 
-    assert res.status_code == status.HTTP_400_BAD_REQUEST
+    assert res.status_code == status.HTTP_409_CONFLICT
     assert res.json() == {"detail": "No GitHub token linked", "error_code": "NOT_LINKED"}
 
 
@@ -111,28 +111,28 @@ OLD_GITHUB_ITEM = github_platform.transform_github_item({
 
 # (GitHub 的回應, 嘗試次數, 沒有舊資料時的狀態碼, error_code, 有舊資料時是否設 X-Auth-Error)
 GITHUB_FETCH_CASES = [
-    pytest.param(response(403, {"x-ratelimit-remaining": "0"}), 1, 401, "UPSTREAM_RATE_LIMITED", False, id="403-remaining-0"),
-    pytest.param(response(403, {"retry-after": "30"}), 1, 401, "UPSTREAM_RATE_LIMITED", False, id="403-retry-after"),
+    pytest.param(response(403, {"x-ratelimit-remaining": "0"}), 1, 503, "UPSTREAM_RATE_LIMITED", False, id="403-remaining-0"),
+    pytest.param(response(403, {"retry-after": "30"}), 1, 503, "UPSTREAM_RATE_LIMITED", False, id="403-retry-after"),
     pytest.param(response(403, json_body={"message": f"You have exceeded a secondary rate limit {UPSTREAM_SECRET_TEXT}"}),
-                 1, 401, "UPSTREAM_RATE_LIMITED", False, id="403-secondary-rate-limit"),
-    pytest.param(response(429), 2, 502, "UPSTREAM_RATE_LIMITED", False, id="429"),
-    pytest.param(response(401), 1, 401, "REAUTH_REQUIRED", True, id="401"),
-    pytest.param(response(403, {"x-ratelimit-remaining": "10"}), 1, 401, "REAUTH_REQUIRED", True, id="403-no-rate-limit"),
-    pytest.param(response(400), 1, 401, "INTERNAL_ERROR", False, id="400"),
-    pytest.param(response(404), 1, 401, "UPSTREAM_ERROR", False, id="404"),
+                 1, 503, "UPSTREAM_RATE_LIMITED", False, id="403-secondary-rate-limit"),
+    pytest.param(response(429), 2, 503, "UPSTREAM_RATE_LIMITED", False, id="429"),
+    pytest.param(response(401), 1, 409, "REAUTH_REQUIRED", True, id="401"),
+    pytest.param(response(403, {"x-ratelimit-remaining": "10"}), 1, 409, "REAUTH_REQUIRED", True, id="403-no-rate-limit"),
+    pytest.param(response(400), 1, 500, "INTERNAL_ERROR", False, id="400"),
+    pytest.param(response(404), 1, 502, "UPSTREAM_ERROR", False, id="404"),
     pytest.param(response(503), 2, 502, "UPSTREAM_ERROR", False, id="5xx"),
     pytest.param(response(418), 2, 502, "UPSTREAM_ERROR", False, id="other-4xx"),
     pytest.param(response(304), 2, 502, "UPSTREAM_ERROR", False, id="3xx"),
-    pytest.param(response(200, content=f"<html>{UPSTREAM_SECRET_TEXT}</html>".encode()), 2, 500, "UPSTREAM_ERROR", False, id="not-json"),
+    pytest.param(response(200, content=f"<html>{UPSTREAM_SECRET_TEXT}</html>".encode()), 2, 502, "UPSTREAM_ERROR", False, id="not-json"),
     pytest.param(_httpx.ConnectError("connection refused"), 2, 502, "UPSTREAM_ERROR", False, id="connect-error"),
-    pytest.param(_httpx.ReadTimeout("timed out"), 2, 502, "UPSTREAM_TIMEOUT", False, id="timeout"),
+    pytest.param(_httpx.ReadTimeout("timed out"), 2, 504, "UPSTREAM_TIMEOUT", False, id="timeout"),
 ]
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("outcome, attempts, status_code, error_code, _", GITHUB_FETCH_CASES)
 async def test_github_fetch_error_without_cached_data(monkeypatch, logged_in_user, outcome, attempts, status_code, error_code, _, clean_platform_data):
-    """AC5、AC6、AC22：沒有舊資料時，每種 GitHub 錯誤的重試次數、狀態碼、error_code 照需求 5；detail 不帶 GitHub 回應原文。"""
+    """AC1、AC9、AC10：沒有舊資料時，每種 GitHub 錯誤的重試次數不變，狀態碼照 error_code 查表；detail 不帶 GitHub 回應原文。"""
     await link_account("github", {"apiKey": "gh-token"})
     await reset_items(database.db.github_issues, None)
     skip_retry_delay(monkeypatch)
@@ -169,7 +169,7 @@ async def test_github_fetch_error_with_cached_data(monkeypatch, logged_in_user, 
 
 @pytest.mark.asyncio
 async def test_github_fetch_when_credentials_cannot_be_decrypted(monkeypatch, logged_in_user, caplog, clean_platform_data):
-    """AC10：已存的 GitHub 憑證解不開 → 維持 500，REAUTH_REQUIRED；記 warning、不刪憑證。"""
+    """已存的 GitHub 憑證解不開 → 409 REAUTH_REQUIRED；記 warning、不刪憑證。"""
     import logging
     await link_account("github", {"apiKey": "gh-token"})
     await database.db.linkedAccounts.update_one({"_id": "test_user_123_github"}, {"$set": {"apiKey": "broken-cipher"}})
@@ -178,7 +178,34 @@ async def test_github_fetch_when_credentials_cannot_be_decrypted(monkeypatch, lo
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             res = await ac.get("/github/issues")
 
-    assert res.status_code == 500
+    assert res.status_code == 409
     assert res.json()["error_code"] == "REAUTH_REQUIRED"
     assert await database.db.linkedAccounts.find_one({"_id": "test_user_123_github"}) is not None
     assert any(r.levelno == logging.WARNING for r in caplog.records)
+
+
+# ---------- 外部限流帶 Retry-After（AC5）----------
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("outcome, retry_after", [
+    pytest.param(response(403, {"retry-after": "30"}), "30", id="403-secondary-seconds"),
+    pytest.param(response(429, {"Retry-After": "60"}), "60", id="429-seconds"),
+    pytest.param(response(429, {"Retry-After": "0"}), "0", id="429-zero"),
+    pytest.param(response(429), None, id="429-without"),
+    pytest.param(response(429, {"Retry-After": "Wed, 21 Oct 2026 07:28:00 GMT"}), None, id="429-http-date"),
+    pytest.param(response(429, {"Retry-After": "-5"}), None, id="429-negative"),
+    pytest.param(response(403, {"x-ratelimit-remaining": "0", "x-ratelimit-reset": "1999999999"}), None, id="403-reset-not-converted"),
+])
+async def test_github_fetch_rate_limited_forwards_retry_after_seconds(monkeypatch, logged_in_user, outcome, retry_after, clean_platform_data):
+    """AC5：GitHub 限流 → 503 UPSTREAM_RATE_LIMITED；GitHub 帶秒數的 Retry-After 時原樣帶上，沒帶、日期格式不帶，也不從 x-ratelimit-reset 換算。"""
+    await link_account("github", {"apiKey": "gh-token"})
+    await reset_items(database.db.github_issues, None)
+    skip_retry_delay(monkeypatch)
+    use_fake_http(monkeypatch, github_platform, outcome)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        res = await ac.get("/github/issues")
+
+    assert res.status_code == 503
+    assert res.json()["error_code"] == "UPSTREAM_RATE_LIMITED"
+    assert res.headers.get("Retry-After") == retry_after

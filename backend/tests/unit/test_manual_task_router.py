@@ -855,7 +855,7 @@ async def test_ac10_inferred_priority_of_inserted_subtask_is_raised_to_next_stag
     ("task-1", ["other-subtask"], "REQUEST_IN_PROGRESS"),
 ], ids=["key-used-elsewhere", "still-in-progress"])
 async def test_subtask_idempotency_conflicts_have_their_own_error_codes(monkeypatch, existing_parent, subtask_ids, error_code):
-    """需求 4：新增子任務時 key 用在別的請求是 IDEMPOTENCY_KEY_REUSED、同一個請求還在處理是 REQUEST_IN_PROGRESS，狀態碼維持 409。"""
+    """需求 4：新增子任務時 key 用在別的請求是 IDEMPOTENCY_KEY_REUSED、同一個請求還在處理是 REQUEST_IN_PROGRESS（都是 409）。"""
     from core.errors import AppError
     crud = manual_task_router.manual_task_crud
 
@@ -875,5 +875,4 @@ async def test_subtask_idempotency_conflicts_have_their_own_error_codes(monkeypa
     with pytest.raises(AppError) as exc_info:
         await manual_task_router._subtask_result_for_key("task-1", "test_user_123", "key")
 
-    assert exc_info.value.status_code == 409
     assert exc_info.value.error_code == error_code

@@ -83,7 +83,7 @@ async def test_get_schedule_suggestion_with_preferences_keeps_scheduled_time_in_
 
 @pytest.mark.asyncio
 async def test_get_schedule_suggestion_when_calendar_not_connected(monkeypatch, logged_in_user):
-    """使用者還沒連接 Google Calendar → 400，HTTP 回應要帶著中文說明，前端才能顯示。"""
+    """使用者還沒連接 Google Calendar → 409 NOT_LINKED，HTTP 回應要帶著中文說明，前端才能顯示。"""
     async def mock_get_tasks(user_id):
         return []
 
@@ -96,7 +96,7 @@ async def test_get_schedule_suggestion_when_calendar_not_connected(monkeypatch, 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         res = await ac.post("/schedule/suggest", json={})
 
-    assert res.status_code == status.HTTP_400_BAD_REQUEST
+    assert res.status_code == status.HTTP_409_CONFLICT
     assert res.json() == {"detail": "尚未連接 Google Calendar", "error_code": "NOT_LINKED"}
 
 
@@ -253,3 +253,286 @@ async def test_update_schedule_task_done_success(monkeypatch, logged_in_user):
     assert res.status_code == status.HTTP_200_OK
     assert captured == {"task_id": "github:42", "done": True}
     assert res.json() == {"task_id": "github:42", "done": True}
+
+
+# ---------- 外部 id 不存在、格式錯誤（AC8）----------
+# 走真的 crud 與測試用的 mongomock，才看得出資料庫有沒有被改
+
+from datetime import datetime, timezone
+
+import httpx
+
+from core import cache
+from core.database import db
+
+USER = "test_user_123"
+
+
+async def _cleanup_schedule_data():
+    for collection in (db.manual_tasks, db.github_issues, db.jira_issues, db.moodle_assignments):
+        await collection.delete_many({"user_id": {"$in": [USER, "someone-else"]}})
+
+
+async def _seed_reorder_data():
+    await _cleanup_schedule_data()
+    await db.manual_tasks.insert_many([
+        {"_id": "t1", "user_id": USER, "title": "手動", "status": "To Do", "priority": "Low", "sort_order": 5},
+        {"_id": "p1", "user_id": USER, "title": "主任務", "is_parent": True, "subtask_ids": ["s1", "s2"]},
+        {"_id": "s1", "user_id": USER, "title": "階段一", "parent_id": "p1", "status": "To Do", "priority": "Medium", "sort_order": 6},
+        {"_id": "s2", "user_id": USER, "title": "階段二", "parent_id": "p1", "status": "To Do", "priority": "Low", "sort_order": 7},
+        {"_id": "other", "user_id": "someone-else", "title": "別人的", "status": "To Do", "priority": "Low", "sort_order": 8},
+    ])
+    await db.github_issues.insert_one({"id": 1, "user_id": USER, "title": "G", "status": "open", "priority": "Low", "sort_order": 9})
+    await db.jira_issues.insert_one({"id": "100", "user_id": USER, "title": "J", "status": "To Do", "priority": "Low", "sort_order": 10})
+    await db.github_issues.insert_one({"id": 2, "user_id": "someone-else", "title": "別人的 G", "status": "open", "sort_order": 11})
+
+
+async def _snapshot_order():
+    snapshot = {}
+    for collection in (db.manual_tasks, db.github_issues, db.jira_issues):
+        async for doc in collection.find({}):
+            snapshot[(collection.name, str(doc.get("_id") if collection is db.manual_tasks else doc["id"]))] = (
+                doc.get("sort_order"), doc.get("priority"), doc.get("updated"),
+            )
+    return snapshot
+
+
+@pytest.mark.parametrize("bad_item", [
+    {"task_id": "github:999", "priority": "High"},
+    {"task_id": "github:2", "priority": "High"},
+    {"task_id": "manual:missing", "priority": "High"},
+    {"task_id": "manual:other", "priority": "High"},
+    {"task_id": "github:not-a-number", "priority": "High"},
+    {"task_id": "foo:1", "priority": "High"},
+    {"task_id": "no-colon", "priority": "High"},
+    {"task_id": "manual:p1", "priority": "High"},
+    {"task_id": "manual:s2", "priority": "High"},
+], ids=[
+    "external-missing", "external-other-user", "manual-missing", "manual-other-user", "external-bad-format",
+    "unknown-prefix", "no-colon", "parent-task", "stage-priority-rule",
+])
+@pytest.mark.asyncio
+async def test_reorder_rejects_whole_batch_without_writing_anything(logged_in_user, bad_item):
+    """AC8：reorder 任何一項會回 400 時，整批 400 INVALID_REQUEST，資料庫的順序完全沒變（合法的項目也不寫）。"""
+    await _seed_reorder_data()
+    try:
+        before = await _snapshot_order()
+        items = [
+            {"task_id": "github:1", "priority": "High"},
+            {"task_id": "jira:100", "priority": "High"},
+            {"task_id": "manual:t1", "priority": "High"},
+            bad_item,
+        ]
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+            res = await ac.put("/schedule/reorder", json={"items": items})
+
+        assert res.status_code == status.HTTP_400_BAD_REQUEST
+        assert res.json()["error_code"] == "INVALID_REQUEST"
+        assert await _snapshot_order() == before
+    finally:
+        await _cleanup_schedule_data()
+
+
+@pytest.mark.parametrize("missing_id", ["github:999", "github:2", "manual:missing", "manual:other"])
+@pytest.mark.asyncio
+async def test_reorder_unknown_id_uses_same_message_as_manual_task(logged_in_user, missing_id):
+    """AC8、AC10：外部與手動的 id 不存在或屬於別人，都是同一個訊息，列出送出的組合 id，不透露資料是否存在。"""
+    await _seed_reorder_data()
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+            res = await ac.put("/schedule/reorder", json={"items": [{"task_id": missing_id, "priority": "High"}]})
+
+        assert res.status_code == status.HTTP_400_BAD_REQUEST
+        assert res.json() == {"detail": f"包含不屬於你的任務 id: ['{missing_id}']", "error_code": "INVALID_REQUEST"}
+    finally:
+        await _cleanup_schedule_data()
+
+
+@pytest.mark.asyncio
+async def test_reorder_valid_batch_still_writes_all_sources(logged_in_user):
+    """AC8：全部合法時照常寫入各來源，sort_order 是整份清單的索引。"""
+    await _seed_reorder_data()
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+            res = await ac.put("/schedule/reorder", json={"items": [
+                {"task_id": "jira:100", "priority": "High"},
+                {"task_id": "manual:t1", "priority": "Medium"},
+                {"task_id": "github:1", "priority": "Low"},
+            ]})
+
+        assert res.status_code == status.HTTP_200_OK
+        assert (await db.jira_issues.find_one({"id": "100"}))["sort_order"] == 0
+        manual = await db.manual_tasks.find_one({"_id": "t1"})
+        assert (manual["sort_order"], manual["priority"]) == (1, "Medium")
+        assert (await db.github_issues.find_one({"id": 1}))["sort_order"] == 2
+    finally:
+        await _cleanup_schedule_data()
+
+
+@pytest.mark.parametrize("path, body", [
+    ("/schedule/tasks/fields", {"duration": 30}),
+    ("/schedule/tasks/done", {"done": True}),
+])
+@pytest.mark.parametrize("task_id", ["github:999", "github:2", "jira:missing"])
+@pytest.mark.asyncio
+async def test_fields_and_done_with_missing_external_id_is_404(logged_in_user, path, body, task_id):
+    """AC8、AC10：fields、done 的外部 id 不存在或屬於別人 → 404 NOT_FOUND，訊息和手動任務不存在時相同，別人的資料也沒被改。"""
+    await _seed_reorder_data()
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+            res = await ac.patch(path, json={"task_id": task_id, **body})
+            manual_res = await ac.patch(path, json={"task_id": "manual:missing", **body})
+
+        assert res.status_code == status.HTTP_404_NOT_FOUND
+        assert res.json() == {"detail": "Task not found", "error_code": "NOT_FOUND"}
+        assert res.json() == manual_res.json()
+        other = await db.github_issues.find_one({"id": 2})
+        assert "duration" not in other and "done" not in other
+    finally:
+        await _cleanup_schedule_data()
+
+
+@pytest.mark.parametrize("method, path, body", [
+    ("PATCH", "/schedule/tasks/fields", {"task_id": "foo:1", "duration": 30}),
+    ("PATCH", "/schedule/tasks/done", {"task_id": "foo:1", "done": True}),
+    ("PATCH", "/schedule/tasks/done", {"task_id": "no-colon", "done": True}),
+    ("PUT", "/schedule/reorder", {"items": [{"task_id": "foo:1", "priority": "High"}]}),
+])
+@pytest.mark.asyncio
+async def test_unknown_source_prefix_is_400_on_all_three_endpoints(logged_in_user, method, path, body):
+    """AC8：來源前綴不認得（或沒有冒號）是組合 id 格式錯誤 → 三個 endpoint 都 400 INVALID_REQUEST。"""
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        res = await ac.request(method, path, json=body)
+
+    assert res.status_code == status.HTTP_400_BAD_REQUEST
+    assert res.json()["error_code"] == "INVALID_REQUEST"
+
+
+@pytest.mark.asyncio
+async def test_fields_and_done_existing_external_item_still_updates(logged_in_user):
+    """AC8：外部項目存在時 fields、done 照常寫入。"""
+    await _seed_reorder_data()
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+            fields_res = await ac.patch("/schedule/tasks/fields", json={"task_id": "github:1", "duration": 30})
+            done_res = await ac.patch("/schedule/tasks/done", json={"task_id": "jira:100", "done": True})
+
+        assert fields_res.status_code == status.HTTP_200_OK
+        assert done_res.status_code == status.HTTP_200_OK
+        assert (await db.github_issues.find_one({"id": 1}))["duration"] == 30
+        assert (await db.jira_issues.find_one({"id": "100"}))["done"] is True
+    finally:
+        await _cleanup_schedule_data()
+
+
+# ---------- 確認排程（AC7、AC8）----------
+
+GOOGLE_EVENTS_URL = "https://www.googleapis.com/calendar/v3/calendars/primary-cal/events"
+
+
+def _google_error_response(status_code: int, reason: str | None = None) -> httpx.Response:
+    body = {"error": {"code": status_code, "errors": [{"reason": reason}] if reason else []}}
+    return httpx.Response(status_code, json=body, request=httpx.Request("POST", GOOGLE_EVENTS_URL))
+
+
+async def _confirm_with_google_write_result(monkeypatch, write_result, tasks=None, scheduled=None):
+    """建議快照裡有 manual:t1；寫入 Google 時照 write_result（回傳值或要丟的例外）。"""
+    import services.google_calendar as google_calendar_service
+
+    cache._memory_store.clear()
+    tasks = tasks or [{"id": "manual:t1", "title": "任務一", "priority": "High", "status": "To Do",
+                       "due_date": None, "calendar_event_id": None}]
+    scheduled = scheduled or [{"task_id": "manual:t1", "title": "任務一", "priority": "High",
+                               "start": "2030-01-01T09:00:00+00:00", "end": "2030-01-01T10:00:00+00:00"}]
+    await cache.cache_set(schedule_router._suggestion_snapshot_key(USER), scheduled, 600)
+
+    async def mock_get_tasks(user_id):
+        return tasks
+
+    async def mock_get_free_slots(user_id, use_cache=True):
+        return [{"start": "2030-01-01T00:00:00Z", "end": "2030-01-02T00:00:00Z"}]
+
+    async def mock_token_and_calendar(clerk_id):
+        return "access-token", "primary-cal"
+
+    async def mock_create_event(*args, **kwargs):
+        if isinstance(write_result, BaseException):
+            raise write_result
+        return write_result
+
+    monkeypatch.setattr(schedule_router, "get_all_schedulable_items", mock_get_tasks)
+    monkeypatch.setattr(schedule_router, "get_free_slots_for_user", mock_get_free_slots)
+    monkeypatch.setattr(google_calendar_service, "_get_access_token_and_primary_calendar_id", mock_token_and_calendar)
+    monkeypatch.setattr(google_calendar_service, "create_calendar_event", mock_create_event)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        return await ac.post("/schedule/confirm")
+
+
+def _status_error(status_code: int, reason: str | None = None) -> httpx.HTTPStatusError:
+    response = _google_error_response(status_code, reason)
+    return httpx.HTTPStatusError("error", request=response.request, response=response)
+
+
+@pytest.mark.parametrize("error, error_code, reason", [
+    (_status_error(401), "REAUTH_REQUIRED", "Google 授權已失效，請重新連接 Google Calendar"),
+    (_status_error(403, "insufficientPermissions"), "REAUTH_REQUIRED", "Google 授權的權限不足，請重新連接 Google Calendar"),
+    (_status_error(400), "INTERNAL_ERROR", "伺服器處理 Google 請求時發生錯誤，請稍後再試"),
+    (_status_error(429), "UPSTREAM_RATE_LIMITED", "Google 請求太頻繁，請稍後再試"),
+    (_status_error(403, "rateLimitExceeded"), "UPSTREAM_RATE_LIMITED", "Google 請求太頻繁，請稍後再試"),
+    (_status_error(503), "UPSTREAM_ERROR", "Google 暫時無法處理請求，請稍後再試"),
+    (httpx.ReadTimeout("timeout"), "UPSTREAM_TIMEOUT", "Google 回應逾時，請稍後再試"),
+    (httpx.ConnectError("refused"), "UPSTREAM_ERROR", "無法連線至 Google，請稍後再試"),
+], ids=["401", "403-permission", "400", "429", "403-rate-limit", "503", "timeout", "unreachable"])
+@pytest.mark.asyncio
+async def test_confirm_google_write_failure_carries_error_code_and_matching_reason(
+    monkeypatch, logged_in_user, error, error_code, reason,
+):
+    """AC7：寫入 Google 失敗的 failed 項目帶依原因的 error_code，reason 是和原因一致的固定文字。"""
+    res = await _confirm_with_google_write_result(monkeypatch, error)
+
+    assert res.status_code == status.HTTP_200_OK
+    assert res.json()["failed"] == [{"task_id": "manual:t1", "title": "任務一", "reason": reason, "error_code": error_code}]
+
+
+@pytest.mark.asyncio
+async def test_confirm_precheck_failure_and_previous_stage_have_null_error_code(monkeypatch, logged_in_user):
+    """AC7：寫入前檢查不通過、前一個階段寫入失敗的項目 error_code 是 null，reason 不變。"""
+    tasks = [
+        {"id": "manual:done", "title": "已完成", "priority": "High", "status": "Done", "calendar_event_id": None},
+        {"id": "manual:s1", "title": "階段一", "priority": "High", "status": "To Do", "calendar_event_id": None, "parent_id": "manual:p1"},
+        {"id": "manual:s2", "title": "階段二", "priority": "High", "status": "To Do", "calendar_event_id": None, "parent_id": "manual:p1"},
+    ]
+    scheduled = [
+        {"task_id": "manual:done", "title": "已完成", "priority": "High",
+         "start": "2030-01-01T08:00:00+00:00", "end": "2030-01-01T09:00:00+00:00"},
+        {"task_id": "manual:s1", "title": "階段一", "priority": "High", "parent_id": "manual:p1",
+         "start": "2030-01-01T09:00:00+00:00", "end": "2030-01-01T10:00:00+00:00"},
+        {"task_id": "manual:s2", "title": "階段二", "priority": "High", "parent_id": "manual:p1",
+         "start": "2030-01-01T10:00:00+00:00", "end": "2030-01-01T11:00:00+00:00"},
+    ]
+
+    res = await _confirm_with_google_write_result(monkeypatch, _status_error(503), tasks=tasks, scheduled=scheduled)
+
+    failed = {f["task_id"]: f for f in res.json()["failed"]}
+    assert failed["manual:done"] == {"task_id": "manual:done", "title": "已完成", "reason": "任務已經完成", "error_code": None}
+    assert failed["manual:s1"]["error_code"] == "UPSTREAM_ERROR"
+    assert failed["manual:s2"] == {"task_id": "manual:s2", "title": "階段二", "reason": "前一個階段寫入失敗", "error_code": None}
+
+
+@pytest.mark.asyncio
+async def test_confirm_succeeds_when_external_item_was_deleted_meanwhile(monkeypatch, logged_in_user):
+    """AC8：確認排程期間外部項目被刪除，寫回事件 id 時找不到也不丟錯，確認仍成功。"""
+    await _cleanup_schedule_data()
+    tasks = [{"id": "github:777", "title": "已刪除的 issue", "priority": "High", "status": "To Do", "calendar_event_id": None}]
+    scheduled = [{"task_id": "github:777", "title": "已刪除的 issue", "priority": "High",
+                  "start": "2030-01-01T09:00:00+00:00", "end": "2030-01-01T10:00:00+00:00"}]
+
+    res = await _confirm_with_google_write_result(monkeypatch, {"id": "event-1"}, tasks=tasks, scheduled=scheduled)
+
+    assert res.status_code == status.HTTP_200_OK
+    assert res.json() == {
+        "confirmed": [{"task_id": "github:777", "title": "已刪除的 issue", "calendar_event_id": "event-1"}],
+        "failed": [],
+    }

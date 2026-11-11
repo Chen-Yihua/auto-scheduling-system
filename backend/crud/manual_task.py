@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 PRIORITY_RANK = {"Low": 0, "Medium": 1, "High": 2}
 LAST_SUBTASK_DETAIL = "主任務只剩這一個子任務，不能刪除；要刪除請改刪主任務"
 PRIORITY_LABEL = {"Low": "低", "Medium": "中", "High": "高"}
+TASK_NOT_FOUND_DETAIL = "Task not found"
 
 
 # 資料庫用 _id 存任務 id，對外（API、其他模組）一律叫 id
@@ -319,7 +320,7 @@ async def create_manual_task(task: ManualTaskOut, idempotency_key: str | None = 
 async def get_manual_task_by_id(task_id: str, user_id: str):
     task = await db.manual_tasks.find_one({"_id": task_id, "user_id": user_id})
     if not task:
-        raise NotFoundError("Task not found")
+        raise NotFoundError(TASK_NOT_FOUND_DETAIL)
     task = _to_task(task)
     return await _with_stage_fields(task)
 
@@ -331,7 +332,7 @@ async def _with_stage_fields(task: dict) -> dict:
     elif task.get("parent_id"):
         stage = next((s["stage"] for s in await get_subtasks(task["parent_id"], task["user_id"]) if s["id"] == task["id"]), None)
         if stage is None:
-            raise NotFoundError("Task not found")
+            raise NotFoundError(TASK_NOT_FOUND_DETAIL)
         task["stage"] = stage
     return task
 
@@ -339,24 +340,13 @@ async def get_manual_tasks_by_user_id(user_id: str):
     tasks = await db.manual_tasks.find({"user_id": user_id}).to_list()
     return _with_parents_computed([_to_task(task) for task in tasks])
 
-async def reorder_manual_tasks(user_id: str, items: list[dict]):
+async def write_manual_task_order(user_id: str, items: list[dict]) -> None:
     """
     寫回拖拉排序後的 priority 和 sort_order。sort_order 由呼叫端依跨來源的完整清單指定。
 
-    先確認每個 id 都屬於這個使用者，避免竄改別人的任務。
+    呼叫端要先確認每個 id 都屬於這個使用者，並用 validate_reordered_stages 檢查過。
     不用 update_manual_task_by_id：順序沒變（modified_count 為 0）在這裡是正常情況，不該丟 400。
     """
-    if not items:
-        return []
-
-    own_tasks = {task["id"]: task for task in await get_manual_tasks_by_user_id(user_id)}
-
-    unknown_ids = [item["task_id"] for item in items if item["task_id"] not in own_tasks]
-    if unknown_ids:
-        raise InvalidRequestError(f"包含不屬於你的任務 id: {unknown_ids}")
-
-    _validate_reordered_stages(own_tasks, items)
-
     now = datetime.now(timezone.utc)
     for item in items:
         await db.manual_tasks.update_one(
@@ -364,11 +354,9 @@ async def reorder_manual_tasks(user_id: str, items: list[dict]):
             {"$set": {"sort_order": item["sort_order"], "priority": item["priority"], "updated": now}},
         )
 
-    return await get_manual_tasks_by_user_id(user_id)
 
-
-def _validate_reordered_stages(own_tasks: dict[str, dict], items: list[dict]) -> None:
-    """套用拖拉後的優先序再檢查每個受影響的主任務；先檢查完才寫入，違反時資料保持不變。"""
+def validate_reordered_stages(own_tasks: dict[str, dict], items: list[dict]) -> None:
+    """套用拖拉後的優先序再檢查每個受影響的主任務；items 的 id 都要在 own_tasks 裡。"""
     new_priority = {item["task_id"]: item["priority"] for item in items}
     if any(own_tasks[task_id].get("is_parent") for task_id in new_priority):
         raise InvalidRequestError("主任務沒有優先序，不能排序")
@@ -428,7 +416,7 @@ async def update_manual_task_by_id(task_id: str, data: dict):
         raise InvalidRequestError("No valid fields to update")
     doc = await db.manual_tasks.find_one({"_id": task_id})
     if doc is None:
-        raise NotFoundError("Task not found")
+        raise NotFoundError(TASK_NOT_FOUND_DETAIL)
     task = _to_task(doc)
     if task.get("is_parent") or task.get("parent_id"):
         return await _with_stage_fields(task)
@@ -437,4 +425,4 @@ async def update_manual_task_by_id(task_id: str, data: dict):
 async def delete_manual_task_by_id(task_id: str):
     result = await db.manual_tasks.delete_one({"_id": task_id})
     if result.deleted_count == 0:
-        raise NotFoundError("Task not found")
+        raise NotFoundError(TASK_NOT_FOUND_DETAIL)

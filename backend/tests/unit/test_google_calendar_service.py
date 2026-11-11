@@ -1,5 +1,6 @@
 """token 換新和錯誤處理由各功能共用，這裡透過 get_free_slots_for_user 測試。"""
 import pytest
+from core.error_codes import status_for_error_code
 from core.errors import AppError, ExternalServiceError, InvalidRequestError, NotFoundError, ReauthRequiredError
 import httpx
 from datetime import datetime, timezone
@@ -358,8 +359,8 @@ async def test_get_free_slots_requires_reauth_when_calendar_list_still_401_after
     (_http_error(403), AppError),
 ], ids=["500", "503", "429", "connect-error", "read-timeout", "403"])
 async def test_get_free_slots_maps_retry_errors_after_token_refresh(monkeypatch, retry_error, expected):
-    """換新 token 後重試行事曆列表：5xx、429、連不上 → 502，和第一次請求一樣（AC1、AC2）；
-    403 維持 500，依原因帶 error_code（#77 需求 4），不轉成 400。"""
+    """換新 token 後重試行事曆列表：5xx、429、連不上的處理和第一次請求一樣；
+    403 依原因帶 error_code（看不出原因是 UPSTREAM_ERROR），不當成尚未連接。"""
     async def mock_find_one(query):
         return {"_id": "uid123", "access_token": encrypt_secret("expired-token"), "refresh_token": encrypt_secret("rt")}
 
@@ -382,8 +383,8 @@ async def test_get_free_slots_maps_retry_errors_after_token_refresh(monkeypatch,
         await calendar_service.get_free_slots_for_user("uid123")
 
     assert calls == ["expired-token", "new-token"]
-    if retry_error is not None and isinstance(retry_error, httpx.HTTPStatusError) and retry_error.response.status_code == 403:
-        assert exc_info.value.status_code == 500
+    if isinstance(retry_error, httpx.HTTPStatusError) and retry_error.response.status_code == 403:
+        assert exc_info.value.error_code == "UPSTREAM_ERROR"
 
 
 # ========== list_calendars_for_user ==========
@@ -671,8 +672,8 @@ def _connected(monkeypatch, calendar_list=None):
     (_google_status_error(400), "INTERNAL_ERROR"),
     (_google_status_error(404), "UPSTREAM_ERROR"),
 ], ids=["403-rate-limit", "403-permission", "400", "other-4xx"])
-async def test_calendar_list_4xx_after_refresh_keeps_500_with_error_code(monkeypatch, retry_error, error_code):
-    """需求 4：換新 token 後再抓行事曆清單遇到 401 以外的 4xx，依 Google 的原因給 error_code，狀態碼維持 500。"""
+async def test_calendar_list_4xx_after_refresh_has_error_code(monkeypatch, retry_error, error_code):
+    """換新 token 後再抓行事曆清單遇到 401 以外的 4xx，依 Google 的原因給 error_code（狀態碼照對照表）。"""
     _connected(monkeypatch)
 
     async def mock_fetch_calendar_list(token):
@@ -689,31 +690,30 @@ async def test_calendar_list_4xx_after_refresh_keeps_500_with_error_code(monkeyp
     with pytest.raises(AppError) as exc_info:
         await calendar_service.get_free_slots_for_user("uid123")
 
-    assert exc_info.value.status_code == 500
     assert exc_info.value.error_code == error_code
 
 
 @pytest.mark.asyncio
 async def test_no_primary_calendar_has_its_own_error_code(monkeypatch):
-    """需求 4：沒有 primary calendar → 維持 404，NO_PRIMARY_CALENDAR。"""
+    """沒有 primary calendar → NO_PRIMARY_CALENDAR（409）。"""
     _connected(monkeypatch, calendar_list=[{"id": "other"}])
 
     with pytest.raises(AppError) as exc_info:
         await calendar_service.get_free_slots_for_user("uid123")
 
-    assert exc_info.value.status_code == 404
     assert exc_info.value.error_code == "NO_PRIMARY_CALENDAR"
+    assert status_for_error_code(exc_info.value.error_code) == 409
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("error, status_code, error_code", [
-    (_google_status_error(429), 502, "UPSTREAM_RATE_LIMITED"),
-    (_google_status_error(403, "quotaExceeded"), 400, "UPSTREAM_RATE_LIMITED"),
+    (_google_status_error(429), 503, "UPSTREAM_RATE_LIMITED"),
+    (_google_status_error(403, "quotaExceeded"), 503, "UPSTREAM_RATE_LIMITED"),
     (_google_status_error(500), 502, "UPSTREAM_ERROR"),
-    (httpx.ReadTimeout("slow"), 502, "UPSTREAM_TIMEOUT"),
+    (httpx.ReadTimeout("slow"), 504, "UPSTREAM_TIMEOUT"),
 ], ids=["429", "403-quota", "5xx", "timeout"])
 async def test_freebusy_errors_have_error_codes(monkeypatch, error, status_code, error_code):
-    """需求 4：查忙碌時段時的 Google 錯誤也依原因給 error_code，狀態碼不變。"""
+    """查忙碌時段時的 Google 錯誤也依原因給 error_code，狀態碼照對照表。"""
     _connected(monkeypatch, calendar_list=[{"id": "primary-cal-id", "primary": True}])
 
     async def mock_fetch_freebusy(token, calendar_id):
@@ -724,8 +724,8 @@ async def test_freebusy_errors_have_error_codes(monkeypatch, error, status_code,
     with pytest.raises(AppError) as exc_info:
         await calendar_service.get_free_slots_for_user("uid123")
 
-    assert exc_info.value.status_code == status_code
     assert exc_info.value.error_code == error_code
+    assert status_for_error_code(exc_info.value.error_code) == status_code
 
 
 @pytest.mark.asyncio

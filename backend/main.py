@@ -58,6 +58,8 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    # 前後端不同來源時，Retry-After 不在瀏覽器讓前端讀取的安全清單內
+    expose_headers=["Retry-After"],
 )
 
 app.state.limiter = limiter

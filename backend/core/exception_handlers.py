@@ -1,7 +1,7 @@
 """
-例外統一轉成 {"detail", "error_code"} 的錯誤回應（ADR 0011）：AppError 用它帶的 error_code 與狀態碼；
-HTTPException 依狀態碼補預設的 error_code；422 拿掉輸入值；DB 連不上回 503，Redis 失敗、
-其他 DB 錯誤和未預期例外回 500。例外內容只記在 log，不回傳給前端。
+例外統一轉成 {"detail", "error_code"} 的錯誤回應（ADR 0011）：狀態碼一律依 error_code 查 core/error_codes.py 的對照表。
+AppError 用它帶的 error_code；HTTPException 先依狀態碼補 error_code；422 拿掉輸入值；DB 連不上、Redis 失敗是
+SERVICE_UNAVAILABLE，其他 DB 錯誤和未預期例外是 INTERNAL_ERROR。例外內容只記在 log，不回傳給前端。
 """
 import logging
 from collections.abc import Mapping
@@ -14,20 +14,39 @@ from pymongo.errors import ConnectionFailure, PyMongoError
 from redis.exceptions import RedisError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from core.error_codes import status_for_error_code
 from core.errors import AppError
 
 logger = logging.getLogger(__name__)
 
+UNEXPECTED_ERROR_DETAIL = "伺服器發生未預期的錯誤，請稍後再試"
 
-def error_response(status_code: int, detail, error_code: str, headers: Mapping[str, str] | None = None) -> JSONResponse:
+
+def error_response(
+    request: Request,
+    detail,
+    error_code: str,
+    *,
+    headers: Mapping[str, str] | None = None,
+    exc: BaseException | None = None,
+) -> JSONResponse:
+    status_code = status_for_error_code(error_code)
+    if status_code is None:
+        # 不回傳原始的 error_code 與 detail：會把內部的原因名稱與文字暴露給呼叫者
+        logger.error(
+            "對照表沒有的 error_code=%s %s %s trace=%s",
+            error_code, request.method, request.url.path, request.headers.get("x-cloud-trace-context"),
+            exc_info=exc,
+        )
+        return JSONResponse(status_code=500, content={"detail": UNEXPECTED_ERROR_DETAIL, "error_code": "INTERNAL_ERROR"})
     return JSONResponse(status_code=status_code, content={"detail": detail, "error_code": error_code}, headers=headers)
 
 
 async def app_error_handler(request: Request, exc: AppError) -> JSONResponse:
-    return error_response(exc.status_code, exc.detail, exc.error_code)
+    return error_response(request, exc.detail, exc.error_code, headers=exc.headers, exc=exc)
 
 
-# router 還沒改成 AppError 的 HTTPException、未知路由、不支援的方法；403 只有 Clerk 驗證 library 會丟
+# router 還沒改成 AppError 的 HTTPException、未知路由、不支援的方法；403 只有 Clerk 驗證 library 會丟（沒帶 token、scheme 錯）
 _ERROR_CODE_BY_HTTP_STATUS = {
     400: "INVALID_REQUEST",
     401: "UNAUTHENTICATED",
@@ -44,7 +63,7 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException) 
     error_code = _ERROR_CODE_BY_HTTP_STATUS.get(exc.status_code)
     if error_code is None:
         error_code = "INTERNAL_ERROR" if exc.status_code >= 500 else "INVALID_REQUEST"
-    return error_response(exc.status_code, exc.detail, error_code, headers=exc.headers)
+    return error_response(request, exc.detail, error_code, headers=exc.headers, exc=exc)
 
 
 # input 在缺欄位時是整個 request body（含 apiKey、password），ctx 也可能帶輸入值
@@ -56,23 +75,23 @@ async def validation_error_handler(request: Request, exc: RequestValidationError
         {key: value for key, value in error.items() if key not in _DROPPED_VALIDATION_FIELDS}
         for error in exc.errors()
     ]
-    return error_response(422, jsonable_encoder(errors), "VALIDATION_ERROR")
+    return error_response(request, jsonable_encoder(errors), "VALIDATION_ERROR")
 
 
 async def database_unavailable_handler(request: Request, exc: ConnectionFailure) -> JSONResponse:
     logger.error("資料庫連線失敗 %s %s", request.method, request.url.path, exc_info=exc)
-    return error_response(503, "資料庫暫時無法使用，請稍後再試", "SERVICE_UNAVAILABLE")
+    return error_response(request, "資料庫暫時無法使用，請稍後再試", "SERVICE_UNAVAILABLE")
 
 
 async def database_error_handler(request: Request, exc: PyMongoError) -> JSONResponse:
     logger.error("資料庫錯誤 %s %s", request.method, request.url.path, exc_info=exc)
-    return error_response(500, "伺服器發生錯誤，請稍後再試", "INTERNAL_ERROR")
+    return error_response(request, "伺服器發生錯誤，請稍後再試", "INTERNAL_ERROR")
 
 
 async def redis_error_handler(request: Request, exc: RedisError) -> JSONResponse:
-    """快取讀寫與限流計數都用 Redis；狀態碼維持 500（ADR 0011「過渡期間」）。"""
+    """快取讀寫與限流計數都用 Redis。"""
     logger.error("Redis 錯誤 %s %s", request.method, request.url.path, exc_info=exc)
-    return error_response(500, "服務暫時無法使用，請稍後再試", "SERVICE_UNAVAILABLE")
+    return error_response(request, "服務暫時無法使用，請稍後再試", "SERVICE_UNAVAILABLE")
 
 
 class UnhandledExceptionMiddleware:
@@ -106,5 +125,5 @@ class UnhandledExceptionMiddleware:
             if response_started:
                 # 回應已開始送出，無法改成 500
                 raise
-            response = error_response(500, "伺服器發生未預期的錯誤，請稍後再試", "INTERNAL_ERROR")
+            response = error_response(Request(scope), UNEXPECTED_ERROR_DETAIL, "INTERNAL_ERROR")
             await response(scope, receive, send)

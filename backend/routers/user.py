@@ -17,10 +17,14 @@ router = APIRouter(prefix="/users", tags=["users"])
 
 # Clerk Dashboard > Webhooks 的 Signing Secret（whsec_ 開頭），用 svix 驗證請求來自 Clerk
 CLERK_WEBHOOK_SIGNING_SECRET = os.getenv("CLERK_WEBHOOK_SIGNING_SECRET")
+if not CLERK_WEBHOOK_SIGNING_SECRET:
+    # 啟動時記一次就好，請求時不再記，否則每個 webhook 請求都會多一筆 error
+    logger.error("CLERK_WEBHOOK_SIGNING_SECRET 未設定，Clerk webhook 會一律拒絕")
 
 
 def _invalid_signature() -> AppError:
-    return AppError("Invalid webhook signature", error_code="INVALID_WEBHOOK_SIGNATURE", status_code=401)
+    # 沒設定密鑰也用這個 code（對照表 401，ADR 0011「例外」）：回 500 會讓外部知道伺服器漏了設定
+    return AppError("Invalid webhook signature", error_code="INVALID_WEBHOOK_SIGNATURE")
 
 
 def _verify_clerk_webhook_signature(raw_body: bytes, headers: dict) -> None:

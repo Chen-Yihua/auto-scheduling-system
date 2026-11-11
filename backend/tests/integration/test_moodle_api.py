@@ -71,13 +71,13 @@ async def test_get_moodle_assignments(monkeypatch, logged_in_user):
 
 @pytest.mark.asyncio
 async def test_get_moodle_assignments_when_account_not_linked(monkeypatch, logged_in_user):
-    """使用者還沒綁定 Moodle → 400 NOT_LINKED 加說明，前端才能顯示「請先設定帳號」。"""
+    """使用者還沒綁定 Moodle → 409 NOT_LINKED 加說明，前端才能顯示「請先設定帳號」。"""
     monkeypatch.setattr(database.db, "linkedAccounts", EmptyLinkedAccounts())
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         res = await ac.get("/moodle/assignments")
 
-    assert res.status_code == status.HTTP_400_BAD_REQUEST
+    assert res.status_code == status.HTTP_409_CONFLICT
     assert res.json() == {"detail": "No Moodle linked account", "error_code": "NOT_LINKED"}
 
 
@@ -128,9 +128,9 @@ def _fake_browser(monkeypatch, final_url=None, error=None):
 
 MOODLE_FETCH_CASES = [
     pytest.param({"final_url": "https://i.nccu.edu.tw/Login.aspx?ReturnUrl=%2fsso_app%2fMoodleSSO2.aspx&e=1"},
-                 1, 401, "REAUTH_REQUIRED", True, id="stays-on-login-page"),
-    pytest.param({"final_url": "https://i.nccu.edu.tw/sso_app/Error.aspx"}, 1, 401, "UPSTREAM_ERROR", False, id="redirected-elsewhere"),
-    pytest.param({"error": TimeoutException("element not found")}, 2, 502, "UPSTREAM_TIMEOUT", False, id="selenium-timeout"),
+                 1, 409, "REAUTH_REQUIRED", True, id="stays-on-login-page"),
+    pytest.param({"final_url": "https://i.nccu.edu.tw/sso_app/Error.aspx"}, 1, 502, "UPSTREAM_ERROR", False, id="redirected-elsewhere"),
+    pytest.param({"error": TimeoutException("element not found")}, 2, 504, "UPSTREAM_TIMEOUT", False, id="selenium-timeout"),
     pytest.param({"error": WebDriverException("chrome crashed")}, 2, 502, "UPSTREAM_ERROR", False, id="webdriver-error"),
 ]
 

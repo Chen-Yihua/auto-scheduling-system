@@ -199,7 +199,6 @@ class MoodlePlatform(PlatformAdapter):
     # 爬不到提交狀態，沿用預設的 is_done，只靠使用者手動標記完成
 
     async def _verify(self, username: str, password: str) -> None:
-        # 狀態碼維持目前的值：登入失敗 401，Selenium 錯誤 502
         try:
             await run_in_threadpool(verify_moodle_login, username, password)
         except NonRetryableError as e:
@@ -231,7 +230,7 @@ class MoodlePlatform(PlatformAdapter):
             except SecretDecryptError:
                 # 不刪憑證：正式和開發環境共用 DB，可能是另一個環境用它自己的金鑰加密的
                 logger.warning("已存的 Moodle 密碼解密失敗 account=%s", existing.get("_id"))
-                raise ReauthRequiredError("已存的 Moodle 密碼無法讀取，請重新輸入帳號與密碼", status_code=500)
+                raise ReauthRequiredError("已存的 Moodle 密碼無法讀取，請重新輸入帳號與密碼")
 
         if username and password:
             await self._verify(username, password)

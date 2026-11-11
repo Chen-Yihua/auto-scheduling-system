@@ -391,11 +391,11 @@ async def test_ac15_add_subtask_to_other_users_task_returns_404(logged_in_user):
 
 @pytest.mark.asyncio
 async def test_ac37_add_subtask_requires_login():
-    """AC37：沒登入呼叫新增子任務的 API → 403，沿用現有的登入驗證。"""
+    """AC37：沒登入呼叫新增子任務的 API → 401，沿用現有的登入驗證。"""
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         response = await ac.post("/manual-tasks/any-id/subtasks", json=_api_sub("階段"))
 
-    assert response.status_code == 403
+    assert response.status_code == 401
 
 
 @pytest.mark.asyncio

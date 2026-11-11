@@ -46,7 +46,7 @@ async def test_webhook_rejects_when_secret_not_configured(monkeypatch):
     with pytest.raises(AppError) as exc_info:
         await user_router.clerk_webhook(request, **_headers())
 
-    assert exc_info.value.status_code == 401
+    assert exc_info.value.error_code == "INVALID_WEBHOOK_SIGNATURE"
 
 
 @pytest.mark.asyncio
@@ -59,7 +59,7 @@ async def test_webhook_rejects_invalid_signature(monkeypatch):
             verify_ok=False,
         )
 
-    assert exc_info.value.status_code == 401
+    assert exc_info.value.error_code == "INVALID_WEBHOOK_SIGNATURE"
 
 
 @pytest.mark.asyncio
@@ -74,7 +74,7 @@ async def test_webhook_rejects_signature_header_that_is_not_valid_base64(monkeyp
             request, **_headers(svix_signature="v1,not-valid-base64!!!")
         )
 
-    assert exc_info.value.status_code == 401
+    assert exc_info.value.error_code == "INVALID_WEBHOOK_SIGNATURE"
 
 
 @pytest.mark.asyncio
@@ -91,7 +91,7 @@ async def test_webhook_rejects_when_verify_raises_unexpected_exception_type(monk
         with pytest.raises(AppError) as exc_info:
             await user_router.clerk_webhook(request, **_headers())
 
-    assert exc_info.value.status_code == 401
+    assert exc_info.value.error_code == "INVALID_WEBHOOK_SIGNATURE"
     assert exc_info.value.detail == "Invalid webhook signature"
 
 
@@ -166,3 +166,63 @@ async def test_webhook_defaults_data_to_empty_dict_when_data_field_is_not_a_dict
     result = await _call_webhook(monkeypatch, {"type": "user.created", "data": "not-a-dict"})
 
     assert result == {"status": "ok"}
+
+
+# ========== 沒設定密鑰：啟動時記一次 error log ==========
+
+@pytest.fixture
+def reload_user_router(monkeypatch):
+    """重新載入 routers.user 模擬啟動；結束後用原本的環境變數再載入一次，不影響其他測試。"""
+    import importlib
+
+    def reload(secret):
+        if secret is None:
+            monkeypatch.delenv("CLERK_WEBHOOK_SIGNING_SECRET", raising=False)
+        else:
+            monkeypatch.setenv("CLERK_WEBHOOK_SIGNING_SECRET", secret)
+        importlib.reload(user_router)
+
+    yield reload
+    monkeypatch.undo()
+    importlib.reload(user_router)
+
+
+def test_missing_secret_logs_one_error_at_startup(reload_user_router, caplog):
+    """AC6：沒設定 CLERK_WEBHOOK_SIGNING_SECRET → 模組載入（啟動）時記一次 error log，寫明缺哪一個設定。"""
+    import logging
+
+    with caplog.at_level(logging.ERROR, logger="routers.user"):
+        reload_user_router(None)
+
+    errors = [r for r in caplog.records if r.levelno >= logging.ERROR]
+    assert len(errors) == 1
+    assert "CLERK_WEBHOOK_SIGNING_SECRET" in errors[0].getMessage()
+
+
+def test_configured_secret_logs_no_error_at_startup(reload_user_router, caplog):
+    """AC6：有設定密鑰時啟動不記 error，log 也不含密鑰值。"""
+    import logging
+
+    with caplog.at_level(logging.DEBUG, logger="routers.user"):
+        reload_user_router("whsec_super_secret_value")
+
+    assert not [r for r in caplog.records if r.levelno >= logging.ERROR]
+    assert "whsec_super_secret_value" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_request_without_configured_secret_does_not_log_error(monkeypatch, caplog):
+    """AC6：沒設定密鑰時請求回 INVALID_WEBHOOK_SIGNATURE，但不在每個請求重複記 error，也不記簽章與請求內容。"""
+    import logging
+
+    monkeypatch.setattr(user_router, "CLERK_WEBHOOK_SIGNING_SECRET", None)
+    request = FakeRequest({"type": "user.deleted", "data": {"id": "secret-body-value"}})
+
+    with caplog.at_level(logging.DEBUG):
+        with pytest.raises(AppError) as exc_info:
+            await user_router.clerk_webhook(request, **_headers(svix_signature="v1,secret-signature"))
+
+    assert exc_info.value.error_code == "INVALID_WEBHOOK_SIGNATURE"
+    assert not [r for r in caplog.records if r.levelno >= logging.ERROR]
+    assert "secret-signature" not in caplog.text
+    assert "secret-body-value" not in caplog.text

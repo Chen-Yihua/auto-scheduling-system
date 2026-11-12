@@ -360,18 +360,21 @@ async def test_update_schedule_task_fields_only_sends_non_none_fields(monkeypatc
 
 
 @pytest.mark.asyncio
-async def test_update_schedule_task_fields_skips_update_call_when_nothing_to_set(monkeypatch):
-    """兩個欄位都沒帶 → 不需要呼叫 crud，不該無意義地打一次資料庫。"""
-    async def fail_if_called(*args, **kwargs):
-        raise AssertionError("不該呼叫 update_scheduling_fields")
+async def test_update_schedule_task_fields_without_fields_still_goes_through_crud(monkeypatch):
+    """AC8：兩個欄位都沒帶也交給 crud，由 crud 檢查 id（不存在 404、格式錯 400），不寫入任何欄位。"""
+    captured = {}
 
-    monkeypatch.setattr(schedule_router, "update_scheduling_fields", fail_if_called)
+    async def mock_update(user_id, task_id, data):
+        captured.update(task_id=task_id, data=data)
+
+    monkeypatch.setattr(schedule_router, "update_scheduling_fields", mock_update)
 
     result = await schedule_router.update_schedule_task_fields(
         ScheduleTaskFieldsUpdate(task_id="github:42"),
         clerk_user=mock_user,
     )
 
+    assert captured == {"task_id": "github:42", "data": {}}
     assert result == {"task_id": "github:42", "updated": True}
 
 

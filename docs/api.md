@@ -54,7 +54,7 @@
 |---|---|---|---|---|---|
 | GET | `/schedule/tasks` | ✅ | — | `list[SchedulableTaskOut]` | 手動任務和外部平台項目的統一清單 |
 | PUT | `/schedule/reorder` | ✅ | `ScheduleReorderInput` | `list[SchedulableTaskOut]` | 拖拉排序的結果；任何一項不合法時整批回 400、什麼都不寫入：id 不存在或不屬於自己、組合 id 格式錯誤或來源前綴不認得、主任務、讓後面階段的優先序高於前面階段 |
-| PATCH | `/schedule/tasks/fields` | ✅ | `ScheduleTaskFieldsUpdate` | — | 截止日期、所需時長；子任務違反階段之間的截止日限制回 400；任務不存在或不屬於自己（包括外部來源）回 404；組合 id 格式錯誤或來源前綴不認得回 400 |
+| PATCH | `/schedule/tasks/fields` | ✅ | `ScheduleTaskFieldsUpdate` | — | 截止日期、所需時長；子任務違反階段之間的截止日限制回 400；任務不存在或不屬於自己（包括外部來源）回 404；組合 id 格式錯誤或來源前綴不認得回 400；沒帶任何欄位時同樣檢查 id，合法才回 200、不寫入 |
 | PATCH | `/schedule/tasks/done` | ✅ | `ScheduleTaskDoneUpdate` | — | 標記完成或取消完成；主任務回 400；任務不存在或不屬於自己（包括外部來源）回 404；組合 id 格式錯誤或來源前綴不認得回 400 |
 | POST | `/schedule/suggest` | ✅ | `SchedulePreferences` | `ScheduleSuggestion` | 產生建議並存成快照，不寫入行事曆 |
 | POST | `/schedule/confirm` | ✅ | — | `ScheduleConfirmResult` | 把快照寫入 Google Calendar；快照過期回 409 `SUGGESTION_EXPIRED`；`failed` 每一筆帶 `error_code`（寫入 Google 失敗的原因，寫入前檢查不通過時是 `null`） |

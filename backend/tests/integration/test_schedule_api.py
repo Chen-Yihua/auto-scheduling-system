@@ -536,3 +536,52 @@ async def test_confirm_succeeds_when_external_item_was_deleted_meanwhile(monkeyp
         "confirmed": [{"task_id": "github:777", "title": "已刪除的 issue", "calendar_event_id": "event-1"}],
         "failed": [],
     }
+
+
+@pytest.mark.parametrize("task_id, status_code, error_code", [
+    ("github:999", 404, "NOT_FOUND"),
+    ("github:2", 404, "NOT_FOUND"),
+    ("manual:missing", 404, "NOT_FOUND"),
+    ("manual:other", 404, "NOT_FOUND"),
+    ("foo:1", 400, "INVALID_REQUEST"),
+    ("github:not-a-number", 400, "INVALID_REQUEST"),
+], ids=["external-missing", "external-other-user", "manual-missing", "manual-other-user", "unknown-prefix", "external-bad-format"])
+@pytest.mark.asyncio
+async def test_fields_without_any_field_still_checks_task_id(logged_in_user, task_id, status_code, error_code):
+    """AC8：fields 沒帶任何要更新的欄位時也先檢查 id，不存在 404、前綴或格式錯 400，訊息和有欄位時相同。"""
+    await _seed_reorder_data()
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+            res = await ac.patch("/schedule/tasks/fields", json={"task_id": task_id})
+            with_field = await ac.patch("/schedule/tasks/fields", json={"task_id": task_id, "duration": 30})
+
+        assert res.status_code == status_code
+        assert res.json()["error_code"] == error_code
+        assert res.json() == with_field.json()
+    finally:
+        await _cleanup_schedule_data()
+
+
+@pytest.mark.parametrize("task_id", ["github:1", "jira:100", "manual:t1"])
+@pytest.mark.asyncio
+async def test_fields_without_any_field_on_valid_id_returns_200_without_writing(logged_in_user, task_id):
+    """AC8：fields 沒帶欄位、id 合法 → 200，資料沒有任何改變。"""
+    await _seed_reorder_data()
+    try:
+        before = await _snapshot_all()
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+            res = await ac.patch("/schedule/tasks/fields", json={"task_id": task_id})
+
+        assert res.status_code == status.HTTP_200_OK
+        assert await _snapshot_all() == before
+    finally:
+        await _cleanup_schedule_data()
+
+
+async def _snapshot_all():
+    snapshot = {}
+    for collection in (db.manual_tasks, db.github_issues, db.jira_issues):
+        snapshot[collection.name] = sorted(
+            (str(doc) for doc in await collection.find({}).to_list(length=None)),
+        )
+    return snapshot

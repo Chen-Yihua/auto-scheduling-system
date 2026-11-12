@@ -157,10 +157,12 @@ async def reorder_schedulable_items(user_id: str, items: list[dict]):
 
 
 async def update_scheduling_fields(user_id: str, composite_id: str, data: dict):
-    """設定單一項目的排程欄位（due_date、duration）。"""
+    """設定單一項目的排程欄位（due_date、duration）。data 是空的時只檢查 id（格式錯 400、不存在 404），不寫入。"""
     source, raw_id = parse_composite_id(composite_id)
     if source == SOURCE_MANUAL:
         task = await get_manual_task_by_id(raw_id, user_id)
+        if not data:
+            return
         if task.get("is_parent") and "duration" in data:
             raise InvalidRequestError("主任務沒有時長，請修改子任務")
         await validate_task_change(task, data)
@@ -170,7 +172,8 @@ async def update_scheduling_fields(user_id: str, composite_id: str, data: dict):
         return
 
     await _find_own_external(source, raw_id, user_id)
-    await _update_external(source, raw_id, user_id, data)
+    if data:
+        await _update_external(source, raw_id, user_id, data)
 
 
 async def set_done(user_id: str, composite_id: str, done: bool):

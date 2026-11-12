@@ -1,6 +1,6 @@
 # 0008. 標準、高風險寫規格前先做需求問答，`/feature` 不用 plan mode
 
-- 狀態：已採用（修改紀錄寫 C 編號已被 [0009](0009-docs-delivery-and-glossary.md) 取代）；Context／Frontier 與 C、Q 編號的記錄方式，以及輕量不做問答，已被 0012 取代
+- 狀態：已採用（修改紀錄寫 C 編號已被 [0009](0009-docs-delivery-and-glossary.md) 取代）
 - 日期：2026-11-09
 
 ## 背景

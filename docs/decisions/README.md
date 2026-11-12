@@ -35,9 +35,8 @@
 | [0004](0004-subtask-order-on-parent.md) | 子任務的階段順序存在主任務上 | 已採用 |
 | [0005](0005-specification-review.md) | 規格核准前加入規格審查，審查分類依根本原因區分 | 已採用（bug 不審查的例外已被 0006 取代；紀錄檔位置已改，見 0005 狀態） |
 | [0006](0006-bugs-use-full-spec.md) | bug 也用完整規格格式並做規格審查 | 已採用（文字修正與輕量等級的例外見 0007） |
-| [0007](0007-process-depth-by-risk.md) | 依變更碰到的範圍決定規格與審查的深度 | 已採用（文字修正在 plan mode 列改動已被 0008 取代；輕量與標準分級、輕量只審 1 輪與「未經審查」已被 0012 取代） |
-| [0008](0008-grilling-without-plan-mode.md) | 標準、高風險寫規格前先做需求問答，`/feature` 不用 plan mode | 已採用（修改紀錄寫 C 編號已被 0009 取代；Context／Frontier 與 C、Q 編號的記錄方式，以及輕量不做問答，已被 0012 取代） |
-| [0009](0009-docs-delivery-and-glossary.md) | 修改紀錄寫決定與落點、引進術語表、產品文件照交付清單由 implementer commit | 已採用（C、Q 編號規則已被 0012 取代；不引用 scratchpad 的原則沿用） |
-| [0010](0010-scratchpad-loss-recovery.md) | scratchpad 遺失時以暫存產物為單位恢復，審查不逐一要求特定案例 | 已採用（暫存產物表的位置已移到 `feature/references/resume.md`，見 0012） |
+| [0007](0007-process-depth-by-risk.md) | 依變更碰到的範圍決定規格與審查的深度 | 已採用（文字修正在 plan mode 列改動已被 0008 取代） |
+| [0008](0008-grilling-without-plan-mode.md) | 標準、高風險寫規格前先做需求問答，`/feature` 不用 plan mode | 已採用（修改紀錄寫 C 編號已被 0009 取代） |
+| [0009](0009-docs-delivery-and-glossary.md) | 修改紀錄寫決定與落點、引進術語表、產品文件照交付清單由 implementer commit | 已採用 |
+| [0010](0010-scratchpad-loss-recovery.md) | scratchpad 遺失時以暫存產物為單位恢復，審查不逐一要求特定案例 | 已採用 |
 | [0011](0011-api-error-status-codes.md) | API 錯誤回應：狀態碼表示類別，error_code 表示原因 | 已採用 |
-| [0012](0012-simplify-process-levels.md) | 簡化等級、審查分流與決定記錄，`/feature` 拆成階段 skill | 已採用 |

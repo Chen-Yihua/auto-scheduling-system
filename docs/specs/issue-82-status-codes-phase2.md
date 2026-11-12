@@ -57,7 +57,7 @@
    - 寫入前檢查不通過與「前一個階段寫入失敗」：`error_code` 是 `null`，`reason` 不變。
    - 前端：`failed` 裡有任何一筆是 `REAUTH_REQUIRED` 時，除了原本列出失敗項目的 toast，另外顯示「重新連接 Google Calendar」的提示（沿用 `useGoogleCalendarAuth` 的 `reauthToast`）。
 6. **排程的外部 id 不存在**（只套用在 `PUT /schedule/reorder`、`PATCH /schedule/tasks/fields`、`/done`）：
-   - `PATCH /schedule/tasks/fields`、`/done`：外部來源的 id 不存在或不屬於自己時回 404 `NOT_FOUND`，和手動任務不存在時的訊息相同。
+   - `PATCH /schedule/tasks/fields`、`/done`：外部來源的 id 不存在或不屬於自己時回 404 `NOT_FOUND`，和手動任務不存在時的訊息相同。`PATCH /schedule/tasks/fields` 沒帶任何要更新的欄位時（body 只有 `task_id`），也先檢查 id（前綴、格式、是否存在）再回 200；手動任務不存在時同樣回 404（原本 `backend/routers/schedule.py:63-65` 在沒有欄位時直接回 200、不檢查 id）。
    - `PUT /schedule/reorder`：一次送來整份清單的新順序。**所有會回 400 的檢查都在寫入任何項目之前完成**：id 不存在或不屬於自己（外部與手動）、外部 id 格式錯誤、來源前綴不認得、主任務不能排序、階段之間的優先序不合規則（`backend/crud/manual_task.py:358`、`:370-374`）。全部合法才寫入；任何一項不合法時整批回 400 `INVALID_REQUEST`、**什麼都不寫**。id 不存在時訊息和手動任務相同（「包含不屬於你的任務 id」），列出的是使用者送出的組合 id，不透露資料是否存在。目前是一筆一筆寫入、寫到一半才發現手動 id 不存在而回 400（`backend/crud/schedulable_items.py:96-111` 的寫入先於 `backend/crud/manual_task.py:351-356` 的檢查），一併改成先檢查。
    - 來源前綴不認得（例如 `foo:1`，或沒有冒號）是組合 id 格式錯誤：三個 endpoint 都回 400 `INVALID_REQUEST`（目前靜默回 200，`backend/crud/schedulable_items.py:42-44`、`:147-149`）。
    - 確認排程把事件 id 寫回外部項目時（`set_calendar_event_id_for_composite`，共用 `_update_external`）維持目前的行為：找不到也不丟錯。否則 Google 事件已經建立，整次確認卻失敗，Google 上會留下沒記錄的事件。
@@ -107,7 +107,7 @@
 | AC5 | 外部服務限流：503 `UPSTREAM_RATE_LIMITED`；外部回應帶秒數的 `Retry-After` 時，我方回應帶同樣的值；沒帶、或是日期格式時不帶；跨來源的回應有 `Access-Control-Expose-Headers` 包含 `Retry-After`，前端讀得到 | 不變條件 |
 | AC6 | webhook 簽章錯誤與沒設定簽章密鑰：401 `INVALID_WEBHOOK_SIGNATURE`；沒設定密鑰時在啟動時記一次 error log，請求時不重複記 error；log 不含密鑰值、簽章與請求內容 | 不變條件 |
 | AC7 | 確認排程時寫入 Google 失敗的 `failed` 項目帶依原因的 `error_code` 與一致的 `reason`（401 `REAUTH_REQUIRED`、400 `INTERNAL_ERROR`、限流、逾時、5xx 照第一階段）；寫入前檢查不通過的項目 `error_code` 是 `null`、`reason` 不變；有任何一筆 `REAUTH_REQUIRED` 時，畫面另外提示重新連接 Google Calendar | 使用者行為 |
-| AC8 | `PATCH /schedule/tasks/fields`、`/done` 的外部 id 不存在或不屬於自己：404 `NOT_FOUND`；`PUT /schedule/reorder` 回 400 的任何情況（id 不存在或不屬於自己、外部 id 格式錯、前綴不認得、主任務、階段優先序不合規則），資料庫的順序都完全沒有改變；id 不存在時是 400 `INVALID_REQUEST`、和手動任務同一個訊息；來源前綴不認得：三個 endpoint 都是 400；確認排程寫回事件 id 時外部項目不存在，確認仍成功 | 不變條件 |
+| AC8 | `PATCH /schedule/tasks/fields`、`/done` 的外部 id 不存在或不屬於自己：404 `NOT_FOUND`；`fields` 沒帶任何要更新的欄位時也一樣檢查（外部與手動任務不存在 404、前綴不認得或 id 格式錯 400，id 合法才回 200）；`PUT /schedule/reorder` 回 400 的任何情況（id 不存在或不屬於自己、外部 id 格式錯、前綴不認得、主任務、階段優先序不合規則），資料庫的順序都完全沒有改變；id 不存在時是 400 `INVALID_REQUEST`、和手動任務同一個訊息；來源前綴不認得：三個 endpoint 都是 400；確認排程寫回事件 id 時外部項目不存在，確認仍成功 | 不變條件 |
 | AC9 | 除了 AC4 的 JWKS 失敗（`error_code` 從 `UNAUTHENTICATED` 變成 `UPSTREAM_*`）、AC7、AC8 的情況，各畫面顯示的錯誤和改之前相同；外部平台同步的重試次數、`X-Auth-Error`、`X-Data-Stale` 和改之前相同；前端的 `$fetch` 呼叫本後端時照需求 7 重送：暫時性錯誤最多總共 3 次並照間隔等待，永久性錯誤、限流、其他沒列出的情況與不能重送的方法不重送；呼叫非本後端時的重送和改之前相同（ofetch 預設）；`useUserSync` 的原生 `fetch` 維持不重送 | 使用者行為 |
 | AC10 | 錯誤回應不帶憑證、token、第三方回應原文；查別人的資料和查不存在的資料回一樣的 404 與訊息 | 不變條件 |
 | AC11 | `docs/api.md` 開頭寫 401、「錯誤回應」一節沒有過渡期間的說明、各 endpoint 的狀態碼是新的值；`backend/README.md`「錯誤處理」寫明只選 `error_code` | 不變條件 |
@@ -168,9 +168,9 @@
 | AC3 | unit：handler 收到對照表沒有的 `error_code`，回應是 500 `INTERNAL_ERROR` 與固定 `detail`，log 有原始 `error_code` 與 trace header |
 | AC4 | unit：`test_security.py` 用實際的例外形式模擬：沒帶、scheme 錯、token 格式錯、簽章無效、過期；`kid` 找不到（cooldown 內不重新抓，401）與 cooldown 過後重新抓失敗（502／504）；連線時逾時（`URLError(reason=TimeoutError)`，`TimeoutError` 在 `__context__`）、讀回應時逾時（`PyJWKClientConnectionError` → `TimeoutError`）、連線被拒、HTTP 503、`RemoteDisconnected`、`IncompleteRead`、`JSONDecodeError`、`PyJWKSetError`、`keys` 元素不是 object（`AttributeError`，502）、key 的 `n`／`e` 不是字串（`TypeError`，502）；在 `get_signing_keys()` 以外丟的 `AttributeError`（非預期例外）回 500；上次成功抓取後 30 秒內帶任意 `kid` 的 token 不會再抓 JWKS（Clerk 正常、剛抓取成功的情況）；至少一條用真的 `PyJWKClient`、只模擬 `urllib` 這一層（`urllib.request.build_opener` 或 `OpenerDirector.open`，`fetch_data` 不用 `urlopen`，只 patch `urlopen` 會真的連到 Clerk），不整個 mock 掉 `jwks_client`；每個測試自己建立子類別的 instance，不共用模組層級的 `clerk_auth`（JWKS 快取與 `_last_successful_fetch` 會在測試之間互相影響）；測試用的 RSA 金鑰以 `cryptography` 產生 |
 | AC5 | integration：`test_github_api.py`、`test_jira_api.py`、`test_linked_account_api.py`、`test_google_calendar_api.py` 的限流情況，帶與不帶 `Retry-After`、日期格式；`test_cors.py` 帶 `Origin` 的請求，回應的 `Access-Control-Expose-Headers` 包含 `Retry-After`；vitest：`fetchRetry.test.ts` 從回應讀 `Retry-After` 決定間隔 |
-| AC6 | integration：`test_user_api.py`（Clerk webhook）、`test_pr_review_webhook.py` 的 webhook 測試；unit：密鑰沒設定時模組載入只記一次 error log、請求時不再記 error、log 不含密鑰值 |
+| AC6 | integration：`test_error_codes_api.py` 的 webhook 測試；unit：`test_user_webhook.py`、`test_pr_review_webhook.py`；unit：密鑰沒設定時模組載入只記一次 error log、請求時不再記 error、log 不含密鑰值 |
 | AC7 | integration：`test_schedule_api.py` 確認排程時 Google 回 401、429、逾時、5xx 與寫入前檢查不通過；vitest：`useSchedule` 有 `REAUTH_REQUIRED` 時顯示重新連接的提示 |
-| AC8 | integration：`test_schedule_api.py` reorder（外部與手動不存在的 id、外部 id 格式錯、主任務、階段優先序不合規則，每種都斷言所有項目的順序沒變）、fields、done 帶不存在的外部 id 與不認得的前綴；確認排程期間外部項目被刪除，確認仍成功 |
+| AC8 | integration：`test_schedule_api.py` reorder（外部與手動不存在的 id、外部 id 格式錯、主任務、階段優先序不合規則，每種都斷言所有項目的順序沒變）、fields、done 帶不存在的外部 id 與不認得的前綴；確認排程期間外部項目被刪除，確認仍成功；`fields` 不帶欄位時的不存在的外部 id、不存在的手動任務、不認得的前綴、合法的 id |
 | AC9 | vitest：既有的前端測試全部通過；`fetchRetry.test.ts` 逐列測需求 7 的表（每種暫時性、永久性、限流與其他沒列出的情況；GET、帶與不帶 `Idempotency-Key` 的 POST、PUT；第 3 次後不再重送；間隔與 `Retry-After`）；`isBackendRequest` 測：`apiBaseUrl` 沒有 path（`http://localhost:8000`，實際的設定形式）時 `http://localhost:8000/schedule/tasks` 是本後端、`apiBaseUrl` 結尾帶 `/`、base 是 `/api` 時 `/api` 與 `/api/x` 算而 `/api2/x` 不算、`apiBaseUrl` 的字串前綴相同但 origin 不同（例如 `https://api.example.com.evil.com`）、userinfo 形式（`https://api.example.com@evil.com`）、相對網址、不同 port；plugin 的串接用 `$fetch.create(defaults, { fetch: mock })` 測（`apiBaseUrl` 用沒有 path 的形式）：本後端沒有回應時會重送、跨重送總共最多 3 次、不重送的情況不再送出，以及非本後端的 GET 遇到 503 照 ofetch 預設重送 1 次；integration：外部平台同步的重試次數與 header 斷言保留 |
 | AC10 | integration：既有的「不帶第三方原文」「別人的資料回 404」斷言保留並通過 |
 | AC11 | 讀 `docs/api.md`、`backend/README.md` |
@@ -179,3 +179,4 @@
 ## 修改紀錄
 | 日期 | 修改 | 原因 | 確認者 |
 |---|---|---|---|
+| 2026-11-12 | AC8、需求 6：`PATCH /schedule/tasks/fields` 沒帶欄位時也先檢查 id；測試對應 AC6 的檔名改成實際位置、AC8 補測試 | 開發者決定沒有欄位時也檢查 id（實作審查發現原本直接回 200，手動任務不存在時會從 200 變成 404）→ 需求 6、AC8；檢查過 AC9（前端不會送出沒有欄位的請求，畫面不變）、AC10 不用改 | 開發者 |

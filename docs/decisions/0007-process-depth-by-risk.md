@@ -1,6 +1,6 @@
 # 0007. 依變更碰到的範圍決定規格與審查的深度
 
-- 狀態：已採用（文字修正在 plan mode 列改動已被 [0008](0008-grilling-without-plan-mode.md) 取代）
+- 狀態：已採用（文字修正在 plan mode 列改動已被 [0008](0008-grilling-without-plan-mode.md)取代；輕量與標準分級、輕量只審 1 輪與「未經審查」已被 [0012](0012-simplify-process-levels.md) 取代）
 - 日期：2026-11-08
 
 ## 背景

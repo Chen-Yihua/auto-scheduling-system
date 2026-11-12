@@ -9,22 +9,22 @@
 ## 摘要
 
 - 發現：5 項：Implementation Defect 1、Improvement Suggestion 4；Minor 2、Info 3
-- 開發者決策：0 項（#1 待決定）
-- 尚未處理：2 項（#1、#3）
+- 開發者決策：1 項（#1）
+- 尚未處理：0 項
 
 ## 各輪摘要
 
 | 輪 | 日期／commit | 新發現（阻擋） | 這一輪之後改了什麼 |
 |---|---|---|---|
-| 1 | 2026-11-12 `cfd2c0a` | #1–#5（#1） | AC8 以外的 AC 通過；CORS 設定只多了 `expose_headers`、判斷本後端的規則、非本後端維持 ofetch 預設都確認正確；implementer 的 5 項實作選擇判斷符合規格；#2、#4、#5 開 issue |
+| 1 | 2026-11-12 `cfd2c0a` | #1–#5（#1） | AC8 以外的 AC 通過；CORS 設定只多了 `expose_headers`、判斷本後端的規則、非本後端維持 ofetch 預設都確認正確；implementer 的 5 項實作選擇判斷符合規格；#2、#4、#5 開 issue；開發者決定 #1 改程式，規格 AC8 與需求 6 修改，修正在 `e2f6852`；#3 規格測試對應同步 |
 
 ## 發現與處理
 
 | # | 輪 | 標題 | 類型 | 嚴重程度 | 阻擋合併 | 涉及安全／架構 | 根本原因 | 處理 | 決定者 | 結果 |
 |---|---|---|---|---|---|---|---|---|---|---|
-| 1 | 1 | `PATCH /schedule/tasks/fields` 沒帶任何欄位時，不存在的 id、不認得的前綴都回 200 | Implementation Defect | Minor | 是 | 否 | 沒有欄位時跳過檢查 | 待開發者決定：改程式（沒有欄位時也先檢查 id）或改規格（AC8 寫明例外） | 開發者 | 待定 |
+| 1 | 1 | `PATCH /schedule/tasks/fields` 沒帶任何欄位時，不存在的 id、不認得的前綴都回 200 | Implementation Defect | Minor | 是 | 否 | 沒有欄位時跳過檢查 | 開發者決定改程式：沒有欄位時也先檢查 id（前綴、格式、是否存在），規格 AC8、需求 6 修改並記進修改紀錄 | 開發者 | 已修正（`e2f6852`） |
 | 2 | 1 | webhook 密鑰沒設定的啟動 error log 在 logging 設定前輸出，沒有等級、時間與 logger 名稱 | Improvement Suggestion | Minor | 否 | 安全 | — | 開 issue | 主 session | [#87](https://github.com/Chen-Yihua/auto-scheduling-system/issues/87) |
-| 3 | 1 | 規格「測試對應」AC6 寫的測試檔和實際位置不同 | Improvement Suggestion | Info | 否 | 否 | — | 和 #1 的修正一起同步規格的測試對應（文字同步，不改驗收條件） | 主 session | 待修正 |
+| 3 | 1 | 規格「測試對應」AC6 寫的測試檔和實際位置不同 | Improvement Suggestion | Info | 否 | 否 | — | 和 #1 一起同步規格的測試對應（文字同步，不改驗收條件） | 主 session | 已修正（規格隨 #1 交付） |
 | 4 | 1 | Clerk JWKS 裡有非 RSA 的 key、token 指到它時回 500 | Improvement Suggestion | Info | 否 | 否 | — | 開 issue（和 #5 同一個） | 主 session | [#88](https://github.com/Chen-Yihua/auto-scheduling-system/issues/88) |
 | 5 | 1 | Clerk JWKS 逾時回 `UPSTREAM_TIMEOUT`，前端會把同一個 GET 重送到 3 次，每次都同步卡住後端 | Improvement Suggestion | Info | 否 | 否 | — | 開 issue | 主 session | [#88](https://github.com/Chen-Yihua/auto-scheduling-system/issues/88) |
 
@@ -36,11 +36,10 @@
 
 ## 開發者決策
 
-無。
+| # | 問題 | 選項 | 開發者的決定 | 理由 |
+|---|---|---|---|---|
+| 1 | `fields` 沒帶欄位時不檢查 id | 改程式／改規格 | 改程式，沒有欄位時也先檢查 id | 改動小，AC8 與文件不用加例外，外部與手動一致 |
 
 ## 尚未處理
 
-| # | 原因 | 後續（issue 編號或「無」） |
-|---|---|---|
-| 1 | 待開發者決定改程式或改規格 | 無 |
-| 3 | 和 #1 的修正一起處理 | 無 |
+無。

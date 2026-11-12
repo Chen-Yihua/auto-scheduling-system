@@ -1,6 +1,6 @@
 # 0010. scratchpad 遺失時以暫存產物為單位恢復，審查不逐一要求特定案例
 
-- 狀態：已採用
+- 狀態：已採用（暫存產物表的位置已移到 feature/references/resume.md，見 [0012](0012-simplify-process-levels.md)）
 - 日期：2026-11-09
 
 ## 背景

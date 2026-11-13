@@ -1,8 +1,12 @@
 import logging
+import secrets
+
 from core.database import db
 from core.crypto import SecretDecryptError, encrypt_secret, decrypt_secret, mask_secret
 from schemas.linked_account import LinkedAccountCreate
 from platforms import PLATFORMS
+from platforms.account_sync import SyncOutcome, sync_account
+from platforms.base import PlatformAdapter
 from pymongo.errors import DuplicateKeyError
 from core.errors import ConflictError, InvalidRequestError, NotFoundError
 
@@ -11,6 +15,25 @@ logger = logging.getLogger(__name__)
 
 # 存 DB 前加密，回傳前端前遮罩
 SENSITIVE_FIELDS = ("apiKey", "password")
+
+
+def _new_link_id() -> str:
+    """每次連結、更新憑證都換一個：同步途中連結變了，那次同步就整次放棄（見 platforms/account_sync.py）。"""
+    return secrets.token_hex(16)
+
+
+async def _sync_after_link(platform: PlatformAdapter, clerk_id: str) -> None:
+    """連結或更新憑證後馬上同步一次；同步失敗不影響連結的結果，只記 log。"""
+    try:
+        result = await sync_account(platform, clerk_id)
+    except Exception as exc:
+        logger.error("Sync after linking %s failed for user_id=%s: %s", platform.name, clerk_id, type(exc).__name__)
+        return
+    if result.outcome is not SyncOutcome.SUCCEEDED:
+        logger.warning(
+            "Sync after linking %s did not succeed for user_id=%s: outcome=%s error_code=%s",
+            platform.name, clerk_id, result.outcome.value, result.error_code,
+        )
 
 
 def _to_public(account: dict) -> dict:
@@ -52,12 +75,14 @@ async def create_linked_account(clerk_id: str, account: LinkedAccountCreate) -> 
     result = await platform.verify_new_account(doc)
     doc.update(result)
     doc[platform.secret_field] = encrypt_secret(doc[platform.secret_field])
+    doc["link_id"] = _new_link_id()
 
     try:
         await db.linkedAccounts.insert_one(doc)
     except DuplicateKeyError:
         raise ConflictError("Linked account already exists")
 
+    await _sync_after_link(platform, clerk_id)
     return _to_public(doc)
 
 
@@ -77,16 +102,22 @@ async def update_linked_account_by_clerk_id(clerk_id: str, platform: str, data: 
         raise InvalidRequestError("沒有可更新的欄位")
 
     adapter = PLATFORMS.get(platform)
-    if adapter and adapter.needs_reverify(data):
+    reverified_platform = adapter if adapter and adapter.needs_reverify(data) else None
+    if reverified_platform:
         existing = await find_linked_account(clerk_id, platform)
         if existing is None:
             return False  # 帳號不存在，不用呼叫平台驗證
-        data = await adapter.verify_account_update(data, existing)
+        data = await reverified_platform.verify_account_update(data, existing)
+        data["link_id"] = _new_link_id()
 
     # 不 upsert：帳號不存在要回 404
     # 用 matched_count：值沒變時 modified_count 是 0，但不算失敗
     result = await db.linkedAccounts.update_one({"_id": composite_id}, {"$set": data})
-    return result.matched_count > 0
+    if result.matched_count == 0:
+        return False
+    if reverified_platform:
+        await _sync_after_link(reverified_platform, clerk_id)
+    return True
 
 
 async def delete_linked_account_by_id(composite_id: str):

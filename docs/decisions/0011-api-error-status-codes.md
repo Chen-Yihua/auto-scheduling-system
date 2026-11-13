@@ -49,6 +49,7 @@
 | 400 | `INVALID_AUTHORIZATION_CODE` | Google OAuth 授權碼無效或已過期（`invalid_grant`） |
 | 401 | `UNAUTHENTICATED` | Clerk JWT 缺少、格式錯誤、簽章或期限驗證失敗 |
 | 401 | `INVALID_WEBHOOK_SIGNATURE` | webhook 簽章錯誤，或伺服器沒設定簽章密鑰（見下面「例外」） |
+| 401 | `INVALID_SCHEDULER_TOKEN` | 定時同步（`POST /internal/scheduled-sync`）的密鑰錯誤、格式不對，或伺服器沒設定密鑰（見下面「例外」） |
 | 404 | `NOT_FOUND` | 本系統的資料不存在或不屬於目前的使用者；未知路由。外部平台回的 404 不用這個 code |
 | 405 | `METHOD_NOT_ALLOWED` | 路由存在但不支援這個方法 |
 | 409 | `NOT_LINKED` | 需要的第三方帳號還沒連結 |
@@ -69,6 +70,7 @@
 ### 例外
 
 - **webhook 沒設定簽章密鑰時回 401**：依分類原則這是我方的設定錯誤（500），但 webhook 的呼叫者是外部服務，回 500 會讓外部知道伺服器漏了設定。維持 401，另外記 error log，由監控發現。
+- **定時同步沒設定密鑰時回 401**：理由和 webhook 相同，呼叫者是 GitHub Actions（[ADR 0013](0013-scheduled-sync-trigger.md)），回 500 會讓外部知道伺服器漏了設定。維持 401 `INVALID_SCHEDULER_TOKEN`，啟動時記 error log。
 
 ### 過渡期間
 

@@ -263,3 +263,95 @@ describe('usePlatformItems：依 error_code 判斷與最近一次已知的結果
     expect(unavailable.value).toBe(true)
   })
 })
+
+describe.each([
+  { platform: 'github', getPath: '/github/issues', syncPath: '/github/sync', label: 'GitHub' },
+  { platform: 'jira', getPath: '/jira/issues', syncPath: '/jira/sync', label: 'Jira' },
+  { platform: 'moodle', getPath: '/moodle/assignments', syncPath: '/moodle/sync', label: 'Moodle' },
+] as const)('usePlatformItems($platform)：定時同步與立即同步（issue #13）', ({ platform, getPath, syncPath, label }) => {
+  beforeEach(() => {
+    fetchRawSpy = vi.fn()
+    toastSpy.add.mockClear()
+    fetchKeysSpy.mockReset()
+    fetchKeysSpy.mockResolvedValue(undefined)
+    clerk.userId.value = 'user_a'
+    linkedKeys.value = [{ platform, value: 'KEY****', domain: 'team.atlassian.net' }]
+  })
+
+  it('AC30：打開頁面（fetchItems）只呼叫 GET，不呼叫立即同步的 POST', async () => {
+    fetchRawSpy.mockResolvedValueOnce(ok([]))
+
+    const { fetchItems } = usePlatformItems(platform as PlatformName)
+    await fetchItems()
+
+    expect(fetchRawSpy).toHaveBeenCalledTimes(1)
+    const [url, options] = fetchRawSpy.mock.calls[0]!
+    expect(url).toBe(`http://api${getPath}`)
+    expect(options.method ?? 'GET').toBe('GET')
+  })
+
+  it('AC31：立即同步只呼叫這個平台的 POST，完成後更新清單與上次同步時間', async () => {
+    fetchRawSpy.mockResolvedValueOnce(ok([{ id: 'old' }], { 'X-Synced-At': '2026-11-01T04:00:00Z' }))
+    const { fetchItems, syncNow, items, syncedAt, isStale, syncing } = usePlatformItems(platform as PlatformName)
+    await fetchItems()
+
+    fetchRawSpy.mockResolvedValueOnce(ok([{ id: 'new' }], { 'X-Data-Stale': 'false', 'X-Synced-At': '2026-11-14T05:00:00Z' }))
+    const pending = syncNow()
+    expect(syncing.value).toBe(true)
+    await pending
+
+    expect(fetchRawSpy).toHaveBeenLastCalledWith(`http://api${syncPath}`, {
+      method: 'POST',
+      headers: { Authorization: 'Bearer jwt-token' },
+    })
+    expect(items.value).toEqual([{ id: 'new' }])
+    expect(syncedAt.value).toBe('2026-11-14T05:00:00Z')
+    expect(isStale.value).toBe(false)
+    expect(syncing.value).toBe(false)
+    expect(toastSpy.add).not.toHaveBeenCalled()
+  })
+
+  it('需求 24：立即同步失敗但後端退回舊資料 → 顯示舊資料與提示（isStale），不跳 toast', async () => {
+    fetchRawSpy.mockResolvedValueOnce(ok([{ id: 'old' }], { 'X-Data-Stale': 'true', 'X-Synced-At': '2026-11-01T04:00:00Z' }))
+
+    const { syncNow, items, isStale } = usePlatformItems(platform as PlatformName)
+    await syncNow()
+
+    expect(items.value).toEqual([{ id: 'old' }])
+    expect(isStale.value).toBe(true)
+    expect(toastSpy.add).not.toHaveBeenCalled()
+  })
+
+  it('需求 24：立即同步失敗而且沒有舊資料 → 跳錯誤訊息，清單維持原樣', async () => {
+    fetchRawSpy.mockResolvedValueOnce(ok([{ id: 'kept' }]))
+    const { fetchItems, syncNow, items, syncing } = usePlatformItems(platform as PlatformName)
+    await fetchItems()
+
+    fetchRawSpy.mockRejectedValueOnce({ response: { status: 502 }, data: { error_code: 'UPSTREAM_ERROR', detail: '說明' } })
+    await syncNow()
+
+    expect(items.value).toEqual([{ id: 'kept' }])
+    expect(syncing.value).toBe(false)
+    expect(toastSpy.add).toHaveBeenCalledTimes(1)
+    expect(toastSpy.add).toHaveBeenCalledWith(expect.objectContaining({ title: `${label} 資料暫時無法取得`, color: 'error' }))
+  })
+
+  it('AC39：GET 帶 X-Auth-Error（沒有 X-Data-Stale）→ authError 為 true', async () => {
+    fetchRawSpy.mockResolvedValueOnce(ok([{ id: '1' }], { 'X-Auth-Error': 'true', 'X-Synced-At': '2026-11-01T04:00:00Z' }))
+
+    const { fetchItems, authError, isStale } = usePlatformItems(platform as PlatformName)
+    await fetchItems()
+
+    expect(authError.value).toBe(true)
+    expect(isStale.value).toBe(false)
+  })
+
+  it('AC33：GET 沒帶 X-Synced-At（尚未同步）→ syncedAt 為 null', async () => {
+    fetchRawSpy.mockResolvedValueOnce(ok([]))
+
+    const { fetchItems, syncedAt } = usePlatformItems(platform as PlatformName)
+    await fetchItems()
+
+    expect(syncedAt.value).toBeNull()
+  })
+})

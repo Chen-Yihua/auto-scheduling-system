@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive } from 'vue'
+import { reactive, ref } from 'vue'
 import { usePlatformItems } from '@/composables/usePlatformItems'
 import { useUser } from '@clerk/vue'
 import { useGoogleCalendarAuth } from '@/composables/useGoogleCalendarAuth'
@@ -29,6 +29,17 @@ function loadDashboardData() {
   moodle.fetchItems();
 }
 
+// 三個平台同時同步；各自處理自己的錯誤訊息，一個失敗不影響其他
+const syncingAll = ref(false)
+async function syncAllPlatforms() {
+  syncingAll.value = true
+  try {
+    await Promise.allSettled([github.syncNow(), jira.syncNow(), moodle.syncNow()])
+  } finally {
+    syncingAll.value = false
+  }
+}
+
 // 未登入時不抓，否則訪客會看到一排錯誤提示
 watch(isSignedIn, (signedIn) => {
   if (signedIn === undefined) return; // Clerk 還在初始化，先不動作
@@ -45,6 +56,19 @@ watch(googleConnectedCount, () => {
 
 <template>
   <div class="p-4">
+    <div v-if="isSignedIn" class="flex justify-start">
+      <UButton
+        data-testid="dashboard-sync-now"
+        size="sm"
+        variant="soft"
+        icon="i-lucide-refresh-cw"
+        :loading="syncingAll"
+        :disabled="syncingAll"
+        @click="syncAllPlatforms"
+      >
+        立即同步外部平台
+      </UButton>
+    </div>
     <!-- Clerk 初始化完成前不顯示，避免已登入的人先看到「請先登入」 -->
     <div
       v-if="isSignedIn !== undefined"

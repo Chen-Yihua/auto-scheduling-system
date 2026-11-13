@@ -59,7 +59,8 @@ backend/
 | `user` | 使用者資料、Clerk webhook |
 | `linked_account` | 連結 GitHub/Jira/Moodle 帳號（含驗證、加密） |
 | `manual_task` | 手動任務 CRUD，缺 priority/duration 時用 Gemini 推斷 |
-| `platforms/router.py` | `/github/issues`、`/jira/issues`、`/moodle/assignments`：外部平台資料同步（即時抓 + fallback），依 `PLATFORMS` 自動產生 |
+| `platforms/router.py` | `GET /github/issues`、`/jira/issues`、`/moodle/assignments` 讀資料庫；`POST /github/sync`、`/jira/sync`、`/moodle/sync` 立即同步（失敗時退回舊資料）。依 `PLATFORMS` 自動產生 |
+| `scheduled_sync` | `POST /internal/scheduled-sync`：GitHub Actions 每天呼叫，同步所有外部平台帳號（共用密鑰驗證） |
 | `google_calendar` | Google Calendar 授權、行事曆列表（路徑前綴 `/oauth`） |
 | `schedule` | 排程建議、確認排程 |
 | `pr_review_webhook` | GitHub PR 摘要機器人（Gemini + Discord），跟使用者功能無關，是這個 repo 自己開發流程用的 |
@@ -248,7 +249,7 @@ app.include_router(note.router)
    平台能回報完成狀態的話再覆寫 `is_done`
 3. `platforms/__init__.py`：把 `GITLAB` 加進 `PLATFORMS`
 4. 測試：抓資料、轉格式、帳號驗證寫在 `tests/unit/test_gitlab_crud.py`；
-   共用流程的測試（`tests/unit/test_platform_router.py`）把新平台加進 `PLATFORM_CASES` 就會一起跑
+   共用流程的測試（`tests/integration/test_platform_sync_api.py`）把新平台加進 `PLATFORM_CASES` 就會一起跑
 
 前端另外要加這個平台的顯示元件和帳號設定欄位。
 

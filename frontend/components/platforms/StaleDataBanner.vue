@@ -20,7 +20,7 @@ const message = computed(() => {
 
 <template>
   <UAlert
-    v-if="stale"
+    v-if="stale || authError"
     :color="authError ? 'error' : 'warning'"
     variant="soft"
     :icon="authError ? 'i-lucide-shield-alert' : 'i-lucide-clock-alert'"

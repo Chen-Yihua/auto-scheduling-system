@@ -10,7 +10,6 @@ from httpx import AsyncClient
 from httpx._transports.asgi import ASGITransport
 
 from main import app
-from core.cache import cache_delete
 from core.crypto import encrypt_secret
 from core.database import db
 from core.datetimes import to_utc_datetime
@@ -18,7 +17,6 @@ from core.security import get_current_clerk_user
 from platforms.github import GITHUB
 from platforms.jira import JIRA
 from platforms.moodle import MOODLE
-from platforms.router import _cache_key
 from platforms.sync import UpstreamError
 
 SCENARIO_USER = {"sub": "scenario_user_platform_datetimes"}
@@ -98,21 +96,19 @@ async def _sync_then_fail(ac: AsyncClient, case: dict, monkeypatch):
         return [dict(case["item"])]
 
     monkeypatch.setattr(platform, "fetch_items", fetch_ok)
-    fresh = await ac.get(platform.route_path)
+    fresh = await ac.post(platform.sync_route_path)
     assert fresh.status_code == status.HTTP_200_OK, fresh.text
 
     await platform.collection.update_one(
         {"user_id": user_id, "id": case["item"]["id"]},
         {"$set": {"scheduling_due_date": SCHEDULING_DUE}},
     )
-    # Moodle 成功的結果會進快取，要清掉才會真的再抓一次
-    await cache_delete(_cache_key(platform, user_id))
 
     async def fetch_fail(credentials):
         raise UpstreamError("暫時連不上")
 
     monkeypatch.setattr(platform, "fetch_items", fetch_fail)
-    stale = await ac.get(platform.route_path)
+    stale = await ac.post(platform.sync_route_path)
     assert stale.status_code == status.HTTP_200_OK, stale.text
     assert stale.headers["X-Data-Stale"] == "true"
     return fresh, stale
@@ -122,7 +118,6 @@ async def _cleanup(platform):
     user_id = SCENARIO_USER["sub"]
     await db.linkedAccounts.delete_many({"clerk_id": user_id})
     await platform.collection.delete_many({"user_id": user_id})
-    await cache_delete(_cache_key(platform, user_id))
 
 
 @pytest.mark.asyncio

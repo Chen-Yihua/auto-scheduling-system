@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import type { JiraIssue } from '~/types/jira'
 import StaleDataBanner from './StaleDataBanner.vue'
+import SyncStatus from './SyncStatus.vue'
 
 const props = defineProps<{
   issues: JiraIssue[]
@@ -17,6 +18,9 @@ const props = defineProps<{
   unavailable?: boolean
   // 不傳則顯示全部
   limit?: number
+  // 有傳才顯示「立即同步」按鈕
+  onSync?: () => void | Promise<void>
+  syncing?: boolean
 }>()
 
 const displayedIssues = computed(() =>
@@ -41,6 +45,8 @@ const openJiraIssue = (key: string) => {
         <span class="text-lg font-semibold text-gray-900 dark:text-white">Jira 指派任務</span>
       </div>
     </template>
+
+    <SyncStatus :synced-at="syncedAt ?? null" :on-sync="onSync" :syncing="syncing ?? false" />
 
     <StaleDataBanner
       :stale="isStale ?? false"

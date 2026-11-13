@@ -5,10 +5,9 @@
 的 PLATFORMS 註冊。
 """
 from datetime import datetime
-from typing import Awaitable, Callable, Optional, TypedDict
+from typing import Callable, Optional, TypedDict
 
 from core.database import db
-from platforms.sync import sync_platform_items
 
 
 class PlatformUserInfo(TypedDict):
@@ -21,11 +20,11 @@ class PlatformAdapter:
     name: str            # 例如 "github"，也是 linkedAccounts.platform 的值和組合 id（"github:42"）的前綴
     display_name: str    # 例如 "GitHub"，錯誤訊息用
 
-    # ---------- 對外 API（GET 這個路徑回傳使用者在這個平台的項目）----------
-    route_path: str                          # 例如 "/github/issues"，前端已經在用，不能隨便改
+    # ---------- 對外 API ----------
+    route_path: str                   # GET 讀資料庫裡的項目，例如 "/github/issues"，前端已經在用，不能隨便改
+    sync_route_path: str              # POST 立即同步，例如 "/github/sync"
     response_model: type
-    rate_limit: Optional[str] = None         # 例如 "5/minute"；None 表示不限流
-    cache_ttl_seconds: Optional[int] = None  # 抓取成本高的平台才設，例如爬蟲
+    rate_limit: Optional[str] = None  # 立即同步的限流，例如 "5/minute"；None 表示不限流
 
     # ---------- 錯誤訊息（前端會直接顯示）----------
     not_linked_detail: str
@@ -58,15 +57,6 @@ class PlatformAdapter:
         其他例外會被當成程式錯誤（500）。
         """
         raise NotImplementedError
-
-    async def sync_items(self, user_id: str, fetch_fn: Callable[[], Awaitable[list[dict]]]):
-        """即時抓資料並寫進 collection，失敗時退回上次成功的資料。回傳值同 sync_platform_items。"""
-        return await sync_platform_items(
-            collection=self.collection,
-            user_id=user_id,
-            id_field="id",
-            fetch_fn=fetch_fn,
-        )
 
     def is_done(self, item: dict) -> bool:
         """平台回報的完成狀態。拿不到狀態的平台回 False，只靠使用者手動標記。"""

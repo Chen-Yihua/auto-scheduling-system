@@ -3,7 +3,7 @@ load_dotenv()
 
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends
-from routers import user, linked_account, pr_review_webhook, manual_task, google_calendar, schedule, analytics
+from routers import user, linked_account, pr_review_webhook, manual_task, google_calendar, schedule, analytics, scheduled_sync
 from platforms.router import platform_routers
 from fastapi.middleware.cors import CORSMiddleware
 import os
@@ -58,8 +58,8 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    # 前後端不同來源時，Retry-After 不在瀏覽器讓前端讀取的安全清單內
-    expose_headers=["Retry-After"],
+    # 前後端不同來源時，這些 header 不在瀏覽器讓前端讀取的安全清單內
+    expose_headers=["Retry-After", "X-Synced-At", "X-Auth-Error", "X-Data-Stale"],
 )
 
 app.state.limiter = limiter
@@ -82,6 +82,7 @@ app.include_router(google_calendar.router)
 app.include_router(manual_task.router)
 app.include_router(schedule.router)
 app.include_router(analytics.router)
+app.include_router(scheduled_sync.router)
 # 外部平台的路由依 PLATFORMS 自動產生
 for platform_router in platform_routers:
     app.include_router(platform_router)

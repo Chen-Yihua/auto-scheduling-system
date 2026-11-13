@@ -41,3 +41,4 @@
 | [0010](0010-scratchpad-loss-recovery.md) | scratchpad 遺失時以暫存產物為單位恢復，審查不逐一要求特定案例 | 已採用（暫存產物表的位置已移到 `feature/references/resume.md`，見 0012） |
 | [0011](0011-api-error-status-codes.md) | API 錯誤回應：狀態碼表示類別，error_code 表示原因 | 已採用 |
 | [0012](0012-simplify-process-levels.md) | 簡化等級、審查分流與決定記錄，`/feature` 拆成階段 skill | 已採用 |
+| [0013](0013-scheduled-sync-trigger.md) | 外部平台定時同步由 GitHub Actions 觸發 | 已採用 |

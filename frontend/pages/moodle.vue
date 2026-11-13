@@ -6,7 +6,7 @@ import MoodleAssignmentsList from '~/components/platforms/MoodleAssignmentsList.
 import LoginRequiredCard from '~/components/LoginRequiredCard.vue'
 
 const { isSignedIn } = useUser()
-const { items, fetchItems, isStale, syncedAt, authError, notLinked, needsReauth, unavailable, loading } = usePlatformItems('moodle')
+const { items, fetchItems, syncNow, syncing, isStale, syncedAt, authError, notLinked, needsReauth, unavailable, loading } = usePlatformItems('moodle')
 
 watch(isSignedIn, (signedIn) => {
   if (signedIn) fetchItems()
@@ -32,6 +32,8 @@ watch(isSignedIn, (signedIn) => {
         :not-linked="notLinked"
         :needs-reauth="needsReauth"
         :unavailable="unavailable"
+        :on-sync="syncNow"
+        :syncing="syncing"
       />
       <LoginRequiredCard
         v-else-if="isSignedIn === false"

@@ -9,6 +9,7 @@ const PLATFORMS = {
   github: {
     label: 'GitHub',
     path: '/github/issues',
+    syncPath: '/github/sync',
     authFailedTitle: 'GitHub 授權已失效',
     authFailedDescription: '你的 GitHub 連結帳號可能已過期或被撤銷，請至右上角頭像 → Key 分頁重新連結',
     fetchFailedDescription: '伺服器暫時連不上 GitHub 或發生錯誤，請稍後再試一次；如果一直失敗，請確認你的 GitHub token 是否仍然有效',
@@ -16,6 +17,7 @@ const PLATFORMS = {
   jira: {
     label: 'Jira',
     path: '/jira/issues',
+    syncPath: '/jira/sync',
     authFailedTitle: 'Jira 授權已失效',
     authFailedDescription: '你的 Jira 連結帳號可能已過期或被撤銷，請至右上角頭像 → Key 分頁重新連結',
     fetchFailedDescription: '伺服器暫時連不上 Jira 或發生錯誤，請稍後再試一次；如果一直失敗，請確認你的 API Key 是否仍然有效',
@@ -23,6 +25,7 @@ const PLATFORMS = {
   moodle: {
     label: 'Moodle',
     path: '/moodle/assignments',
+    syncPath: '/moodle/sync',
     authFailedTitle: 'Moodle 帳號或密碼已失效',
     authFailedDescription: '你的 Moodle 帳號或密碼可能已經變更，請至右上角頭像 → Key 分頁重新輸入',
     fetchFailedDescription: '伺服器暫時連不上 Moodle 或發生錯誤，請稍後再試一次；如果一直失敗，請確認帳號密碼是否仍然正確',
@@ -37,7 +40,8 @@ interface PlatformItemTypes {
 
 export type PlatformName = keyof PlatformItemTypes
 
-// 取得外部平台的項目，以及 header 回報的狀態（是否舊資料、同步時間、是否需重新連結）
+// 外部平台的項目：打開頁面時讀後端資料庫（fetchItems），按「立即同步」時即時同步（syncNow）；
+// 以及 header 回報的狀態（是否舊資料、同步時間、是否需重新連結）
 export const usePlatformItems = <P extends PlatformName>(platform: P) => {
   const settings = PLATFORMS[platform]
   const toast = useToast()
@@ -56,6 +60,7 @@ export const usePlatformItems = <P extends PlatformName>(platform: P) => {
   // 帳號檢查失敗而且還沒有已知的結果：顯示「暫時無法載入」，不顯示「尚未綁定」
   const unavailable = ref(false)
   const loading = ref(true)
+  const syncing = ref(false)
   // 例如 Jira 要用 domain 組出 issue 連結
   const account = computed(() => keys.value.find(k => k.platform === platform))
 
@@ -81,6 +86,30 @@ export const usePlatformItems = <P extends PlatformName>(platform: P) => {
     reset()
   }
   watch(() => userId?.value ?? null, switchOwner)
+
+  const applyResponse = (res: { _data?: PlatformItemTypes[P][]; headers: Headers }) => {
+    hasKnownResult = true
+    items.value = res._data ?? []
+    isStale.value = res.headers.get('X-Data-Stale') === 'true'
+    syncedAt.value = res.headers.get('X-Synced-At')
+    authError.value = res.headers.get('X-Auth-Error') === 'true'
+  }
+
+  const handleRequestError = (err: unknown, action: string) => {
+    logApiError(`${settings.label} ${action}`, err)
+    if (isNotLinkedError(err)) {
+      hasKnownResult = true
+      notLinked.value = true
+      return
+    }
+    authError.value = isAuthError(err)
+    toast.add({
+      title: authError.value ? settings.authFailedTitle : getFriendlyErrorTitle(err, `${settings.label} 資料暫時無法取得`),
+      description: authError.value ? settings.authFailedDescription : describeError(err, settings.fetchFailedDescription),
+      color: 'error',
+      icon: 'i-lucide-x',
+    })
+  }
 
   const fetchItems = async () => {
     loading.value = true
@@ -118,31 +147,32 @@ export const usePlatformItems = <P extends PlatformName>(platform: P) => {
         const res = await $fetch.raw<PlatformItemTypes[P][]>(`${BASE_URL}${settings.path}`, {
           headers: { Authorization: `Bearer ${token}` },
         })
-
-        hasKnownResult = true
-        items.value = res._data ?? []
-        isStale.value = res.headers.get('X-Data-Stale') === 'true'
-        syncedAt.value = res.headers.get('X-Synced-At')
-        authError.value = res.headers.get('X-Auth-Error') === 'true'
+        applyResponse(res)
       } catch (err) {
-        logApiError(`${settings.label} 抓取失敗`, err)
-        if (isNotLinkedError(err)) {
-          hasKnownResult = true
-          notLinked.value = true
-          return
-        }
-        authError.value = isAuthError(err)
-        toast.add({
-          title: authError.value ? settings.authFailedTitle : getFriendlyErrorTitle(err, `${settings.label} 資料暫時無法取得`),
-          description: authError.value ? settings.authFailedDescription : describeError(err, settings.fetchFailedDescription),
-          color: 'error',
-          icon: 'i-lucide-x',
-        })
+        handleRequestError(err, '抓取失敗')
       }
     } finally {
       loading.value = false
     }
   }
 
-  return { items, account, fetchItems, isStale, syncedAt, authError, notLinked, needsReauth, unavailable, loading }
+  // 立即同步：後端一律即時向平台抓資料；失敗時後端有舊資料就退回舊資料（isStale）
+  const syncNow = async () => {
+    syncing.value = true
+    switchOwner(userId?.value ?? null)
+    try {
+      const token = await getToken.value()
+      const res = await $fetch.raw<PlatformItemTypes[P][]>(`${BASE_URL}${settings.syncPath}`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      applyResponse(res)
+    } catch (err) {
+      handleRequestError(err, '同步失敗')
+    } finally {
+      syncing.value = false
+    }
+  }
+
+  return { items, account, fetchItems, syncNow, syncing, isStale, syncedAt, authError, notLinked, needsReauth, unavailable, loading }
 }

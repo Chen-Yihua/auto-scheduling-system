@@ -44,6 +44,7 @@
 4. `http_exception_handler` 與 `_ERROR_CODE_BY_HTTP_STATUS` 保留，只把 `:49` 的註解改成目前還會用到它的來源（未知路由、不支援的方法、Clerk 驗證 library 的 403、FastAPI 或其他 library 丟的 `HTTPException`），拿掉「router 還沒改成 AppError」。
 5. 文件改成所有層都丟 `core/errors.py` 的例外、不用 `HTTPException`：`backend/README.md`「錯誤處理」第一條、`docs/architecture.md` 後端分層圖的 `routers/` 那一行、`backend/core/errors.py` 的模組 docstring。
 6. 移除改完後沒用到的 `HTTPException` import。
+7. 移除 `backend/tests/integration/test_google_calendar_api.py:5`、`backend/tests/integration/test_schedule_api.py:3` 沒用到的 `HTTPException` import（`main` 上原本就沒用到），只留 `status`。
 
 ## 不做
 
@@ -63,6 +64,7 @@
 | AC5 | `get_current_clerk_user` 沒有 credentials 或沒有解出的 payload 時，回 401 `UNAUTHENTICATED`，`detail` "Invalid authentication credentials"，帶 `WWW-Authenticate: Bearer` | 不變條件 |
 | AC6 | 未知路由回 404 `NOT_FOUND`、不支援的方法回 405 `METHOD_NOT_ALLOWED`、沒帶 token 或 token 無效回 401 `{"detail": "Forbidden", "error_code": "UNAUTHENTICATED"}`，和改之前相同 | 不變條件 |
 | AC7 | `backend/` 的正式程式（不含 `tests/`）沒有 `raise HTTPException`；`backend/README.md`、`docs/architecture.md`、`core/errors.py` 的說明寫明所有層都丟 `core/errors.py` 的例外 | 不變條件 |
+| AC8 | `backend/tests/integration/test_google_calendar_api.py`、`test_schedule_api.py` 不再 import `HTTPException`，兩個檔案的測試照常通過 | 不變條件 |
 
 ## 不適用的情境
 
@@ -98,8 +100,10 @@
 | AC5 | unit：`tests/unit/test_security.py:345-351` 斷言 `AppError` 的 `error_code`、`detail` 與 `headers` |
 | AC6 | 既有的 `tests/integration/test_error_responses_api.py` 的 `test_unknown_route_returns_not_found_code`、`test_unsupported_method_returns_method_not_allowed_and_keeps_allow_header`、`test_missing_or_invalid_jwt_returns_unauthenticated` 不改、全部通過 |
 | AC7 | `grep -rn "raise HTTPException" backend --include=*.py --exclude-dir=tests` 沒有結果；讀三份文件 |
+| AC8 | `grep -n HTTPException` 兩個檔案沒有結果；`pytest` 通過 |
 
 ## 修改紀錄
 
 | 日期 | 修改 | 原因 | 確認者 |
 |---|---|---|---|
+| 2026-11-13 | 需求 7、AC8：移除兩個 integration 測試檔沒用到的 `HTTPException` import | 開發者決定實作審查 #2 在這個 PR 處理，不另開 issue（原本開的 #93 關閉）→ 需求 7、AC8；檢查過需求 6、AC7（只看正式程式）不用改 | 開發者 |

@@ -14,7 +14,7 @@ description: 依開發者核准的規格實作功能、開 PR、等 CI；不參�
      - 更新本 PR 的術語（這個 PR 先前交付、`origin/main` 還沒有的術語）：交付清單寫出術語名稱、這個 PR 上一版的定義與新定義。PR 分支上的定義和上一版一致才取代成新定義；不一致時停下來回報。對 `origin/main` 照「新增的術語」的規則對照。
      - `origin/main` 沒有 `docs/glossary.md` 時，才照 `docs/README.md`「術語表」的格式（含檔頭）建立；分支沒有這個檔案但 `origin/main` 有時，先把分支更新到 `origin/main`，再合併。
 2. 先寫每條驗收條件對應的測試，跑一次確認在改程式前會失敗，再實作。測試名稱或 docstring 要看得出對應哪條驗收條件。
-3. 跑 CLAUDE.md「完成的定義」的檢查，全部通過才 commit。commit 前看 `git status`、`git diff`，只用 `git add <路徑>` 加入交付清單上的檔案與這次實作改的檔案，不用 `git add -A`、`git add .`；`docs/reviews/` 的審查紀錄由主 session commit，不要加入。工作目錄有交付清單以外、也不是這次實作造成的改動，或無法確認歸屬時，停下來回報，不 commit。接著 push → `gh pr create`（描述放驗收條件、測試與結果的對照表：驗收條件 → 對應的測試 → 結果）→ 把規格開頭的「PR」補上編號，commit、push → `gh pr checks --watch`。之後更新 PR 描述照 CLAUDE.md「開發流程」的方式。
+3. 跑 CLAUDE.md「完成的定義」的檢查，全部通過才 commit。commit 前看 `git status`、`git diff`，只用 `git add <路徑>` 加入交付清單上的檔案與這次實作改的檔案，不用 `git add -A`、`git add .`；`docs/reviews/` 的審查紀錄由主 session commit，不要加入。工作目錄有交付清單以外、也不是這次實作造成的改動，或無法確認歸屬時，停下來回報，不 commit。接著 push → `gh pr create`（描述放「驗收條件、測試與結果的對照表」：驗收條件 → 對應的測試 → 結果）→ 把規格開頭的「PR」補上編號，commit、push → `gh pr checks --watch`。之後更新 PR 描述照 CLAUDE.md「開發流程」的方式。
 4. CI 失敗就用 `gh run view --log-failed` 讀錯誤、修正後 push 到同一個分支，最多 3 輪。
 
 發現可被利用的漏洞時（不用等指示），停下這一項，只寫在給主 session 的回報裡並標明「漏洞」：不要修正、不要 push，也不要把漏洞的位置與利用方式寫進 commit 訊息、PR 描述、程式註解、測試名稱與 docstring 或 issue，因為 repo 是公開的。之後照開發者決定的方式處理。

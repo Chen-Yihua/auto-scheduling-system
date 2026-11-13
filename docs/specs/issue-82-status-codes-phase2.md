@@ -77,6 +77,7 @@
    | 間隔 | 第 1 次重送前等 0.5 秒，第 2 次等 1 秒；回應帶 `Retry-After` 時取兩者中較長的 |
 
    - **`Retry-After` 的完整流程**：後端照需求 4 把外部回應的 `Retry-After` 放進我方的錯誤回應 → 後端 CORS 設定 `expose_headers` 加上 `Retry-After`（`backend/main.py:55-61` 目前沒有設定 `expose_headers`；前後端不同來源時，`Retry-After` 不在瀏覽器允許前端讀取的安全清單內，不加就讀不到）→ 前端在重送判斷裡用 `response.headers.get('Retry-After')` 讀取。因為限流不重送，而本後端只在 `UPSTREAM_RATE_LIMITED` 帶 `Retry-After`，目前沒有會用到這段讀取的情況，保留給之後帶 `Retry-After` 的暫時性錯誤；讀不到或不是秒數時照固定的間隔。
+   - **讀不到狀態碼的回應**：上面的表以前端讀得到狀態碼為前提。前後端不同來源時，Cloud Run 平台自己回的回應（例如它的 429、沒有 `error_code` 的 500）不經過後端的 `CORSMiddleware`，沒有 `Access-Control-Allow-Origin`，瀏覽器只給前端網路錯誤，前端分不出它和「沒有收到回應」，所以照暫時性錯誤重送；上限、間隔與可以重送的方法仍然適用。這是已知限制，這次不處理。
    - 後端呼叫外部平台的重試（`backend/platforms/sync.py` 最多 2 次）不變。
    - 非同步工作的重送上限是 5 次：目前系統沒有非同步工作，這次不實作，寫進 `backend/README.md`「錯誤處理」當作之後新增非同步工作時的規則。
 8. **文件**：`docs/api.md` 開頭的「沒帶會被擋下」改成 401；「錯誤回應」一節拿掉過渡期間的說明，改成狀態碼照 ADR 0011 的對照表；各 endpoint 說明欄的狀態碼改成新的值。`backend/README.md`「錯誤處理」寫明丟例外時只選 `error_code`，狀態碼由對照表決定，並寫上重送原則（需求 7：暫時性錯誤才重送、同步呼叫上限 3 次、非同步工作上限 5 次、遵守限流）；`:70` 的「由全域 handler 回 503 或 500」照 Redis 改成 503 一起更新。
@@ -108,7 +109,7 @@
 | AC6 | webhook 簽章錯誤與沒設定簽章密鑰：401 `INVALID_WEBHOOK_SIGNATURE`；沒設定密鑰時在啟動時記一次 error log，請求時不重複記 error；log 不含密鑰值、簽章與請求內容 | 不變條件 |
 | AC7 | 確認排程時寫入 Google 失敗的 `failed` 項目帶依原因的 `error_code` 與一致的 `reason`（401 `REAUTH_REQUIRED`、400 `INTERNAL_ERROR`、限流、逾時、5xx 照第一階段）；寫入前檢查不通過的項目 `error_code` 是 `null`、`reason` 不變；有任何一筆 `REAUTH_REQUIRED` 時，畫面另外提示重新連接 Google Calendar | 使用者行為 |
 | AC8 | `PATCH /schedule/tasks/fields`、`/done` 的外部 id 不存在或不屬於自己：404 `NOT_FOUND`；`fields` 沒帶任何要更新的欄位時也一樣檢查（外部與手動任務不存在 404、前綴不認得或 id 格式錯 400，id 合法才回 200）；`PUT /schedule/reorder` 回 400 的任何情況（id 不存在或不屬於自己、外部 id 格式錯、前綴不認得、主任務、階段優先序不合規則），資料庫的順序都完全沒有改變；id 不存在時是 400 `INVALID_REQUEST`、和手動任務同一個訊息；來源前綴不認得：三個 endpoint 都是 400；確認排程寫回事件 id 時外部項目不存在，確認仍成功 | 不變條件 |
-| AC9 | 除了 AC4 的 JWKS 失敗（`error_code` 從 `UNAUTHENTICATED` 變成 `UPSTREAM_*`）、AC7、AC8 的情況，各畫面顯示的錯誤和改之前相同；外部平台同步的重試次數、`X-Auth-Error`、`X-Data-Stale` 和改之前相同；前端的 `$fetch` 呼叫本後端時照需求 7 重送：暫時性錯誤最多總共 3 次並照間隔等待，永久性錯誤、限流、其他沒列出的情況與不能重送的方法不重送；呼叫非本後端時的重送和改之前相同（ofetch 預設）；`useUserSync` 的原生 `fetch` 維持不重送 | 使用者行為 |
+| AC9 | 除了 AC4 的 JWKS 失敗（`error_code` 從 `UNAUTHENTICATED` 變成 `UPSTREAM_*`）、AC7、AC8 的情況，各畫面顯示的錯誤和改之前相同；外部平台同步的重試次數、`X-Auth-Error`、`X-Data-Stale` 和改之前相同；前端的 `$fetch` 呼叫本後端時照需求 7 重送：暫時性錯誤最多總共 3 次並照間隔等待，永久性錯誤、限流、其他沒列出的情況與不能重送的方法不重送（前端讀得到狀態碼時；讀不到時照需求 7「讀不到狀態碼的回應」）；呼叫非本後端時的重送和改之前相同（ofetch 預設）；`useUserSync` 的原生 `fetch` 維持不重送 | 使用者行為 |
 | AC10 | 錯誤回應不帶憑證、token、第三方回應原文；查別人的資料和查不存在的資料回一樣的 404 與訊息 | 不變條件 |
 | AC11 | `docs/api.md` 開頭寫 401、「錯誤回應」一節沒有過渡期間的說明、各 endpoint 的狀態碼是新的值；`backend/README.md`「錯誤處理」寫明只選 `error_code` | 不變條件 |
 | AC12 | PR 描述有 `Closes #82` | 使用者行為 |
@@ -180,3 +181,4 @@
 | 日期 | 修改 | 原因 | 確認者 |
 |---|---|---|---|
 | 2026-11-12 | AC8、需求 6：`PATCH /schedule/tasks/fields` 沒帶欄位時也先檢查 id；測試對應 AC6 的檔名改成實際位置、AC8 補測試 | 開發者決定沒有欄位時也檢查 id（實作審查發現原本直接回 200，手動任務不存在時會從 200 變成 404）→ 需求 6、AC8；檢查過 AC9（前端不會送出沒有欄位的請求，畫面不變）、AC10 不用改 | 開發者 |
+| 2026-11-13 | 需求 7 補「讀不到狀態碼的回應」、AC9 註明以讀得到狀態碼為前提 | 開發者決定程式不改、寫明限制（實作審查 #6：跨來源時 Cloud Run 平台自己回的 429、沒有 `error_code` 的 500 沒有 CORS header，前端當成沒有收到回應而重送）→ 需求 7、AC9；檢查過 AC4、AC7、AC8、測試對應 AC9（測的是讀得到狀態碼的情況）不用改 | 開發者 |

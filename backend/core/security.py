@@ -11,11 +11,11 @@ import time
 from urllib.error import URLError
 
 import jwt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends
 from fastapi.encoders import jsonable_encoder
 from fastapi_clerk_auth import ClerkConfig, ClerkHTTPBearer, HTTPAuthorizationCredentials
 
-from core.errors import ExternalServiceError
+from core.errors import AppError, ExternalServiceError
 
 logger = logging.getLogger(__name__)
 
@@ -141,9 +141,9 @@ async def get_current_clerk_user(
 ):
     """回傳解碼後的 JWT payload，"sub" 是 Clerk 使用者 id。"""
     if not credentials or not credentials.decoded :
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authentication credentials",
+        raise AppError(
+            "Invalid authentication credentials",
+            error_code="UNAUTHENTICATED",
             headers={"WWW-Authenticate": "Bearer"},
         )
     return credentials.decoded

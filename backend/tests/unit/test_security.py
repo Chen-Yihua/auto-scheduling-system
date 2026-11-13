@@ -10,7 +10,6 @@ from urllib.error import HTTPError, URLError
 import jwt
 import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
-from fastapi import HTTPException
 from fastapi_clerk_auth import HTTPAuthorizationCredentials
 from jwt.algorithms import RSAAlgorithm
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -343,9 +342,10 @@ async def test_get_current_clerk_user_returns_decoded_payload_on_success():
 
 @pytest.mark.asyncio
 async def test_get_current_clerk_user_raises_401_when_credentials_missing():
-    """完全沒有 credentials → 401，並帶 WWW-Authenticate: Bearer 標頭。"""
-    with pytest.raises(HTTPException) as exc_info:
+    """AC5：完全沒有 credentials → 401 UNAUTHENTICATED，並帶 WWW-Authenticate: Bearer 標頭。"""
+    with pytest.raises(AppError) as exc_info:
         await security.get_current_clerk_user(credentials=None)
 
-    assert exc_info.value.status_code == 401
+    assert exc_info.value.error_code == "UNAUTHENTICATED"
+    assert exc_info.value.detail == "Invalid authentication credentials"
     assert exc_info.value.headers == {"WWW-Authenticate": "Bearer"}

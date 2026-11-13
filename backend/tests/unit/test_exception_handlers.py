@@ -178,7 +178,7 @@ async def test_http_exception_error_code_by_status_then_status_by_table(status, 
 
 @pytest.mark.asyncio
 async def test_http_exception_keeps_original_headers():
-    """保留 HTTPException 原本的 header，例如 core/security.py 401 的 WWW-Authenticate。"""
+    """保留 HTTPException 原本的 header，例如 WWW-Authenticate。"""
     exc = StarletteHTTPException(status_code=401, detail="Invalid authentication credentials", headers={"WWW-Authenticate": "Bearer"})
 
     response = await http_exception_handler(_request(), exc)

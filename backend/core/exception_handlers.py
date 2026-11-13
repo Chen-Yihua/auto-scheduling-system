@@ -46,7 +46,7 @@ async def app_error_handler(request: Request, exc: AppError) -> JSONResponse:
     return error_response(request, exc.detail, exc.error_code, headers=exc.headers, exc=exc)
 
 
-# router 還沒改成 AppError 的 HTTPException、未知路由、不支援的方法；403 只有 Clerk 驗證 library 會丟（沒帶 token、scheme 錯）
+# 未知路由、不支援的方法、Clerk 驗證 library 的 403（沒帶 token、scheme 錯、token 無效），以及 FastAPI 或其他 library 丟的 HTTPException
 _ERROR_CODE_BY_HTTP_STATUS = {
     400: "INVALID_REQUEST",
     401: "UNAUTHENTICATED",

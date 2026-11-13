@@ -18,7 +18,7 @@ Hacker News 不經過後端，由瀏覽器直接呼叫公開 API。
 ## 後端分層
 
 ```
-routers/     HTTP 進出：驗證登入、組回應；只有這層用 HTTPException
+routers/     HTTP 進出：驗證登入、組回應；各層都丟 core/errors.py 的例外，不用 HTTPException
    │
    ├── crud/        讀寫 MongoDB
    ├── services/    商業邏輯（排程計算、AI 推估、Google Calendar、工作效率統計）

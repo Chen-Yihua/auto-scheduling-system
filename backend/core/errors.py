@@ -1,5 +1,5 @@
 """
-crud、services 和各平台用的例外，由 core/exception_handlers.py 轉成錯誤回應。
+所有層（routers、crud、services、platforms）丟的例外，由 core/exception_handlers.py 轉成錯誤回應；不用 HTTPException。
 
 丟例外時只決定 error_code（照 ADR 0011 選原因），狀態碼由 core/error_codes.py 的對照表決定；
 原因和類別預設不同時在建構時另外指定 error_code。

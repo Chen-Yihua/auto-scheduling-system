@@ -20,20 +20,21 @@
 |---|---|---|
 | 永久保存（歷史紀錄） | `specs/`、`reviews/specification/`、`reviews/implementation/`、`reviews/*-round<N>.md`、`decisions/` | 不刪除，也不因為過時就改寫內容。被取代時只改狀態並連結新的文件：規格照 [specs/README.md](specs/README.md)「規格和目前系統的關係」，ADR 照 [decisions/README.md](decisions/README.md)。記錄的是當時的決定，不是目前的系統 |
 | 持續更新（目前狀態） | `api.md`、`architecture.md`、`architecture.drawio`、`issues.md`、`glossary.md` | 和程式碼、流程保持一致，改動時在同一個 PR 更新（時機見上表）。不記歷史，歷史看 git、規格與 ADR |
-| 暫存（不 commit） | scratchpad（`<功能>-` 開頭的暫存檔，種類與檔名見 `.claude/skills/feature/references/resume.md`的暫存產物表） | 只放當下的開發需要的內容。核准後由 `feature-implementer` 照交付清單把規格存進 `specs/`、ADR 草稿存進 `decisions/`、術語合併進 `glossary.md`；規格審查紀錄草稿由主 session 存進 `reviews/specification/`（`implement-and-review`「審查紀錄的 commit」）。流程回報前確認已確認的內容都已在規格、審查紀錄、ADR 或術語表（文字修正對照 PR 的改動與描述），還沒做完的後續動作列在回報的「待辦」（`/feature`「清理暫存」）。已確認、會影響實作的決定，核准前一定要寫進規格、ADR 草稿或 `<功能>-glossary.md`（落點是術語表的），不能只留在暫存或對話裡 |
+| 暫存（不 commit） | scratchpad（`<功能>-` 開頭的暫存檔，種類與檔名見 `.claude/skills/feature/references/resume.md` 的暫存檔表） | 只放當下的開發需要的內容。核准後由 `feature-implementer` 照交付清單把規格存進 `specs/`、ADR 草稿存進 `decisions/`、術語合併進 `glossary.md`；規格審查紀錄草稿由主 session 存進 `reviews/specification/`（`implement-and-review`「審查紀錄的 commit」）。流程回報前確認已確認的內容都已在規格、審查紀錄、ADR 或術語表（文字修正對照 PR 的改動與描述），還沒做完的後續動作列在回報的「待辦」（`/feature`「清理暫存」）。已確認、會影響實作的決定，核准前一定要寫進規格、ADR 草稿或 `<功能>-glossary.md`（要寫在術語表的），不能只留在暫存或對話裡 |
 | 選擇性保存（實驗） | `experiments/` | README 寫實驗目的、指標與結論，TEMPLATE 是紀錄格式，`records/` 保留有參考價值的紀錄。流程的版本用紀錄裡的「流程版本」（commit）對應，不另外備份每一版的 skill。既有紀錄不自動刪除，也不為了符合新規則修改；要刪除時先寫出它沒有參考價值的理由，由開發者決定 |
 
 暫存的取消與暫停（`/feature`「取消」、`feature/references/resume.md`）：
 
 - **取消**：核准前取消時這次確定的術語怎麼處理，見 `/feature`「取消」。
-- **暫停與接續**：暫停、接續，以及 scratchpad 遺失時以暫存產物為單位的恢復，見 `feature/references/resume.md`。
+- **暫停與接續**：暫停、接續，以及 scratchpad 遺失時以暫存檔為單位的恢復，見 `feature/references/resume.md`。
 
 ## 術語表
 
 `docs/glossary.md` 記錄這個專案的產品用詞：使用者看得到的概念用哪個名稱、指的是什麼。
 
 - 位置：`docs/glossary.md`。第一個術語合併時由 `feature-implementer` 建立，不預先填寫。
-- 只收產品領域、使用者看得到的概念（例如「主任務」「子任務」「階段任務」）；不收開發流程的用詞（已確認、待問、等級、交付清單等，它們定義在 skill 與 `docs/`）。
+- 只收產品領域、使用者看得到的概念（例如「主任務」「子任務」「階段任務」）。
+- 流程用語（skill、agent 與 `docs/` 的流程文件用到的詞）收在本節最後的「流程用語」小節，不寫進 `docs/glossary.md`。
 - 不寫實作細節，不當規格用：行為與驗收條件寫在規格。
 - 什麼時候算術語確定、核准前後怎麼寫與交付，見 `.claude/skills/clarify-requirements/SKILL.md`「術語」。
 
@@ -52,3 +53,59 @@ _避免_：<不採用的說法>、<不採用的說法>
 ```
 
 格式改寫自 [mattpocock/skills](https://github.com/mattpocock/skills) 的 `domain-modeling`（`GLOSSARY-FORMAT`，commit `4ae2317`，MIT 授權）。
+
+### 流程用語
+
+skill（主 session 照著做的流程說明，在 `.claude/skills/`）、agent（主 session 派去做單一工作的另一個 Claude，在 `.claude/agents/`）與 `docs/` 底下的 README 用到的詞。格式和上面的術語表相同。
+
+**等級**（一般／高風險／文字修正）：
+依變更碰到什麼分成的三種處理深度，各自對應規格要寫多細、要審查幾次。
+
+**阻擋／不阻擋**：
+阻擋：這個問題要先處理完（或由開發者決定另開 issue）才能往下走；規格審查是指核准前，實作審查是指交給開發者決定合併前。不阻擋：不用先處理。
+
+**發現**：
+審查找到的一個問題或建議。
+
+**已確認／待問**：
+已確認：開發者已經回答的決定。待問：還沒問的問題。
+
+**交付清單**：
+交給 `feature-implementer` 的檔案與要做的事。
+
+**主 session**：
+和開發者對話、指派其他 agent 的那個 Claude。
+
+**scratchpad**：
+這次對話專用的暫存資料夾，不會進 repo。
+
+**已接受的風險**：
+確定不處理、之後審查也不再提出的風險。
+
+**決策樹**：
+把問題依「哪一題要先回答」排出的順序。
+
+**不變條件**：
+只看畫面驗不出來，但一定要守住的系統狀態。
+
+**advisory**：
+GitHub 上不公開的漏洞報告。
+
+#### 問題類型與嚴重程度的舊名稱
+
+審查問題的類型與嚴重程度以前用英文名稱。讀舊的規格、審查紀錄、ADR 與實驗紀錄時，用這張表對照：
+
+| 舊名稱 | 新名稱 |
+|---|---|
+| Factual Error | 規格對現有系統的描述和程式不符 |
+| Specification Defect | 規格內容互相矛盾或沒有依據 |
+| Missing Acceptance Criteria（Missing AC） | 規格沒寫某個情境該怎麼做 |
+| Implementation Defect | 程式沒照規格做 |
+| Test Gap | 測試抓不到錯的程式 |
+| Improvement Suggestion | 沒有錯，但可以更好 |
+| Critical | 會壞資料、有安全問題，或主要功能不能用 |
+| Major | 一般操作就會遇到的錯 |
+| Minor | 影響小的問題 |
+| Info | 不影響功能，只供參考 |
+
+前 6 列是問題類型，後 4 列是嚴重程度，定義見 [reviews/README.md](reviews/README.md)「分類」。

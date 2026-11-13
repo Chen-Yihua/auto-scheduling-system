@@ -36,6 +36,6 @@ issue 只寫了程式狀態、沒寫受影響的人遇到的情境時（格式�
 | 需求問答 | 照 `clarify-requirements`「需求問答」。issue 裡的現象與程式狀態可以當作查到的事實，但仍要讀程式碼確認；「建議的驗收條件」「修法參考」在問答裡當成題目、附上建議答案問開發者，不直接寫進「已確認」|
 | 分支 | `issue-<N>-<簡短名稱>` |
 | 審查紀錄 | `docs/reviews/implementation/issue-<N>-<簡短名稱>.md`；規格審查是 `docs/reviews/specification/issue-<N>-<簡短名稱>.md`。文字修正沒有規格檔與審查紀錄 |
-| PR 描述 | 交給 `feature-implementer` 時明確要求 PR 描述加上 `Closes #<N>`（文字修正由你自己開 PR 時加上）；每次更新 PR 描述後（包括 `feature`「回報」放驗收表時），用 `gh api repos/{owner}/{repo}/pulls/<PR> --jq .body` 確認描述裡有；沒有就以目前的描述為基礎補上一行，再 `gh api -X PATCH`，不要只送 `Closes #<N>` 把整份描述蓋掉。合併後 issue 會自動關閉 |
+| PR 描述 | 交給 `feature-implementer` 時明確要求 PR 描述加上 `Closes #<N>`（文字修正由你自己開 PR 時加上）；每次更新 PR 描述後（包括 `feature`「回報」放驗收條件、測試與結果的對照表時），用 `gh api repos/{owner}/{repo}/pulls/<PR> --jq .body` 確認描述裡有；沒有就以目前的描述為基礎補上一行，再 `gh api -X PATCH`，不要只送 `Closes #<N>` 把整份描述蓋掉。合併後 issue 會自動關閉 |
 
 開發中發現和這個 issue 無關的問題，照 `implement-and-review`「不阻擋的發現開 issue」規則開新 issue（可被利用的漏洞照 `implement-and-review`「漏洞的處理」，不開 issue），不在這個 PR 修。

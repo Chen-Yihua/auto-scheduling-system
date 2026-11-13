@@ -74,6 +74,11 @@ describe('dashboard/Dashboard.vue 立即同步', () => {
     toastSpy.add.mockClear()
     fetchRaw.mockReset()
     stateStore.clear()
+    linkedKeys.value = [
+      { platform: 'github', value: 'KEY****' },
+      { platform: 'jira', value: 'KEY****', domain: 'team.atlassian.net' },
+      { platform: 'moodle', value: 'PW****' },
+    ]
   })
 
   it('AC34、AC35：三個平台各呼叫自己的 POST；Jira 失敗時 GitHub、Moodle 仍更新，只跳一個 Jira 的錯誤訊息', async () => {
@@ -101,5 +106,26 @@ describe('dashboard/Dashboard.vue 立即同步', () => {
     expect(wrapper.findComponent({ name: 'MoodleAssignmentsList' }).props('assignments')).toEqual([{ id: 'http://api/moodle/sync' }])
     expect(toastSpy.add).toHaveBeenCalledTimes(1)
     expect(toastSpy.add.mock.calls[0]![0].title).toContain('Jira')
+  })
+
+  it('AC35：進儀表板時 GitHub 尚未綁定，之後按立即同步成功 → GitHub 卡片不再顯示尚未綁定，清單已更新', async () => {
+    linkedKeys.value = [
+      { platform: 'github', value: '' },
+      { platform: 'jira', value: 'KEY****', domain: 'team.atlassian.net' },
+      { platform: 'moodle', value: 'PW****' },
+    ]
+    fetchRaw.mockResolvedValue(ok([]))
+    const wrapper = mount(Dashboard, { global: { stubs: uiStubs } })
+    await flushPromises()
+    expect(wrapper.findComponent({ name: 'GithubIssuesList' }).props('notLinked')).toBe(true)
+
+    fetchRaw.mockReset()
+    fetchRaw.mockImplementation(async (url: string) => ok([{ id: url }]))
+    await wrapper.find('[data-testid="dashboard-sync-now"]').trigger('click')
+    await flushPromises()
+
+    const github = wrapper.findComponent({ name: 'GithubIssuesList' })
+    expect(github.props('notLinked')).toBe(false)
+    expect(github.props('issues')).toEqual([{ id: 'http://api/github/sync' }])
   })
 })

@@ -93,6 +93,10 @@ export const usePlatformItems = <P extends PlatformName>(platform: P) => {
     isStale.value = res.headers.get('X-Data-Stale') === 'true'
     syncedAt.value = res.headers.get('X-Synced-At')
     authError.value = res.headers.get('X-Auth-Error') === 'true'
+    // 後端回 2xx 代表帳號已連結（例如使用者在頁面上剛連結後按立即同步），清單元件會先看這三個狀態
+    notLinked.value = false
+    needsReauth.value = false
+    unavailable.value = false
   }
 
   const handleRequestError = (err: unknown, action: string) => {

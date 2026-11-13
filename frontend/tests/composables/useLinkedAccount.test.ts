@@ -72,6 +72,19 @@ describe('useLinkedAccount', () => {
     expect(keys.value.find((k) => k.platform === 'moodle')!.isMasked).toBe(true)
   })
 
+  it('AC37：fetchKeys 把後端的 last_synced_at 寫到對應 key 的 lastSyncedAt，沒有同步紀錄的是 null', async () => {
+    fetchSpy.mockResolvedValueOnce([
+      { platform: 'github', apiKey: 'GKEY*****', last_synced_at: '2026-11-14T04:00:00Z' },
+      { platform: 'jira', apiKey: 'JKEY*****', domain: 'https://j.atl', last_synced_at: null },
+    ])
+
+    const { keys, fetchKeys } = (await load())()
+    await fetchKeys()
+
+    expect(keys.value.find((k) => k.platform === 'github')!.lastSyncedAt).toBe('2026-11-14T04:00:00Z')
+    expect(keys.value.find((k) => k.platform === 'jira')!.lastSyncedAt).toBeNull()
+  })
+
   it('openEdit / cancelEdit 切換編輯狀態', async () => {
     const { keys, openEdit, cancelEdit } = (await load())()
     const git = keys.value.find((k) => k.platform === 'github')!

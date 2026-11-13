@@ -311,6 +311,52 @@ describe.each([
     expect(toastSpy.add).not.toHaveBeenCalled()
   })
 
+  it.each([
+    ['尚未綁定', { value: '' }, 'notLinked'],
+    ['憑證無法讀取', { value: '', needsReauth: true }, 'needsReauth'],
+  ] as const)('AC31：打開頁面時是%s，在頁面上連結後按立即同步成功 → 不再顯示這個狀態，清單已更新', async (_label, account, flag) => {
+    linkedKeys.value = [{ platform, domain: 'team.atlassian.net', ...account }]
+    const state = usePlatformItems(platform as PlatformName)
+    await state.fetchItems()
+    expect(state[flag].value).toBe(true)
+
+    fetchRawSpy.mockResolvedValueOnce(ok([{ id: 'new' }], { 'X-Synced-At': '2026-11-14T05:00:00Z' }))
+    await state.syncNow()
+
+    expect(state.notLinked.value).toBe(false)
+    expect(state.needsReauth.value).toBe(false)
+    expect(state.unavailable.value).toBe(false)
+    expect(state.items.value).toEqual([{ id: 'new' }])
+  })
+
+  it('AC31：打開頁面時暫時無法載入，之後按立即同步成功 → 不再顯示暫時無法載入，清單已更新', async () => {
+    fetchKeysSpy.mockRejectedValueOnce(new Error('網路爆炸'))
+    const { fetchItems, syncNow, items, unavailable, notLinked, needsReauth } = usePlatformItems(platform as PlatformName)
+    await fetchItems()
+    expect(unavailable.value).toBe(true)
+
+    fetchRawSpy.mockResolvedValueOnce(ok([{ id: 'new' }], { 'X-Synced-At': '2026-11-14T05:00:00Z' }))
+    await syncNow()
+
+    expect(unavailable.value).toBe(false)
+    expect(notLinked.value).toBe(false)
+    expect(needsReauth.value).toBe(false)
+    expect(items.value).toEqual([{ id: 'new' }])
+  })
+
+  it('AC31：尚未綁定時按立即同步，後端退回舊資料 → 不再顯示尚未綁定，顯示舊資料', async () => {
+    linkedKeys.value = [{ platform, value: '' }]
+    const { fetchItems, syncNow, items, isStale, notLinked } = usePlatformItems(platform as PlatformName)
+    await fetchItems()
+
+    fetchRawSpy.mockResolvedValueOnce(ok([{ id: 'old' }], { 'X-Data-Stale': 'true' }))
+    await syncNow()
+
+    expect(notLinked.value).toBe(false)
+    expect(isStale.value).toBe(true)
+    expect(items.value).toEqual([{ id: 'old' }])
+  })
+
   it('需求 24：立即同步失敗但後端退回舊資料 → 顯示舊資料與提示（isStale），不跳 toast', async () => {
     fetchRawSpy.mockResolvedValueOnce(ok([{ id: 'old' }], { 'X-Data-Stale': 'true', 'X-Synced-At': '2026-11-01T04:00:00Z' }))
 

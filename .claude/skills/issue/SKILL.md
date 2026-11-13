@@ -38,4 +38,4 @@ issue 只寫了程式狀態、沒寫受影響的人遇到的情境時（格式�
 | 審查紀錄 | `docs/reviews/implementation/issue-<N>-<簡短名稱>.md`；規格審查是 `docs/reviews/specification/issue-<N>-<簡短名稱>.md`。文字修正沒有規格檔與審查紀錄 |
 | PR 描述 | 交給 `feature-implementer` 時明確要求 PR 描述加上 `Closes #<N>`（文字修正由你自己開 PR 時加上）；每次更新 PR 描述後（包括 `feature`「回報」放驗收表時），用 `gh api repos/{owner}/{repo}/pulls/<PR> --jq .body` 確認描述裡有；沒有就以目前的描述為基礎補上一行，再 `gh api -X PATCH`，不要只送 `Closes #<N>` 把整份描述蓋掉。合併後 issue 會自動關閉 |
 
-開發中發現和這個 issue 無關的問題，照 `implement-and-review`「不阻擋的發現開 issue」規則開新 issue（可被利用的漏洞照 `implement-and-review`「漏洞的處理」，不開 issue），不在這個 PR 修。
+開發中發現和這個 issue 無關的問題，屬於 `implement-and-review`「不改行為的清理」的在這個 PR 做；其餘照「不阻擋的發現開 issue」規則開新 issue（可被利用的漏洞照 `implement-and-review`「漏洞的處理」，不開 issue），不在這個 PR 修。

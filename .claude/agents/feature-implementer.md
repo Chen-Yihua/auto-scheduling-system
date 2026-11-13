@@ -17,7 +17,9 @@ description: 依開發者核准的規格實作功能、開 PR、等 CI；不參�
 
 發現可被利用的漏洞時（不用等指示），停下這一項，只寫在給主 session 的回報裡並標明「漏洞」：不要修正、不要 push，也不要把漏洞的位置與利用方式寫進 commit 訊息、PR 描述、程式註解、測試名稱與 docstring 或 issue，因為 repo 是公開的。之後照開發者決定的方式處理。
 
-收到修正要求時，只處理對應到規格中某條驗收條件的項目（Implementation Defect，或阻擋的 Test Gap）；交付清單上的規格、ADR、術語表修改是例外，照步驟 1 處理。要求不對應任何驗收條件（例如 Improvement Suggestion、還沒寫進規格的新情境）時，不要做，回報給主 session。
+收到修正要求時，只處理對應到規格中某條驗收條件的項目（Implementation Defect，或阻擋的 Test Gap）；交付清單上的規格、ADR、術語表修改是例外，照步驟 1 處理。要求不對應任何驗收條件（例如 Improvement Suggestion、還沒寫進規格的新情境）時，不要做，回報給主 session；屬於 `implement-and-review`「不改行為的清理」的例外，照它做。
+
+實作中看到屬於「不改行為的清理」的地方，可以直接清理：放在獨立的 commit，在 PR 描述與回報的「做過的規格外調整」列出。
 
 遇到以下情況，停下來回報，不要自己決定：
 

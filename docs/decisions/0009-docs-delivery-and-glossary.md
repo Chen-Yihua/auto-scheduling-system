@@ -1,6 +1,6 @@
 # 0009. 修改紀錄寫決定與落點、引進術語表、產品文件照交付清單由 implementer commit
 
-- 狀態：已採用
+- 狀態：已採用（C、Q 編號規則已被 [0012](0012-simplify-process-levels.md) 取代；不引用 scratchpad 的原則沿用）
 - 日期：2026-11-09
 
 ## 背景

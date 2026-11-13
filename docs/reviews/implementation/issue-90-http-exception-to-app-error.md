@@ -23,7 +23,7 @@
 | # | 輪 | 標題 | 類型 | 嚴重程度 | 阻擋合併 | 涉及安全／架構 | 根本原因 | 處理 | 決定者 | 結果 |
 |---|---|---|---|---|---|---|---|---|---|---|
 | 1 | 1 | `get_current_clerk_user` 有 credentials 但沒有解出 payload 的分支沒有測試 | Test Gap | Minor | 否 | 否 | — | 開 issue（`main` 上原本就有的缺口；真實請求走不到這個分支） | 主 session | [#92](https://github.com/Chen-Yihua/auto-scheduling-system/issues/92) |
-| 2 | 1 | 兩個 integration 測試檔留著沒用到的 `HTTPException` import | Improvement Suggestion | Info | 否 | 否 | — | 開發者決定在這個 PR 處理：規格需求 7、AC8，記進修改紀錄；原本開的 #93 關閉 | 開發者 | 交給 implementer 修正 |
+| 2 | 1 | 兩個 integration 測試檔留著沒用到的 `HTTPException` import | Improvement Suggestion | Info | 否 | 否 | — | 開發者決定在這個 PR 處理：規格需求 7、AC8，記進修改紀錄；原本開的 #93 關閉 | 開發者 | 已修正（`1c30070`）；只刪兩行 import，主 session 核對 diff 與 CI，沒有另跑重新審查 |
 
 ## 開發者決策
 

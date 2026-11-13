@@ -24,10 +24,13 @@ export interface ConfirmedTask {
   calendar_event_id: string
 }
 
+// 對應後端 FailedConfirmation
 export interface FailedConfirmation {
   task_id: string
   title: string
   reason: string
+  // 寫入 Google 失敗的原因；寫入前檢查不通過、前一個階段寫入失敗是 null
+  error_code: string | null
 }
 
 export interface ScheduleConfirmResult {

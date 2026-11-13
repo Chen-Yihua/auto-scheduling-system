@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from crud.google_tokens import save_google_calendar_token, is_google_calendar_connected
 from core.errors import ExternalServiceError, InvalidRequestError
 from services.google_calendar import list_calendars_for_user
-from services.google_errors import RATE_LIMITED_DETAIL, UPSTREAM_DETAIL, is_rate_limited, request_error_code
+from services.google_errors import RATE_LIMITED_DETAIL, UPSTREAM_DETAIL, is_rate_limited, rate_limit_headers, request_error_code
 from services.google_oauth import google_oauth_error
 from services.google_calendar_client import GOOGLE_HTTP_TIMEOUT
 from core.security import get_current_clerk_user
@@ -36,7 +36,7 @@ def _token_exchange_error(response: httpx.Response) -> InvalidRequestError:
         logger.error("Google 拒絕 OAuth 設定: %s", oauth_error)
         return InvalidRequestError("伺服器設定錯誤，請聯絡管理員", error_code="INTERNAL_ERROR")
     if is_rate_limited(response):
-        return InvalidRequestError(RATE_LIMITED_DETAIL, error_code="UPSTREAM_RATE_LIMITED")
+        return InvalidRequestError(RATE_LIMITED_DETAIL, error_code="UPSTREAM_RATE_LIMITED", headers=rate_limit_headers(response))
     return InvalidRequestError(UPSTREAM_DETAIL, error_code="UPSTREAM_ERROR")
 
 
@@ -56,7 +56,6 @@ async def oauth_callback(
     }
 
     # 不用 except Exception，以免蓋掉後面更具體的錯誤（例如 DB 的 503）
-    # 狀態碼維持目前的值：Google 回錯誤與拿不到 access token 是 400，連不上與逾時是 502
     try:
         async with httpx.AsyncClient(timeout=GOOGLE_HTTP_TIMEOUT) as client:
             res = await client.post(token_url, data=token_payload)

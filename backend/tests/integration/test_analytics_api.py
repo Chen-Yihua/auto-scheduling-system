@@ -65,8 +65,8 @@ async def test_get_productivity_summary_rejects_unknown_timezone(logged_in_user)
 
 @pytest.mark.asyncio
 async def test_get_productivity_summary_requires_login():
-    """AC11：未登入回 403（沿用 Clerk 驗證的既有行為）。"""
+    """未登入回 401 UNAUTHENTICATED。"""
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         res = await ac.get("/analytics/productivity")
 
-    assert res.status_code == status.HTTP_403_FORBIDDEN
+    assert res.status_code == status.HTTP_401_UNAUTHORIZED

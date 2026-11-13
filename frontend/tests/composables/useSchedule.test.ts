@@ -276,6 +276,45 @@ describe('useSchedule composable', () => {
       )
     })
 
+    it('AC7：failed 裡有一筆 REAUTH_REQUIRED → 除了列出失敗項目的 toast，另外提示重新連接 Google Calendar', async () => {
+      fetchSpy.mockResolvedValueOnce({
+        confirmed: [{ task_id: 't1', title: '任務一', calendar_event_id: 'event-1' }],
+        failed: [
+          { task_id: 't2', title: '任務二', reason: 'Google 授權已失效，請重新連接 Google Calendar', error_code: 'REAUTH_REQUIRED' },
+          { task_id: 't3', title: '任務三', reason: '前一個階段寫入失敗', error_code: null },
+        ],
+      })
+      fetchSpy.mockResolvedValueOnce({ scheduled: [], unscheduled: [] })
+
+      const ctx = useSchedule()
+      await ctx.confirmSchedule()
+
+      const toasts = toastSpy.add.mock.calls.map((call) => call[0])
+      expect(toasts).toContainEqual(expect.objectContaining({
+        title: '1 筆已確認，2 筆寫入失敗',
+        description: expect.stringContaining('任務二'),
+      }))
+      const reauth = toasts.find((t) => t.title === 'Google Calendar 授權已失效')
+      expect(reauth?.actions[0].label).toBe('重新連接 Google Calendar')
+    })
+
+    it('AC7：failed 沒有 REAUTH_REQUIRED（其他原因或 null）→ 不顯示重新連接的提示', async () => {
+      fetchSpy.mockResolvedValueOnce({
+        confirmed: [],
+        failed: [
+          { task_id: 't1', title: '任務一', reason: 'Google 請求太頻繁，請稍後再試', error_code: 'UPSTREAM_RATE_LIMITED' },
+          { task_id: 't2', title: '任務二', reason: '任務已經完成', error_code: null },
+        ],
+      })
+      fetchSpy.mockResolvedValueOnce({ scheduled: [], unscheduled: [] })
+
+      const ctx = useSchedule()
+      await ctx.confirmSchedule()
+
+      const toasts = toastSpy.add.mock.calls.map((call) => call[0])
+      expect(toasts.some((t) => t.title === 'Google Calendar 授權已失效')).toBe(false)
+    })
+
     it('請求本身失敗（例如 500）→ 跳出「確認排程失敗」的 toast，不會噴例外', async () => {
       fetchSpy.mockRejectedValueOnce(new Error('boom'))
 

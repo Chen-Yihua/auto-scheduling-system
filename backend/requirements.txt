@@ -4,10 +4,10 @@ pymongo
 pydantic
 python-dotenv
 email-validator
-fastapi-clerk-auth
+fastapi-clerk-auth==0.0.9
 cryptography
 python-jose
-PyJWT
+PyJWT==2.14.0
 httpx
 google-genai==2.22.0
 tzdata

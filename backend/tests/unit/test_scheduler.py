@@ -633,7 +633,7 @@ def test_check_suggestion_rejects_items_that_changed_since_the_user_saw_them(cur
     to_write, failed = check_suggestion_still_valid([item], current_tasks, free_slots, now=CHECK_NOW)
 
     assert to_write == []
-    assert failed == [{"task_id": "t1", "title": "t1", "reason": reason}]
+    assert failed == [{"task_id": "t1", "title": "t1", "reason": reason, "error_code": None}]
 
 
 # ---------- 階段任務：子任務依階段先後排程 ----------
@@ -857,7 +857,7 @@ def test_ac26_previous_stage_done_or_already_on_calendar_does_not_block_later_st
     to_write, failed = check_suggestion_still_valid(scheduled, current, free_slots, now=CHECK_NOW)
 
     assert [i["task_id"] for i in to_write] == ["s2"]
-    assert failed == [{"task_id": "s1", "title": "s1", "reason": reason}]
+    assert failed == [{"task_id": "s1", "title": "s1", "reason": reason, "error_code": None}]
 
 
 @pytest.mark.parametrize("current, start_hour, free_slot", [

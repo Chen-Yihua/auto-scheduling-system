@@ -5,19 +5,22 @@ id 加上來源前綴（例如 "github:42"）：不同平台的 id 可能重複�
 """
 from collections import Counter
 from datetime import datetime, timezone
-from core.errors import InvalidRequestError
+from core.errors import InvalidRequestError, NotFoundError
 from crud.manual_task import (
+    TASK_NOT_FOUND_DETAIL,
     completed_at_after_status_change,
     get_manual_task_by_id,
     get_manual_tasks_by_user_id,
-    reorder_manual_tasks,
     set_calendar_event_id,
     update_manual_task_by_id,
+    validate_reordered_stages,
     validate_task_change,
+    write_manual_task_order,
 )
 from platforms import PLATFORMS
 
 SOURCE_MANUAL = "manual"
+INVALID_TASK_ID_DETAIL = "任務 id 格式錯誤"
 
 
 def make_composite_id(source: str, item_id) -> str:
@@ -33,12 +36,31 @@ def _external_id(platform, raw_id: str):
     try:
         return platform.id_type(raw_id)
     except ValueError:
-        # 狀態碼維持目前的 500（ADR 0011「過渡期間」）
-        raise InvalidRequestError("任務 id 格式錯誤", status_code=500)
+        raise InvalidRequestError(INVALID_TASK_ID_DETAIL)
+
+
+def _external_platform(source: str):
+    """不認得的來源前綴（包括沒有冒號）是組合 id 格式錯誤。"""
+    platform = PLATFORMS.get(source)
+    if platform is None:
+        raise InvalidRequestError(INVALID_TASK_ID_DETAIL)
+    return platform
+
+
+async def _find_own_external(source: str, raw_id: str, user_id: str) -> dict:
+    """外部項目不存在或不屬於自己時和手動任務一樣回 404，不透露資料是否存在。"""
+    platform = _external_platform(source)
+    doc = await platform.collection.find_one({"id": _external_id(platform, raw_id), "user_id": user_id})
+    if doc is None:
+        raise NotFoundError(TASK_NOT_FOUND_DETAIL)
+    return doc
 
 
 async def _update_external(source: str, raw_id: str, user_id: str, fields: dict) -> None:
-    """更新外部平台項目的排程欄位，不認得的來源忽略。"""
+    """
+    更新外部平台項目的排程欄位；不認得的來源、項目不存在都忽略。
+    要檢查存在的呼叫端自己先查：確認排程寫回事件 id 時不能丟錯，否則 Google 上會留下沒記錄的事件。
+    """
     platform = PLATFORMS.get(source)
     if platform is None:
         return
@@ -98,24 +120,49 @@ async def reorder_schedulable_items(user_id: str, items: list[dict]):
     處理使用者拖拉任務後的排序結果，將排序資訊寫入對應的項目。
     items 是拖拉排序後的完整順序，可混合不同來源。
     sort_order 用整份清單的索引，不分來源各自編號，否則同一欄內交錯的順序會被打散。
+
+    所有會回 400 的檢查都在寫入任何項目之前完成，任何一項不合法時整批都不寫。
     """
     manual_items = []
+    external_items = []
     for index, item in enumerate(items):
         source, raw_id = parse_composite_id(item["task_id"])
         if source == SOURCE_MANUAL:
-            manual_items.append({"task_id": raw_id, "priority": item["priority"], "sort_order": index})
+            manual_items.append({"task_id": raw_id, "priority": item["priority"], "sort_order": index, "composite_id": item["task_id"]})
         else:
-            await _update_external(source, raw_id, user_id, {"sort_order": index, "priority": item["priority"]})
+            platform = _external_platform(source)
+            external_items.append({
+                "platform": platform, "id": _external_id(platform, raw_id), "priority": item["priority"],
+                "sort_order": index, "composite_id": item["task_id"],
+            })
 
-    if manual_items:
-        await reorder_manual_tasks(user_id, manual_items)
+    own_manual_tasks = {task["id"]: task for task in await get_manual_tasks_by_user_id(user_id)} if manual_items else {}
+    unknown = {item["composite_id"] for item in manual_items if item["task_id"] not in own_manual_tasks}
+    for item in external_items:
+        if await item["platform"].collection.find_one({"id": item["id"], "user_id": user_id}) is None:
+            unknown.add(item["composite_id"])
+    if unknown:
+        # 列出使用者送出的組合 id，外部和手動同一個訊息，不透露資料是否存在
+        unknown_ids = [item["task_id"] for item in items if item["task_id"] in unknown]
+        raise InvalidRequestError(f"包含不屬於你的任務 id: {unknown_ids}")
+
+    validate_reordered_stages(own_manual_tasks, manual_items)
+
+    for item in external_items:
+        await item["platform"].collection.update_one(
+            {"id": item["id"], "user_id": user_id},
+            {"$set": {"sort_order": item["sort_order"], "priority": item["priority"]}},
+        )
+    await write_manual_task_order(user_id, manual_items)
 
 
 async def update_scheduling_fields(user_id: str, composite_id: str, data: dict):
-    """設定單一項目的排程欄位（due_date、duration）。"""
+    """設定單一項目的排程欄位（due_date、duration）。data 是空的時只檢查 id（格式錯 400、不存在 404），不寫入。"""
     source, raw_id = parse_composite_id(composite_id)
     if source == SOURCE_MANUAL:
         task = await get_manual_task_by_id(raw_id, user_id)
+        if not data:
+            return
         if task.get("is_parent") and "duration" in data:
             raise InvalidRequestError("主任務沒有時長，請修改子任務")
         await validate_task_change(task, data)
@@ -124,7 +171,9 @@ async def update_scheduling_fields(user_id: str, composite_id: str, data: dict):
         await update_manual_task_by_id(raw_id, task)
         return
 
-    await _update_external(source, raw_id, user_id, data)
+    await _find_own_external(source, raw_id, user_id)
+    if data:
+        await _update_external(source, raw_id, user_id, data)
 
 
 async def set_done(user_id: str, composite_id: str, done: bool):
@@ -144,12 +193,7 @@ async def set_done(user_id: str, composite_id: str, done: bool):
         await update_manual_task_by_id(raw_id, task)
         return
 
-    platform = PLATFORMS.get(source)
-    if platform is None:
-        return
-    doc = await platform.collection.find_one({"id": _external_id(platform, raw_id), "user_id": user_id})
-    if doc is None:
-        return
+    doc = await _find_own_external(source, raw_id, user_id)
     completed_at = None
     if done:
         completed_at = doc.get("completed_at") if doc.get("done") else datetime.now(timezone.utc)

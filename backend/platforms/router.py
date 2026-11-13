@@ -61,7 +61,7 @@ async def get_platform_items(platform: PlatformAdapter, user_id: str, response: 
     except SecretDecryptError:
         # 不刪憑證：正式和開發環境共用 DB，可能是另一個環境用它自己的金鑰加密的
         logger.warning("Failed to decrypt %s credentials for user_id=%s", platform.name, user_id)
-        raise ReauthRequiredError(_credentials_unreadable_detail(platform), status_code=500)
+        raise ReauthRequiredError(_credentials_unreadable_detail(platform))
     except Exception:
         logger.exception("Failed to read %s credentials for user_id=%s", platform.name, user_id)
         raise AppError(platform.fetch_failed_detail)
@@ -71,22 +71,22 @@ async def get_platform_items(platform: PlatformAdapter, user_id: str, response: 
     async def fetch():
         return await platform.fetch_items(credentials)
 
-    # 沒有舊資料時的狀態碼維持目前的值，依例外類別決定；error_code 照例外帶的原因
+    # 沒有舊資料時照例外帶的 error_code 回錯誤
     try:
         items, stale, synced_at, auth_error = await platform.sync_items(user_id, fetch)
     except NonRetryableError as e:
         logger.warning("%s fetch failed without retry for user_id=%s: %s", platform.name, user_id, e.error_code)
-        raise AppError(e.detail or _fetch_error_detail(platform, e.error_code), error_code=e.error_code, status_code=401)
+        raise AppError(e.detail or _fetch_error_detail(platform, e.error_code), error_code=e.error_code, headers=e.headers)
     except UpstreamError as e:
         logger.warning("%s unavailable for user_id=%s", platform.name, user_id, exc_info=True)
-        raise ExternalServiceError(_fetch_error_detail(platform, e.error_code), error_code=e.error_code)
+        raise ExternalServiceError(_fetch_error_detail(platform, e.error_code), error_code=e.error_code, headers=e.headers)
     except httpx.HTTPError as e:
         logger.warning("%s unavailable for user_id=%s", platform.name, user_id, exc_info=True)
         error_code = "UPSTREAM_TIMEOUT" if isinstance(e, httpx.TimeoutException) else "UPSTREAM_ERROR"
         raise ExternalServiceError(_fetch_error_detail(platform, error_code), error_code=error_code)
     except InvalidResponseError:
         logger.warning("%s returned an unparsable response for user_id=%s", platform.name, user_id, exc_info=True)
-        raise ExternalServiceError(platform.fetch_failed_detail, status_code=500)
+        raise ExternalServiceError(platform.fetch_failed_detail)
     except ConnectionFailure:
         logger.exception("Database unavailable while syncing %s items for user_id=%s", platform.name, user_id)
         raise AppError(platform.fetch_failed_detail, error_code="SERVICE_UNAVAILABLE")

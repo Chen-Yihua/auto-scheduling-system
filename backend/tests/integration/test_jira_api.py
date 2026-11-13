@@ -66,13 +66,13 @@ async def test_get_jira_issues(monkeypatch, logged_in_user):
 
 @pytest.mark.asyncio
 async def test_get_jira_issues_when_account_not_linked(monkeypatch, logged_in_user):
-    """使用者還沒綁定 Jira → 400 NOT_LINKED 加說明，前端才能顯示「請先設定帳號」。"""
+    """使用者還沒綁定 Jira → 409 NOT_LINKED 加說明，前端才能顯示「請先設定帳號」。"""
     monkeypatch.setattr(database.db, "linkedAccounts", EmptyLinkedAccounts())
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         res = await ac.get("/jira/issues")
 
-    assert res.status_code == status.HTTP_400_BAD_REQUEST
+    assert res.status_code == status.HTTP_409_CONFLICT
     assert res.json() == {"detail": "No Jira linked account", "error_code": "NOT_LINKED"}
 
 
@@ -103,24 +103,24 @@ from tests.integration.platform_http_fakes import (  # noqa: F401  clean_platfor
 OLD_JIRA_ITEM = jira_platform.transform_jira_item({"id": "10001", "key": "P-1", "fields": {"summary": "舊資料"}})
 
 JIRA_FETCH_CASES = [
-    pytest.param(response(429), 2, 502, "UPSTREAM_RATE_LIMITED", False, id="429"),
-    pytest.param(response(401), 1, 401, "REAUTH_REQUIRED", True, id="401"),
-    pytest.param(response(403), 1, 401, "REAUTH_REQUIRED", True, id="403"),
-    pytest.param(response(404), 1, 401, "REAUTH_REQUIRED", True, id="404"),
-    pytest.param(response(400), 1, 401, "INTERNAL_ERROR", False, id="400"),
+    pytest.param(response(429), 2, 503, "UPSTREAM_RATE_LIMITED", False, id="429"),
+    pytest.param(response(401), 1, 409, "REAUTH_REQUIRED", True, id="401"),
+    pytest.param(response(403), 1, 409, "REAUTH_REQUIRED", True, id="403"),
+    pytest.param(response(404), 1, 409, "REAUTH_REQUIRED", True, id="404"),
+    pytest.param(response(400), 1, 500, "INTERNAL_ERROR", False, id="400"),
     pytest.param(response(500), 2, 502, "UPSTREAM_ERROR", False, id="5xx"),
     pytest.param(response(409), 2, 502, "UPSTREAM_ERROR", False, id="other-4xx"),
     pytest.param(response(302), 2, 502, "UPSTREAM_ERROR", False, id="3xx"),
-    pytest.param(response(200, content=f"<html>{UPSTREAM_SECRET_TEXT}</html>".encode()), 2, 500, "UPSTREAM_ERROR", False, id="not-json"),
+    pytest.param(response(200, content=f"<html>{UPSTREAM_SECRET_TEXT}</html>".encode()), 2, 502, "UPSTREAM_ERROR", False, id="not-json"),
     pytest.param(_httpx.ConnectError("connection refused"), 2, 502, "UPSTREAM_ERROR", False, id="connect-error"),
-    pytest.param(_httpx.ReadTimeout("timed out"), 2, 502, "UPSTREAM_TIMEOUT", False, id="timeout"),
+    pytest.param(_httpx.ReadTimeout("timed out"), 2, 504, "UPSTREAM_TIMEOUT", False, id="timeout"),
 ]
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("outcome, attempts, status_code, error_code, _", JIRA_FETCH_CASES)
 async def test_jira_fetch_error_without_cached_data(monkeypatch, logged_in_user, outcome, attempts, status_code, error_code, _, clean_platform_data):
-    """AC6、AC22：沒有舊資料時，每種 Jira 錯誤的重試次數、狀態碼、error_code 照需求 5；detail 不帶 Jira 回應原文。"""
+    """AC1、AC9、AC10：沒有舊資料時，每種 Jira 錯誤的重試次數不變，狀態碼照 error_code 查表；detail 不帶 Jira 回應原文。"""
     await link_account("jira", {"apiKey": "jira-key", "domain": "team.atlassian.net"})
     await reset_items(database.db.jira_issues, None)
     skip_retry_delay(monkeypatch)
@@ -164,3 +164,26 @@ async def test_jira_fetch_error_with_cached_data(monkeypatch, logged_in_user, ou
     assert res.status_code == status.HTTP_200_OK
     assert res.headers["X-Data-Stale"] == "true"
     assert ("X-Auth-Error" in res.headers) is auth_error
+
+
+# ---------- 外部限流帶 Retry-After（AC5）----------
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("outcome, retry_after", [
+    pytest.param(response(429, {"Retry-After": "15"}), "15", id="seconds"),
+    pytest.param(response(429), None, id="without"),
+    pytest.param(response(429, {"Retry-After": "Wed, 21 Oct 2026 07:28:00 GMT"}), None, id="http-date"),
+])
+async def test_jira_fetch_rate_limited_forwards_retry_after_seconds(monkeypatch, logged_in_user, outcome, retry_after, clean_platform_data):
+    """AC5：Jira 抓項目限流 → 503 UPSTREAM_RATE_LIMITED；帶秒數的 Retry-After 原樣帶上，沒帶或日期格式不帶。"""
+    await link_account("jira", {"apiKey": "jira-key", "domain": "team.atlassian.net"})
+    await reset_items(database.db.jira_issues, None)
+    skip_retry_delay(monkeypatch)
+    use_fake_http(monkeypatch, jira_platform, outcome)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        res = await ac.get("/jira/issues")
+
+    assert res.status_code == 503
+    assert res.json()["error_code"] == "UPSTREAM_RATE_LIMITED"
+    assert res.headers.get("Retry-After") == retry_after

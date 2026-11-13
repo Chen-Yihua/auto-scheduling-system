@@ -19,7 +19,7 @@ export const useGoogleCalendarAuth = () => {
     window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`
   }
 
-  // 後端回 401 代表要重新連接，等待或重試都沒用，所以直接給按鈕
+  // 後端回 REAUTH_REQUIRED 代表要重新連接，等待或重試都沒用，所以直接給按鈕
   const reauthToast = () => ({
     title: 'Google Calendar 授權已失效',
     description: '你的 Google 授權可能已過期或被撤銷，請重新連接 Google Calendar',

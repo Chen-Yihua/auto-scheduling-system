@@ -167,7 +167,7 @@ async def test_update_linked_account_rejects_wrong_field_type(monkeypatch, logge
     assert res.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
 
 
-# ---------- 連結與更新帳號：依原因的 error_code（需求 4），狀態碼不變 ----------
+# ---------- 連結與更新帳號：依原因的 error_code，狀態碼照對照表 ----------
 import logging
 import socket
 
@@ -202,24 +202,24 @@ JIRA_PAYLOAD = {"platform": "jira", "status": "connected", "username": "me", "ap
 
 # (平台模組, 送出的內容, 平台的回應, 狀態碼, error_code)
 LINK_CASES = [
-    pytest.param(github_platform, GITHUB_PAYLOAD, response(401), 401, "INVALID_CREDENTIALS", id="github-401"),
-    pytest.param(jira_platform, JIRA_PAYLOAD, response(401), 401, "INVALID_CREDENTIALS", id="jira-401"),
-    pytest.param(github_platform, GITHUB_PAYLOAD, response(403), 403, "INVALID_CREDENTIALS", id="github-403-no-rate-limit"),
-    pytest.param(jira_platform, JIRA_PAYLOAD, response(404), 403, "INVALID_PLATFORM_DOMAIN", id="jira-404"),
-    pytest.param(jira_platform, JIRA_PAYLOAD, _dns_error(), 502, "INVALID_PLATFORM_DOMAIN", id="jira-dns-not-found"),
+    pytest.param(github_platform, GITHUB_PAYLOAD, response(401), 400, "INVALID_CREDENTIALS", id="github-401"),
+    pytest.param(jira_platform, JIRA_PAYLOAD, response(401), 400, "INVALID_CREDENTIALS", id="jira-401"),
+    pytest.param(github_platform, GITHUB_PAYLOAD, response(403), 400, "INVALID_CREDENTIALS", id="github-403-no-rate-limit"),
+    pytest.param(jira_platform, JIRA_PAYLOAD, response(404), 400, "INVALID_PLATFORM_DOMAIN", id="jira-404"),
+    pytest.param(jira_platform, JIRA_PAYLOAD, _dns_error(), 400, "INVALID_PLATFORM_DOMAIN", id="jira-dns-not-found"),
     pytest.param(jira_platform, JIRA_PAYLOAD, httpx.ConnectError("connection refused"), 502, "UPSTREAM_ERROR", id="jira-connect-error"),
     pytest.param(github_platform, GITHUB_PAYLOAD, httpx.ConnectError("connection refused"), 502, "UPSTREAM_ERROR", id="github-connect-error"),
-    pytest.param(github_platform, GITHUB_PAYLOAD, httpx.ReadTimeout("timed out"), 502, "UPSTREAM_TIMEOUT", id="github-timeout"),
-    pytest.param(github_platform, GITHUB_PAYLOAD, response(503), 403, "UPSTREAM_ERROR", id="github-5xx"),
-    pytest.param(jira_platform, JIRA_PAYLOAD, response(500), 403, "UPSTREAM_ERROR", id="jira-5xx"),
-    pytest.param(github_platform, GITHUB_PAYLOAD, response(429), 403, "UPSTREAM_RATE_LIMITED", id="github-429"),
-    pytest.param(jira_platform, JIRA_PAYLOAD, response(429), 403, "UPSTREAM_RATE_LIMITED", id="jira-429"),
-    pytest.param(github_platform, GITHUB_PAYLOAD, response(403, {"x-ratelimit-remaining": "0"}), 403, "UPSTREAM_RATE_LIMITED", id="github-403-rate-limit"),
-    pytest.param(github_platform, GITHUB_PAYLOAD, response(400), 403, "INTERNAL_ERROR", id="github-400"),
-    pytest.param(jira_platform, JIRA_PAYLOAD, response(400), 403, "INTERNAL_ERROR", id="jira-400"),
-    pytest.param(github_platform, GITHUB_PAYLOAD, response(404), 403, "UPSTREAM_ERROR", id="github-404"),
-    pytest.param(github_platform, GITHUB_PAYLOAD, response(302), 403, "UPSTREAM_ERROR", id="github-3xx"),
-    pytest.param(github_platform, GITHUB_PAYLOAD, response(200, content=f"<html>{UPSTREAM_SECRET_TEXT}".encode()), 500, "UPSTREAM_ERROR", id="github-not-json"),
+    pytest.param(github_platform, GITHUB_PAYLOAD, httpx.ReadTimeout("timed out"), 504, "UPSTREAM_TIMEOUT", id="github-timeout"),
+    pytest.param(github_platform, GITHUB_PAYLOAD, response(503), 502, "UPSTREAM_ERROR", id="github-5xx"),
+    pytest.param(jira_platform, JIRA_PAYLOAD, response(500), 502, "UPSTREAM_ERROR", id="jira-5xx"),
+    pytest.param(github_platform, GITHUB_PAYLOAD, response(429), 503, "UPSTREAM_RATE_LIMITED", id="github-429"),
+    pytest.param(jira_platform, JIRA_PAYLOAD, response(429), 503, "UPSTREAM_RATE_LIMITED", id="jira-429"),
+    pytest.param(github_platform, GITHUB_PAYLOAD, response(403, {"x-ratelimit-remaining": "0"}), 503, "UPSTREAM_RATE_LIMITED", id="github-403-rate-limit"),
+    pytest.param(github_platform, GITHUB_PAYLOAD, response(400), 500, "INTERNAL_ERROR", id="github-400"),
+    pytest.param(jira_platform, JIRA_PAYLOAD, response(400), 500, "INTERNAL_ERROR", id="jira-400"),
+    pytest.param(github_platform, GITHUB_PAYLOAD, response(404), 502, "UPSTREAM_ERROR", id="github-404"),
+    pytest.param(github_platform, GITHUB_PAYLOAD, response(302), 502, "UPSTREAM_ERROR", id="github-3xx"),
+    pytest.param(github_platform, GITHUB_PAYLOAD, response(200, content=f"<html>{UPSTREAM_SECRET_TEXT}".encode()), 502, "UPSTREAM_ERROR", id="github-not-json"),
 ]
 
 # 不是 REAUTH_REQUIRED、INVALID_CREDENTIALS 的列，detail 不能有這些說法
@@ -229,7 +229,7 @@ CREDENTIAL_WORDS = ("授權已失效", "帳號或密碼錯誤", "token 無效", 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("module, payload, outcome, status_code, error_code", LINK_CASES)
 async def test_link_account_error_codes(monkeypatch, logged_in_user, no_linked_accounts, module, payload, outcome, status_code, error_code, clean_platform_data):
-    """AC8、AC16、AC21、AC22：連結帳號時每種平台回應的 error_code 不同，狀態碼和改之前相同；detail 不帶平台回應原文。"""
+    """AC1、AC10：連結帳號時每種平台回應的 error_code 不同，狀態碼照 error_code 查表；detail 不帶平台回應原文。"""
     use_fake_http(monkeypatch, module, outcome)
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
@@ -280,9 +280,9 @@ MOODLE_PAYLOAD = {"platform": "moodle", "status": "connected", "username": "stu-
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("browser, status_code, error_code", [
-    pytest.param({"final_url": "https://i.nccu.edu.tw/Login.aspx?x=1"}, 401, "INVALID_CREDENTIALS", id="wrong-password"),
-    pytest.param({"final_url": "https://i.nccu.edu.tw/sso_app/Error.aspx"}, 401, "UPSTREAM_ERROR", id="redirected-elsewhere"),
-    pytest.param({"error": "timeout"}, 502, "UPSTREAM_TIMEOUT", id="selenium-timeout"),
+    pytest.param({"final_url": "https://i.nccu.edu.tw/Login.aspx?x=1"}, 400, "INVALID_CREDENTIALS", id="wrong-password"),
+    pytest.param({"final_url": "https://i.nccu.edu.tw/sso_app/Error.aspx"}, 502, "UPSTREAM_ERROR", id="redirected-elsewhere"),
+    pytest.param({"error": "timeout"}, 504, "UPSTREAM_TIMEOUT", id="selenium-timeout"),
     pytest.param({"error": "webdriver"}, 502, "UPSTREAM_ERROR", id="webdriver-error"),
 ])
 async def test_link_moodle_error_codes(monkeypatch, logged_in_user, no_linked_accounts, browser, status_code, error_code, clean_platform_data):
@@ -307,33 +307,33 @@ async def test_link_moodle_error_codes(monkeypatch, logged_in_user, no_linked_ac
 
 @pytest.mark.asyncio
 async def test_patch_jira_domain_only_rejected_with_stored_key_is_invalid_credentials(monkeypatch, logged_in_user, no_linked_accounts, clean_platform_data):
-    """AC8：只改 Jira 網域、用已存的 API key 驗證被拒（401）→ INVALID_CREDENTIALS，狀態碼 401。"""
+    """只改 Jira 網域、用已存的 API key 驗證被拒（401）→ 400 INVALID_CREDENTIALS。"""
     await link_account("jira", {"apiKey": "stored-key", "domain": "old.atlassian.net"})
     use_fake_http(monkeypatch, jira_platform, response(401))
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         res = await ac.patch("/users/me/linked-accounts/jira", json={"domain": "new.atlassian.net"})
 
-    assert res.status_code == 401
+    assert res.status_code == 400
     assert res.json()["error_code"] == "INVALID_CREDENTIALS"
 
 
 @pytest.mark.asyncio
 async def test_patch_moodle_username_only_rejected_is_invalid_credentials(monkeypatch, logged_in_user, no_linked_accounts, clean_platform_data):
-    """AC8：只改 Moodle 帳號、用已存的密碼驗證停在登入頁 → INVALID_CREDENTIALS，狀態碼 401。"""
+    """只改 Moodle 帳號、用已存的密碼驗證停在登入頁 → 400 INVALID_CREDENTIALS。"""
     await link_account("moodle", {"username": "old", "password": "stored-pw"})
     _fake_moodle_browser(monkeypatch, final_url="https://i.nccu.edu.tw/Login.aspx")
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         res = await ac.patch("/users/me/linked-accounts/moodle", json={"username": "new"})
 
-    assert res.status_code == 401
+    assert res.status_code == 400
     assert res.json()["error_code"] == "INVALID_CREDENTIALS"
 
 
 @pytest.mark.asyncio
 async def test_patch_with_undecryptable_stored_credentials_is_reauth_required(monkeypatch, logged_in_user, no_linked_accounts, caplog, clean_platform_data):
-    """AC10：PATCH 用已存的憑證驗證但解不開 → 維持 500，REAUTH_REQUIRED；記 warning、不刪憑證。"""
+    """PATCH 用已存的憑證驗證但解不開 → 409 REAUTH_REQUIRED；記 warning、不刪憑證。"""
     await link_account("jira", {"apiKey": "stored-key", "domain": "old.atlassian.net"})
     await db.linkedAccounts.update_one({"_id": "test_user_123_jira"}, {"$set": {"apiKey": "broken-cipher"}})
 
@@ -341,22 +341,22 @@ async def test_patch_with_undecryptable_stored_credentials_is_reauth_required(mo
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             res = await ac.patch("/users/me/linked-accounts/jira", json={"domain": "new.atlassian.net"})
 
-    assert res.status_code == 500
+    assert res.status_code == 409
     assert res.json()["error_code"] == "REAUTH_REQUIRED"
     assert (await db.linkedAccounts.find_one({"_id": "test_user_123_jira"}))["apiKey"] == "broken-cipher"
     assert any(r.levelno == logging.WARNING for r in caplog.records)
 
 
 @pytest.mark.asyncio
-async def test_patch_without_fields_is_invalid_request_with_status_404(logged_in_user, no_linked_accounts, clean_platform_data):
-    """需求 4：沒有可更新的欄位 → 維持 404，INVALID_REQUEST，和「帳號不存在」（NOT_FOUND）分得出來。"""
+async def test_patch_without_fields_is_invalid_request(logged_in_user, no_linked_accounts, clean_platform_data):
+    """AC1：沒有可更新的欄位 → 400 INVALID_REQUEST，和「帳號不存在」（404 NOT_FOUND）分得出來。"""
     await link_account("github", {"apiKey": "tok"})
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         no_fields = await ac.patch("/users/me/linked-accounts/github", json={})
         missing = await ac.patch("/users/me/linked-accounts/jira", json={"status": "connected"})
 
-    assert no_fields.status_code == 404
+    assert no_fields.status_code == 400
     assert no_fields.json()["error_code"] == "INVALID_REQUEST"
     assert missing.status_code == 404
     assert missing.json()["error_code"] == "NOT_FOUND"
@@ -425,3 +425,25 @@ async def test_list_returns_500_when_encryption_key_missing(monkeypatch, logged_
 
     assert res.status_code == 500
     assert res.json()["error_code"] == "INTERNAL_ERROR"
+
+
+# ---------- 外部限流帶 Retry-After（AC5）----------
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("module, payload, outcome, retry_after", [
+    pytest.param(github_platform, GITHUB_PAYLOAD, response(429, {"Retry-After": "12"}), "12", id="github-429-seconds"),
+    pytest.param(github_platform, GITHUB_PAYLOAD, response(403, {"retry-after": "7"}), "7", id="github-403-secondary-seconds"),
+    pytest.param(jira_platform, JIRA_PAYLOAD, response(429, {"Retry-After": "20"}), "20", id="jira-429-seconds"),
+    pytest.param(jira_platform, JIRA_PAYLOAD, response(429), None, id="jira-429-without"),
+    pytest.param(github_platform, GITHUB_PAYLOAD, response(429, {"Retry-After": "Wed, 21 Oct 2026 07:28:00 GMT"}), None, id="github-429-http-date"),
+])
+async def test_link_account_rate_limited_forwards_retry_after_seconds(monkeypatch, logged_in_user, no_linked_accounts, module, payload, outcome, retry_after, clean_platform_data):
+    """AC5：連結帳號時平台限流 → 503 UPSTREAM_RATE_LIMITED；帶秒數的 Retry-After 原樣帶上，沒帶或日期格式不帶。"""
+    use_fake_http(monkeypatch, module, outcome)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        res = await ac.post("/users/me/linked-accounts/", json=payload)
+
+    assert res.status_code == 503
+    assert res.json()["error_code"] == "UPSTREAM_RATE_LIMITED"
+    assert res.headers.get("Retry-After") == retry_after

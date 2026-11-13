@@ -8,6 +8,8 @@ from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
+from core.exception_handlers import error_response
+
 logger = logging.getLogger(__name__)
 
 
@@ -38,7 +40,4 @@ limiter = Limiter(key_func=rate_limit_key, storage_uri=_storage_uri, enabled=_en
 
 async def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded) -> JSONResponse:
     """回 JSON 和 error_code，讓前端能辨識是被限流。"""
-    return JSONResponse(
-        status_code=429,
-        content={"detail": "請求太頻繁，請稍後再試", "error_code": "RATE_LIMITED"},
-    )
+    return error_response(request, "請求太頻繁，請稍後再試", "RATE_LIMITED")

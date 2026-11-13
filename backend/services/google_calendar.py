@@ -9,7 +9,7 @@ from core.cache import cache_get, cache_set
 from core.crypto import SecretDecryptError
 from core.datetimes import to_utc_datetime
 from crud.google_tokens import get_google_calendar_token, is_google_calendar_connected
-from services.google_errors import DETAIL_BY_ERROR_CODE, google_error_code, request_error_code
+from services.google_errors import DETAIL_BY_ERROR_CODE, google_error_code, rate_limit_headers, request_error_code
 from services.google_oauth import GOOGLE_REAUTH_DETAIL, refresh_google_calendar_token
 from crud.schedulable_items import set_calendar_event_id_for_composite
 from services.google_calendar_client import (
@@ -33,20 +33,16 @@ DELETE_RETRY_DETAIL = "刪除 Google Calendar 事件失敗，請稍後重試"
 _EVENT_GONE_STATUSES = {404, 410}
 
 
-def _google_error(e: httpx.HTTPStatusError, detail: str, client_error_status: int | None = None) -> AppError:
-    """
-    依 Google 的原因給 error_code；狀態碼維持目前的值：5xx、429 是 502，其他 4xx 是 400
-    （client_error_status 有指定時用它）。detail 是無法判斷原因的 4xx 用的說明。
-    """
+def _google_error(e: httpx.HTTPStatusError, detail: str) -> AppError:
+    """依 Google 的原因給 error_code。detail 是無法判斷原因的 4xx 用的說明。"""
     status = e.response.status_code
     logger.warning("Google Calendar API 回應錯誤: %s %s", status, e.response.text)
     error_code = google_error_code(e.response)
+    headers = rate_limit_headers(e.response)
     if status >= 500 or status == 429:
-        return ExternalServiceError(DETAIL_BY_ERROR_CODE[error_code], error_code=error_code)
+        return ExternalServiceError(DETAIL_BY_ERROR_CODE[error_code], error_code=error_code, headers=headers)
     message = detail if error_code == "UPSTREAM_ERROR" else DETAIL_BY_ERROR_CODE[error_code]
-    if client_error_status is not None:
-        return AppError(message, error_code=error_code, status_code=client_error_status)
-    return InvalidRequestError(message, error_code=error_code)
+    return InvalidRequestError(message, error_code=error_code, headers=headers)
 
 
 def _unreachable(e: httpx.RequestError, log_message: str, detail: str | None = None) -> ExternalServiceError:
@@ -63,8 +59,7 @@ async def _fetch_calendar_list_after_refresh(access_token: str) -> list[dict]:
         if e.response.status_code == 401:
             logger.warning("換新 token 後 Google Calendar 仍回 401: %s", e.response.text)
             raise ReauthRequiredError(GOOGLE_REAUTH_DETAIL)
-        # 狀態碼維持目前的 500，只依原因補 error_code（ADR 0011「過渡期間」）
-        raise _google_error(e, "取得行事曆列表失敗", client_error_status=500)
+        raise _google_error(e, "取得行事曆列表失敗")
     except httpx.RequestError as e:
         raise _unreachable(e, "換新 token 後連線 Google Calendar API 失敗")
 
@@ -143,6 +138,19 @@ async def get_free_slots_for_user(clerk_id: str, use_cache: bool = True) -> list
     return free_slots
 
 
+def _write_failure(e: httpx.HTTPStatusError | httpx.RequestError) -> tuple[str, str]:
+    """
+    寫入事件失敗的 (error_code, reason)，分類同其他 Google 請求。
+    401 直接要求重新連接：寫入迴圈開始前剛驗證或換過 token，再換也沒用。
+    """
+    if isinstance(e, httpx.RequestError):
+        return request_error_code(e)
+    if e.response.status_code == 401:
+        return "REAUTH_REQUIRED", GOOGLE_REAUTH_DETAIL
+    error_code = google_error_code(e.response)
+    return error_code, DETAIL_BY_ERROR_CODE[error_code]
+
+
 async def create_calendar_events_for_scheduled_tasks(clerk_id: str, scheduled: list[dict]) -> dict:
     """
     把排程建議逐筆寫入 primary calendar，成功的任務記下 calendar_event_id。
@@ -159,7 +167,9 @@ async def create_calendar_events_for_scheduled_tasks(clerk_id: str, scheduled: l
     for task in scheduled:
         if task.get("previous_task_id") in failed_ids:
             failed_ids.add(task["task_id"])
-            failed.append({"task_id": task["task_id"], "title": task["title"], "reason": PREVIOUS_STAGE_WRITE_FAILED})
+            failed.append({
+                "task_id": task["task_id"], "title": task["title"], "reason": PREVIOUS_STAGE_WRITE_FAILED, "error_code": None,
+            })
             continue
         start_iso = task["start"].isoformat().replace("+00:00", "Z")
         end_iso = task["end"].isoformat().replace("+00:00", "Z")
@@ -167,14 +177,11 @@ async def create_calendar_events_for_scheduled_tasks(clerk_id: str, scheduled: l
             event = await create_calendar_event(
                 access_token, primary_calendar_id, task["title"], start_iso, end_iso
             )
-        except (httpx.HTTPStatusError, httpx.RequestError):
+        except (httpx.HTTPStatusError, httpx.RequestError) as e:
             logger.exception("寫入 Google Calendar 失敗 task_id=%s", task["task_id"])
+            error_code, reason = _write_failure(e)
             failed_ids.add(task["task_id"])
-            failed.append({
-                "task_id": task["task_id"],
-                "title": task["title"],
-                "reason": "寫入 Google Calendar 失敗，請稍後再試",
-            })
+            failed.append({"task_id": task["task_id"], "title": task["title"], "reason": reason, "error_code": error_code})
             continue
 
         await set_calendar_event_id_for_composite(clerk_id, task["task_id"], event["id"])
@@ -221,7 +228,9 @@ def _delete_error(e: httpx.HTTPStatusError) -> AppError:
         return ReauthRequiredError(GOOGLE_REAUTH_DETAIL)
     if status >= 500 or status == 429:
         logger.warning("刪除 Google Calendar 事件失敗: %s %s", status, e.response.text)
-        return ExternalServiceError(DELETE_RETRY_DETAIL, error_code=google_error_code(e.response))
+        return ExternalServiceError(
+            DELETE_RETRY_DETAIL, error_code=google_error_code(e.response), headers=rate_limit_headers(e.response)
+        )
     return _google_error(e, "刪除 Google Calendar 事件失敗")
 
 

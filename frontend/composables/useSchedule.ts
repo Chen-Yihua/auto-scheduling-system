@@ -90,6 +90,9 @@ function useScheduleImpl() {
           color: res.confirmed.length > 0 ? 'warning' : 'error',
           icon: 'i-lucide-alert-triangle',
         })
+        if (res.failed.some((f) => f.error_code === 'REAUTH_REQUIRED')) {
+          toast.add(reauthToast())
+        }
       } else if (res.confirmed.length > 0) {
         toast.add({
           title: `已確認 ${res.confirmed.length} 筆排程，寫入 Google Calendar`,

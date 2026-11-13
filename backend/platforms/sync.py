@@ -8,16 +8,25 @@ logger = logging.getLogger(__name__)
 
 class NonRetryableError(Exception):
     """
-    重試也沒用的失敗，不重試直接退回舊資料；沒有舊資料時 router 回 401。
+    重試也沒用的失敗，不重試直接退回舊資料；沒有舊資料時 router 依 error_code 回錯誤。
 
-    重試、狀態碼和原因分開判斷：error_code 是原因（ADR 0011），只有 REAUTH_REQUIRED 算憑證失效
+    重試和原因分開判斷：error_code 是原因（ADR 0011），只有 REAUTH_REQUIRED 算憑證失效
     （有舊資料時設 X-Auth-Error）。message 可能帶第三方回應原文，只記 log；detail 會回給前端。
+    headers 是要轉送給呼叫者的 header（例如限流的 Retry-After）。
     """
 
-    def __init__(self, message: str, *, error_code: str = "REAUTH_REQUIRED", detail: str | None = None):
+    def __init__(
+        self,
+        message: str,
+        *,
+        error_code: str = "REAUTH_REQUIRED",
+        detail: str | None = None,
+        headers: dict[str, str] | None = None,
+    ):
         super().__init__(message)
         self.error_code = error_code
         self.detail = detail
+        self.headers = headers or {}
 
     @property
     def auth_error(self) -> bool:
@@ -25,15 +34,16 @@ class NonRetryableError(Exception):
 
 
 class UpstreamError(Exception):
-    """外部平台暫時性失敗（5xx、限流、連不上），會重試；沒有舊資料時 router 回 502。message 只記 log。"""
+    """外部平台暫時性失敗（5xx、限流、連不上），會重試；沒有舊資料時 router 依 error_code 回錯誤。message 只記 log。"""
 
-    def __init__(self, message: str, *, error_code: str = "UPSTREAM_ERROR"):
+    def __init__(self, message: str, *, error_code: str = "UPSTREAM_ERROR", headers: dict[str, str] | None = None):
         super().__init__(message)
         self.error_code = error_code
+        self.headers = headers or {}
 
 
 class InvalidResponseError(Exception):
-    """外部平台的回應無法解析（不是 JSON、少欄位），會重試；沒有舊資料時 router 回 500。"""
+    """外部平台的回應無法解析（不是 JSON、少欄位），會重試；沒有舊資料時 router 回 UPSTREAM_ERROR。"""
 
 
 async def sync_platform_items(

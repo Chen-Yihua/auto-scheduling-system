@@ -62,8 +62,7 @@ async def update_schedule_task_fields(
 ):
     """調整單一項目的截止日期和所需時長。"""
     data = body.model_dump(exclude={"task_id"}, exclude_none=True)
-    if data:
-        await update_scheduling_fields(clerk_user["sub"], body.task_id, data)
+    await update_scheduling_fields(clerk_user["sub"], body.task_id, data)
     return {"task_id": body.task_id, "updated": True}
 
 

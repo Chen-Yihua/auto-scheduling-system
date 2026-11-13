@@ -173,7 +173,7 @@ class JiraPlatform(PlatformAdapter):
             except SecretDecryptError:
                 # 不刪憑證：正式和開發環境共用 DB，可能是另一個環境用它自己的金鑰加密的
                 logger.warning("已存的 Jira API key 解密失敗 account=%s", existing.get("_id"))
-                raise ReauthRequiredError(STORED_CREDENTIALS_UNREADABLE_DETAIL, status_code=500)
+                raise ReauthRequiredError(STORED_CREDENTIALS_UNREADABLE_DETAIL)
 
         if api_key and domain:
             info = await fetch_jira_userinfo(api_key, domain)

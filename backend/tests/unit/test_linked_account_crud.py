@@ -247,11 +247,10 @@ async def test_update_github_account_with_token(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_update_linked_account_no_valid_fields():
-    """沒有任何要更新的欄位 → 維持 404，error_code 是 INVALID_REQUEST，和「帳號不存在」分開。"""
+    """沒有任何要更新的欄位 → INVALID_REQUEST（400），和「帳號不存在」（NOT_FOUND）分開。"""
     with pytest.raises(InvalidRequestError) as exc_info:
         await update_linked_account_by_clerk_id("uid123", "github", {})
 
-    assert exc_info.value.status_code == 404
     assert exc_info.value.error_code == "INVALID_REQUEST"
 
 

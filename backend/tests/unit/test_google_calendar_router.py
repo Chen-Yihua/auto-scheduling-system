@@ -1,4 +1,4 @@
-"""直接呼叫 routers/google_calendar.py 的函式，測試各錯誤分支的狀態碼。"""
+"""直接呼叫 routers/google_calendar.py 的函式，測試各錯誤分支的 error_code（狀態碼由對照表決定）。"""
 import logging
 
 import pytest
@@ -107,8 +107,8 @@ async def test_oauth_callback_happy_path_saves_token(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_oauth_callback_raises_400_when_google_rejects_code(monkeypatch):
-    """Google 拒絕這個授權碼（無效或已過期）→ 400。"""
+async def test_oauth_callback_unrecognized_400_is_upstream_error(monkeypatch):
+    """Google 回 400 但看不出原因（沒有 error 欄位）→ UPSTREAM_ERROR（502），不當成授權碼無效。"""
     class MockResponse:
         status_code = 400
 
@@ -132,12 +132,13 @@ async def test_oauth_callback_raises_400_when_google_rejects_code(monkeypatch):
     with pytest.raises(AppError) as exc_info:
         await google_calendar_router.oauth_callback(payload=payload, clerk_user=mock_user)
 
-    assert exc_info.value.status_code == 400
+    assert exc_info.value.error_code == "UPSTREAM_ERROR"
+    assert status_for_error_code(exc_info.value.error_code) == 502
 
 
 @pytest.mark.asyncio
-async def test_oauth_callback_raises_400_when_no_access_token_in_response(monkeypatch):
-    """Google 回 200 但回應裡沒有 access_token → 400，不能存一個空的 token。"""
+async def test_oauth_callback_rejects_response_without_access_token(monkeypatch):
+    """Google 回 200 但回應裡沒有 access_token → UPSTREAM_ERROR（502），不能存一個空的 token。"""
     class MockResponse:
         status_code = 200
 
@@ -164,12 +165,12 @@ async def test_oauth_callback_raises_400_when_no_access_token_in_response(monkey
     with pytest.raises(AppError) as exc_info:
         await google_calendar_router.oauth_callback(payload=payload, clerk_user=mock_user)
 
-    assert exc_info.value.status_code == 400
+    assert status_for_error_code(exc_info.value.error_code) == 502
 
 
 @pytest.mark.asyncio
 async def test_oauth_callback_logs_error_and_returns_502_when_google_unreachable(monkeypatch, caplog):
-    """連不上 Google → 記錄 error log 並回 502，跟「Google 拒絕這個授權碼」的 400 分開。"""
+    """連不上 Google → 記錄 error log 並回 502，跟「授權碼無效」的 400 分開。"""
     class FailingClient:
         async def __aenter__(self):
             return self
@@ -190,12 +191,12 @@ async def test_oauth_callback_logs_error_and_returns_502_when_google_unreachable
                 payload=payload, clerk_user={"sub": "uid123"}
             )
 
-    # 502 = 連不上上游服務，跟「授權碼無效」的 400 分開
-    assert exc_info.value.status_code == 502
+    assert status_for_error_code(exc_info.value.error_code) == 502
     assert any("連線 Google Token Endpoint 失敗" in record.message for record in caplog.records)
 
 
 # ---------- 需求 4：OAuth 換 token 的 error_code（AC11） ----------
+from core.error_codes import status_for_error_code
 from core.errors import AppError
 
 GOOGLE_RAW_TEXT = "google-oauth-raw-5d1e"
@@ -210,26 +211,26 @@ def _token_endpoint(monkeypatch, handler):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("status_code, body, http_status, error_code", [
     (400, {"error": "invalid_grant", "error_description": GOOGLE_RAW_TEXT}, 400, "INVALID_AUTHORIZATION_CODE"),
-    (401, {"error": "invalid_client"}, 400, "INTERNAL_ERROR"),
-    (400, {"error": "invalid_request"}, 400, "INTERNAL_ERROR"),
-    (400, {"error": "unauthorized_client"}, 400, "INTERNAL_ERROR"),
-    (400, {"error": "redirect_uri_mismatch"}, 400, "INTERNAL_ERROR"),
-    (400, {"error": "something_new"}, 400, "UPSTREAM_ERROR"),
-    (503, {"error": "backend_error", "error_description": GOOGLE_RAW_TEXT}, 400, "UPSTREAM_ERROR"),
-    (429, {"error": "rate_limit_exceeded"}, 400, "UPSTREAM_RATE_LIMITED"),
+    (401, {"error": "invalid_client"}, 500, "INTERNAL_ERROR"),
+    (400, {"error": "invalid_request"}, 500, "INTERNAL_ERROR"),
+    (400, {"error": "unauthorized_client"}, 500, "INTERNAL_ERROR"),
+    (400, {"error": "redirect_uri_mismatch"}, 500, "INTERNAL_ERROR"),
+    (400, {"error": "something_new"}, 502, "UPSTREAM_ERROR"),
+    (503, {"error": "backend_error", "error_description": GOOGLE_RAW_TEXT}, 502, "UPSTREAM_ERROR"),
+    (429, {"error": "rate_limit_exceeded"}, 503, "UPSTREAM_RATE_LIMITED"),
 ], ids=["invalid_grant", "invalid_client", "invalid_request", "unauthorized_client", "redirect_uri_mismatch",
         "other-error-code", "5xx", "429"])
 async def test_oauth_callback_error_codes(monkeypatch, status_code, body, http_status, error_code):
-    """AC11、AC16：只有 invalid_grant 是 INVALID_AUTHORIZATION_CODE 並說授權碼無效；Google 暫時故障、限流不說授權碼無效；
-    狀態碼維持 400；detail 不帶 Google 回應原文。"""
+    """只有 invalid_grant 是 INVALID_AUTHORIZATION_CODE 並說授權碼無效；Google 暫時故障、限流不說授權碼無效；
+    狀態碼照 error_code 查表；detail 不帶 Google 回應原文。"""
     _token_endpoint(monkeypatch, lambda request: httpx.Response(status_code, json=body))
 
     with pytest.raises(AppError) as exc_info:
         await google_calendar_router.oauth_callback(
             payload=google_calendar_router.OAuthCallbackPayload(code="c"), clerk_user=mock_user)
 
-    assert exc_info.value.status_code == http_status
     assert exc_info.value.error_code == error_code
+    assert status_for_error_code(exc_info.value.error_code) == http_status
     assert GOOGLE_RAW_TEXT not in exc_info.value.detail
     assert ("授權碼無效" in exc_info.value.detail) is (error_code == "INVALID_AUTHORIZATION_CODE")
 
@@ -239,8 +240,8 @@ async def test_oauth_callback_error_codes(monkeypatch, status_code, body, http_s
     (httpx.ConnectError("down"), "UPSTREAM_ERROR"),
     (httpx.ReadTimeout("slow"), "UPSTREAM_TIMEOUT"),
 ])
-async def test_oauth_callback_connection_errors_keep_502(monkeypatch, error, error_code):
-    """AC11：連不上、逾時維持 502，error_code 分別是 UPSTREAM_ERROR、UPSTREAM_TIMEOUT。"""
+async def test_oauth_callback_connection_errors(monkeypatch, error, error_code):
+    """連不上是 UPSTREAM_ERROR（502）、逾時是 UPSTREAM_TIMEOUT（504）。"""
     def handler(request):
         raise error
 
@@ -250,18 +251,16 @@ async def test_oauth_callback_connection_errors_keep_502(monkeypatch, error, err
         await google_calendar_router.oauth_callback(
             payload=google_calendar_router.OAuthCallbackPayload(code="c"), clerk_user=mock_user)
 
-    assert exc_info.value.status_code == 502
     assert exc_info.value.error_code == error_code
 
 
 @pytest.mark.asyncio
 async def test_oauth_callback_without_access_token_is_upstream_error(monkeypatch):
-    """AC11：Google 回 200 但沒有 access token → 維持 400，UPSTREAM_ERROR。"""
+    """Google 回 200 但沒有 access token → UPSTREAM_ERROR（502）。"""
     _token_endpoint(monkeypatch, lambda request: httpx.Response(200, json={}))
 
     with pytest.raises(AppError) as exc_info:
         await google_calendar_router.oauth_callback(
             payload=google_calendar_router.OAuthCallbackPayload(code="c"), clerk_user=mock_user)
 
-    assert exc_info.value.status_code == 400
     assert exc_info.value.error_code == "UPSTREAM_ERROR"

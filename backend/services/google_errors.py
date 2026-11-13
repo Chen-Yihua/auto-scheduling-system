@@ -1,6 +1,8 @@
 """依 Google 回應的狀態碼與 error.errors[].reason 判斷錯誤原因（ADR 0011 的 error_code）。"""
 import httpx
 
+from core.errors import retry_after_header
+
 # Google Calendar API 用 403 或 429 加這些 reason 回報限流與用量上限；dailyLimitExceeded 是舊文件的 reason
 RATE_LIMIT_REASONS = {"rateLimitExceeded", "userRateLimitExceeded", "quotaExceeded", "dailyLimitExceeded"}
 PERMISSION_REASONS = {"insufficientPermissions", "forbidden"}
@@ -50,6 +52,11 @@ DETAIL_BY_ERROR_CODE = {
     "INTERNAL_ERROR": INTERNAL_DETAIL,
     "UPSTREAM_ERROR": UPSTREAM_DETAIL,
 }
+
+
+def rate_limit_headers(response: httpx.Response) -> dict[str, str]:
+    """限流時要轉送給呼叫者的 header（Google 帶秒數的 Retry-After）；不是限流回空的。"""
+    return retry_after_header(response.headers) if is_rate_limited(response) else {}
 
 
 def request_error_code(e: httpx.RequestError) -> tuple[str, str]:

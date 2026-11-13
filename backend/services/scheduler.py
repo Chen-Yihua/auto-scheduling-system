@@ -387,6 +387,6 @@ def check_suggestion_still_valid(
             continue
         if parent_id and blocks_later_stages:
             blocked_parents.add(parent_id)
-        failed.append({"task_id": item["task_id"], "title": item["title"], "reason": reason})
+        failed.append({"task_id": item["task_id"], "title": item["title"], "reason": reason, "error_code": None})
 
     return to_write, failed

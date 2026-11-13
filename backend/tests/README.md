@@ -24,11 +24,11 @@ pytest                     # 全部（CI 用這個）
 | 檔名 | 怎麼測 | 負責測什麼 | 不測什麼 |
 |---|---|---|---|
 | `unit/test_<x>_crud.py`（外部平台是 `test_<x>_platform.py`） | 直接呼叫 `crud/<x>.py`（或 `platforms/<x>.py`）的函式 | 商業邏輯、資料轉換、對外 API 呼叫（翻頁、重試規則、錯誤分類） | HTTP、狀態碼 |
-| `unit/test_<x>_router.py` | 直接呼叫 router 函式，例如 `await platform_router.get_platform_items(...)` | router 自己的判斷分支：查不到帳號 / 解密失敗 / 同步失敗各回什麼狀態碼、有沒有設回應 header（資料庫連不上由全域 handler 統一處理，見 `integration/test_db_error_handling.py`） | 路由註冊、登入驗證、JSON 格式 |
+| `unit/test_<x>_router.py` | 直接呼叫 router 函式，例如 `await platform_router.get_platform_items(...)` | router 自己的判斷分支：查不到帳號 / 解密失敗 / 同步失敗各回什麼 error_code、有沒有設回應 header（資料庫連不上由全域 handler 統一處理，見 `integration/test_db_error_handling.py`） | 路由註冊、登入驗證、JSON 格式 |
 | `integration/test_<x>_api.py` | 走 HTTP：`AsyncClient(ASGITransport(app=main.app))` + `logged_in_user` fixture | 「接線」：路由有註冊、登入驗證有掛上、`response_model` 的 JSON 格式、狀態碼與 `detail` 真的送得出去、請求內容驗證（422） | 每個錯誤分支（交給 router 測試） |
 | `integration/test_<x>_scenario.py` | 走 HTTP，串多個步驟 | 端對端情境（例如建立 -> 查詢 -> 刪除） | 單一分支 |
 
-`_api.py` 的標準結構是三種測試：**成功**、**典型錯誤**（例如未綁定帳號回 400、找不到回 404），以及**沒登入被擋**。
+`_api.py` 的標準結構是三種測試：**成功**、**典型錯誤**（例如未綁定帳號回 409、找不到回 404），以及**沒登入被擋**。
 所有 `_api.py` 都用 `AsyncClient` + `logged_in_user` fixture，crud 或外部呼叫用 `monkeypatch` / `@patch` 換掉。
 
 ## 各模組現況
@@ -66,7 +66,7 @@ pytest                     # 全部（CI 用這個）
 ## 每個測試的說明寫法
 
 每個測試函式開頭用 docstring（一到兩行）寫「**什麼情境 → 預期什麼行為（為什麼）**」，
-例如：`token 失效（NonRetryableError）要回 401，跟一般暫時性失敗（500）分開——重試也沒用。`
+例如：`token 失效（NonRetryableError）要回 REAUTH_REQUIRED，跟一般暫時性失敗（UPSTREAM_ERROR）分開——重試也沒用。`
 
 - docstring 寫的是「測什麼」：情境、預期結果、背後的規則或要防的問題。
 - 「怎麼測」（怎麼 mock、為什麼用某個假物件、為什麼走 HTTP）不放進 docstring，

@@ -141,6 +141,8 @@ async def test_fetch_jira_user_issues_transient_error_is_retryable(status_code):
     with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
         mock_get.return_value.status_code = status_code
         mock_get.return_value.text = "error"
+        # 限流時會讀 Retry-After；AsyncMock 的屬性預設是 coroutine，要給真的 header
+        mock_get.return_value.headers = {}
 
         with pytest.raises(Exception) as exc_info:
             await jira.fetch_jira_user_issues("fake_key", "fake.atlassian.net")

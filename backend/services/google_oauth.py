@@ -9,7 +9,7 @@ from pymongo.errors import PyMongoError
 from core.crypto import SecretDecryptError
 from crud.google_tokens import delete_google_calendar_token, get_google_refresh_token, update_google_calendar_token
 from services.google_calendar_client import GOOGLE_HTTP_TIMEOUT
-from services.google_errors import RATE_LIMITED_DETAIL, UPSTREAM_DETAIL, is_rate_limited, request_error_code
+from services.google_errors import RATE_LIMITED_DETAIL, UPSTREAM_DETAIL, is_rate_limited, rate_limit_headers, request_error_code
 
 logger = logging.getLogger(__name__)
 
@@ -77,7 +77,9 @@ async def refresh_google_calendar_token(clerk_id: str) -> str:
             raise ConfigurationError("伺服器設定錯誤，請聯絡管理員")
         # 429、5xx 等暫時性錯誤，token 可能還有效，不能刪
         if is_rate_limited(e.response):
-            raise ExternalServiceError(RATE_LIMITED_DETAIL, error_code="UPSTREAM_RATE_LIMITED")
+            raise ExternalServiceError(
+                RATE_LIMITED_DETAIL, error_code="UPSTREAM_RATE_LIMITED", headers=rate_limit_headers(e.response)
+            )
         raise ExternalServiceError(UPSTREAM_DETAIL)
 
     # Google 不一定會回新的 refresh_token

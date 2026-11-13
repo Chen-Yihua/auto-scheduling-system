@@ -35,6 +35,8 @@ class FailedConfirmation(BaseModel):
     task_id: str
     title: str
     reason: str
+    # 寫入 Google 失敗時的原因（ADR 0011）；寫入前檢查不通過、前一個階段寫入失敗是 None
+    error_code: Optional[str] = None
 
 
 class ScheduleConfirmResult(BaseModel):

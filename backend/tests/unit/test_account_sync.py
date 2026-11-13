@@ -344,6 +344,25 @@ async def test_relinked_while_writing_items_cannot_delete_or_record(fetch, pausi
 
 
 @pytest.mark.asyncio
+async def test_account_deleted_while_writing_items_is_account_changed(fetch, pausing_items):
+    """AC66：寫入項目期間帳號被刪除 → 回傳帳號已變更（不是鎖被拿走），不刪項目，也不會重新建出帳號文件。"""
+    await link_github(last_synced_at=PAST)
+    await db.github_issues.insert_one({"id": 9, "title": "這次抓不到", "user_id": USER})
+    reached, release = pausing_items.pause_on("A1")
+    _, gate = fetch.plan([item(1, "A1")])
+    gate.set()
+    task = asyncio.create_task(sync_account(GITHUB, USER))
+    await reached.wait()
+    await db.linkedAccounts.delete_one({"_id": ACCOUNT_ID})
+    release.set()
+    result = await task
+
+    assert result.outcome is SyncOutcome.ACCOUNT_CHANGED
+    assert 9 in await items_by_id()
+    assert await account() is None
+
+
+@pytest.mark.asyncio
 async def test_lock_taken_while_writing_items_is_lock_lost(fetch, pausing_items):
     """寫入項目期間鎖被換成別人的 → 回傳鎖被拿走，不刪項目、不寫同步結果。"""
     await link_github(last_synced_at=PAST)

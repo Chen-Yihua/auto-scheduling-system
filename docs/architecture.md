@@ -12,7 +12,6 @@
 | 資料庫 | MongoDB | — | 持久化資料 |
 | 快取 | Redis（選用） | — | 限流計數、短期快取、排程建議的快照（30 分鐘）；未設定 `REDIS_URL` 時改用記憶體，多個 instance 之間不共用 |
 | 身分驗證 | Clerk | — | 前端登入；後端以 JWKS 驗證每個請求的 JWT |
-
 | 定時觸發 | GitHub Actions（`.github/workflows/scheduled-sync.yml`） | — | 每天台灣時間 12:00 呼叫後端 `POST /internal/scheduled-sync`，同步所有外部平台帳號（[ADR 0013](decisions/0013-scheduled-sync-trigger.md)） |
 
 Hacker News 不經過後端，由瀏覽器直接呼叫公開 API。

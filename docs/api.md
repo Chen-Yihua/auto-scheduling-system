@@ -30,7 +30,12 @@
 外部平台每天台灣時間 12:00 定時同步一次（見下方「內部」）。
 
 - `GET` 只讀資料庫，不向平台抓資料。header `X-Synced-At` 是最近一次成功同步的時間（沒有同步紀錄時不帶）；最近一次同步因憑證失效失敗時帶 `X-Auth-Error: true`。尚未連結回 409 `NOT_LINKED`。
-- `POST`（立即同步）一律即時向平台抓資料、寫進資料庫，回傳最新的項目。失敗時有舊資料就退回舊資料並帶 `X-Data-Stale: true`（憑證失效另外帶 `X-Auth-Error: true`）；沒有舊資料時照失敗的原因回錯誤，例如尚未連結 409 `NOT_LINKED`、憑證失效或無法解密 409 `REAUTH_REQUIRED`、平台故障 502、限流 503、逾時 504。等不到寫入鎖（同一個帳號的另一次同步正在寫入）時同樣退回舊資料，沒有舊資料回 503 `SERVICE_UNAVAILABLE`。被比較晚開始的同步取代時，回資料庫目前的項目。
+- `POST`（立即同步）一律即時向平台抓資料、寫進資料庫：
+  - 成功時回傳最新的項目。
+  - 失敗時有舊資料就退回舊資料，並帶 `X-Data-Stale: true`；憑證失效另外帶 `X-Auth-Error: true`。
+  - 失敗時沒有舊資料，照失敗的原因回錯誤，例如尚未連結 409 `NOT_LINKED`、憑證失效或無法解密 409 `REAUTH_REQUIRED`、平台故障 502、限流 503、逾時 504。
+  - 等不到寫入鎖（同一個帳號的另一次同步正在寫入）時同樣退回舊資料；沒有舊資料回 503 `SERVICE_UNAVAILABLE`。
+  - 被比較晚開始的同步取代時，回資料庫目前的項目。
 - 這三個 header 跨來源也讀得到。
 
 | 方法 | 路徑 | 登入 | Response | 限流 |
@@ -85,13 +90,13 @@
 | 方法 | 路徑 | 登入 | 說明 |
 |---|---|---|---|
 | POST | `/webhook` | GitHub 簽章 | PR 摘要機器人；簽章錯誤或伺服器沒設定密鑰回 401；限流 30/分 |
+| GET | `/health` | — | 健康檢查 |
 
 ## 內部
 
 | 方法 | 路徑 | 登入 | Response | 說明 |
 |---|---|---|---|---|
 | POST | `/internal/scheduled-sync` | 共用密鑰（`Authorization: Bearer <SCHEDULED_SYNC_SECRET>`） | `{"succeeded": n, "failed": n, "skipped": n}` | 由 GitHub Actions 每天呼叫（[ADR 0013](decisions/0013-scheduled-sync-trigger.md)），依序同步所有已連結的平台帳號；回應只帶筆數。密鑰錯誤、格式不對或伺服器沒設定密鑰回 401 `INVALID_SCHEDULER_TOKEN`；限流 5/時 |
-| GET | `/health` | — | 健康檢查 |
 
 ## 前端 server route
 

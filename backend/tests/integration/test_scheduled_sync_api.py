@@ -21,7 +21,7 @@ from tests.integration.platform_http_fakes import skip_retry_delay
 SECRET = "scheduler-test-secret"
 AUTH = {"Authorization": f"Bearer {SECRET}"}
 USERS = ["sched-u1", "sched-u2", "sched-u3"]
-CATEGORY_USERS = ["ok", "fails", "superseded", "unlinked", "incomplete", "locked"]
+CATEGORY_USERS = ["ok", "fails", "superseded", "unlinked", "unlinked-writing", "incomplete", "locked"]
 PAST = datetime(2026, 1, 1, tzinfo=timezone.utc)
 
 # 每個平台用憑證認出是哪個使用者，抓到的項目 id 帶上使用者，才看得出寫到誰身上
@@ -58,6 +58,22 @@ async def _link(uid: str, platform: str, **extra) -> None:
         "_id": f"{uid}_{platform}", "clerk_id": uid, "platform": platform, "status": "connected",
         "username": uid, "link_id": f"link-{uid}-{platform}", **fields, **extra,
     })
+
+
+class _DeletesAccountOnWrite:
+    """寫入指定使用者的項目時，先刪掉他的 GitHub 帳號再寫入，模擬寫入項目期間帳號被刪除。"""
+
+    def __init__(self, inner, uid: str):
+        self._inner = inner
+        self._uid = uid
+
+    def __getattr__(self, name):
+        return getattr(self._inner, name)
+
+    async def update_one(self, filter, update, *args, **kwargs):
+        if filter.get("user_id") == self._uid:
+            await db.linkedAccounts.delete_one({"_id": f"{self._uid}_github"})
+        return await self._inner.update_one(filter, update, *args, **kwargs)
 
 
 def _fetch_by_user(monkeypatch, platform, behaviours: dict | None = None, calls: list | None = None):
@@ -216,7 +232,7 @@ async def test_syncing_one_user_does_not_touch_another_users_data(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_each_result_is_counted_in_its_category(monkeypatch):
-    """AC66、AC67、AC70：成功算 succeeded；抓取失敗（有舊資料）、等不到鎖算 failed；被取代、帳號已變更、憑證資料不完整算 skipped。"""
+    """AC66、AC67、AC70：成功算 succeeded；抓取失敗（有舊資料）、等不到鎖算 failed；被取代、帳號已變更（抓資料期間或寫入項目期間刪除）、憑證資料不完整算 skipped。"""
     monkeypatch.setattr(account_sync, "LOCK_WAIT_SECONDS", 0.05)
     monkeypatch.setattr(account_sync, "LOCK_POLL_SECONDS", 0.01)
     future = datetime.now(timezone.utc) + timedelta(hours=1)
@@ -225,6 +241,7 @@ async def test_each_result_is_counted_in_its_category(monkeypatch):
     await db.github_issues.insert_one({"id": "old", "title": "舊資料", "user_id": "fails"})
     await _link("superseded", "github", sync_started_at=future)
     await _link("unlinked", "github")
+    await _link("unlinked-writing", "github")
     await _link("incomplete", "github", apiKey="")
     await _link("locked", "github", sync_lock_owner="someone-else", sync_lock_until=future)
 
@@ -236,7 +253,8 @@ async def test_each_result_is_counted_in_its_category(monkeypatch):
         "fails": NonRetryableError("401", error_code="REAUTH_REQUIRED"),
         "unlinked": unlink,
     })
+    monkeypatch.setattr(db, "github_issues", _DeletesAccountOnWrite(db.github_issues, "unlinked-writing"))
 
     res = await _post(AUTH)
 
-    assert res.json() == {"succeeded": 1, "failed": 2, "skipped": 3}
+    assert res.json() == {"succeeded": 1, "failed": 2, "skipped": 4}

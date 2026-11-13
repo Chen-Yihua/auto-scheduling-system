@@ -95,7 +95,7 @@ async def test_delete_linked_account(monkeypatch, logged_in_user):
 
 @pytest.mark.asyncio
 async def test_update_linked_account_not_found(monkeypatch, logged_in_user):
-    """要更新的綁定帳號不存在 → 404 NOT_FOUND 加說明。"""
+    """AC3：要更新的綁定帳號不存在 → 404 NOT_FOUND 加說明。"""
     async def mock_update(clerk_id, platform, data):
         return False
 
@@ -105,7 +105,7 @@ async def test_update_linked_account_not_found(monkeypatch, logged_in_user):
         res = await ac.patch("/users/me/linked-accounts/github", json={"status": "connected"})
 
     assert res.status_code == status.HTTP_404_NOT_FOUND
-    assert res.json() == {"detail": "Linked account not found or no valid fields to update", "error_code": "NOT_FOUND"}
+    assert res.json() == {"detail": "Linked account not found", "error_code": "NOT_FOUND"}
 
 
 @pytest.mark.asyncio

@@ -1,5 +1,6 @@
 from typing import List
-from fastapi import APIRouter, HTTPException, Depends, Request
+from fastapi import APIRouter, Depends, Request
+from core.errors import NotFoundError
 from crud import linked_account as linked_account_crud
 from schemas.linked_account import LinkedAccountCreate, LinkedAccountOut, LinkedAccountUpdate
 from core.security import get_current_clerk_user
@@ -46,7 +47,7 @@ async def update_linked_account(
         data.model_dump(exclude_none=True)
     )
     if not success:
-        raise HTTPException(status_code=404, detail="Linked account not found or no valid fields to update")
+        raise NotFoundError("Linked account not found")
     return {"success": True}
 
 

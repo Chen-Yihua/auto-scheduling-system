@@ -104,8 +104,8 @@ async def test_update_user_success(mock_update_user, logged_in_user):
 @patch("crud.user.update_user_by_clerk_id", new_callable=AsyncMock)
 async def test_update_user_not_found(mock_update_user, logged_in_user):
     """找不到使用者或沒有任何變更 → 404。"""
-    from fastapi import HTTPException
-    mock_update_user.side_effect = HTTPException(status_code=404, detail="User not found or no changes made")
+    from core.errors import NotFoundError
+    mock_update_user.side_effect = NotFoundError("User not found or no changes made")
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         response = await ac.put("/users/me", json={"name": "No Change"})
@@ -132,14 +132,14 @@ async def test_delete_user_success(mock_delete_user, logged_in_user):
 @pytest.mark.asyncio
 @patch("crud.user.delete_user_by_clerk_id", new_callable=AsyncMock)
 async def test_delete_user_not_found(mock_delete_user, logged_in_user):
-    """要刪除的使用者不存在 → 404。"""
+    """AC1：要刪除的使用者不存在 → 404 NOT_FOUND。"""
     mock_delete_user.return_value = False  # 模擬找不到使用者
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         response = await ac.delete("/users/me")
 
     assert response.status_code == 404
-    assert response.json()["detail"] == "User not found"
+    assert response.json() == {"detail": "User not found", "error_code": "NOT_FOUND"}
 
 
 """

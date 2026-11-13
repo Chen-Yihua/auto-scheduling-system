@@ -1,6 +1,6 @@
 # 透過 HTTP 確認路由、登入驗證、回應格式和錯誤狀態碼；細部邏輯由 unit 測試負責
 import pytest
-from fastapi import HTTPException, status
+from fastapi import status
 from httpx import AsyncClient
 from httpx._transports.asgi import ASGITransport
 

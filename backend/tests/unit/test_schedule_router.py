@@ -1,10 +1,10 @@
+import logging
+
 import pytest
 from core.errors import AppError
 import pytest_asyncio
 from datetime import datetime, timezone
 from pydantic import ValidationError
-
-from fastapi import HTTPException
 
 import routers.schedule as schedule_router
 from core.cache import cache_get, cache_set, cache_delete
@@ -61,9 +61,9 @@ async def test_suggest_schedule_handles_no_tasks(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_suggest_schedule_returns_clean_500_when_build_suggestion_fails(monkeypatch):
-    """排程計算意外出錯 → 回 500 和清楚的中文訊息，而不是沒有說明的原始例外。"""
-    # build_schedule_suggestion 本身不會丟 HTTPException，這裡模擬它出意外（例如未來資料格式跟假設的不一樣）
+async def test_suggest_schedule_returns_clean_500_when_build_suggestion_fails(monkeypatch, caplog):
+    """AC4：排程計算意外出錯 → 500 INTERNAL_ERROR 和固定的中文訊息（不含例外內容），並記下例外的 log。"""
+    # 模擬 build_schedule_suggestion 出意外（例如未來資料格式跟假設的不一樣）
     async def mock_get_tasks(user_id):
         return [{"id": "t1", "title": "任務一", "priority": "High", "status": "To Do", "due_date": None}]
 
@@ -77,15 +77,19 @@ async def test_suggest_schedule_returns_clean_500_when_build_suggestion_fails(mo
     monkeypatch.setattr(schedule_router, "get_free_slots_for_user", mock_get_free_slots)
     monkeypatch.setattr(schedule_router, "build_schedule_suggestion", mock_build_schedule_suggestion)
 
-    with pytest.raises(HTTPException) as exc_info:
-        await schedule_router.suggest_schedule(clerk_user=mock_user)
+    with caplog.at_level(logging.ERROR, logger="routers.schedule"):
+        with pytest.raises(AppError) as exc_info:
+            await schedule_router.suggest_schedule(clerk_user=mock_user)
 
-    assert exc_info.value.status_code == 500
+    assert exc_info.value.error_code == "INTERNAL_ERROR"
+    assert exc_info.value.detail == "產生排程建議失敗，請稍後再試"
+    assert "unexpected" not in exc_info.value.detail
+    assert any(r.levelno == logging.ERROR and r.exc_info for r in caplog.records)
 
 
 @pytest.mark.asyncio
 async def test_suggest_schedule_returns_clean_500_when_apply_blocked_periods_fails(monkeypatch):
-    """套用不工作時段出錯 → 回有說明的 500。"""
+    """AC4：套用不工作時段出錯 → 500 INTERNAL_ERROR 和固定的說明。"""
     async def mock_get_tasks(user_id):
         return [{"id": "t1", "title": "任務一", "priority": "High", "status": "To Do", "due_date": None}]
 
@@ -99,10 +103,11 @@ async def test_suggest_schedule_returns_clean_500_when_apply_blocked_periods_fai
     monkeypatch.setattr(schedule_router, "get_free_slots_for_user", mock_get_free_slots)
     monkeypatch.setattr(schedule_router, "apply_blocked_periods", mock_apply_blocked_periods)
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(AppError) as exc_info:
         await schedule_router.suggest_schedule(clerk_user=mock_user)
 
-    assert exc_info.value.status_code == 500
+    assert exc_info.value.error_code == "INTERNAL_ERROR"
+    assert exc_info.value.detail == "產生排程建議失敗，請稍後再試"
 
 
 @pytest.mark.asyncio

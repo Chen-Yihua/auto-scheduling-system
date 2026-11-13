@@ -1,6 +1,6 @@
 import logging
-from fastapi import APIRouter, Depends, HTTPException
-from core.errors import ConflictError
+from fastapi import APIRouter, Depends
+from core.errors import AppError, ConflictError
 from core.security import get_current_clerk_user
 from services.google_calendar import (
     get_free_slots_for_user,
@@ -113,7 +113,7 @@ async def _compute_suggestion(user_id: str, preferences: SchedulePreferences, er
         )
     except Exception:
         logger.exception("計算排程建議失敗 user_id=%s", user_id)
-        raise HTTPException(status_code=500, detail=error_detail)
+        raise AppError(error_detail)
 
 
 @router.post("/suggest", response_model=ScheduleSuggestion)

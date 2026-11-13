@@ -3,7 +3,6 @@ import pytest
 from core.errors import AppError
 from unittest.mock import AsyncMock, patch
 
-from fastapi import HTTPException
 from svix.webhooks import WebhookVerificationError
 
 import routers.user as user_router
@@ -97,16 +96,17 @@ async def test_webhook_rejects_when_verify_raises_unexpected_exception_type(monk
 
 @pytest.mark.asyncio
 async def test_webhook_rejects_malformed_json(monkeypatch):
-    """body 不是合法 JSON → 400。"""
+    """AC2：body 不是合法 JSON → 400 INVALID_REQUEST，detail 是固定文字。"""
     monkeypatch.setattr(user_router, "CLERK_WEBHOOK_SIGNING_SECRET", "whsec_test")
     request = FakeRequest({})
     request._raw = b"not valid json"  # 模擬 body 不是合法 JSON
 
     with patch.object(user_router.Webhook, "verify", lambda self, data, headers: None):
-        with pytest.raises(HTTPException) as exc_info:
+        with pytest.raises(AppError) as exc_info:
             await user_router.clerk_webhook(request, **_headers())
 
-    assert exc_info.value.status_code == 400
+    assert exc_info.value.error_code == "INVALID_REQUEST"
+    assert exc_info.value.detail == "Invalid JSON payload"
 
 
 # ========== user.deleted 事件的實際行為 ==========
@@ -136,11 +136,12 @@ async def test_webhook_user_deleted_not_found_locally_still_returns_ok(mock_dele
 
 @pytest.mark.asyncio
 async def test_webhook_user_deleted_missing_clerk_id_returns_400(monkeypatch):
-    """user.deleted 事件缺少使用者 id → 400。"""
-    with pytest.raises(HTTPException) as exc_info:
+    """AC2：user.deleted 事件缺少使用者 id → 400 INVALID_REQUEST。"""
+    with pytest.raises(AppError) as exc_info:
         await _call_webhook(monkeypatch, {"type": "user.deleted", "data": {}})
 
-    assert exc_info.value.status_code == 400
+    assert exc_info.value.error_code == "INVALID_REQUEST"
+    assert exc_info.value.detail == "Clerk ID not found in payload"
 
 
 @pytest.mark.asyncio
@@ -153,11 +154,12 @@ async def test_webhook_ignores_unhandled_event_types(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_webhook_rejects_payload_that_is_valid_json_but_not_an_object(monkeypatch):
-    """body 是合法 JSON、但頂層不是物件（例如陣列）→ 400，當成無效 payload。"""
-    with pytest.raises(HTTPException) as exc_info:
+    """AC2：body 是合法 JSON、但頂層不是物件（例如陣列）→ 400 INVALID_REQUEST，當成無效 payload。"""
+    with pytest.raises(AppError) as exc_info:
         await _call_webhook(monkeypatch, ["not", "an", "object"])
 
-    assert exc_info.value.status_code == 400
+    assert exc_info.value.error_code == "INVALID_REQUEST"
+    assert exc_info.value.detail == "Invalid JSON payload"
 
 
 @pytest.mark.asyncio

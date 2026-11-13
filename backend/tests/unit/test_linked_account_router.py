@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import MagicMock
-from fastapi import HTTPException
+from core.errors import AppError, NotFoundError
 from routers import linked_account as router
 import crud.linked_account as crud_mod
 from schemas.linked_account import LinkedAccountCreate, LinkedAccountUpdate
@@ -84,20 +84,21 @@ async def test_update_linked_account(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_update_linked_account_fail(monkeypatch):
-    """crud 回傳 False（找不到帳號，或沒有合法欄位可更新）→ 404。"""
+    """AC3：crud 回傳 False（找不到帳號）→ 404 NOT_FOUND，detail 是 "Linked account not found"。"""
     async def mock_update(clerk_id, platform, data):
         return False
 
     monkeypatch.setattr(crud_mod, "update_linked_account_by_clerk_id", mock_update)
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(AppError) as exc_info:
         await router.update_linked_account(
             request=MagicMock(),
             platform="github",
             data=LinkedAccountUpdate(status="connected"),
             clerk_user=mock_user
         )
-    assert exc_info.value.status_code == 404
+    assert exc_info.value.error_code == "NOT_FOUND"
+    assert exc_info.value.detail == "Linked account not found"
 
 
 @pytest.mark.asyncio
@@ -120,13 +121,13 @@ async def test_delete_linked_account_fail(monkeypatch):
     """查無此帳號 → 404。"""
     # 這個 404 是 crud 丟出來的，router 沒有另外判斷
     async def mock_delete(composite_id):
-        raise HTTPException(status_code=404, detail="Linked account not found")
+        raise NotFoundError("Linked account not found")
 
     monkeypatch.setattr(crud_mod, "delete_linked_account_by_id", mock_delete)
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(NotFoundError) as exc_info:
         await router.delete_linked_account(
             platform="github",
             clerk_user=mock_user
         )
-    assert exc_info.value.status_code == 404
+    assert exc_info.value.error_code == "NOT_FOUND"

@@ -2,10 +2,10 @@ import json
 import logging
 import os
 
-from fastapi import APIRouter, HTTPException, Depends, Header, Request
+from fastapi import APIRouter, Depends, Header, Request
 from svix.webhooks import Webhook, WebhookVerificationError
 
-from core.errors import AppError, ConflictError
+from core.errors import AppError, ConflictError, InvalidRequestError, NotFoundError
 from crud import user as user_crud
 from schemas.user import UserCreate, UserOut, UserUpdate
 from typing import Optional
@@ -47,7 +47,7 @@ async def get_current_user(
     """取得目前登入的使用者。"""
     user = await user_crud.get_user_by_clerk_id(clerk_user["sub"])
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise NotFoundError("User not found")
     return user
 
 @router.post("/", response_model=UserOut, status_code=201)
@@ -81,7 +81,7 @@ async def update_user(data: UserUpdate, clerk_user: dict = Depends(get_current_c
 async def delete_user(clerk_user: dict = Depends(get_current_clerk_user)):
     success = await user_crud.delete_user_by_clerk_id(clerk_user['sub'])
     if not success:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise NotFoundError("User not found")
     return {"deleted": True}
 
 @router.post("/webhook/clerk")
@@ -104,10 +104,10 @@ async def clerk_webhook(
     try:
         payload = json.loads(raw_body)
     except json.JSONDecodeError:
-        raise HTTPException(status_code=400, detail="Invalid JSON payload")
+        raise InvalidRequestError("Invalid JSON payload")
 
     if not isinstance(payload, dict):
-        raise HTTPException(status_code=400, detail="Invalid JSON payload")
+        raise InvalidRequestError("Invalid JSON payload")
 
     event_type = payload.get("type")
     data = payload.get("data")
@@ -118,7 +118,7 @@ async def clerk_webhook(
         clerk_id = data.get("id")
         if not clerk_id:
             logger.warning("Clerk webhook user.deleted event missing data.id")
-            raise HTTPException(status_code=400, detail="Clerk ID not found in payload")
+            raise InvalidRequestError("Clerk ID not found in payload")
 
         success = await user_crud.delete_user_by_clerk_id(clerk_id)
         if not success:

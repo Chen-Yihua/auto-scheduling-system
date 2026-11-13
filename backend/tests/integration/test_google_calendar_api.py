@@ -2,7 +2,7 @@
 import httpx
 import pytest
 from cryptography.fernet import Fernet
-from fastapi import HTTPException, status
+from fastapi import status
 from httpx import AsyncClient
 from httpx._transports.asgi import ASGITransport
 

@@ -66,7 +66,7 @@ backend/
 
 ### 錯誤處理
 
-- 只有 router 用 `HTTPException`；crud、services、platforms 丟 `core/errors.py` 的例外，由 `core/exception_handlers.py` 轉成 `{"detail", "error_code"}` 的回應。
+- 所有層（routers、crud、services、platforms）都丟 `core/errors.py` 的例外，不用 `HTTPException`，由 `core/exception_handlers.py` 轉成 `{"detail", "error_code"}` 的回應。
 - 丟例外時只選 `error_code`，照 [ADR 0011](../docs/decisions/0011-api-error-status-codes.md) 選原因：類別的預設 `error_code` 不是實際原因時，建構時用 `error_code=` 指定。狀態碼一律由 `core/error_codes.py` 的對照表決定，丟例外的地方不指定；新增原因時同時更新對照表與 ADR 0011，對照表沒有的 `error_code` 會被當成 500 `INTERNAL_ERROR`。`detail` 只能是固定的文字或使用者自己送出、非機密的值，第三方回應原文只記 log。
 - 外部服務限流時用 `core/errors.py` 的 `retry_after_header` 帶出對方的 `Retry-After`（`headers=`）。
 - 資料庫錯誤、Redis 錯誤和未預期的例外不用自己 `try/except`，由全域 handler 處理：資料庫連不上與 Redis 故障回 503，其他資料庫錯誤與未預期的例外回 500。

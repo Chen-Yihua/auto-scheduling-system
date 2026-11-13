@@ -1,6 +1,6 @@
 # 透過 HTTP 確認路由、登入驗證、回應格式和錯誤狀態碼；細部邏輯由 unit 測試負責
 import pytest
-from fastapi import HTTPException
+from core.errors import NotFoundError
 from httpx import AsyncClient
 from httpx._transports.asgi import ASGITransport
 from unittest.mock import AsyncMock, patch
@@ -140,7 +140,7 @@ async def test_get_manual_task_success(mock_get_task, fake_task_out, logged_in_u
 @patch("crud.manual_task.get_manual_task_by_id", new_callable=AsyncMock)
 async def test_get_manual_task_not_found(mock_get_task, logged_in_user):
     """查無此任務 → 404 "Task not found"。"""
-    mock_get_task.side_effect = HTTPException(status_code=404, detail="Task not found")
+    mock_get_task.side_effect = NotFoundError("Task not found")
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         response = await ac.get("/manual-tasks/does-not-exist")
@@ -172,7 +172,7 @@ async def test_update_manual_task_success(mock_update_task, mock_get_task, fake_
 @patch("crud.manual_task.get_manual_task_by_id", new_callable=AsyncMock)
 async def test_update_manual_task_not_found(mock_get_task, fake_task_out, logged_in_user):
     """更新不存在的任務 → 404 "Task not found"。"""
-    mock_get_task.side_effect = HTTPException(status_code=404, detail="Task not found")
+    mock_get_task.side_effect = NotFoundError("Task not found")
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         response = await ac.put("/manual-tasks/does-not-exist", json=fake_task_out.model_dump(mode="json"))
@@ -202,7 +202,7 @@ async def test_delete_manual_task_success(mock_delete_task, mock_get_task, fake_
 @patch("crud.manual_task.get_manual_task_by_id", new_callable=AsyncMock)
 async def test_delete_manual_task_not_found(mock_get_task, logged_in_user):
     """刪除不存在的任務 → 404 "Task not found"。"""
-    mock_get_task.side_effect = HTTPException(status_code=404, detail="Task not found")
+    mock_get_task.side_effect = NotFoundError("Task not found")
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         response = await ac.delete("/manual-tasks/task-999")

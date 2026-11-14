@@ -1,0 +1,24 @@
+# 每天台灣時間 12:00 呼叫後端同步所有外部平台帳號（ADR 0013）
+name: Scheduled Sync
+
+on:
+  schedule:
+    # UTC 04:00 = 台灣時間 12:00；GitHub 的排程常延遲 5 到 30 分鐘
+    - cron: "0 4 * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  scheduled-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call scheduled sync
+        env:
+          BACKEND_URL: ${{ vars.BACKEND_URL }}
+          SCHEDULED_SYNC_SECRET: ${{ secrets.SCHEDULED_SYNC_SECRET }}
+        # -f：後端回非 2xx 時這一步失敗。回應只有筆數，公開的 log 看得到也沒關係
+        run: |
+          curl -fsS -X POST "$BACKEND_URL/internal/scheduled-sync" \
+            -H "Authorization: Bearer $SCHEDULED_SYNC_SECRET" \
+            --max-time 900

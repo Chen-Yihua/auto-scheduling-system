@@ -25,6 +25,8 @@ export interface LinkedAccountKey {
   _originalDomain?: string;
   // 已連結但已存的憑證無法讀取：儲存時走 PATCH，而且要填完整的憑證
   needsReauth?: boolean;
+  // 最近一次成功同步的時間；沒有同步紀錄時是 null
+  lastSyncedAt?: string | null;
 }
 
 interface LinkedAccountPayload {
@@ -110,6 +112,7 @@ export const useLinkedAccount = () => {
         k.avatar = undefined;
         k.needsReauth = false;
         k.isMasked = false;
+        k.lastSyncedAt = null;
       });
 
     list.forEach((ac) => {
@@ -124,6 +127,7 @@ export const useLinkedAccount = () => {
           item.value = ac.password ?? '';
         }
         item.needsReauth = ac.needs_reauth === true;
+        item.lastSyncedAt = ac.last_synced_at ?? null;
         item.isMasked = true;
       }
     });

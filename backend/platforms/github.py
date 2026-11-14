@@ -110,6 +110,7 @@ class GithubPlatform(PlatformAdapter):
     display_name = "GitHub"
 
     route_path = "/github/issues"
+    sync_route_path = "/github/sync"
     response_model = GitHubIssue
     # GitHub search API 每分鐘只能 30 次，而每次請求至少會查 2 次（issue 和 PR）
     rate_limit = "10/minute"

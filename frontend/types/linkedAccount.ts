@@ -8,4 +8,6 @@ export interface LinkedAccountRecord {
   username?: string
   // 已存的憑證無法解密，要重新連結；這時沒有 apiKey、password
   needs_reauth: boolean
+  // 最近一次成功同步的時間（ISO 字串）；沒有同步紀錄時是 null
+  last_synced_at: string | null
 }

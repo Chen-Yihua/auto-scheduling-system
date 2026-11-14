@@ -1,8 +1,14 @@
+"""platforms/sync.py 的抓取重試與項目寫入；同步流程（鎖、新舊判斷）由 test_account_sync.py 負責。"""
 import pytest
 from datetime import datetime, timezone
 
-from platforms.sync import sync_platform_items
-from platforms.sync import NonRetryableError
+from platforms.sync import (
+    NonRetryableError,
+    delete_missing_items,
+    fetch_with_retry,
+    read_items,
+    upsert_items,
+)
 
 
 class FakeCursor:
@@ -14,7 +20,7 @@ class FakeCursor:
 
 
 class FakeCollection:
-    """簡化的 in-memory collection，模擬 update_one(upsert) 和 find().to_list()。"""
+    """簡化的 in-memory collection，模擬 update_one(upsert)、find().to_list() 和 delete_many。"""
 
     def __init__(self, initial=None):
         self._docs = list(initial or [])
@@ -46,159 +52,95 @@ class FakeCollection:
         self._docs = [d for d in self._docs if not matches(d)]
 
 
+NOW = datetime(2026, 11, 14, 4, 0, tzinfo=timezone.utc)
+
+
+# ---------- 寫入項目 ----------
+
 @pytest.mark.asyncio
-async def test_sync_platform_items_live_success_upserts_and_returns_fresh():
-    """即時抓資料成功 → 資料存進資料庫並原樣回傳，且標示為「不是舊資料、沒有授權問題」。"""
+async def test_upsert_items_writes_user_id_and_synced_at():
+    """抓到的項目存進資料庫，帶上使用者 id 與這次同步時間。"""
     collection = FakeCollection()
 
-    async def fetch():
-        return [{"id": 1, "title": "a"}, {"id": 2, "title": "b"}]
+    written = await upsert_items(collection, "u1", "id", [{"id": 1, "title": "a"}, {"id": 2, "title": "b"}], NOW)
 
-    items, stale, synced_at, auth_error = await sync_platform_items(
-        collection=collection, user_id="u1", id_field="id", fetch_fn=fetch
-    )
-
-    assert stale is False
-    assert auth_error is False
-    assert synced_at is not None
-    assert [i["title"] for i in items] == ["a", "b"]
+    assert [i["title"] for i in written] == ["a", "b"]
     assert len(collection._docs) == 2
     assert collection._docs[0]["user_id"] == "u1"
-    assert collection._docs[0]["synced_at"] == synced_at
+    assert collection._docs[0]["synced_at"] == NOW
 
 
 @pytest.mark.asyncio
-async def test_sync_platform_items_removes_duplicate_ids_in_fetched_items():
+async def test_upsert_items_removes_duplicate_ids():
     """抓回來的資料裡同一個 id 出現兩次（例如翻頁時資料變動）→ 只保留一筆，用最後一次的內容。"""
     collection = FakeCollection()
 
-    async def fetch():
-        return [{"id": 1, "title": "舊"}, {"id": 2, "title": "b"}, {"id": 1, "title": "新"}]
-
-    items, *_ = await sync_platform_items(
-        collection=collection, user_id="u1", id_field="id", fetch_fn=fetch
+    written = await upsert_items(
+        collection, "u1", "id", [{"id": 1, "title": "舊"}, {"id": 2, "title": "b"}, {"id": 1, "title": "新"}], NOW,
     )
 
-    assert [(i["id"], i["title"]) for i in items] == [(1, "新"), (2, "b")]
+    assert [(i["id"], i["title"]) for i in written] == [(1, "新"), (2, "b")]
     assert len(collection._docs) == 2
 
 
 @pytest.mark.asyncio
-async def test_sync_platform_items_removes_items_no_longer_returned_by_live_fetch():
-    """這次沒抓到的項目要從 DB 刪除，否則退回舊資料時會出現已不存在的項目。"""
+async def test_upsert_items_updates_existing_item_and_keeps_user_fields():
+    """AC49：DB 已有同 id 的項目時更新它，不重複新增；使用者設定的排程欄位要保留。"""
+    collection = FakeCollection(initial=[{"id": 1, "title": "old", "user_id": "u1", "priority": "high", "done": True}])
+
+    await upsert_items(collection, "u1", "id", [{"id": 1, "title": "new"}], NOW)
+
+    assert len(collection._docs) == 1
+    assert collection._docs[0]["title"] == "new"
+    assert collection._docs[0]["priority"] == "high"
+    assert collection._docs[0]["done"] is True
+
+
+@pytest.mark.asyncio
+async def test_delete_missing_items_removes_items_no_longer_returned():
+    """這次沒抓到的項目要從 DB 刪除，否則畫面會出現平台上早就不存在的項目。"""
     collection = FakeCollection(initial=[
         {"id": 1, "title": "still open", "user_id": "u1"},
         {"id": 2, "title": "already closed on github", "user_id": "u1"},
     ])
 
-    async def fetch():
-        return [{"id": 1, "title": "still open"}]
+    await delete_missing_items(collection, "u1", "id", [1])
 
-    items, stale, _, _ = await sync_platform_items(
-        collection=collection, user_id="u1", id_field="id", fetch_fn=fetch
-    )
-
-    assert stale is False
     assert [d["id"] for d in collection._docs] == [1]
 
 
 @pytest.mark.asyncio
-async def test_sync_platform_items_removal_does_not_affect_other_users():
+async def test_delete_missing_items_does_not_affect_other_users():
     """清掉「這次已不存在」的項目時，只能動當前使用者的資料，不能誤刪其他使用者同 id 的項目。"""
     collection = FakeCollection(initial=[
         {"id": 1, "title": "user u1's item", "user_id": "u1"},
         {"id": 1, "title": "user u2's item", "user_id": "u2"},
     ])
 
-    async def fetch():
-        return []  # u1 這次即時抓資料是空的（例如全部關閉了）
+    await delete_missing_items(collection, "u1", "id", [])
 
-    items, stale, _, _ = await sync_platform_items(
-        collection=collection, user_id="u1", id_field="id", fetch_fn=fetch
-    )
-
-    assert stale is False
-    assert items == []
-    remaining = [(d["user_id"], d["id"]) for d in collection._docs]
-    assert remaining == [("u2", 1)]
+    assert [(d["user_id"], d["id"]) for d in collection._docs] == [("u2", 1)]
 
 
 @pytest.mark.asyncio
-async def test_sync_platform_items_live_fetch_upserts_existing_item():
-    """DB 已有同 id 的舊項目時，即時抓到的新內容要更新它（upsert），不能重複新增一筆。"""
-    collection = FakeCollection(initial=[{"id": 1, "title": "old", "user_id": "u1"}])
-
-    async def fetch():
-        return [{"id": 1, "title": "new"}]
-
-    items, stale, _, _ = await sync_platform_items(
-        collection=collection, user_id="u1", id_field="id", fetch_fn=fetch
-    )
-
-    assert stale is False
-    assert len(collection._docs) == 1
-    assert collection._docs[0]["title"] == "new"
-
-
-@pytest.mark.asyncio
-async def test_sync_platform_items_falls_back_to_cache_on_failure():
-    """即時抓資料失敗（暫時性問題）→ 退回資料庫裡的舊資料並標示為舊資料；因為不是憑證問題，不標示授權失效；回傳的資料不含資料庫內部 id。"""
-    synced_at = datetime.now(timezone.utc)
+async def test_read_items_returns_only_this_users_items_without_mongo_id():
+    """讀資料庫的項目只拿當前使用者的，回傳的資料不含資料庫內部 id。"""
     collection = FakeCollection(initial=[
-        {"_id": "mongo_id", "id": 1, "title": "cached", "user_id": "u1", "synced_at": synced_at}
+        {"_id": "m1", "id": 1, "title": "mine", "user_id": "u1"},
+        {"_id": "m2", "id": 2, "title": "other", "user_id": "u2"},
     ])
 
-    async def fetch():
-        raise Exception("API down")
+    items = await read_items(collection, "u1")
 
-    items, stale, returned_synced_at, auth_error = await sync_platform_items(
-        collection=collection, user_id="u1", id_field="id", fetch_fn=fetch,
-        retry_delay_seconds=0,
-    )
-
-    assert stale is True
-    assert auth_error is False  # 一般 Exception，不是憑證問題
-    assert returned_synced_at == synced_at
-    assert items[0]["title"] == "cached"
+    assert [i["title"] for i in items] == ["mine"]
     assert "_id" not in items[0]
 
 
-@pytest.mark.asyncio
-async def test_sync_platform_items_raises_when_no_cache_available():
-    """即時抓資料失敗、DB 又沒有舊資料可退回 → 把原本的例外往外丟，不能回傳空清單假裝成功。"""
-    collection = FakeCollection()
-
-    async def fetch():
-        raise Exception("API down, no cache either")
-
-    with pytest.raises(Exception, match="API down, no cache either"):
-        await sync_platform_items(
-            collection=collection, user_id="u1", id_field="id", fetch_fn=fetch,
-            retry_delay_seconds=0,
-        )
-
+# ---------- 抓取重試 ----------
 
 @pytest.mark.asyncio
-async def test_sync_platform_items_only_returns_cache_for_matching_user():
-    """退回舊資料時只能拿當前使用者的；DB 裡只有別人的資料就等於沒有快取，要丟例外，不能把別人的資料回給他。"""
-    collection = FakeCollection(initial=[
-        {"id": 1, "title": "other user's cached data", "user_id": "someone_else"}
-    ])
-
-    async def fetch():
-        raise Exception("API down")
-
-    with pytest.raises(Exception, match="API down"):
-        await sync_platform_items(
-            collection=collection, user_id="u1", id_field="id", fetch_fn=fetch,
-            retry_delay_seconds=0,
-        )
-
-
-@pytest.mark.asyncio
-async def test_sync_platform_items_retries_and_recovers_on_second_attempt():
-    """第一次抓失敗、第二次就成功 → 不需要退回快取，直接回傳重試後拿到的新資料。"""
-    collection = FakeCollection()
+async def test_fetch_with_retry_retries_and_recovers_on_second_attempt():
+    """第一次抓失敗、第二次就成功 → 回傳重試後拿到的資料。"""
     call_count = {"n": 0}
 
     async def fetch():
@@ -207,43 +149,29 @@ async def test_sync_platform_items_retries_and_recovers_on_second_attempt():
             raise Exception("暫時性失敗")
         return [{"id": 1, "title": "recovered"}]
 
-    items, stale, synced_at, _ = await sync_platform_items(
-        collection=collection, user_id="u1", id_field="id", fetch_fn=fetch,
-        retry_delay_seconds=0,
-    )
+    items = await fetch_with_retry("u1", fetch, retry_delay_seconds=0)
 
     assert call_count["n"] == 2
-    assert stale is False
     assert items[0]["title"] == "recovered"
-    assert len(collection._docs) == 1
 
 
 @pytest.mark.asyncio
-async def test_sync_platform_items_respects_max_attempts_before_falling_back():
-    """max_attempts=3 時應該剛好嘗試 3 次都失敗，才退回快取——不多試也不少試。"""
-    synced_at = datetime.now(timezone.utc)
-    collection = FakeCollection(initial=[
-        {"id": 1, "title": "cached", "user_id": "u1", "synced_at": synced_at}
-    ])
+async def test_fetch_with_retry_raises_last_error_after_max_attempts():
+    """max_attempts=3 時剛好嘗試 3 次都失敗，才把最後的例外往外丟——不多試也不少試。"""
     call_count = {"n": 0}
 
     async def fetch():
         call_count["n"] += 1
-        raise Exception("一直失敗")
+        raise Exception(f"失敗 {call_count['n']}")
 
-    items, stale, _, auth_error = await sync_platform_items(
-        collection=collection, user_id="u1", id_field="id", fetch_fn=fetch,
-        max_attempts=3, retry_delay_seconds=0,
-    )
+    with pytest.raises(Exception, match="失敗 3"):
+        await fetch_with_retry("u1", fetch, max_attempts=3, retry_delay_seconds=0)
 
     assert call_count["n"] == 3
-    assert stale is True
-    assert auth_error is False  # 一般 Exception，不是憑證問題
-    assert items[0]["title"] == "cached"
 
 
 @pytest.mark.asyncio
-async def test_sync_platform_items_backs_off_exponentially_between_retries(monkeypatch):
+async def test_fetch_with_retry_backs_off_exponentially_between_retries(monkeypatch):
     """重試之間的等待時間要指數成長（1 秒、2 秒、4 秒…），不是每次都等一樣久。"""
     sleep_calls = []
 
@@ -252,93 +180,32 @@ async def test_sync_platform_items_backs_off_exponentially_between_retries(monke
 
     monkeypatch.setattr("platforms.sync.asyncio.sleep", fake_sleep)
 
-    collection = FakeCollection()
-
     async def fetch():
         raise Exception("一直失敗")
 
     with pytest.raises(Exception):
-        await sync_platform_items(
-            collection=collection, user_id="u1", id_field="id", fetch_fn=fetch,
-            max_attempts=4, retry_delay_seconds=1.0,
-        )
+        await fetch_with_retry("u1", fetch, max_attempts=4, retry_delay_seconds=1.0)
 
     assert sleep_calls == [1.0, 2.0, 4.0]
 
 
 @pytest.mark.asyncio
-async def test_sync_platform_items_does_not_retry_non_retryable_error():
-    """NonRetryableError（例如帳密/token 錯誤）不該被重試，抓一次失敗就直接放棄。"""
-    synced_at = datetime.now(timezone.utc)
-    collection = FakeCollection(initial=[
-        {"id": 1, "title": "cached", "user_id": "u1", "synced_at": synced_at}
-    ])
-    call_count = {"n": 0}
-
-    async def fetch():
-        call_count["n"] += 1
-        raise NonRetryableError("401 Unauthorized")
-
-    items, stale, _, auth_error = await sync_platform_items(
-        collection=collection, user_id="u1", id_field="id", fetch_fn=fetch,
-        max_attempts=5, retry_delay_seconds=0,
-    )
-
-    # 就算 max_attempts=5，NonRetryableError 也只該打一次就放棄，不多試
-    assert call_count["n"] == 1
-    assert stale is True
-    # 憑證錯誤造成的退回要標記 auth_error
-    assert auth_error is True
-    assert items[0]["title"] == "cached"
-
-
-@pytest.mark.asyncio
-async def test_sync_platform_items_non_retryable_error_skips_sleep(monkeypatch):
-    """NonRetryableError 不該觸發任何退避等待，直接跳過重試邏輯。"""
+async def test_fetch_with_retry_does_not_retry_non_retryable_error(monkeypatch):
+    """NonRetryableError（例如帳密/token 錯誤）不重試、不等待，抓一次失敗就直接放棄。"""
     sleep_calls = []
 
     async def fake_sleep(seconds):
         sleep_calls.append(seconds)
 
     monkeypatch.setattr("platforms.sync.asyncio.sleep", fake_sleep)
-
-    collection = FakeCollection()
-
-    async def fetch():
-        raise NonRetryableError("404 Not Found")
-
-    with pytest.raises(NonRetryableError):
-        await sync_platform_items(
-            collection=collection, user_id="u1", id_field="id", fetch_fn=fetch,
-            max_attempts=3, retry_delay_seconds=1.0,
-        )
-
-    assert sleep_calls == []
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("error, expected_auth_error", [
-    (NonRetryableError("401", error_code="REAUTH_REQUIRED"), True),
-    (NonRetryableError("403 rate limit", error_code="UPSTREAM_RATE_LIMITED"), False),
-    (NonRetryableError("400", error_code="INTERNAL_ERROR"), False),
-    (NonRetryableError("404", error_code="UPSTREAM_ERROR"), False),
-], ids=["reauth", "rate-limited", "bad-request", "github-404"])
-async def test_sync_auth_error_follows_error_code_not_retryability(error, expected_auth_error):
-    """AC5、AC6：不重試的錯誤只有憑證失效（REAUTH_REQUIRED）才標 auth_error；限流、400、404 不重試但不標。"""
-    collection = FakeCollection(initial=[
-        {"id": 1, "title": "cached", "user_id": "u1", "synced_at": datetime.now(timezone.utc)}
-    ])
     call_count = {"n": 0}
 
     async def fetch():
         call_count["n"] += 1
-        raise error
+        raise NonRetryableError("401 Unauthorized")
 
-    _, stale, _, auth_error = await sync_platform_items(
-        collection=collection, user_id="u1", id_field="id", fetch_fn=fetch,
-        max_attempts=2, retry_delay_seconds=0,
-    )
+    with pytest.raises(NonRetryableError):
+        await fetch_with_retry("u1", fetch, max_attempts=5, retry_delay_seconds=1.0)
 
     assert call_count["n"] == 1
-    assert stale is True
-    assert auth_error is expected_auth_error
+    assert sleep_calls == []

@@ -364,17 +364,16 @@ async def test_set_done_external_item_records_and_clears_completed_at():
 
 @pytest.mark.asyncio
 async def test_completed_at_of_external_item_survives_next_platform_sync():
-    """同步只 $set 平台回傳的欄位，使用者標記的完成時間不能被洗掉。"""
-    from platforms.sync import sync_platform_items
+    """AC49：同步只 $set 平台回傳的欄位，使用者標記的完成時間不能被洗掉。"""
+    from platforms.sync import upsert_items
 
     try:
         await db.moodle_assignments.insert_one({"id": "https://m/1", "user_id": "sched-user", "title": "作業"})
         await schedulable_items.set_done("sched-user", "moodle:https://m/1", True)
 
-        async def fetch():
-            return [{"id": "https://m/1", "title": "作業（改名）"}]
-
-        await sync_platform_items(db.moodle_assignments, "sched-user", "id", fetch)
+        await upsert_items(
+            db.moodle_assignments, "sched-user", "id", [{"id": "https://m/1", "title": "作業（改名）"}], datetime.now(timezone.utc),
+        )
 
         items = await schedulable_items.get_all_schedulable_items("sched-user")
         assert items[0]["title"] == "作業（改名）"

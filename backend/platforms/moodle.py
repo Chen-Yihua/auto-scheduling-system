@@ -166,11 +166,11 @@ class MoodlePlatform(PlatformAdapter):
     display_name = "Moodle"
 
     route_path = "/moodle/assignments"
+    sync_route_path = "/moodle/sync"
     response_model = MoodleAssignment
     
-    # 每次抓取都要開 Chrome 跑好幾秒，所以限流較嚴、快取較久
+    # 每次抓取都要開 Chrome 跑好幾秒，所以限流較嚴
     rate_limit = "5/minute"
-    cache_ttl_seconds = 15 * 60
 
     not_linked_detail = "No Moodle linked account"
     auth_failed_detail = "無法取得 Moodle 資料，請確認帳號密碼是否正確"

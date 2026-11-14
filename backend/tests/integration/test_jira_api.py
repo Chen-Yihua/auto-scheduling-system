@@ -5,16 +5,7 @@ from httpx import AsyncClient
 from httpx._transports.asgi import ASGITransport
 
 from main import app
-import platforms.router as platform_router
 from core import database
-from platforms.jira import JIRA
-
-
-class MockLinkedAccounts:
-    """模擬 db.linkedAccounts.find_one：使用者有綁定 Jira。"""
-
-    async def find_one(self, query):
-        return {"apiKey": "unused-because-sync-is-mocked", "domain": "fake.atlassian.net"}
 
 
 class EmptyLinkedAccounts:
@@ -25,48 +16,31 @@ class EmptyLinkedAccounts:
 
 
 @pytest.mark.asyncio
-async def test_get_jira_issues(monkeypatch, logged_in_user):
-    """GET /jira/issues 成功 → 200，回傳統一格式的 issue 清單，並用 X-Data-Stale 標示資料是最新的。"""
-    # 解密、抓資料、同步各自有 router/crud 測試，這裡只確認 HTTP 這一層，所以直接讓 sync 回傳結果
-    issue = {
-        "id": "1",
-        "key": "JIRA-1",
-        "title": "Test Issue 1",
-        "status": "In Progress",
-        "updated_at": "2024-01-01T00:00:00.000+0000",
-        "assignee": "User One",
-        "avatar": "",
-        "type": "Task",
-        "iconUrl": "",
-    }
+async def test_sync_jira_issues(monkeypatch, logged_in_user, clean_platform_data):
+    """AC24：POST /jira/sync 即時抓資料、寫進資料庫並回傳；回應統一格式，時間統一成 UTC。"""
+    await link_account("jira", {"apiKey": "jira-key", "domain": "fake.atlassian.net"})
+    await reset_items(database.db.jira_issues, None)
+    raw = {"id": "1", "key": "JIRA-1", "fields": {"summary": "Test Issue 1", "updated": "2024-01-01T00:00:00.000+0000"}}
 
-    async def mock_sync(user_id, fetch_fn):
-        return [issue], False, None, False
+    async def mock_fetch(credentials):
+        return [jira_platform.transform_jira_item(raw)]
 
-    monkeypatch.setattr(database.db, "linkedAccounts", MockLinkedAccounts())
-    monkeypatch.setattr(platform_router, "decrypt_secret", lambda value: "fake_api_key")
-    monkeypatch.setattr(JIRA, "sync_items", mock_sync)
+    monkeypatch.setattr(jira_platform.JIRA, "fetch_items", mock_fetch)
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        res = await ac.get("/jira/issues")
+        res = await ac.post("/jira/sync")
 
     assert res.status_code == status.HTTP_200_OK
-    # 排程欄位都是預設值，不列出
     body = res.json()
-    assert len(body) == 1
-    assert body[0]["id"] == issue["id"]
-    assert body[0]["status_category"] == ""
-    for key, value in issue.items():
-        if key != "updated_at":
-            assert body[0][key] == value
-    # AC19：資料庫裡舊的字串時間照樣讀得出來，回應統一成 UTC
+    assert [(i["id"], i["key"], i["title"]) for i in body] == [("1", "JIRA-1", "Test Issue 1")]
     assert body[0]["updated_at"] == "2024-01-01T00:00:00Z"
     assert res.headers["X-Data-Stale"] == "false"
+    assert await database.db.jira_issues.find_one({"user_id": logged_in_user["sub"], "id": "1"}) is not None
 
 
 @pytest.mark.asyncio
 async def test_get_jira_issues_when_account_not_linked(monkeypatch, logged_in_user):
-    """使用者還沒綁定 Jira → 409 NOT_LINKED 加說明，前端才能顯示「請先設定帳號」。"""
+    """AC21：使用者還沒綁定 Jira → GET 回 409 NOT_LINKED 加說明，前端才能顯示「請先設定帳號」。"""
     monkeypatch.setattr(database.db, "linkedAccounts", EmptyLinkedAccounts())
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
@@ -77,13 +51,15 @@ async def test_get_jira_issues_when_account_not_linked(monkeypatch, logged_in_us
 
 
 @pytest.mark.asyncio
-async def test_get_jira_issues_requires_login():
-    """沒帶登入 token → 被擋在門外（401/403），不能進到函式裡。"""
+@pytest.mark.parametrize("method, path", [("GET", "/jira/issues"), ("POST", "/jira/sync")])
+async def test_jira_endpoints_require_login(method, path):
+    """AC29：沒帶登入 token → GET 與 POST 都被擋在門外（401），不能進到函式裡。"""
     # 這個測試刻意不用 logged_in_user，所以請求是沒登入的
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        res = await ac.get("/jira/issues")
+        res = await ac.request(method, path)
 
-    assert res.status_code in (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN)
+    assert res.status_code == status.HTTP_401_UNAUTHORIZED
+    assert res.json()["error_code"] == "UNAUTHENTICATED"
 
 
 # ---------- 需求 5：Jira 每種錯誤回應的重試、狀態碼、error_code、X-Auth-Error ----------
@@ -120,14 +96,14 @@ JIRA_FETCH_CASES = [
 @pytest.mark.asyncio
 @pytest.mark.parametrize("outcome, attempts, status_code, error_code, _", JIRA_FETCH_CASES)
 async def test_jira_fetch_error_without_cached_data(monkeypatch, logged_in_user, outcome, attempts, status_code, error_code, _, clean_platform_data):
-    """AC1、AC9、AC10：沒有舊資料時，每種 Jira 錯誤的重試次數不變，狀態碼照 error_code 查表；detail 不帶 Jira 回應原文。"""
+    """AC28：POST /jira/sync 沒有舊資料時，每種 Jira 錯誤的重試次數不變，狀態碼照 error_code 查表；detail 不帶 Jira 回應原文。"""
     await link_account("jira", {"apiKey": "jira-key", "domain": "team.atlassian.net"})
     await reset_items(database.db.jira_issues, None)
     skip_retry_delay(monkeypatch)
     client = use_fake_http(monkeypatch, jira_platform, outcome)
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        res = await ac.get("/jira/issues")
+        res = await ac.post("/jira/sync")
 
     assert client.calls == attempts
     assert res.status_code == status_code
@@ -137,13 +113,13 @@ async def test_jira_fetch_error_without_cached_data(monkeypatch, logged_in_user,
 
 @pytest.mark.asyncio
 async def test_jira_fetch_404_asks_to_check_domain(monkeypatch, logged_in_user, clean_platform_data):
-    """AC16：Jira 404 是 REAUTH_REQUIRED，detail 請使用者確認網域或重新連結。"""
+    """AC28：POST 時 Jira 404 是 REAUTH_REQUIRED，detail 請使用者確認網域或重新連結。"""
     await link_account("jira", {"apiKey": "jira-key", "domain": "team.atlassian.net"})
     await reset_items(database.db.jira_issues, None)
     use_fake_http(monkeypatch, jira_platform, response(404))
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        res = await ac.get("/jira/issues")
+        res = await ac.post("/jira/sync")
 
     assert res.json() == {"detail": "Jira 網域可能已失效，請到設定確認或重新連結", "error_code": "REAUTH_REQUIRED"}
 
@@ -151,14 +127,14 @@ async def test_jira_fetch_404_asks_to_check_domain(monkeypatch, logged_in_user, 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("outcome, attempts, _, error_code, auth_error", JIRA_FETCH_CASES)
 async def test_jira_fetch_error_with_cached_data(monkeypatch, logged_in_user, outcome, attempts, _, error_code, auth_error, clean_platform_data):
-    """AC6：有舊資料時回舊資料；只有 401、403、404 設 X-Auth-Error。"""
+    """AC27：POST /jira/sync 失敗但有舊資料時回舊資料；只有 401、403、404 設 X-Auth-Error。"""
     await link_account("jira", {"apiKey": "jira-key", "domain": "team.atlassian.net"})
     await reset_items(database.db.jira_issues, OLD_JIRA_ITEM)
     skip_retry_delay(monkeypatch)
     client = use_fake_http(monkeypatch, jira_platform, outcome)
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        res = await ac.get("/jira/issues")
+        res = await ac.post("/jira/sync")
 
     assert client.calls == attempts
     assert res.status_code == status.HTTP_200_OK
@@ -175,14 +151,14 @@ async def test_jira_fetch_error_with_cached_data(monkeypatch, logged_in_user, ou
     pytest.param(response(429, {"Retry-After": "Wed, 21 Oct 2026 07:28:00 GMT"}), None, id="http-date"),
 ])
 async def test_jira_fetch_rate_limited_forwards_retry_after_seconds(monkeypatch, logged_in_user, outcome, retry_after, clean_platform_data):
-    """AC5：Jira 抓項目限流 → 503 UPSTREAM_RATE_LIMITED；帶秒數的 Retry-After 原樣帶上，沒帶或日期格式不帶。"""
+    """AC28：POST 時 Jira 抓項目限流 → 503 UPSTREAM_RATE_LIMITED；帶秒數的 Retry-After 原樣帶上，沒帶或日期格式不帶。"""
     await link_account("jira", {"apiKey": "jira-key", "domain": "team.atlassian.net"})
     await reset_items(database.db.jira_issues, None)
     skip_retry_delay(monkeypatch)
     use_fake_http(monkeypatch, jira_platform, outcome)
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        res = await ac.get("/jira/issues")
+        res = await ac.post("/jira/sync")
 
     assert res.status_code == 503
     assert res.json()["error_code"] == "UPSTREAM_RATE_LIMITED"

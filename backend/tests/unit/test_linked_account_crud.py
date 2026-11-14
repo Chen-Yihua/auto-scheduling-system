@@ -13,9 +13,23 @@ from crud.linked_account import (
 )
 from platforms.github import fetch_github_userinfo
 from platforms.jira import fetch_jira_userinfo
+from platforms.account_sync import SyncOutcome, SyncResult
 from platforms.sync import NonRetryableError
 from schemas.linked_account import LinkedAccountCreate
 import httpx
+
+
+@pytest.fixture(autouse=True)
+def no_sync_after_link(monkeypatch):
+    """連結後的同步由 integration/test_linked_account_sync_scenario.py 負責；這裡的 db 是假的，不能真的去抓平台。"""
+    calls = []
+
+    async def fake_sync(platform, clerk_id):
+        calls.append((platform.name, clerk_id))
+        return SyncResult(SyncOutcome.SUCCEEDED)
+
+    monkeypatch.setattr(linked_mod, "sync_account", fake_sync)
+    return calls
 
 
 # ========== 建立 Linked Account ==========

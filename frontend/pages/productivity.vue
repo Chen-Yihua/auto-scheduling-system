@@ -7,16 +7,38 @@ import LoginRequiredCard from '~/components/LoginRequiredCard.vue'
 import WeeklyBarChart from '~/components/productivity/WeeklyBarChart.vue'
 import ProgressList from '~/components/productivity/ProgressList.vue'
 import { formatDateTime, formatMinutes, formatPercent } from '~/utils/format'
+import { formatRelativeTime } from '~/utils/time'
 import { priorityLabel, sourceLabel } from '~/utils/labels'
 
 const { isSignedIn } = useUser()
 const { summary, loading, error, fetchSummary, startAutoRefresh, stopAutoRefresh } = useProductivity()
+const { keys, fetchKeys } = useLinkedAccount()
+
+// 統計只讀資料庫，讓使用者知道各平台的資料是什麼時候同步的；已連結（含憑證無法讀取）的平台才顯示
+const platformSyncTimes = computed(() =>
+  keys.value
+    .filter((k) => k.value || k.needsReauth)
+    .map((k) => ({
+      platform: k.platform,
+      label: sourceLabel(k.platform),
+      text: k.lastSyncedAt ? formatRelativeTime(k.lastSyncedAt) : '尚未同步',
+    })),
+)
+
+async function loadPlatformSyncTimes() {
+  try {
+    await fetchKeys()
+  } catch {
+    // 只是輔助資訊，讀不到就不顯示，不影響統計
+  }
+}
 
 // Clerk 初始化完成才知道有沒有登入，所以用 watch 而不是 onMounted
 watch(isSignedIn, (signedIn) => {
   if (signedIn) {
     fetchSummary()
     startAutoRefresh()
+    loadPlatformSyncTimes()
   } else {
     stopAutoRefresh()
   }
@@ -59,6 +81,11 @@ const priorityItems = computed(() =>
             統計時間：{{ formatDateTime(summary.generated_at) }}
           </p>
         </div>
+
+        <p v-if="platformSyncTimes.length" data-testid="platform-synced-at" class="text-xs text-gray-500 dark:text-gray-400 mb-4">
+          外部平台上次同步：
+          <span v-for="(p, i) in platformSyncTimes" :key="p.platform">{{ i ? '、' : '' }}{{ p.label }} {{ p.text }}</span>
+        </p>
 
         <p v-if="loading && !summary" class="text-sm text-gray-500 dark:text-gray-400">統計資料載入中，請稍候…</p>
 

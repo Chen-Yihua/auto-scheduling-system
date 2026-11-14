@@ -5,7 +5,6 @@ import httpx
 import pytest_asyncio
 
 import platforms.sync as platform_sync
-from core import cache
 from core.crypto import encrypt_secret
 from core.database import db
 
@@ -59,7 +58,6 @@ async def link_account(platform: str, fields: dict):
 
 
 async def reset_items(collection, old_item: dict | None):
-    cache._memory_store.clear()
     await collection.delete_many({"user_id": USER_ID})
     if old_item is not None:
         await collection.insert_one({**old_item, "user_id": USER_ID})
@@ -75,7 +73,6 @@ def response(status_code: int, headers: dict | None = None, json_body=None, cont
 async def clean_platform_data():
     """測試結束後清掉這裡放進 mongomock 的帳號與項目，其他測試才不會讀到。"""
     yield
-    cache._memory_store.clear()
     await db.linkedAccounts.delete_many({"clerk_id": USER_ID})
     for collection in (db.github_issues, db.jira_issues, db.moodle_assignments):
         await collection.delete_many({"user_id": USER_ID})

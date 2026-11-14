@@ -124,6 +124,7 @@ class JiraPlatform(PlatformAdapter):
     display_name = "Jira"
 
     route_path = "/jira/issues"
+    sync_route_path = "/jira/sync"
     response_model = JiraIssue
     rate_limit = "30/minute"
 

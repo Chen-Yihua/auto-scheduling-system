@@ -3,8 +3,6 @@ import pytest
 from unittest.mock import MagicMock
 
 import platforms.moodle as moodle_crud
-import platforms.base as platform_base
-from core import database
 from platforms.sync import NonRetryableError
 
 
@@ -310,30 +308,6 @@ def test_fetch_assignments_skips_course_with_no_assignments(monkeypatch):
 
     assert result == []
     driver.quit.assert_called_once()
-
-
-@pytest.mark.asyncio
-async def test_sync_moodle_assignments_delegates_to_sync_platform_items(monkeypatch):
-    """同步 Moodle 作業 → 用 adapter 預設的 sync，交給通用的同步流程處理，並原樣回傳它的結果。"""
-    # 檢查交給通用流程的參數（儲存位置、使用者 id、識別欄位、抓資料的函式）都正確；通用流程本身的邏輯不在這裡重測
-    captured = {}
-
-    async def fake_sync_platform_items(**kwargs):
-        captured.update(kwargs)
-        return ("issues", False, None, False)
-
-    monkeypatch.setattr(platform_base, "sync_platform_items", fake_sync_platform_items)
-
-    async def fetch_fn():
-        return []
-
-    result = await moodle_crud.MOODLE.sync_items("uid123", fetch_fn)
-
-    assert result == ("issues", False, None, False)
-    assert captured["collection"] is database.db.moodle_assignments
-    assert captured["user_id"] == "uid123"
-    assert captured["id_field"] == "id"
-    assert captured["fetch_fn"] is fetch_fn
 
 
 @pytest.mark.asyncio

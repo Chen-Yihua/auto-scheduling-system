@@ -20,20 +20,32 @@
 
 | 方法 | 路徑 | 登入 | Request | Response | 說明 |
 |---|---|---|---|---|---|
-| GET | `/users/me/linked-accounts/` | ✅ | — | `list[LinkedAccountOut]` | 憑證一律遮蔽 |
-| POST | `/users/me/linked-accounts/` | ✅ | `LinkedAccountCreate` | `LinkedAccountOut`（201） | 儲存前實際驗證憑證，平台拒絕憑證回 400 `INVALID_CREDENTIALS`；限流 10/分 |
-| PATCH | `/users/me/linked-accounts/{platform}` | ✅ | `LinkedAccountUpdate` | — | 改到憑證時重新驗證；沒有可更新的欄位回 400；限流 10/分 |
+| GET | `/users/me/linked-accounts/` | ✅ | — | `list[LinkedAccountOut]` | 憑證一律遮蔽；`last_synced_at` 是最近一次成功同步的時間，沒有同步紀錄時是 `null` |
+| POST | `/users/me/linked-accounts/` | ✅ | `LinkedAccountCreate` | `LinkedAccountOut`（201） | 儲存前實際驗證憑證，平台拒絕憑證回 400 `INVALID_CREDENTIALS`；成功後馬上同步該平台一次，同步失敗仍回 201；限流 10/分 |
+| PATCH | `/users/me/linked-accounts/{platform}` | ✅ | `LinkedAccountUpdate` | — | 改到憑證時重新驗證，驗證成功後馬上同步該平台一次，同步失敗仍回成功；沒有可更新的欄位回 400；限流 10/分 |
 | DELETE | `/users/me/linked-accounts/{platform}` | ✅ | — | — | |
 
 ## 外部平台項目
 
-每次呼叫都即時向平台同步；失敗時退回上次的資料，回應 header 帶 `X-Data-Stale`、`X-Auth-Error`、`X-Synced-At`。沒有舊資料時照失敗的原因回錯誤，例如尚未連結 409 `NOT_LINKED`、憑證失效 409 `REAUTH_REQUIRED`、平台故障 502、限流 503、逾時 504。
+外部平台每天台灣時間 12:00 定時同步一次（見下方「內部」）。
+
+- `GET` 只讀資料庫，不向平台抓資料。header `X-Synced-At` 是最近一次成功同步的時間（沒有同步紀錄時不帶）；最近一次同步因憑證失效失敗時帶 `X-Auth-Error: true`。尚未連結回 409 `NOT_LINKED`。
+- `POST`（立即同步）一律即時向平台抓資料、寫進資料庫：
+  - 成功時回傳最新的項目。
+  - 失敗時有舊資料就退回舊資料，並帶 `X-Data-Stale: true`；憑證失效另外帶 `X-Auth-Error: true`。
+  - 失敗時沒有舊資料，照失敗的原因回錯誤，例如尚未連結 409 `NOT_LINKED`、憑證失效或無法解密 409 `REAUTH_REQUIRED`、平台故障 502、限流 503、逾時 504。
+  - 等不到寫入鎖（同一個帳號的另一次同步正在寫入）時同樣退回舊資料；沒有舊資料回 503 `SERVICE_UNAVAILABLE`。
+  - 被比較晚開始的同步取代時，回資料庫目前的項目。
+- 這三個 header 跨來源也讀得到。
 
 | 方法 | 路徑 | 登入 | Response | 限流 |
 |---|---|---|---|---|
-| GET | `/github/issues` | ✅ | `list[GitHubIssue]` | 10/分 |
-| GET | `/jira/issues` | ✅ | `list[JiraIssue]` | 30/分 |
-| GET | `/moodle/assignments` | ✅ | `list[MoodleAssignment]` | 5/分（另有結果快取） |
+| GET | `/github/issues` | ✅ | `list[GitHubIssue]` | — |
+| GET | `/jira/issues` | ✅ | `list[JiraIssue]` | — |
+| GET | `/moodle/assignments` | ✅ | `list[MoodleAssignment]` | — |
+| POST | `/github/sync` | ✅ | `list[GitHubIssue]` | 10/分 |
+| POST | `/jira/sync` | ✅ | `list[JiraIssue]` | 30/分 |
+| POST | `/moodle/sync` | ✅ | `list[MoodleAssignment]` | 5/分 |
 
 ## 手動任務
 
@@ -79,6 +91,12 @@
 |---|---|---|---|
 | POST | `/webhook` | GitHub 簽章 | PR 摘要機器人；簽章錯誤或伺服器沒設定密鑰回 401；限流 30/分 |
 | GET | `/health` | — | 健康檢查 |
+
+## 內部
+
+| 方法 | 路徑 | 登入 | Response | 說明 |
+|---|---|---|---|---|
+| POST | `/internal/scheduled-sync` | 共用密鑰（`Authorization: Bearer <SCHEDULED_SYNC_SECRET>`） | `{"succeeded": n, "failed": n, "skipped": n}` | 由 GitHub Actions 每天呼叫（[ADR 0013](decisions/0013-scheduled-sync-trigger.md)），依序同步所有已連結的平台帳號；回應只帶筆數。密鑰錯誤、格式不對或伺服器沒設定密鑰回 401 `INVALID_SCHEDULER_TOKEN`；限流 5/時 |
 
 ## 前端 server route
 

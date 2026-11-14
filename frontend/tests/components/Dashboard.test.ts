@@ -26,6 +26,8 @@ vi.mock('@clerk/vue', () => ({
 
 // ---------- 需要授權的 composables：每個平台各一個 spy ----------
 const fetchItemsSpies = { github: vi.fn(), jira: vi.fn(), moodle: vi.fn() }
+const syncNowSpies = { github: vi.fn(), jira: vi.fn(), moodle: vi.fn() }
+const syncedAtByPlatform = { github: '2026-11-14T04:00:00Z', jira: '2026-11-13T04:00:00Z', moodle: null }
 const fetchGoogleCalendarsSpy = vi.fn()
 
 vi.mock('@/composables/usePlatformItems', () => ({
@@ -33,8 +35,10 @@ vi.mock('@/composables/usePlatformItems', () => ({
     items: ref([]),
     account: ref(undefined),
     fetchItems: fetchItemsSpies[platform],
+    syncNow: syncNowSpies[platform],
+    syncing: ref(false),
     isStale: ref(false),
-    syncedAt: ref(null),
+    syncedAt: ref(syncedAtByPlatform[platform]),
     authError: ref(false),
     notLinked: ref(false),
     needsReauth: ref(false),
@@ -67,6 +71,13 @@ const uiStubs = {
   JiraIssuesList: true,
   GoogleCalendarEmbed: true,
   UIcon: true,
+  UButton: defineComponent({
+    name: 'UButton',
+    emits: ['click'],
+    setup(_props, { slots, emit, attrs }) {
+      return () => h('button', { ...attrs, onClick: () => emit('click') }, slots.default?.())
+    },
+  }),
   // LoginRequiredCard 用到 UCard 的 header slot，要用會把 slot 畫出來的假元件
   UCard: defineComponent({
     setup(_props, { slots }) {
@@ -87,6 +98,7 @@ describe('dashboard/Dashboard.vue', () => {
     isSignedInRef.value = undefined
     stateStore.clear()
     Object.values(fetchItemsSpies).forEach(spy => spy.mockClear())
+    Object.values(syncNowSpies).forEach(spy => spy.mockReset())
     fetchGoogleCalendarsSpy.mockClear()
   })
 
@@ -228,5 +240,46 @@ describe('dashboard/Dashboard.vue', () => {
 
     expect(wrapper.findComponent({ name: 'GoogleCalendarEmbed' }).props('unavailable')).toBe(true)
     calendarUnavailableRef.value = false
+  })
+
+  describe('外部平台定時同步（issue #13）', () => {
+    it('AC30：打開儀表板只讀資料（fetchItems），不呼叫立即同步', async () => {
+      isSignedInRef.value = true
+      const wrapper = mount(Dashboard, { global: { stubs: uiStubs } })
+      activeWrapper = wrapper
+      await wrapper.vm.$nextTick()
+
+      Object.values(fetchItemsSpies).forEach(spy => expect(spy).toHaveBeenCalledTimes(1))
+      Object.values(syncNowSpies).forEach(spy => expect(spy).not.toHaveBeenCalled())
+    })
+
+    it('AC34、AC35：按「立即同步」同時呼叫三個平台的同步；其中一個失敗不影響其他平台', async () => {
+      isSignedInRef.value = true
+      syncNowSpies.jira.mockRejectedValueOnce(new Error('Jira 掛了'))
+      const wrapper = mount(Dashboard, { global: { stubs: uiStubs } })
+      activeWrapper = wrapper
+      await wrapper.vm.$nextTick()
+
+      await wrapper.find('[data-testid="dashboard-sync-now"]').trigger('click')
+
+      Object.values(syncNowSpies).forEach(spy => expect(spy).toHaveBeenCalledTimes(1))
+    })
+
+    it('AC36：三個平台的卡片各自收到自己的上次同步時間；卡片上不放立即同步按鈕', async () => {
+      isSignedInRef.value = true
+      const wrapper = mount(Dashboard, { global: { stubs: uiStubs } })
+      activeWrapper = wrapper
+      await wrapper.vm.$nextTick()
+
+      const cards = {
+        github: wrapper.findComponent({ name: 'GithubIssuesList' }),
+        jira: wrapper.findComponent({ name: 'JiraIssuesList' }),
+        moodle: wrapper.findComponent({ name: 'MoodleAssignmentsList' }),
+      }
+      for (const [platform, card] of Object.entries(cards)) {
+        expect(card.props('syncedAt'), platform).toBe(syncedAtByPlatform[platform as keyof typeof syncedAtByPlatform])
+        expect(card.props('onSync'), platform).toBeUndefined()
+      }
+    })
   })
 })

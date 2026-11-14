@@ -1,7 +1,10 @@
+"""外部平台抓資料的重試規則與失敗分類，以及項目怎麼寫進資料庫。一次同步的完整流程在 platforms/account_sync.py。"""
 import asyncio
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Awaitable, Callable, Optional
+
+import httpx
 
 logger = logging.getLogger(__name__)
 
@@ -46,42 +49,29 @@ class InvalidResponseError(Exception):
     """外部平台的回應無法解析（不是 JSON、少欄位），會重試；沒有舊資料時 router 回 UPSTREAM_ERROR。"""
 
 
-async def sync_platform_items(
-    collection,
+async def fetch_with_retry(
     user_id: str,
-    id_field: str,
     fetch_fn: Callable[[], Awaitable[list[dict]]],
     max_attempts: int = 2,
     retry_delay_seconds: float = 1.0,
-) -> tuple[list[dict], bool, Optional[datetime], bool]:
+) -> list[dict]:
     """
-    即時抓資料，失敗就以指數退避重試（若非 NonRetryableError 不重試），
-    最後仍失敗則退回 DB 裡上次成功的資料；沒有舊資料就把最後的例外往外拋。
-
-    回傳 (items, stale, synced_at, auth_error)：
-    stale 表示是退回的舊資料；auth_error 表示是憑證失效造成的退回。
+    即時抓資料，失敗就以指數退避重試（NonRetryableError 不重試）；
+    最後仍失敗就把最後一次的例外往外拋，由呼叫端決定要不要退回舊資料。
     """
-    last_exc: Optional[Exception] = None # 最後一次發生的異常
-    items: Optional[list[dict]] = None # 抓取到的資料
+    last_exc: Optional[Exception] = None
 
     for attempt in range(max_attempts):
         try:
-            # 執行抓取任務
-            items = await fetch_fn()
-            break
+            return await fetch_fn()
         except Exception as exc:
             last_exc = exc
-            is_last_attempt = attempt == max_attempts - 1 # 避免最後一次等待，直接跳出迴圈
-            is_retryable = not isinstance(exc, NonRetryableError)
-
-            if not is_retryable:
-                logger.info(
-                    "Non-retryable error for user_id=%s, skipping retry: %s",
-                    user_id, exc,
-                )
+            if isinstance(exc, NonRetryableError):
+                logger.info("Non-retryable error for user_id=%s, skipping retry: %s", user_id, exc)
                 break
 
-            if not is_last_attempt:
+            # 最後一次失敗不用再等
+            if attempt < max_attempts - 1:
                 delay = retry_delay_seconds * (2 ** attempt)
                 logger.warning(
                     "Live fetch failed for user_id=%s (attempt %d/%d), retrying in %.1fs",
@@ -90,40 +80,46 @@ async def sync_platform_items(
                 )
                 await asyncio.sleep(delay)
 
-    if items is None:
-        logger.warning(
-            "Live fetch failed for user_id=%s after %d attempt(s), falling back to last synced data",
-            user_id, max_attempts,
-            exc_info=last_exc,
-        )
-        last_synced = await collection.find({"user_id": user_id}).to_list(length=None)
-        if not last_synced: # 沒有舊資料可退，這時才把例外拋出去
-            assert last_exc is not None  # items 是 None 代表至少失敗過一次
-            raise last_exc
-        synced_at = last_synced[0].get("synced_at")
-        # _id 是 MongoDB 的 ObjectId，不能轉成 JSON，新抓的資料也沒有這個欄位，需移除 _id
-        for doc in last_synced:
-            doc.pop("_id", None)
-        auth_error = isinstance(last_exc, NonRetryableError) and last_exc.auth_error
-        return last_synced, True, synced_at, auth_error
+    assert last_exc is not None  # 沒有成功回傳代表至少失敗過一次
+    logger.warning("Live fetch failed for user_id=%s after %d attempt(s)", user_id, max_attempts, exc_info=last_exc)
+    raise last_exc
 
+
+def fetch_error_code(exc: Exception) -> str:
+    """抓取失敗的原因（ADR 0011 的 error_code），記成同步結果，也決定沒有舊資料時回哪種錯誤。"""
+    if isinstance(exc, (NonRetryableError, UpstreamError)):
+        return exc.error_code
+    if isinstance(exc, httpx.TimeoutException):
+        return "UPSTREAM_TIMEOUT"
+    if isinstance(exc, (httpx.HTTPError, InvalidResponseError)):
+        return "UPSTREAM_ERROR"
+    return "INTERNAL_ERROR"
+
+
+async def upsert_items(collection, user_id: str, id_field: str, items: list[dict], now: datetime) -> list[dict]:
+    """
+    寫入抓到的項目，回傳去掉重複 id 後的清單。
+    只 $set 平台回傳的欄位，使用者設定的排程欄位（priority、done 等）才不會被覆蓋。
+    """
     # 翻頁期間資料有變動時，同一個項目可能出現在兩頁；保留最後一次的內容
-    items = list({item[id_field]: item for item in items}.values())
-
-    now = datetime.now(timezone.utc)
-    for item in items:
-        doc = {**item, "user_id": user_id, "synced_at": now}
+    unique = list({item[id_field]: item for item in items}.values())
+    for item in unique:
         await collection.update_one(
             {"user_id": user_id, id_field: item[id_field]},
-            {"$set": doc},
+            {"$set": {**item, "user_id": user_id, "synced_at": now}},
             upsert=True,
         )
+    return unique
 
-    # 清掉平台上已不存在的項目，否則退回舊資料時會出現早就被刪掉的項目
-    current_ids = [item[id_field] for item in items]
-    await collection.delete_many({
-        "user_id": user_id,
-        id_field: {"$nin": current_ids},
-    })
 
-    return items, False, now, False
+async def delete_missing_items(collection, user_id: str, id_field: str, current_ids: list) -> None:
+    """清掉平台上已不存在的項目，否則畫面會一直顯示早就被刪掉的項目。"""
+    await collection.delete_many({"user_id": user_id, id_field: {"$nin": current_ids}})
+
+
+async def read_items(collection, user_id: str) -> list[dict]:
+    docs = await collection.find({"user_id": user_id}).to_list(length=None)
+    # _id 是 MongoDB 的 ObjectId，不能轉成 JSON
+    for doc in docs:
+        doc.pop("_id", None)
+    return docs

@@ -35,11 +35,12 @@ pytest                     # 全部（CI 用這個）
 
 | 模組 | crud / 邏輯 | router | api | 其他 |
 |---|---|---|---|---|
-| github / jira / moodle | ✅（`_platform`） | ✅（共用 `test_platform_router.py`） | ✅ | `test_platform_sync.py`、`test_platform_datetimes_scenario.py` |
+| github / jira / moodle | ✅（`_platform`） | ✅（共用 `test_platform_router.py`） | ✅（另有三個平台共用的 `test_platform_sync_api.py`） | `test_platform_sync.py`、`test_account_sync.py`（同步流程與同時同步）、`test_platform_datetimes_scenario.py` |
+| 定時同步 | — | ✅（`test_scheduled_sync_router.py`） | ✅ | |
 | google calendar | ✅（`test_google_tokens.py`） | ✅ | ✅ | `test_google_calendar_service.py`、`_client` |
 | schedule | ✅（`test_scheduler.py`） | ✅ | ✅ | `_scenario` |
 | analytics | ✅（`test_productivity.py`） | — | ✅ | `_scenario` |
-| linked account | ✅ | ✅ | ✅ | `_scenario`、`_secrets` |
+| linked account | ✅ | ✅ | ✅ | `_scenario`、`_secrets`、`test_linked_account_sync_scenario.py`（連結後同步） |
 | manual task | ✅ | ✅ | ✅ | `_scenario`、`test_task_inference.py` |
 | user | ✅ | — | ✅ | `test_user_webhook.py` |
 | PR review webhook | — | ✅（`test_pr_review_webhook.py`） | — | |

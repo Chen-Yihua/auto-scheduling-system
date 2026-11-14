@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import type { MoodleAssignment } from '~/types/moodle'
 import StaleDataBanner from './StaleDataBanner.vue'
+import SyncStatus from './SyncStatus.vue'
 const props = defineProps<{
   assignments: MoodleAssignment[]
   loading: boolean
@@ -15,6 +16,9 @@ const props = defineProps<{
   unavailable?: boolean
   // 不傳則顯示全部
   limit?: number
+  // 有傳才顯示「立即同步」按鈕
+  onSync?: () => void | Promise<void>
+  syncing?: boolean
 }>()
 
 const displayedAssignments = computed(() =>
@@ -36,6 +40,8 @@ const openAssignment = (url: string) => {
         <span class="text-lg font-semibold text-gray-900 dark:text-white">Moodle 作業</span>
       </div>
     </template>
+
+    <SyncStatus :synced-at="syncedAt ?? null" :on-sync="onSync" :syncing="syncing ?? false" />
 
     <StaleDataBanner :stale="isStale ?? false" :synced-at="syncedAt ?? null" :auth-error="authError ?? false" platform-label="Moodle" />
 

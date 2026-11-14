@@ -23,6 +23,11 @@ vi.mock('~/composables/useProductivity', () => ({
   }),
 }))
 
+// 帳號清單：已連結的平台才顯示上次同步時間（issue #13）
+const linkedKeysRef = vueRef<{ platform: string; value: string; needsReauth?: boolean; lastSyncedAt?: string | null }[]>([])
+const fetchKeysSpy = vi.fn()
+vi.stubGlobal('useLinkedAccount', () => ({ keys: linkedKeysRef, fetchKeys: fetchKeysSpy }))
+
 const UButtonStub = defineComponent({
   name: 'UButton',
   setup(_props, { slots, attrs }) {
@@ -70,6 +75,9 @@ describe('pages/productivity.vue', () => {
     fetchSummarySpy.mockReset()
     startAutoRefreshSpy.mockReset()
     stopAutoRefreshSpy.mockReset()
+    fetchKeysSpy.mockReset()
+    fetchKeysSpy.mockResolvedValue(undefined)
+    linkedKeysRef.value = []
   })
 
   it('登入後抓取統計，數字卡片顯示完成率、逾期、剩餘工時、準時率（沒有資料顯示「—」）', async () => {
@@ -211,5 +219,38 @@ describe('pages/productivity.vue', () => {
 
     expect(wrapper.find('[data-testid="error"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="kpi-completion"]').exists()).toBe(true)
+  })
+
+  describe('外部平台的上次同步時間（issue #13）', () => {
+    it('AC37：顯示已連結平台各自的上次同步時間，沒有同步紀錄的顯示「尚未同步」，沒連結的平台不顯示', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] }).setSystemTime(new Date('2026-11-14T07:00:00Z'))
+      summaryRef.value = fakeSummary()
+      linkedKeysRef.value = [
+        { platform: 'github', value: 'KEY****', lastSyncedAt: '2026-11-14T04:00:00Z' },
+        { platform: 'jira', value: '' },
+        { platform: 'moodle', value: 'PW****', lastSyncedAt: null },
+      ]
+      const wrapper = render()
+      await flushPromises()
+
+      expect(fetchKeysSpy).toHaveBeenCalled()
+      const status = wrapper.find('[data-testid="platform-synced-at"]').text()
+      expect(status).toContain('GitHub')
+      expect(status).toContain('3 小時前')
+      expect(status).toContain('Moodle')
+      expect(status).toContain('尚未同步')
+      expect(status).not.toContain('Jira')
+      vi.useRealTimers()
+    })
+
+    it('AC38：工作效率統計頁沒有立即同步按鈕', async () => {
+      summaryRef.value = fakeSummary()
+      linkedKeysRef.value = [{ platform: 'github', value: 'KEY****', lastSyncedAt: '2026-11-14T04:00:00Z' }]
+      const wrapper = render()
+      await flushPromises()
+
+      expect(wrapper.text()).not.toContain('立即同步')
+      expect(wrapper.find('[data-testid="sync-now"]').exists()).toBe(false)
+    })
   })
 })

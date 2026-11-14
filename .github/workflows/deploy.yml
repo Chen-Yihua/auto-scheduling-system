@@ -83,7 +83,8 @@ jobs:
 
   deploy-backend:
     needs: backend-test
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    # if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: false
     runs-on: ubuntu-latest
     # id-token：向 GCP 用 Workload Identity Federation 換短期憑證，不在 repo 存 service account 金鑰
     permissions:

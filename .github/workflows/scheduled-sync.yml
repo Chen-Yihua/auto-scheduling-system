@@ -2,9 +2,9 @@
 name: Scheduled Sync
 
 on:
-  schedule:
-    # UTC 04:00 = 台灣時間 12:00；GitHub 的排程常延遲 5 到 30 分鐘
-    - cron: "0 4 * * *"
+  # schedule:
+  #   # UTC 04:00 = 台灣時間 12:00；GitHub 的排程常延遲 5 到 30 分鐘
+  #   - cron: "0 4 * * *"
   workflow_dispatch:
 
 permissions: {}

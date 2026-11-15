@@ -143,8 +143,8 @@ async def test_manual_task_ai_inference_fills_missing_fields_and_survives_full_l
 @pytest.mark.asyncio
 async def test_staged_task_delete_parent_fails_midway_then_retry_succeeds(monkeypatch):
     """
-    AC28 / AC31 / AC33：建立主任務加兩個階段 → 兩個階段都排入行事曆 → 刪除主任務時第二個事件刪失敗（502），
-    任務全部保留 → 重試時第一個事件已經不存在（404）當作成功，主任務和子任務都刪掉。
+    issue-30 AC3、AC13、AC14：建立主任務加兩個階段 → 兩個階段都排入行事曆 → 刪除主任務時第二個事件刪失敗（502），
+    任務全部保留、第一個事件不復原 → 重試後主任務和子任務都刪掉。
     """
     import httpx
     from core.crypto import encrypt_secret
@@ -211,6 +211,65 @@ async def test_staged_task_delete_parent_fails_midway_then_retry_succeeds(monkey
             retry = await ac.delete(f"/manual-tasks/{parent_id}")
             assert retry.status_code == 200, retry.text
             assert remaining_events == set()
+            assert (await ac.get("/manual-tasks/me")).json() == []
+    finally:
+        await db.googleCalendarTokens.delete_many({"_id": SCENARIO_USER["sub"]})
+        await db.manual_tasks.delete_many({"user_id": SCENARIO_USER["sub"]})
+
+
+@pytest.mark.asyncio
+async def test_issue30_ac13_ac14_plain_task_delete_fails_on_google_then_retry_succeeds(monkeypatch):
+    """
+    issue-30 AC13、AC14、AC9：已排入行事曆的一般任務，刪除時 Google 刪掉事件後回 503 → 502 提示重試、任務還在
+    → 重試時事件已經不存在（404）當作成功，任務刪掉。
+    """
+    import httpx
+    from core.crypto import encrypt_secret
+    import services.google_calendar as calendar_service
+
+    await db.googleCalendarTokens.update_one(
+        {"_id": SCENARIO_USER["sub"]},
+        {"$set": {"access_token": encrypt_secret("token")}},
+        upsert=True,
+    )
+
+    async def fake_calendar_list(access_token):
+        return [{"id": "primary", "primary": True}]
+
+    remaining_events = {"ev-plain"}
+    attempts = []
+
+    def _error(status):
+        request = httpx.Request("DELETE", "https://example.com")
+        return httpx.HTTPStatusError("error", request=request, response=httpx.Response(status, request=request))
+
+    async def fake_delete_event(access_token, calendar_id, event_id):
+        attempts.append(event_id)
+        if event_id not in remaining_events:
+            raise _error(404)
+        # Google 已經刪掉事件，回應卻是 503：重試時才會走到 404
+        remaining_events.discard(event_id)
+        raise _error(503)
+
+    monkeypatch.setattr(calendar_service, "fetch_google_calendar_list", fake_calendar_list)
+    monkeypatch.setattr(calendar_service, "delete_calendar_event", fake_delete_event)
+
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+            created = (await ac.post("/manual-tasks/", json={
+                "title": "情境測試：已排入的一般任務", "description": "", "status": "To Do", "priority": "High", "duration": 60,
+            })).json()
+            task_id = created["id"]
+            await db.manual_tasks.update_one({"_id": task_id}, {"$set": {"calendar_event_id": "ev-plain"}})
+
+            first_try = await ac.delete(f"/manual-tasks/{task_id}")
+            assert first_try.status_code == 502
+            assert "重試" in first_try.json()["detail"]
+            assert [t["id"] for t in (await ac.get("/manual-tasks/me")).json()] == [task_id]
+
+            retry = await ac.delete(f"/manual-tasks/{task_id}")
+            assert retry.status_code == 200, retry.text
+            assert attempts == ["ev-plain", "ev-plain"]
             assert (await ac.get("/manual-tasks/me")).json() == []
     finally:
         await db.googleCalendarTokens.delete_many({"_id": SCENARIO_USER["sub"]})

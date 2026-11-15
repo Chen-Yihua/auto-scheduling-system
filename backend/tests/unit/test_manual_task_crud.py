@@ -230,21 +230,24 @@ async def test_delete_manual_task_by_id_raises_404_when_nothing_deleted(monkeypa
 
     monkeypatch.setattr(manual_task_crud.db.manual_tasks, "delete_one", mock_delete_one)
 
-    with pytest.raises(NotFoundError) as exc_info:
-        await manual_task_crud.delete_manual_task_by_id("task1")
-
+    with pytest.raises(NotFoundError):
+        await manual_task_crud.delete_manual_task_by_id("task1", "alice")
 
 
 @pytest.mark.asyncio
-async def test_delete_manual_task_by_id_succeeds(monkeypatch):
-    """刪除任務成功 → 不出錯。"""
-    async def mock_delete_one(query):
-        return type("Result", (), {"deleted_count": 1})()
+async def test_delete_manual_task_by_id_only_deletes_own_task():
+    """issue-30 AC18：刪除時同時以 user_id 篩選 → 別人的任務刪不到（404），仍在資料庫裡。"""
+    collection = manual_task_crud.db.manual_tasks
+    await collection.insert_one({"_id": "issue30-own", "user_id": "alice", "title": "Alice 的任務"})
+    try:
+        with pytest.raises(NotFoundError):
+            await manual_task_crud.delete_manual_task_by_id("issue30-own", "bob")
+        assert await collection.find_one({"_id": "issue30-own"}) is not None
 
-    monkeypatch.setattr(manual_task_crud.db.manual_tasks, "delete_one", mock_delete_one)
-
-    # 不丟例外就代表成功
-    await manual_task_crud.delete_manual_task_by_id("task1")
+        await manual_task_crud.delete_manual_task_by_id("issue30-own", "alice")
+        assert await collection.find_one({"_id": "issue30-own"}) is None
+    finally:
+        await collection.delete_many({"_id": "issue30-own"})
 
 
 # ---------- 建立任務：Idempotency-Key ----------
@@ -617,17 +620,33 @@ async def test_ac39_conversion_sets_parent_fields_and_first_subtask_in_one_updat
 
 
 @pytest.mark.asyncio
-async def test_ac39_ac30_deleting_when_only_one_stage_remains_is_rejected():
-    """AC39 / AC30：刪除當下主任務只剩一個子任務（另一個請求先刪了）→ 400，至少保留 1 個。"""
+async def test_issue30_ac6_removing_the_only_stage_from_the_list_is_refused():
+    """issue-30 AC6、AC17：主任務只剩這個子任務時，「移出清單」不成立（回 False、不改資料），改由刪整個主任務處理。"""
     await _insert_chain("ac39f", 1)
     try:
         only = await manual_task_crud.get_manual_task_by_id("ac39f-s1", "alice")
-        with pytest.raises(InvalidRequestError):
-            await manual_task_crud.delete_subtask(only)
+        assert await manual_task_crud.delete_subtask(only) is False
 
         assert await _visible_titles("ac39f-p") == ["階段1"]
     finally:
         await manual_task_crud.db.manual_tasks.delete_many({"_id": {"$regex": "^ac39f-"}})
+
+
+@pytest.mark.asyncio
+async def test_issue30_ac6_deleting_parent_through_only_subtask_requires_list_to_be_exactly_it():
+    """issue-30 AC6、AC24：清單正好只有這個子任務才刪整個主任務；清單還有別的子任務時回 False、什麼都不刪。"""
+    await _insert_chain("i30only", 1)
+    await _insert_chain("i30two", 2)
+    try:
+        two_s1 = await manual_task_crud.get_manual_task_by_id("i30two-s1", "alice")
+        assert await manual_task_crud.delete_parent_if_only_subtask(two_s1) is False
+        assert await _visible_titles("i30two-p") == ["階段1", "階段2"]
+
+        only = await manual_task_crud.get_manual_task_by_id("i30only-s1", "alice")
+        assert await manual_task_crud.delete_parent_if_only_subtask(only) is True
+        assert await manual_task_crud.db.manual_tasks.count_documents({"_id": {"$regex": "^i30only-"}}) == 0
+    finally:
+        await manual_task_crud.db.manual_tasks.delete_many({"_id": {"$regex": "^i30(only|two)-"}})
 
 
 @pytest.mark.asyncio

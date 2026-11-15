@@ -1,6 +1,6 @@
 # 連續刪除最後兩個階段時，被擋下的階段不再被排程
 
-- 狀態：已核准
+- 狀態：部分被 [刪除任務時一起刪除 Google Calendar 上的事件](issue-30-delete-calendar-events.md) 取代（AC1、AC2）
 - issue：[#37](https://github.com/Chen-Yihua/auto-scheduling-system/issues/37)
 - PR：[#43](https://github.com/Chen-Yihua/auto-scheduling-system/pull/43)
 

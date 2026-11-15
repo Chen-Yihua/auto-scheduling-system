@@ -56,7 +56,7 @@
 | GET | `/manual-tasks/me` | ✅ | — | `list[ManualTaskOut]` | 沒有任務回空陣列；主任務和子任務各一筆，主任務的狀態與進度依子任務計算 |
 | GET | `/manual-tasks/{task_id}` | ✅ | — | `ManualTaskOut` | 只能查自己的 |
 | PUT | `/manual-tasks/{task_id}` | ✅ | `ManualTaskUpdate` | `ManualTaskOut` | 部分更新，沒帶的欄位保留原值；主任務只能改標題、描述、截止日；違反階段之間的優先序或截止日限制回 400 |
-| DELETE | `/manual-tasks/{task_id}` | ✅ | — | — | 主任務連同子任務一起刪；主任務和子任務會先刪掉子任務在 Google Calendar 上還沒開始的事件（需要時 Google 授權失效回 409 `REAUTH_REQUIRED`、Google 暫時失敗回 502／503／504，任務都保留）；主任務只剩一個子任務時不能刪那個子任務（400） |
+| DELETE | `/manual-tasks/{task_id}` | ✅ | — | — | 主任務連同子任務一起刪；三種任務都先刪掉要刪的任務在 Google Calendar 上的事件（不管事件時間），成功後才刪任務（需要時 Google 授權失效或沒有連接回 409 `REAUTH_REQUIRED`、Google 暫時失敗回 502／503／504，任務都保留）；刪掉主任務唯一的子任務時整個主任務一起刪；同時有其他請求在改同一個主任務的階段、試了 3 輪仍不成立時回 409 `REQUEST_IN_PROGRESS` |
 
 ## 排程
 

@@ -265,12 +265,20 @@ async def test_update_manual_task_refuses_other_users_task_and_leaves_it_unchang
 
 
 @pytest.mark.asyncio
-async def test_delete_manual_task_refuses_other_users_task_and_keeps_it():
-    """使用者 bob 刪除 alice 的任務 → 404，任務仍在資料庫裡。"""
+async def test_delete_manual_task_refuses_other_users_task_and_keeps_it(monkeypatch):
+    """issue-30 AC18：使用者 bob 刪除 alice 已排入行事曆的任務 → 404，不呼叫 Google 刪事件，任務仍在資料庫裡。"""
     await _insert_alice_task("router-t3")
+    await db.manual_tasks.update_one({"_id": "router-t3"}, {"$set": {"calendar_event_id": "ev-alice"}})
+    event_calls = []
+
+    async def record_delete(user_id, event_ids):
+        event_calls.append((user_id, list(event_ids)))
+
+    monkeypatch.setattr(manual_task_router, "delete_calendar_events", record_delete)
     try:
         with pytest.raises(NotFoundError):
             await manual_task_router.delete_manual_task("router-t3", clerk_user={"sub": "bob"})
+        assert event_calls == []
         assert await db.manual_tasks.find_one({"_id": "router-t3"}) is not None
     finally:
         await _remove_task("router-t3")
@@ -311,9 +319,8 @@ def deleted_events(monkeypatch):
 
     async def fake_delete(user_id, event_ids):
         calls.append(list(event_ids))
-        return list(event_ids)
 
-    monkeypatch.setattr(manual_task_router, "delete_upcoming_calendar_events", fake_delete)
+    monkeypatch.setattr(manual_task_router, "delete_calendar_events", fake_delete)
     return calls
 
 
@@ -635,102 +642,29 @@ async def test_ac38_update_cannot_change_parent_id_stage_or_is_parent(stage_db, 
     assert not {"parent_id", "stage", "is_parent", "subtask_ids"} & set(ManualTaskUpdate.model_fields)
 
 
-# ---------- 刪除 ----------
+# ---------- 刪除（issue-30：任務和它在 Google Calendar 上的事件一起刪）----------
 
-@pytest.mark.asyncio
-async def test_ac28_deleting_parent_deletes_subtasks_and_their_calendar_events(stage_db, subtask_infer_calls, deleted_events):
-    """AC28：刪除主任務 → 主任務和所有子任務都刪掉，並要求刪除子任務的行事曆事件。"""
-    parent = await _three_stage_parent(subtask_infer_calls)
-    await db.manual_tasks.update_one({"_id": parent["subtasks"][0]["id"]}, {"$set": {"calendar_event_id": "ev-1"}})
-    await db.manual_tasks.update_one({"_id": parent["subtasks"][2]["id"]}, {"$set": {"calendar_event_id": "ev-3"}})
-
-    await manual_task_router.delete_manual_task(parent["id"], clerk_user=STAGE_USER)
-
-    assert deleted_events == [["ev-1", "ev-3"]]
-    assert await stage_db.count_documents({"user_id": STAGE_USER["sub"]}) == 0
+import asyncio
+from core.error_codes import status_for_error_code
+from core.errors import ConflictError, ExternalServiceError, ReauthRequiredError
+from pymongo.errors import PyMongoError
+import services.google_calendar as calendar_service
 
 
-@pytest.mark.asyncio
-async def test_ac29_deleting_subtask_deletes_its_event_and_renumbers(stage_db, subtask_infer_calls, deleted_events):
-    """AC29：刪除子任務 → 刪它的行事曆事件，後面的階段往前遞補。"""
-    parent = await _three_stage_parent(subtask_infer_calls)
-    stage2_id = parent["subtasks"][1]["id"]
-    await db.manual_tasks.update_one({"_id": stage2_id}, {"$set": {"calendar_event_id": "ev-2"}})
-
-    await manual_task_router.delete_manual_task(stage2_id, clerk_user=STAGE_USER)
-
-    assert deleted_events == [["ev-2"]]
-    assert [(d["title"], d["stage"]) for d in await _stage_docs(parent["id"])] == [("階段1", 1), ("階段3", 2)]
+async def _delete(task_id):
+    return await manual_task_router.delete_manual_task(task_id, clerk_user=STAGE_USER)
 
 
-@pytest.mark.asyncio
-async def test_ac30_last_remaining_subtask_cannot_be_deleted(stage_db, subtask_infer_calls, deleted_events):
-    """AC30：主任務只剩一個子任務 → 這個子任務不能刪，400 並提示改刪主任務。"""
-    parent = await _create_staged([_sub("唯一", priority="Low", duration=30)])
-
-    with pytest.raises(InvalidRequestError) as exc_info:
-        await manual_task_router.delete_manual_task(parent["subtasks"][0]["id"], clerk_user=STAGE_USER)
-
-    assert "主任務" in exc_info.value.detail
-    assert deleted_events == []
-    assert len(await _stage_docs(parent["id"])) == 1
+async def _schedule(task_id, event_id):
+    await db.manual_tasks.update_one({"_id": task_id}, {"$set": {"calendar_event_id": event_id}})
 
 
-@pytest.mark.asyncio
-async def test_ac32_ac33_tasks_are_kept_when_deleting_events_fails(stage_db, subtask_infer_calls, monkeypatch):
-    """AC32 / AC33：刪事件失敗（要求重新連接或 Google 暫時失敗）→ 例外往外丟，主任務和子任務全部保留。"""
-    from core.errors import ExternalServiceError
-
-    parent = await _three_stage_parent(subtask_infer_calls)
-    await db.manual_tasks.update_one({"_id": parent["subtasks"][0]["id"]}, {"$set": {"calendar_event_id": "ev-1"}})
-
-    async def failing_delete(user_id, event_ids):
-        raise ExternalServiceError("刪除 Google Calendar 事件失敗，請重試")
-
-    monkeypatch.setattr(manual_task_router, "delete_upcoming_calendar_events", failing_delete)
-
-    with pytest.raises(ExternalServiceError):
-        await manual_task_router.delete_manual_task(parent["id"], clerk_user=STAGE_USER)
-
-    assert await stage_db.count_documents({"user_id": STAGE_USER["sub"]}) == 4
+async def _doc(task_id):
+    return await db.manual_tasks.find_one({"_id": task_id})
 
 
-@pytest.mark.asyncio
-async def test_ac34_deleting_plain_task_does_not_touch_calendar(stage_db, deleted_events):
-    """AC34：一般任務的刪除行為不變，就算有行事曆事件也不刪。"""
-    await _insert_plain_task("plain-3", calendar_event_id="ev-plain")
-
-    await manual_task_router.delete_manual_task("plain-3", clerk_user=STAGE_USER)
-
-    assert deleted_events == []
-    assert await db.manual_tasks.find_one({"_id": "plain-3"}) is None
-
-
-async def _delete_concurrently(monkeypatch, subtask_ids):
-    """同時刪除多個子任務，回傳 (成功的 id, 被擋下的 id, 被擋下的例外)。"""
-    import asyncio
-
-    real_delete_subtask = manual_task_router.manual_task_crud.delete_subtask
-    arrived = []
-    all_arrived = asyncio.Event()
-
-    # 等所有請求都通過數量預檢、刪完事件才一起寫入，重現同時送出的時序
-    async def delete_subtask_after_all_arrive(subtask):
-        arrived.append(subtask["id"])
-        if len(arrived) == len(subtask_ids):
-            all_arrived.set()
-        await asyncio.wait_for(all_arrived.wait(), timeout=1)
-        await real_delete_subtask(subtask)
-
-    monkeypatch.setattr(manual_task_router.manual_task_crud, "delete_subtask", delete_subtask_after_all_arrive)
-    results = await asyncio.gather(
-        *(manual_task_router.delete_manual_task(i, clerk_user=STAGE_USER) for i in subtask_ids),
-        return_exceptions=True,
-    )
-    succeeded = [i for i, r in zip(subtask_ids, results) if isinstance(r, dict)]
-    blocked = [(i, r) for i, r in zip(subtask_ids, results) if isinstance(r, InvalidRequestError)]
-    assert len(succeeded) + len(blocked) == len(subtask_ids), results
-    return succeeded, [i for i, _ in blocked], [r for _, r in blocked]
+async def _user_doc_count():
+    return await db.manual_tasks.count_documents({"user_id": STAGE_USER["sub"]})
 
 
 async def _two_stage_parent(event_ids=(None, None)):
@@ -738,90 +672,333 @@ async def _two_stage_parent(event_ids=(None, None)):
     ids = [s["id"] for s in parent["subtasks"]]
     for subtask_id, event_id in zip(ids, event_ids):
         if event_id:
-            await db.manual_tasks.update_one({"_id": subtask_id}, {"$set": {"calendar_event_id": event_id}})
+            await _schedule(subtask_id, event_id)
     return parent, ids
 
 
-@pytest.mark.asyncio
-async def test_issue37_ac1_concurrent_deletes_of_last_two_stages_leave_one_that_is_still_scheduled(
-    stage_db, subtask_infer_calls, deleted_events, monkeypatch,
-):
-    """AC1：剩兩個階段且都有未來事件時同時刪兩個 → 一個成功、一個 400（提示不變），留下的階段之後產生排程會被排入。"""
-    from crud.schedulable_items import SOURCE_MANUAL, get_all_schedulable_items, make_composite_id
-    from services.scheduler import build_schedule_suggestion
+async def _one_stage_parent(event_id=None):
+    parent = await _create_staged([_sub("唯一", priority="Low", duration=30)])
+    only_id = parent["subtasks"][0]["id"]
+    if event_id:
+        await _schedule(only_id, event_id)
+    return parent, only_id
 
+
+def _not_connected(monkeypatch):
+    async def not_connected(clerk_id):
+        return False
+
+    monkeypatch.setattr(calendar_service, "is_google_calendar_connected", not_connected)
+
+
+async def _delete_together(monkeypatch, task_ids):
+    """
+    同時送出多個刪除：每個請求都通過擁有者檢查、刪完事件後，才一起進入資料庫步驟。
+    回傳 (每個請求的結果或例外, 每個請求要求刪除的事件)。
+    """
+    deleted = []
+    all_arrived = asyncio.Event()
+
+    async def delete_after_all_arrive(user_id, event_ids):
+        deleted.append(list(event_ids))
+        if len(deleted) == len(task_ids):
+            all_arrived.set()
+        await asyncio.wait_for(all_arrived.wait(), timeout=1)
+
+    monkeypatch.setattr(manual_task_router, "delete_calendar_events", delete_after_all_arrive)
+    results = await asyncio.gather(*(_delete(i) for i in task_ids), return_exceptions=True)
+    return results, deleted
+
+
+def _succeeded_or_not_found(results):
+    return all(isinstance(r, dict) or isinstance(r, NotFoundError) for r in results)
+
+
+@pytest.mark.asyncio
+async def test_issue30_ac1_deleting_scheduled_plain_task_deletes_its_event(stage_db, deleted_events):
+    """issue-30 AC1：已排入行事曆的一般任務 → 刪掉它的事件，任務也刪掉（取代 staged-tasks AC34：一般任務不動行事曆）。"""
+    await _insert_plain_task("plain-3", calendar_event_id="ev-plain")
+
+    await _delete("plain-3")
+
+    assert deleted_events == [["ev-plain"]]
+    assert await _doc("plain-3") is None
+
+
+@pytest.mark.asyncio
+async def test_issue30_ac2_ac3_deleting_parent_deletes_all_subtasks_and_their_events(stage_db, subtask_infer_calls, deleted_events):
+    """issue-30 AC2、AC3：刪除主任務 → 主任務和所有子任務都刪掉，每個子任務的行事曆事件都要求刪除。"""
+    parent = await _three_stage_parent(subtask_infer_calls)
+    await _schedule(parent["subtasks"][0]["id"], "ev-1")
+    await _schedule(parent["subtasks"][2]["id"], "ev-3")
+
+    await _delete(parent["id"])
+
+    assert deleted_events == [["ev-1", "ev-3"]]
+    assert await _user_doc_count() == 0
+
+
+@pytest.mark.asyncio
+async def test_issue30_ac4_ac5_deleting_one_of_three_subtasks_only_touches_it_and_renumbers(stage_db, subtask_infer_calls, deleted_events):
+    """issue-30 AC4、AC5：三個子任務刪階段 2 → 只刪它和它的事件，其他子任務的欄位與事件不變，階段 3 往前遞補成 2。"""
+    parent = await _three_stage_parent(subtask_infer_calls)
+    ids = [s["id"] for s in parent["subtasks"]]
+    for subtask_id, event_id in zip(ids, ("ev-1", "ev-2", "ev-3")):
+        await _schedule(subtask_id, event_id)
+    others_before = [await _doc(ids[0]), await _doc(ids[2])]
+
+    await _delete(ids[1])
+
+    assert deleted_events == [["ev-2"]]
+    assert [await _doc(ids[0]), await _doc(ids[2])] == others_before
+    assert [(d["title"], d["stage"]) for d in await _stage_docs(parent["id"])] == [("階段1", 1), ("階段3", 2)]
+
+
+@pytest.mark.asyncio
+async def test_issue30_ac5_deleting_one_of_two_subtasks_keeps_parent_with_one_subtask(stage_db, subtask_infer_calls, deleted_events):
+    """issue-30 AC5：兩個子任務刪階段 1 → 剩一個子任務的主任務照常存在，階段 2 遞補成 1。"""
     parent, ids = await _two_stage_parent(("ev-1", "ev-2"))
 
-    succeeded, blocked, errors = await _delete_concurrently(monkeypatch, ids)
+    await _delete(ids[0])
 
-    assert (len(succeeded), len(blocked)) == (1, 1)
-    assert errors[0].detail == manual_task_router.manual_task_crud.LAST_SUBTASK_DETAIL
-    assert [d["id"] for d in await _stage_docs(parent["id"])] == blocked
-
-    tasks = await get_all_schedulable_items(STAGE_USER["sub"])
-    free_slots = [{"start": "2030-01-10T09:00:00Z", "end": "2030-01-10T12:00:00Z"}]
-    suggestion = build_schedule_suggestion(tasks, free_slots, now=datetime(2030, 1, 1, tzinfo=timezone.utc))
-    assert [s["task_id"] for s in suggestion["scheduled"]] == [make_composite_id(SOURCE_MANUAL, blocked[0])]
+    assert deleted_events == [["ev-1"]]
+    assert (await _doc(parent["id"]))["is_parent"] is True
+    assert [(d["title"], d["stage"], d["calendar_event_id"]) for d in await _stage_docs(parent["id"])] == [("階段2", 1, "ev-2")]
 
 
 @pytest.mark.asyncio
-async def test_issue37_ac2_blocked_subtask_whose_event_was_deleted_has_event_id_cleared(
-    stage_db, subtask_infer_calls, deleted_events, monkeypatch,
-):
-    """AC2：被「只剩一個」擋下、但這次請求已刪掉它的事件 → calendar_event_id 清成 None，否則永遠不會再被排入。"""
+async def test_issue30_ac6_deleting_only_subtask_deletes_whole_parent(stage_db, subtask_infer_calls, deleted_events):
+    """issue-30 AC6：刪主任務唯一的子任務 → 主任務、子任務、事件都刪掉，回應成功（取代 staged-tasks AC30：不能刪）。"""
+    parent, only_id = await _one_stage_parent("ev-only")
+
+    result = await _delete(only_id)
+
+    assert result == {"task ID": only_id, "deleted": True}
+    assert deleted_events == [["ev-only"]]
+    assert await _user_doc_count() == 0
+
+
+@pytest.mark.asyncio
+async def test_issue30_ac7_event_of_completed_subtask_is_deleted_too(stage_db, subtask_infer_calls, deleted_events):
+    """issue-30 AC7：子任務已經完成，它的行事曆事件也要刪。"""
+    _, ids = await _two_stage_parent(("ev-1", "ev-2"))
+    await db.manual_tasks.update_one({"_id": ids[0]}, {"$set": {"status": "Done"}})
+
+    await _delete(ids[0])
+
+    assert deleted_events == [["ev-1"]]
+    assert await _doc(ids[0]) is None
+
+
+@pytest.mark.asyncio
+async def test_issue30_ac8_tasks_without_events_are_deleted_without_google_connection(stage_db, subtask_infer_calls, monkeypatch):
+    """issue-30 AC8：沒排入行事曆的一般任務、子任務都沒排入的主任務 → 沒有連接 Google 也刪得掉。"""
+    _not_connected(monkeypatch)
+    await _insert_plain_task("plain-unscheduled")
+    parent, _ = await _two_stage_parent()
+
+    await _delete("plain-unscheduled")
+    await _delete(parent["id"])
+
+    assert await _user_doc_count() == 0
+
+
+@pytest.mark.asyncio
+async def test_issue30_ac10_scheduled_plain_task_without_connection_is_kept_and_reauth_required(stage_db, monkeypatch):
+    """issue-30 AC10：已排入的一般任務，但沒有連接 Google → 409 REAUTH_REQUIRED，任務還在。"""
+    _not_connected(monkeypatch)
+    await _insert_plain_task("plain-scheduled", calendar_event_id="ev-plain")
+
+    with pytest.raises(ReauthRequiredError) as exc_info:
+        await _delete("plain-scheduled")
+
+    assert status_for_error_code(exc_info.value.error_code) == 409
+    assert exc_info.value.error_code == "REAUTH_REQUIRED"
+    assert await _doc("plain-scheduled") is not None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("error", [
+    ReauthRequiredError("Google 授權已失效，請重新連接 Google Calendar"),
+    ExternalServiceError("刪除 Google Calendar 事件失敗，請稍後重試"),
+], ids=["reauth", "google-failure"])
+@pytest.mark.parametrize("target", ["plain", "parent", "one-of-two", "only-subtask"])
+async def test_issue30_ac10_ac13_ac16_failed_event_deletion_keeps_every_task(stage_db, subtask_infer_calls, monkeypatch, error, target):
+    """issue-30 AC10、AC13、AC16：刪事件失敗（要求重新連接或 Google 暫時失敗）→ 例外往外丟，所有任務都保留，可以重試。"""
+    await _insert_plain_task("plain-kept", calendar_event_id="ev-plain")
+    two_parent, two_ids = await _two_stage_parent(("ev-1", "ev-2"))
+    one_parent, only_id = await _one_stage_parent("ev-only")
+    count_before = await _user_doc_count()
+    stages_before = [await _stage_docs(two_parent["id"]), await _stage_docs(one_parent["id"])]
+
+    async def failing_delete(user_id, event_ids):
+        raise error
+
+    monkeypatch.setattr(manual_task_router, "delete_calendar_events", failing_delete)
+    task_id = {"plain": "plain-kept", "parent": two_parent["id"], "one-of-two": two_ids[0], "only-subtask": only_id}[target]
+
+    with pytest.raises(type(error)):
+        await _delete(task_id)
+
+    assert await _user_doc_count() == count_before
+    assert [await _stage_docs(two_parent["id"]), await _stage_docs(one_parent["id"])] == stages_before
+
+
+@pytest.mark.asyncio
+async def test_issue30_ac17_concurrent_deletes_of_last_two_subtasks_delete_whole_parent(stage_db, subtask_infer_calls, monkeypatch):
+    """
+    issue-30 AC17：同時刪最後兩個子任務 → 和依序刪除一樣，主任務、兩個子任務與兩個事件都刪掉，兩個請求都成功
+    （取代 issue-37 AC1、AC2：後到的回 400、被擋下的清事件 id）。
+    """
     _, ids = await _two_stage_parent(("ev-1", "ev-2"))
 
-    _, blocked, _ = await _delete_concurrently(monkeypatch, ids)
+    results, deleted = await _delete_together(monkeypatch, ids)
 
-    assert (await db.manual_tasks.find_one({"_id": blocked[0]}))["calendar_event_id"] is None
-
-
-@pytest.mark.asyncio
-async def test_issue37_ac2_blocked_subtask_whose_started_event_was_kept_keeps_event_id(
-    stage_db, subtask_infer_calls, monkeypatch,
-):
-    """AC2：被擋下、事件已經開始或過去而保留 → calendar_event_id 維持原值，和 Google 上的事件一致。"""
-    _, ids = await _two_stage_parent(("ev-1", "ev-2"))
-
-    async def keep_started_events(user_id, event_ids):
-        return []
-
-    monkeypatch.setattr(manual_task_router, "delete_upcoming_calendar_events", keep_started_events)
-
-    _, blocked, _ = await _delete_concurrently(monkeypatch, ids)
-
-    expected = {ids[0]: "ev-1", ids[1]: "ev-2"}[blocked[0]]
-    assert (await db.manual_tasks.find_one({"_id": blocked[0]}))["calendar_event_id"] == expected
+    assert all(isinstance(r, dict) for r in results), results
+    assert sorted(deleted) == [["ev-1"], ["ev-2"]]
+    assert await _user_doc_count() == 0
 
 
 @pytest.mark.asyncio
-async def test_issue37_ac2_blocked_subtask_without_event_is_unchanged(
-    stage_db, subtask_infer_calls, deleted_events, monkeypatch,
-):
-    """AC2：被擋下的子任務原本就沒有事件 → calendar_event_id 不變。"""
-    _, ids = await _two_stage_parent()
-    before = {i: (await db.manual_tasks.find_one({"_id": i})).get("calendar_event_id") for i in ids}
+async def test_issue30_ac24_same_subtask_deleted_twice_among_three_only_deletes_it(stage_db, subtask_infer_calls, monkeypatch):
+    """issue-30 AC24：三個子任務時同一個子任務同時刪兩次 → 只刪它和它的事件，其他子任務不變，兩個請求回成功或 404。"""
+    parent = await _three_stage_parent(subtask_infer_calls)
+    ids = [s["id"] for s in parent["subtasks"]]
+    for subtask_id, event_id in zip(ids, ("ev-1", "ev-2", "ev-3")):
+        await _schedule(subtask_id, event_id)
+    others_before = [await _doc(ids[0]), await _doc(ids[2])]
 
-    _, blocked, _ = await _delete_concurrently(monkeypatch, ids)
+    results, deleted = await _delete_together(monkeypatch, [ids[1], ids[1]])
 
-    assert (await db.manual_tasks.find_one({"_id": blocked[0]})).get("calendar_event_id") == before[blocked[0]]
+    assert _succeeded_or_not_found(results), results
+    assert deleted == [["ev-2"], ["ev-2"]]
+    assert [await _doc(ids[0]), await _doc(ids[2])] == others_before
+    assert [d["title"] for d in await _stage_docs(parent["id"])] == ["階段1", "階段3"]
 
 
 @pytest.mark.asyncio
-async def test_issue37_ac2_clearing_event_id_does_not_touch_other_users_task(
-    stage_db, subtask_infer_calls, deleted_events, monkeypatch,
-):
-    """AC2：被擋下時只改這個使用者的這個子任務；別的使用者記著同一個事件 id 的任務不受影響。"""
-    _, ids = await _two_stage_parent(("ev-1", "ev-2"))
-    for i, event_id in enumerate(("ev-1", "ev-2")):
-        await db.manual_tasks.insert_one({"_id": f"issue37-other-{i}", "user_id": "someone_else", "calendar_event_id": event_id})
-    try:
-        await _delete_concurrently(monkeypatch, ids)
+async def test_issue30_ac24_same_subtask_deleted_twice_among_two_keeps_the_other(stage_db, subtask_infer_calls, monkeypatch):
+    """issue-30 AC24：兩個子任務時同一個子任務同時刪兩次 → 另一個子任務和它的事件還在，主任務照常存在。"""
+    parent, ids = await _two_stage_parent(("ev-1", "ev-2"))
+    other_before = await _doc(ids[1])
 
-        others = await db.manual_tasks.find({"user_id": "someone_else"}).sort("_id").to_list(length=None)
-        assert [d["calendar_event_id"] for d in others] == ["ev-1", "ev-2"]
-    finally:
-        await db.manual_tasks.delete_many({"user_id": "someone_else"})
+    results, deleted = await _delete_together(monkeypatch, [ids[0], ids[0]])
+
+    assert _succeeded_or_not_found(results), results
+    assert deleted == [["ev-1"], ["ev-1"]]
+    assert await _doc(ids[1]) == other_before
+    assert [d["id"] for d in await _stage_docs(parent["id"])] == [ids[1]]
+
+
+@pytest.mark.asyncio
+async def test_issue30_ac24_second_request_arriving_after_subtask_was_removed_keeps_the_other(stage_db, subtask_infer_calls, monkeypatch):
+    """
+    issue-30 AC24：兩個子任務 A、B，同時刪 A 兩次，第二個請求通過擁有者檢查後、進入資料庫步驟前，第一個請求已經刪掉 A
+    → 第二個請求回成功，不會把 B 當成唯一的子任務刪掉整個主任務；B 和它的事件還在。
+    """
+    parent, ids = await _two_stage_parent(("ev-1", "ev-2"))
+    other_before = await _doc(ids[1])
+    deleted = []
+
+    async def let_first_request_finish(user_id, event_ids):
+        deleted.append(list(event_ids))
+        if len(deleted) == 1:
+            # 這裡是第二個請求：讓第一個請求整個跑完，才回到第二個請求的資料庫步驟
+            assert await _delete(ids[0]) == {"task ID": ids[0], "deleted": True}
+
+    monkeypatch.setattr(manual_task_router, "delete_calendar_events", let_first_request_finish)
+
+    assert await _delete(ids[0]) == {"task ID": ids[0], "deleted": True}
+
+    assert deleted == [["ev-1"], ["ev-1"]]
+    assert await _doc(ids[1]) == other_before
+    assert [d["id"] for d in await _stage_docs(parent["id"])] == [ids[1]]
+
+
+@pytest.mark.asyncio
+async def test_issue30_ac24_retry_after_document_deletion_failed_returns_404(stage_db, subtask_infer_calls, deleted_events, monkeypatch):
+    """issue-30 AC24：子任務已移出清單、刪文件時資料庫失敗 → 重試回 404，其他子任務和主任務不變。"""
+    parent, ids = await _two_stage_parent(("ev-1", "ev-2"))
+    other_before = await _doc(ids[1])
+    collection = manual_task_router.manual_task_crud.db.manual_tasks
+    real_delete_one = collection.delete_one
+    failures = []
+
+    async def fail_once(*args, **kwargs):
+        if not failures:
+            failures.append(True)
+            raise PyMongoError("資料庫暫時失敗")
+        return await real_delete_one(*args, **kwargs)
+
+    monkeypatch.setattr(collection, "delete_one", fail_once)
+
+    with pytest.raises(PyMongoError):
+        await _delete(ids[0])
+    with pytest.raises(NotFoundError):
+        await _delete(ids[0])
+
+    assert await _doc(ids[1]) == other_before
+    assert [d["id"] for d in await _stage_docs(parent["id"])] == [ids[1]]
+
+
+@pytest.mark.asyncio
+async def test_issue30_ac24_stage_added_meanwhile_retries_and_deletes_only_this_subtask(stage_db, subtask_infer_calls, deleted_events, monkeypatch):
+    """
+    issue-30 AC24：刪唯一的子任務 A 時，另一個請求剛好新增了階段 B（「至少 2 個」和「只剩它」都不成立）
+    → 重新讀取後再試，只刪 A；主任務和 B 都還在。
+    """
+    parent, only_id = await _one_stage_parent("ev-only")
+    crud = manual_task_router.manual_task_crud
+    real_delete_parent = crud.delete_parent_if_only_subtask
+    added = []
+
+    async def stage_added_just_before(subtask):
+        if not added:
+            new_stage = {"_id": "issue30-added", "user_id": STAGE_USER["sub"], "title": "新增的", "status": "To Do", "priority": "Low", "duration": 30}
+            await crud.insert_subtask(parent["id"], STAGE_USER["sub"], new_stage, position=2)
+            added.append(True)
+        return await real_delete_parent(subtask)
+
+    monkeypatch.setattr(crud, "delete_parent_if_only_subtask", stage_added_just_before)
+
+    assert await _delete(only_id) == {"task ID": only_id, "deleted": True}
+
+    assert await _doc(only_id) is None
+    assert [d["id"] for d in await _stage_docs(parent["id"])] == ["issue30-added"]
+
+
+@pytest.mark.asyncio
+async def test_issue30_ac24_stages_keep_changing_for_three_rounds_returns_request_in_progress(stage_db, subtask_infer_calls, deleted_events, monkeypatch):
+    """issue-30 AC24：三輪都碰上別的請求在改階段（兩個條件都不成立、它還在清單裡）→ 409 REQUEST_IN_PROGRESS，所有子任務都還在。"""
+    parent, ids = await _two_stage_parent(("ev-1", "ev-2"))
+    crud = manual_task_router.manual_task_crud
+    attempts = []
+
+    async def never_matches(subtask):
+        attempts.append(subtask["id"])
+        return False
+
+    monkeypatch.setattr(crud, "delete_subtask", never_matches)
+    monkeypatch.setattr(crud, "delete_parent_if_only_subtask", never_matches)
+
+    with pytest.raises(ConflictError) as exc_info:
+        await _delete(ids[0])
+
+    assert exc_info.value.error_code == "REQUEST_IN_PROGRESS"
+    assert len(attempts) == 6
+    assert [d["id"] for d in await _stage_docs(parent["id"])] == ids
+
+
+@pytest.mark.asyncio
+async def test_issue30_ac24_only_subtask_deleted_twice_deletes_whole_parent(stage_db, subtask_infer_calls, monkeypatch):
+    """issue-30 AC24、AC6：只有一個子任務時同時刪它兩次 → 主任務、子任務、事件都不在，兩個請求回成功或 404。"""
+    _, only_id = await _one_stage_parent("ev-only")
+
+    results, deleted = await _delete_together(monkeypatch, [only_id, only_id])
+
+    assert _succeeded_or_not_found(results), results
+    assert deleted == [["ev-only"], ["ev-only"]]
+    assert await _user_doc_count() == 0
 
 
 @pytest.mark.asyncio

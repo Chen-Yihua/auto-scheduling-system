@@ -727,23 +727,90 @@ describe('useTaskForm', () => {
     expect(Object.keys(body).sort()).toEqual(['description', 'due_date', 'title'])
   })
 
-  it('AC28：刪除主任務的確認文字寫出會一起刪除幾個子任務', async () => {
-    const ctx = useTaskForm()
-    const confirmSpy = vi.fn((_message: string) => false)
+  // ---------- 刪除任務（#30）----------
+  const confirmWith = (answer: boolean) => {
+    const confirmSpy = vi.fn((_message: string) => answer)
     vi.stubGlobal('window', Object.assign({}, globalThis.window, { confirm: confirmSpy }))
-    ctx.all_tasks.value = [parentTask(3), subtaskOf('p1', 1), subtaskOf('p1', 2), subtaskOf('p1', 3)]
+    return confirmSpy
+  }
+  const reauthError = () => Object.assign(httpError(409, 'Google 授權已失效，請重新連接 Google Calendar'), {
+    data: { error_code: 'REAUTH_REQUIRED', detail: 'Google 授權已失效，請重新連接 Google Calendar' },
+  })
+  const subtaskOnlyOf = (parentId: string) => [{ ...parentTask(1), id: parentId, title: '期末報告' }, subtaskOf(parentId, 1)]
+  const twoSubtasksOf = (parentId: string) => [{ ...parentTask(2), id: parentId, title: '期末報告' }, subtaskOf(parentId, 1), subtaskOf(parentId, 2)]
+  const lastStageMessage = '你確定要刪除「階段1」這個階段嗎？\n這是最後一個階段，刪除後「期末報告」整個任務都會刪除。'
+
+  it('#30 AC19：刪除主任務的確認文字依階段順序列出子任務名稱', async () => {
+    const ctx = useTaskForm()
+    const confirmSpy = confirmWith(false)
+    // 故意打亂順序，確認文字要照階段排
+    ctx.all_tasks.value = [parentTask(3), subtaskOf('p1', 3), subtaskOf('p1', 1), subtaskOf('p1', 2)]
     ctx.startEditTask(ctx.all_tasks.value[0]!)
 
     await ctx.onDelete()
 
-    expect(confirmSpy.mock.calls[0]![0]).toContain('3 個子任務')
+    expect(confirmSpy.mock.calls[0]![0]).toBe(
+      '這個主任務和底下 3 個子任務會一起刪除：\n1. 階段1\n2. 階段2\n3. 階段3\n確定嗎？',
+    )
   })
 
-  it('AC32、AC8：刪除時 Google 授權失效（REAUTH_REQUIRED）→ 沿用重新連接 Google Calendar 的提示', async () => {
+  it('#30 AC20：從主任務的階段列表刪唯一的子任務，確認文字說明整個任務都會刪除，成功後關閉編輯視窗', async () => {
     const ctx = useTaskForm()
-    vi.stubGlobal('window', Object.assign({}, globalThis.window, { confirm: () => true }))
-    ctx.startEditTask(parentTask())
-    fetchSpy.mockRejectedValueOnce(Object.assign(httpError(401, 'Google 授權已失效，請重新連接 Google Calendar'), { data: { error_code: 'REAUTH_REQUIRED', detail: 'Google 授權已失效，請重新連接 Google Calendar' } }))
+    const confirmSpy = confirmWith(true)
+    ctx.all_tasks.value = subtaskOnlyOf('p1')
+    ctx.startEditTask(ctx.all_tasks.value[0]!)
+    fetchSpy.mockResolvedValueOnce({ deleted: true })
+
+    await ctx.onDeleteSubtask(ctx.all_tasks.value[1]!)
+
+    expect(confirmSpy.mock.calls[0]![0]).toBe(lastStageMessage)
+    expect(fetchSpy).toHaveBeenCalledWith('http://localhost:8000/manual-tasks/p1-s1', expect.objectContaining({ method: 'DELETE' }))
+    expect(ctx.showEditModal.value).toBe(false)
+  })
+
+  it('#30 AC20：從子任務自己的編輯視窗刪唯一的子任務，確認文字和從階段列表刪一樣，成功後關閉編輯視窗', async () => {
+    const ctx = useTaskForm()
+    const confirmSpy = confirmWith(true)
+    ctx.all_tasks.value = subtaskOnlyOf('p1')
+    ctx.startEditTask(ctx.all_tasks.value[1]!)
+    fetchSpy.mockResolvedValueOnce({ deleted: true })
+
+    await ctx.onDelete()
+
+    expect(confirmSpy.mock.calls[0]![0]).toBe(lastStageMessage)
+    expect(ctx.showEditModal.value).toBe(false)
+  })
+
+  it('#30 AC21：刪除一般任務的確認文字維持原樣', async () => {
+    const ctx = useTaskForm()
+    const confirmSpy = confirmWith(false)
+    ctx.all_tasks.value = [fakeTask('plain')]
+    ctx.startEditTask(ctx.all_tasks.value[0]!)
+
+    await ctx.onDelete()
+
+    expect(confirmSpy.mock.calls[0]![0]).toBe('你確定要刪除這個任務嗎？')
+  })
+
+  it('#30 AC22：主任務有兩個以上子任務時，從階段列表或子任務自己的編輯視窗刪除，確認文字都是「你確定要刪除「名稱」這個階段嗎？」', async () => {
+    const ctx = useTaskForm()
+    const confirmSpy = confirmWith(false)
+    ctx.all_tasks.value = twoSubtasksOf('p1')
+
+    ctx.startEditTask(ctx.all_tasks.value[0]!)
+    await ctx.onDeleteSubtask(ctx.all_tasks.value[1]!)
+    ctx.startEditTask(ctx.all_tasks.value[1]!)
+    await ctx.onDelete()
+
+    expect(confirmSpy.mock.calls.map((c) => c[0])).toEqual(['你確定要刪除「階段1」這個階段嗎？', '你確定要刪除「階段1」這個階段嗎？'])
+  })
+
+  it.each(['plain', 'parent'])('#30 AC12：刪除%s任務收到 REAUTH_REQUIRED → 沿用重新連接 Google Calendar 的提示', async (kind) => {
+    const ctx = useTaskForm()
+    confirmWith(true)
+    ctx.all_tasks.value = kind === 'plain' ? [fakeTask('plain')] : twoSubtasksOf('p1')
+    ctx.startEditTask(ctx.all_tasks.value[0]!)
+    fetchSpy.mockRejectedValueOnce(reauthError())
     vi.spyOn(console, 'error').mockImplementationOnce(() => {})
 
     await ctx.onDelete()
@@ -752,19 +819,48 @@ describe('useTaskForm', () => {
       title: 'Google Calendar 授權已失效',
       actions: [expect.objectContaining({ label: '重新連接 Google Calendar' })],
     }))
+    expect(ctx.showEditModal.value).toBe(true)
   })
 
-  it('AC30 / AC33：刪除子任務被擋或刪事件失敗時，顯示後端說明的原因（例如改刪主任務、請重試）', async () => {
+  it('#30 AC13：刪除子任務時 Google 暫時失敗，顯示後端說明的原因（請重試）', async () => {
     const ctx = useTaskForm()
-    vi.stubGlobal('window', Object.assign({}, globalThis.window, { confirm: () => true }))
-    fetchSpy.mockRejectedValueOnce(httpError(400, '主任務只剩這一個子任務，不能刪除；要刪除請改刪主任務'))
+    confirmWith(true)
+    ctx.all_tasks.value = twoSubtasksOf('p1')
+    fetchSpy.mockRejectedValueOnce(httpError(502, '刪除 Google Calendar 事件失敗，請稍後重試'))
     vi.spyOn(console, 'error').mockImplementationOnce(() => {})
 
-    await ctx.onDeleteSubtask(subtaskOf('p1', 1))
+    await ctx.onDeleteSubtask(ctx.all_tasks.value[1]!)
 
     expect(fetchSpy).toHaveBeenCalledWith('http://localhost:8000/manual-tasks/p1-s1', expect.objectContaining({ method: 'DELETE' }))
     expect(toastSpy.add).toHaveBeenCalledWith(expect.objectContaining({
-      color: 'error', description: '主任務只剩這一個子任務，不能刪除；要刪除請改刪主任務',
+      color: 'error', description: '刪除 Google Calendar 事件失敗，請稍後重試',
     }))
+  })
+
+  it.each([
+    ['成功', (finish: { resolve: (v: unknown) => void; reject: (e: Error) => void }) => finish.resolve({ deleted: true })],
+    ['失敗', (finish: { resolve: (v: unknown) => void; reject: (e: Error) => void }) => finish.reject(new Error('刪除失敗'))],
+  ])('#30 AC23：一個刪除送出中時 deleting 為 true，任務本身與階段的刪除都不會再送出；刪除%s後恢復', async (_, settle) => {
+    const ctx = useTaskForm()
+    confirmWith(true)
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    ctx.all_tasks.value = twoSubtasksOf('p1')
+    ctx.startEditTask(ctx.all_tasks.value[0]!)
+    let finish!: { resolve: (v: unknown) => void; reject: (e: Error) => void }
+    fetchSpy.mockImplementationOnce(() => new Promise((resolve, reject) => { finish = { resolve, reject } }))
+
+    const pending = ctx.onDeleteSubtask(ctx.all_tasks.value[1]!)
+    await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1))
+    expect(ctx.deleting.value).toBe(true)
+
+    await ctx.onDeleteSubtask(ctx.all_tasks.value[2]!)
+    await ctx.onDelete()
+    expect(fetchSpy).toHaveBeenCalledTimes(1)
+
+    settle(finish)
+    await pending
+
+    expect(ctx.deleting.value).toBe(false)
+    vi.mocked(console.error).mockRestore()
   })
 })

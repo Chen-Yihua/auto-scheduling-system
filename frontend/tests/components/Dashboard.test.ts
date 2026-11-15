@@ -48,10 +48,12 @@ vi.mock('@/composables/usePlatformItems', () => ({
 }))
 
 const calendarReloadTokenRef = ref(0)
-const needsReconnectRef = ref(false)
 const calendarUnavailableRef = ref(false)
+const awaitingFirstResultRef = ref(false)
 vi.stubGlobal('useGoogleCalendar', () => ({
-  needsReconnect: needsReconnectRef,
+  // 已移除的欄位：留著才驗得出 Dashboard 有沒有停止把它傳給卡片
+  needsReconnect: ref(true),
+  awaitingFirstResult: awaitingFirstResultRef,
   unavailable: calendarUnavailableRef,
   calendarIds: ref([]),
   primaryCalendarId: ref(''),
@@ -201,20 +203,32 @@ describe('dashboard/Dashboard.vue', () => {
     }
   })
 
-  it('AC1：Google 授權失效時，行事曆卡片收到 needsReconnect，改顯示「授權已失效」', async () => {
+  it('AC2：沒連上時，行事曆卡片收到 connect=false，不再收到 needsReconnect', async () => {
     isSignedInRef.value = true
-    needsReconnectRef.value = false
     const wrapper = mount(Dashboard, { global: { stubs: uiStubs } })
     activeWrapper = wrapper
     await wrapper.vm.$nextTick()
 
     const calendar = wrapper.findComponent({ name: 'GoogleCalendarEmbed' })
-    expect(calendar.props('needsReconnect')).toBe(false)
+    expect(calendar.props('connect')).toBe(false)
+    expect(calendar.props('needsReconnect')).toBeUndefined()
+    expect(calendar.attributes('needs-reconnect')).toBeUndefined()
+    expect(calendar.attributes('needsreconnect')).toBeUndefined()
+  })
 
-    needsReconnectRef.value = true
+  it('AC7：第一次查詢還沒有結果的狀態傳給行事曆卡片', async () => {
+    isSignedInRef.value = true
+    awaitingFirstResultRef.value = true
+    const wrapper = mount(Dashboard, { global: { stubs: uiStubs } })
+    activeWrapper = wrapper
     await wrapper.vm.$nextTick()
 
-    expect(calendar.props('needsReconnect')).toBe(true)
+    const calendar = wrapper.findComponent({ name: 'GoogleCalendarEmbed' })
+    expect(calendar.props('loading')).toBe(true)
+
+    awaitingFirstResultRef.value = false
+    await wrapper.vm.$nextTick()
+    expect(calendar.props('loading')).toBe(false)
   })
 
   it('Google 授權完成（連接成功次數 +1）時，重新查一次行事曆，卡片才會換成行事曆', async () => {

@@ -1,6 +1,6 @@
 # Google Calendar 授權失效時跳兩個「稍後再試」toast，沒有引導重新連接
 
-- 狀態：已完成
+- 狀態：部分被 [issue-104-calendar-card-states.md](issue-104-calendar-card-states.md) 取代（AC1、AC3、AC4）
 - issue：無（開發者直接回報）
 - PR：#22
 

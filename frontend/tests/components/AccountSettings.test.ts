@@ -24,7 +24,8 @@ vi.mock('~/composables/useLinkedAccount', () => ({
 }))
 
 const isConnected = ref(false)
-const needsReconnect = ref(false)
+// 已移除的欄位：留著才驗得出按鈕文字有沒有停止看它
+const needsReconnect = ref(true)
 vi.mock('~/composables/useGoogleCalendar', () => ({
   useGoogleCalendar: () => ({ isConnected, needsReconnect, fetchGoogleCalendars: vi.fn() }),
 }))
@@ -45,18 +46,9 @@ describe('AccountSettings.vue', () => {
   beforeEach(() => {
     keys.value = []
     isConnected.value = false
-    needsReconnect.value = false
   })
 
-  it('AC1(2)：Google 授權已失效（needsReconnect）→ 按鈕是「重新連接 Google Calendar」，沒有「已連接」標記', () => {
-    needsReconnect.value = true
-    const wrapper = mount(AccountSettings, { global: { stubs } })
-
-    expect(wrapper.text()).toContain('重新連接 Google Calendar')
-    expect(wrapper.find('.badge').exists()).toBe(false)
-  })
-
-  it('AC20(3)：從沒成功取得狀態（沒有已知的結果）→ 不顯示「已連接」，按鈕維持「連接 Google Calendar」', () => {
+  it('AC12、AC20(3)：沒連上（從沒連接過、授權失效、或沒有已知的結果），即使 composable 仍回傳 needsReconnect →  按鈕是「連接 Google Calendar」，沒有「已連接」標記', () => {
     const wrapper = mount(AccountSettings, { global: { stubs } })
 
     expect(wrapper.find('.badge').exists()).toBe(false)
@@ -64,10 +56,11 @@ describe('AccountSettings.vue', () => {
     expect(wrapper.text()).not.toContain('重新連接')
   })
 
-  it('AC1(1)：已連接時顯示「已連接」標記', () => {
+  it('AC13：已連接 → 按鈕是「重新連接 Google Calendar」，旁邊有「已連接」標記', () => {
     isConnected.value = true
     const wrapper = mount(AccountSettings, { global: { stubs } })
 
+    expect(wrapper.find('button').text()).toBe('重新連接 Google Calendar')
     expect(wrapper.find('.badge').text()).toContain('已連接')
   })
 

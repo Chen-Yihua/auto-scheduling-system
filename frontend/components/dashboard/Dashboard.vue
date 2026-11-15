@@ -17,7 +17,7 @@ import MoodleAssignmentsList from '~/components/platforms/MoodleAssignmentsList.
 const github = reactive(usePlatformItems('github'));
 const jira = reactive(usePlatformItems('jira'));
 const moodle = reactive(usePlatformItems('moodle'));
-const { calendarIds, primaryCalendarId, fetchGoogleCalendars, isConnected, needsReconnect, unavailable: calendarUnavailable, calendarReloadToken } = useGoogleCalendar();
+const { calendarIds, primaryCalendarId, fetchGoogleCalendars, isConnected, awaitingFirstResult: calendarLoading, unavailable: calendarUnavailable, calendarReloadToken } = useGoogleCalendar();
 const { isSignedIn } = useUser();
 const { connecting: googleConnecting, connectedCount: googleConnectedCount } = useGoogleCalendarAuth();
 
@@ -98,7 +98,7 @@ watch(googleConnectedCount, () => {
           :calendar-ids="calendarIds"
           :connect="isConnected"
           :connecting="googleConnecting"
-          :needs-reconnect="needsReconnect"
+          :loading="calendarLoading"
           :unavailable="calendarUnavailable"
           :reload-token="calendarReloadToken"
         />

@@ -11,7 +11,16 @@ const UCardStub = defineComponent({
   },
 })
 
-const uiStubs = { UIcon: true, UCard: UCardStub }
+const USkeletonStub = defineComponent({
+  name: 'USkeleton',
+  setup() {
+    return () => h('div', { class: 'u-skeleton-stub' })
+  },
+})
+
+const uiStubs = { UIcon: true, UCard: UCardStub, USkeleton: USkeletonStub }
+
+const NEEDS_CONNECT_TEXT = 'Google Calendar 未連接或授權已失效，請前往 帳號設定 連接。'
 
 describe('GoogleCalendarEmbed.vue', () => {
   it('connect=true 且有 calendarIds 時會嵌入 Google Calendar iframe', () => {
@@ -29,45 +38,71 @@ describe('GoogleCalendarEmbed.vue', () => {
     expect(html).toContain('ctz=Asia%2FTaipei')
   })
 
-  it('connect=false 時顯示未連線提示文字且無 iframe', () => {
+  it('AC1、AC3：connect=false 時顯示需要連接的文字（帳號設定用粗體）、沒有 iframe，也不再出現舊文字', () => {
     const wrapper = mount(GoogleCalendarEmbed, {
       props: { calendarIds: [], id: 'bar', connect: false },
       global: { stubs: uiStubs },
     })
 
     expect(wrapper.find('iframe').exists()).toBe(false)
-    expect(wrapper.text()).toContain('尚未連接 Google Calendar')
+    expect(wrapper.text()).toContain(NEEDS_CONNECT_TEXT)
+    expect(wrapper.find('strong').text()).toBe('帳號設定')
+    expect(wrapper.text()).not.toContain('尚未連接')
+    expect(wrapper.text()).not.toContain('請重新連接。')
   })
 
-  it('AC1：needsReconnect=true 時顯示「授權已失效，請重新連接」，不顯示「尚未連接」', () => {
+  it('AC2：授權失效時（即使仍傳入已移除的 needsReconnect）也顯示需要連接的文字，沒有「請重新連接。」', () => {
     const wrapper = mount(GoogleCalendarEmbed, {
-      props: { calendarIds: [], id: 'bar', connect: false, needsReconnect: true },
+      props: { calendarIds: [], id: 'bar', connect: false },
+      attrs: { needsReconnect: true },
       global: { stubs: uiStubs },
     })
 
-    expect(wrapper.text()).toContain('Google Calendar 授權已失效，請重新連接')
-    expect(wrapper.text()).not.toContain('尚未連接')
+    expect(wrapper.text()).toContain(NEEDS_CONNECT_TEXT)
+    expect(wrapper.text()).not.toContain('請重新連接。')
     expect(wrapper.find('iframe').exists()).toBe(false)
   })
 
-  it('AC6：重新連接成功（connect=true）後，即使 needsReconnect 還沒更新也顯示行事曆，不顯示「授權已失效」', () => {
+  it('AC6：connect=true 時有 iframe，不顯示需要連接的文字', () => {
     const wrapper = mount(GoogleCalendarEmbed, {
-      props: { calendarIds: ['cal1'], id: 'foo', connect: true, needsReconnect: false },
+      props: { calendarIds: ['cal1'], id: 'foo', connect: true },
       global: { stubs: uiStubs },
     })
 
     expect(wrapper.find('iframe').exists()).toBe(true)
-    expect(wrapper.text()).not.toContain('授權已失效')
+    expect(wrapper.text()).not.toContain('未連接或授權已失效')
   })
 
-  it('connecting=true 時只在這張卡片顯示「連接中」，不顯示未連線提示，也沒有 iframe', () => {
+  it('AC7：第一次查詢還沒有結果（loading）時顯示灰色方塊，沒有需要連接、暫時無法載入的文字，也沒有 iframe', () => {
+    const wrapper = mount(GoogleCalendarEmbed, {
+      props: { calendarIds: [], id: 'bar', connect: false, loading: true, unavailable: true },
+      global: { stubs: uiStubs },
+    })
+
+    expect(wrapper.findComponent({ name: 'USkeleton' }).exists()).toBe(true)
+    expect(wrapper.text()).not.toContain('未連接或授權已失效')
+    expect(wrapper.text()).not.toContain('暫時無法載入')
+    expect(wrapper.find('iframe').exists()).toBe(false)
+  })
+
+  it('AC7、AC4：正在連接和載入中同時成立時，顯示「正在連接」，沒有灰色方塊', () => {
+    const wrapper = mount(GoogleCalendarEmbed, {
+      props: { calendarIds: [], id: 'bar', connect: false, connecting: true, loading: true },
+      global: { stubs: uiStubs },
+    })
+
+    expect(wrapper.text()).toContain('正在連接 Google Calendar，請稍候…')
+    expect(wrapper.findComponent({ name: 'USkeleton' }).exists()).toBe(false)
+  })
+
+  it('AC4：connecting=true 時只在這張卡片顯示「連接中」，不顯示需要連接的文字，也沒有 iframe', () => {
     const wrapper = mount(GoogleCalendarEmbed, {
       props: { calendarIds: [], id: 'baz', connect: false, connecting: true },
       global: { stubs: uiStubs },
     })
 
-    expect(wrapper.text()).toContain('正在連接 Google Calendar')
-    expect(wrapper.text()).not.toContain('尚未連接')
+    expect(wrapper.text()).toContain('正在連接 Google Calendar，請稍候…')
+    expect(wrapper.text()).not.toContain('未連接或授權已失效')
     expect(wrapper.find('iframe').exists()).toBe(false)
     // 標題列仍在，卡片位置不變
     expect(wrapper.text()).toContain('Google 行事曆')
@@ -88,14 +123,14 @@ describe('GoogleCalendarEmbed.vue', () => {
     expect(wrapper.find('iframe').element).not.toBe(firstIframe)
   })
 
-  it('AC1、AC20：從沒載入成功過又遇到暫時性錯誤（unavailable）→ 顯示暫時無法載入，不顯示尚未連接，也沒有 iframe', () => {
+  it('AC5：從沒載入成功過又遇到暫時性錯誤（unavailable）→ 顯示暫時無法載入，不顯示需要連接的文字，也沒有 iframe', () => {
     const wrapper = mount(GoogleCalendarEmbed, {
       props: { calendarIds: [], id: 'bar', connect: true, unavailable: true },
       global: { stubs: uiStubs },
     })
 
     expect(wrapper.text()).toContain('Google 行事曆暫時無法載入，請稍後再試')
-    expect(wrapper.text()).not.toContain('尚未連接')
+    expect(wrapper.text()).not.toContain('未連接或授權已失效')
     expect(wrapper.find('iframe').exists()).toBe(false)
   })
 })

@@ -1,6 +1,6 @@
 # API 錯誤回應第一階段：依原因加 error_code、前端改看 error_code
 
-- 狀態：已核准
+- 狀態：部分被 [issue-104-calendar-card-states.md](issue-104-calendar-card-states.md) 取代（AC1、AC12）
 - 等級：高風險（改錯誤回應會不會帶出憑證（422 的 `input`）、外部平台同步的錯誤分類與 `X-Auth-Error`、憑證無法解密時的處理；前後端的 API 契約一起改）
 - issue：#77
 - PR：#79

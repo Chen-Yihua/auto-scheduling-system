@@ -121,7 +121,7 @@ describe('useSchedule composable', () => {
     )
   })
 
-  it('AC5：產生建議時授權失效（REAUTH_REQUIRED）→ toast 和首頁一樣有「重新連接 Google Calendar」按鈕，按下導到 Google 授權頁', async () => {
+  it('AC5、issue-104 AC16：產生建議時授權失效（REAUTH_REQUIRED）→ toast 有「重新連接 Google Calendar」按鈕，按下導到 Google 授權頁，六個網址參數都正確', async () => {
     fetchSpy.mockRejectedValueOnce({ response: { status: 401 }, data: { error_code: 'REAUTH_REQUIRED' } })
     vi.stubGlobal('location', { href: '' })
 
@@ -134,8 +134,16 @@ describe('useSchedule composable', () => {
     expect(toast.actions[0].label).toBe('重新連接 Google Calendar')
 
     toast.actions[0].onClick()
-    expect(window.location.href).toContain('https://accounts.google.com/o/oauth2/v2/auth?')
-    expect(window.location.href).toContain('client_id=google-client-id')
+    const url = new URL(window.location.href)
+    expect(url.origin + url.pathname).toBe('https://accounts.google.com/o/oauth2/v2/auth')
+    expect(Object.fromEntries(url.searchParams)).toEqual({
+      client_id: 'google-client-id',
+      redirect_uri: 'http://front/oauth/callback',
+      response_type: 'code',
+      scope: 'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/calendar.events',
+      access_type: 'offline',
+      prompt: 'consent',
+    })
     vi.stubGlobal('location', realLocation)
   })
 

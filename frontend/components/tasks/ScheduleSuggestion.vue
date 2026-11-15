@@ -72,7 +72,7 @@ const formatRange = (start: string, end: string) => {
       v-else-if="notLinked"
       class="text-center text-sm text-gray-500 dark:text-gray-400 py-6"
     >
-      尚未連接 Google Calendar，請先在右側卡片完成連接
+      尚未連接 Google Calendar，請前往 <strong>帳號設定</strong> 連接。
     </div>
 
     <div

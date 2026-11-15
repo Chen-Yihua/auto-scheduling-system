@@ -3,7 +3,7 @@
 - 狀態：已核准
 - 等級：高風險（改變和外部系統 Google Calendar 同步的一致性、刪除中途失敗後的資料狀態，以及同時刪除時的資料狀態）
 - issue：[#30](https://github.com/Chen-Yihua/auto-scheduling-system/issues/30)
-- PR：
+- PR：[#111](https://github.com/Chen-Yihua/auto-scheduling-system/pull/111)
 
 ## 簡短說明
 

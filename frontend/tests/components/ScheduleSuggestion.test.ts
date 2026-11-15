@@ -101,11 +101,13 @@ describe('ScheduleSuggestion.vue', () => {
     expect(after.text()).toContain('重新產生')
   })
 
-  it('尚未連接 Google Calendar 時顯示提示', () => {
+  it('AC14：從沒連接過 Google Calendar 時，提示前往帳號設定連接，不再指向右側卡片', () => {
     hasFetchedRef.value = true
     notLinkedRef.value = true
     const wrapper = render()
-    expect(wrapper.text()).toContain('尚未連接 Google Calendar')
+    expect(wrapper.text()).toContain('尚未連接 Google Calendar，請前往 帳號設定 連接。')
+    expect(wrapper.find('strong').text()).toBe('帳號設定')
+    expect(wrapper.text()).not.toContain('右側卡片')
   })
 
   it('沒有任何排程建議時顯示空狀態', () => {

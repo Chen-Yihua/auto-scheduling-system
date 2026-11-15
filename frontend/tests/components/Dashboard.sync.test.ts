@@ -35,7 +35,7 @@ const linkedKeys = ref([
 ])
 vi.stubGlobal('useLinkedAccount', () => ({ keys: linkedKeys, fetchKeys: vi.fn().mockResolvedValue(undefined) }))
 vi.stubGlobal('useGoogleCalendar', () => ({
-  needsReconnect: ref(false),
+  awaitingFirstResult: ref(false),
   unavailable: ref(false),
   calendarIds: ref([]),
   primaryCalendarId: ref(''),

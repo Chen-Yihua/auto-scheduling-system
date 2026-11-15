@@ -5,7 +5,7 @@ import { useGoogleCalendarAuth } from '~/composables/useGoogleCalendarAuth';
 import { UserButton } from '@clerk/vue';
 
 const { keys, fetchKeys, openEdit, cancelEdit, saveKey, deleteKey } = useLinkedAccount();
-const { isConnected: googleCalendarConnected, needsReconnect: googleNeedsReconnect, fetchGoogleCalendars } = useGoogleCalendar();
+const { isConnected: googleCalendarConnected, fetchGoogleCalendars } = useGoogleCalendar();
 
 onMounted(fetchKeys);
 onMounted(fetchGoogleCalendars);
@@ -218,7 +218,7 @@ const copyKey = (platform: string, key: string, isMasked?: boolean) => {
 
         <div class="flex items-center gap-2">
           <UButton color="primary" icon="i-lucide-calendar" @click="goToGoogleAuth">
-            {{ googleCalendarConnected || googleNeedsReconnect ? '重新連接 Google Calendar' : '連接 Google Calendar' }}
+            {{ googleCalendarConnected ? '重新連接 Google Calendar' : '連接 Google Calendar' }}
           </UButton>
           <UBadge v-if="googleCalendarConnected" color="success" variant="subtle" icon="i-lucide-check">
             已連接

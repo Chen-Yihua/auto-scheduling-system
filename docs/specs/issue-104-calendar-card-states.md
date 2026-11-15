@@ -67,6 +67,8 @@
 | AC13 | 帳號設定裡，已連接的使用者看到的按鈕是「重新連接 Google Calendar」，旁邊有「已連接」標記 |
 | AC14 | 排程頁產生排程建議時，如果使用者從沒連接過 Google Calendar，顯示「尚未連接 Google Calendar，請前往 **帳號設定** 連接。」 |
 | AC15 | Google 授權完成（「正在連接」結束）後、重新查詢回來前，卡片顯示載入中的灰色方塊，不顯示需要連接的文字 |
+| AC16 | 使用者操作時跳出的授權失效 toast，按鈕導向的 Google 授權網址，`client_id`、`redirect_uri`、`response_type`、`scope`、`access_type`、`prompt` 六個參數都和 `useGoogleCalendarAuth.goToGoogleAuth` 的設定一致；少任何一個或值不同時，測試會失敗 |
+| AC17 | `useGoogleCalendar.test.ts` 的測試名稱裡，每個 AC 編號都看得出屬於哪一份規格；共用同一個請求的兩個測試標回 `google-calendar-reauth.md` 的 AC4 |
 
 ## 不適用的情境
 | 情境 | 原因 |
@@ -94,6 +96,9 @@
    - `AccountSettings.test.ts`：mock 拿掉 `needsReconnect`；原本「授權已失效 → 重新連接」的測試改成「沒連上 → 連接 Google Calendar、沒有已連接標記」；新增「已連接 → 重新連接 Google Calendar」的斷言。
    - `ScheduleSuggestion.test.ts`：檢查新文字，而且不再出現「右側卡片」。
 7. 把 [google-calendar-reauth.md](google-calendar-reauth.md) 的「狀態」改成「部分被 [issue-104-calendar-card-states.md](issue-104-calendar-card-states.md) 取代（AC1、AC3、AC4）」，[issue-77-error-codes.md](issue-77-error-codes.md) 的「狀態」改成「部分被 [issue-104-calendar-card-states.md](issue-104-calendar-card-states.md) 取代（AC1、AC12）」，其他內容不改。測試名稱裡指向這兩份規格、而且行為被這份規格改掉的 AC 編號（例如 `AccountSettings.test.ts` 的「AC1(2)」、`useGoogleCalendar.test.ts` 跳 toast 的「AC1」「AC3」「AC4」），重寫時改成這份規格的 AC 編號。
+8. 測試補強（AC16、AC17）：
+   - `useSchedule.test.ts` 授權失效 toast 的測試改成逐一比對授權網址的六個參數。這個 PR 拿掉自動查詢的 toast 時，刪掉了原本唯一做這件事的測試。
+   - `useGoogleCalendar.test.ts`：測試名稱裡不屬於這份規格的 AC 編號，加上規格名（例如「reauth AC6」「issue-77 AC20」）；或在檔案開頭用一行說明各組編號來自哪份規格，兩種擇一，整個檔案用同一種。共用同一個請求的兩個測試（「前一次還沒結束時再呼叫」「前一次結束後再呼叫」）標回 reauth AC4。
 
 ## 測試對應
 | AC | 測試 |
@@ -113,10 +118,13 @@
 | AC13 | `AccountSettings.test.ts`：`isConnected` 為 true → 按鈕「重新連接 Google Calendar」、有「已連接」標記 |
 | AC14 | `frontend/tests/components/ScheduleSuggestion.test.ts`：`notLinked` 時顯示新文字、不含「右側卡片」 |
 | AC15 | `useGoogleCalendar.test.ts`：已有結果（未連接或授權失效）後 `connectedCount` 遞增，回到還沒有結果；重新查詢成功後變成有結果、`isConnected` 為 true；重新查詢時 `/oauth/status` 失敗，也變成有結果，維持最近一次已知的結果（`isConnected` 為 false、`unavailable` 為 false） |
+| AC16 | `frontend/tests/composables/useSchedule.test.ts` 授權失效 toast 的測試：用 `Object.fromEntries(url.searchParams)` 逐一比對六個參數，取代現有的兩個 `toContain` |
+| AC17 | 讀 `useGoogleCalendar.test.ts`，逐一對照三份規格（手動驗證） |
 
 ## 修改紀錄
 | 日期 | 修改 | 原因 | 確認者 |
 |---|---|---|---|
+| 2026-11-15 | 新增 AC16、AC17，實作計畫第 8 步 | 開發者決定實作審查第 1 輪的 #2（[#107](https://github.com/Chen-Yihua/auto-scheduling-system/issues/107)）、#3（[#108](https://github.com/Chen-Yihua/auto-scheduling-system/issues/108)）在這個 PR 處理 → AC16、AC17、實作計畫 8；檢查過 AC11（操作時的 toast 規則不變，AC16 只補參數檢查）、實作計畫 7（共用請求的規則沒有被取代，第 7 步的「AC4」只指跳 toast 的部分）不用改行為 | 開發者 |
 
 ## 請你決定
 無

@@ -392,6 +392,11 @@ function useTaskFormImpl() {
     // 一次只送一個刪除，避免連點重複送出；任務本身與每個階段的「刪除」共用
     const deleting = ref(false)
 
+    /**
+     * 判斷子任務是不是所屬主任務唯一的子任務。
+     * 用前端已載入的任務清單判斷；另一個分頁剛改過子任務時，結果可能和後端不同。
+     * @param subtask 要判斷的子任務；用它的 parent_id 找同一個主任務的子任務。
+     */
     function isOnlySubtask(subtask: Task): boolean {
         return all_tasks.value.filter((t) => t.parent_id === subtask.parent_id).length <= 1
     }
@@ -446,11 +451,19 @@ function useTaskFormImpl() {
         }
     }
 
-    // 從主任務的階段列表刪除；刪掉唯一的子任務時主任務也一起刪掉，編輯視窗要關閉
+    /**
+     * 從主任務的階段列表刪除一個子任務。
+     * 刪的是唯一的子任務時，主任務也一起刪掉，成功後關閉編輯視窗；否則編輯視窗保持開著。
+     * @param subtask 要刪的子任務。
+     */
     async function onDeleteSubtask(subtask: Task) {
         await deleteTask(subtask, subtaskDeleteConfirmMessage(subtask), isOnlySubtask(subtask))
     }
 
+    /**
+     * 刪除編輯視窗中的任務，成功後關閉編輯視窗。
+     * 確認文字依任務種類選：主任務列出會一起刪除的子任務，子任務用子任務的確認文字，一般任務用通用的確認文字。
+     */
     async function onDelete() {
         const task = editing_task.value
         if (!task?.id) return

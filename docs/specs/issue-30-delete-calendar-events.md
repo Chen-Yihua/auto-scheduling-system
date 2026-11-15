@@ -162,12 +162,12 @@
 | AC4、AC5 | `test_manual_task_router.py`：三個子任務刪一個，只有它的事件被刪、後面往前遞補；兩個刪一個，剩一個的主任務照常存在（改寫 `test_ac29_deleting_subtask_deletes_its_event_and_renumbers`） |
 | AC6 | `test_manual_task_router.py`：刪唯一子任務 → 主任務、子任務、事件都刪（取代 `test_ac30_last_remaining_subtask_cannot_be_deleted`：舊規則被取代） |
 | AC7 | `backend/tests/unit/test_google_calendar_service.py`：已經開始、已經過去的事件也被刪（取代 `test_ac28_only_events_that_have_not_started_are_deleted`）；`test_manual_task_router.py`：已完成子任務的事件也被刪 |
-| AC8 | `test_google_calendar_service.py`：既有 `test_no_events_to_delete_does_not_call_google`；`test_manual_task_router.py`：沒排入的一般任務在沒連接 Google 時刪得掉 |
-| AC9 | `test_google_calendar_service.py`：既有 `test_ac31_event_already_gone_counts_as_deleted`，依新函式調整 |
+| AC8 | `test_google_calendar_service.py`：`test_issue30_ac8_no_events_to_delete_does_not_call_google`（由既有測試改名）；`test_manual_task_router.py`：沒排入的一般任務在沒連接 Google 時刪得掉 |
+| AC9 | `test_google_calendar_service.py`：`test_issue30_ac9_event_already_gone_counts_as_deleted`（由既有 `test_ac31_...` 改名，依新函式調整） |
 | AC10 | `test_manual_task_router.py`：已排入的一般任務在沒連接時回 409，任務還在；`test_google_calendar_service.py`：既有 `test_delete_events_without_connection_is_reauth_required` |
 | AC11 | `test_google_calendar_service.py`：第二個事件回 401 → `ReauthRequiredError`，第一個已刪 |
 | AC12 | `frontend/tests/composables/useTaskForm.test.ts`：刪除一般任務收到 `REAUTH_REQUIRED` 顯示重新連接提示 |
-| AC13、AC14 | `test_google_calendar_service.py`：既有 `test_ac33_failure_midway_asks_to_retry_and_keeps_already_deleted_events_deleted`；`backend/tests/integration/test_manual_task_scenario.py`：一般任務刪除時 Google 5xx → 任務還在 → 重試（事件已 404）→ 刪除成功 |
+| AC13、AC14 | `test_google_calendar_service.py`：`test_issue30_ac13_ac14_failure_midway_asks_to_retry_and_keeps_already_deleted_events_deleted`（由既有 `test_ac33_...` 改名）；`backend/tests/integration/test_manual_task_scenario.py`：一般任務刪除時 Google 5xx → 任務還在 → 重試（事件已 404）→ 刪除成功 |
 | AC15、AC16 | 由 AC1、AC3、AC6、AC10、AC13、AC17 的測試一起驗證：成功時檢查事件都被刪，失敗時檢查任務還在 |
 | AC17 | `test_manual_task_router.py`：同時刪最後兩個子任務 → 主任務、子任務、兩個事件都不在（取代 `test_issue37_ac1_...`、`test_issue37_ac2_...`：舊規則被取代） |
 | AC18 | `test_manual_task_router.py`：既有 `test_delete_manual_task_refuses_other_users_task_and_keeps_it`，補上不呼叫 Google 的檢查 |

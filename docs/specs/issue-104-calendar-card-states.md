@@ -3,7 +3,7 @@
 - 狀態：已核准
 - 等級：一般（只改畫面上的文字、提示方式與狀態的顯示，不改連接、授權的判斷，也不改 API 與資料）
 - issue：[#104](https://github.com/Chen-Yihua/auto-scheduling-system/issues/104)
-- PR：
+- PR：[#106](https://github.com/Chen-Yihua/auto-scheduling-system/pull/106)
 
 ## 簡短說明
 首頁的 Google 行事曆卡片把「尚未連接」和「授權已失效」合併成同一種「需要連接」的提示，第一次查詢回來前顯示載入中的占位畫面；頁面自動查詢行事曆的結果只顯示在卡片上，不再跳 toast，toast 只留給使用者的操作。帳號設定的按鈕文字改成只看現在有沒有連上，排程頁的「尚未連接」提示改成指向帳號設定。

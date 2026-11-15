@@ -51,6 +51,8 @@ const calendarReloadTokenRef = ref(0)
 const calendarUnavailableRef = ref(false)
 const awaitingFirstResultRef = ref(false)
 vi.stubGlobal('useGoogleCalendar', () => ({
+  // 已移除的欄位：留著才驗得出 Dashboard 有沒有停止把它傳給卡片
+  needsReconnect: ref(true),
   awaitingFirstResult: awaitingFirstResultRef,
   unavailable: calendarUnavailableRef,
   calendarIds: ref([]),

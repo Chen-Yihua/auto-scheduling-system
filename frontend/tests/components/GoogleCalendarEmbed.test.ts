@@ -51,6 +51,18 @@ describe('GoogleCalendarEmbed.vue', () => {
     expect(wrapper.text()).not.toContain('請重新連接。')
   })
 
+  it('AC2：授權失效時（即使仍傳入已移除的 needsReconnect）也顯示需要連接的文字，沒有「請重新連接。」', () => {
+    const wrapper = mount(GoogleCalendarEmbed, {
+      props: { calendarIds: [], id: 'bar', connect: false },
+      attrs: { needsReconnect: true },
+      global: { stubs: uiStubs },
+    })
+
+    expect(wrapper.text()).toContain(NEEDS_CONNECT_TEXT)
+    expect(wrapper.text()).not.toContain('請重新連接。')
+    expect(wrapper.find('iframe').exists()).toBe(false)
+  })
+
   it('AC6：connect=true 時有 iframe，不顯示需要連接的文字', () => {
     const wrapper = mount(GoogleCalendarEmbed, {
       props: { calendarIds: ['cal1'], id: 'foo', connect: true },

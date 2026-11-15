@@ -24,8 +24,10 @@ vi.mock('~/composables/useLinkedAccount', () => ({
 }))
 
 const isConnected = ref(false)
+// 已移除的欄位：留著才驗得出按鈕文字有沒有停止看它
+const needsReconnect = ref(true)
 vi.mock('~/composables/useGoogleCalendar', () => ({
-  useGoogleCalendar: () => ({ isConnected, fetchGoogleCalendars: vi.fn() }),
+  useGoogleCalendar: () => ({ isConnected, needsReconnect, fetchGoogleCalendars: vi.fn() }),
 }))
 vi.mock('~/composables/useGoogleCalendarAuth', () => ({
   useGoogleCalendarAuth: () => ({ connectedCount: ref(0), goToGoogleAuth: vi.fn() }),
@@ -46,7 +48,7 @@ describe('AccountSettings.vue', () => {
     isConnected.value = false
   })
 
-  it('AC12、AC20(3)：沒連上（從沒連接過、授權失效、或沒有已知的結果）→ 按鈕是「連接 Google Calendar」，沒有「已連接」標記', () => {
+  it('AC12、AC20(3)：沒連上（從沒連接過、授權失效、或沒有已知的結果），即使 composable 仍回傳 needsReconnect →  按鈕是「連接 Google Calendar」，沒有「已連接」標記', () => {
     const wrapper = mount(AccountSettings, { global: { stubs } })
 
     expect(wrapper.find('.badge').exists()).toBe(false)

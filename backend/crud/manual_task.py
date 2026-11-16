@@ -105,26 +105,32 @@ def validate_stage_chain(parent_due_date: datetime | None, stages: list[dict]) -
     validate_stage_due_dates(parent_due_date, stages)
 
 
-def adjust_inferred_priorities(stages: list[dict], inferred_indexes: set[int]) -> list[int]:
+def adjust_inferred_priorities(stages: list[dict], inferred_indexes: set[int]) -> list[dict]:
     """
-    AI 推斷的優先序要落在前後兩個階段之間：比前一個階段高就調成前一個，比後面使用者填的最高值低就調成那個值。
-    使用者填的不動，彼此衝突時交給 validate_stage_priorities。依序處理，前一個被調整時後面的會比對調整後的值。
-    回傳被調整的階段編號。
+    AI 推斷的優先序要落在前後兩個階段之間：比前一個階段高就調成前一個，比後面不是推斷的最高值低就調成那個值。
+    不是推斷的不動，彼此衝突時交給 validate_stage_priorities。依序處理，前一個被調整時後面的會比對調整後的值。
+
+    回傳每個被調整的階段一筆：index、from_priority（推斷的值）、to_priority、compared_index（比較的階段）。
     """
     adjusted = []
     for index in sorted(inferred_indexes):
-        priority = stages[index]["priority"]
-        # 後面推斷的階段之後只會被調到不高於這個階段，所以下限只看使用者填的
-        later_fixed = [s["priority"] for i, s in enumerate(stages) if i > index and i not in inferred_indexes]
-        floor = max(later_fixed, key=_rank) if later_fixed else None
-        ceiling = stages[index - 1]["priority"] if index > 0 else None
-        if ceiling is not None and _rank(priority) > _rank(ceiling):
-            priority = ceiling
-        elif floor is not None and _rank(priority) < _rank(floor):
-            priority = floor
-        if priority != stages[index]["priority"]:
-            stages[index]["priority"] = priority
-            adjusted.append(index + 1)
+        original = stages[index]["priority"]
+        # 後面推斷的階段之後只會被調到不高於這個階段，所以下限只看不是推斷的
+        later_fixed = [i for i in range(index + 1, len(stages)) if i not in inferred_indexes]
+        # max 遇到同樣高時取第一個，就是最前面的階段
+        floor_index = max(later_fixed, key=lambda i: _rank(stages[i]["priority"])) if later_fixed else None
+        compared_index = None
+        if index > 0 and _rank(original) > _rank(stages[index - 1]["priority"]):
+            compared_index = index - 1
+        elif floor_index is not None and _rank(original) < _rank(stages[floor_index]["priority"]):
+            compared_index = floor_index
+        if compared_index is None:
+            continue
+        stages[index]["priority"] = stages[compared_index]["priority"]
+        adjusted.append({
+            "index": index, "from_priority": original,
+            "to_priority": stages[index]["priority"], "compared_index": compared_index,
+        })
     return adjusted
 
 

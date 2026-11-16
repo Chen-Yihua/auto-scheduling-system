@@ -103,8 +103,19 @@ class ManualTaskOut(BaseModel):
     progress: Optional[SubtaskProgress] = None
 
 
+class PriorityAdjustment(BaseModel):
+    """一個 AI 推斷的優先序被自動調整的階段。"""
+    subtask_id: str
+    from_priority: PriorityEnum  # AI 原本推斷的值
+    to_priority: PriorityEnum  # 調整後的值，等於比較的階段當時的值
+    # 被調低時是前一個階段；被調高時是後面不是 AI 推斷的階段裡最高的那個（同樣高取最前面）
+    compared_subtask_id: str
+
+
 class ManualTaskWithSubtasksOut(ManualTaskOut):
     """建立任務、新增子任務的回應：主任務附上依階段排序的子任務。"""
     subtasks: list[ManualTaskOut] = []
-    # AI 推斷的優先序比前一個階段高、被調成和前一個階段一樣的階段編號；只在這次回應裡，不存資料庫
-    priority_adjusted_stages: list[int] = []
+    # AI 推斷的優先序比前一個階段高會被調低、比後面的階段低會被調高，每個被調整的階段一筆。
+    # 一次建立存在主任務、新增單一階段存在那個階段的資料上，同一個 Idempotency-Key 重送時回傳存的這份；
+    # ManualTaskOut 沒有這欄，查詢 API 不會帶出
+    priority_adjustments: list[PriorityAdjustment] = []

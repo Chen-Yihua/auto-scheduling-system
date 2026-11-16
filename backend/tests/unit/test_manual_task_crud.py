@@ -405,7 +405,7 @@ def test_ac6_inferred_priority_higher_than_previous_stage_is_lowered_to_previous
     adjusted = manual_task_crud.adjust_inferred_priorities(stages, inferred_indexes={1})
 
     assert [s["priority"] for s in stages] == ["Low", "Low", "High"]
-    assert adjusted == [2]
+    assert adjusted == [{"index": 1, "from_priority": "High", "to_priority": "Low", "compared_index": 0}]
 
 
 # ---------- 階段任務：一次建立（AC4）----------
@@ -506,7 +506,7 @@ def test_ac6_inferred_priority_lower_than_next_stage_is_raised_to_next():
     adjusted = manual_task_crud.adjust_inferred_priorities(stages, inferred_indexes={0})
 
     assert [s["priority"] for s in stages] == ["High", "High"]
-    assert adjusted == [1]
+    assert adjusted == [{"index": 0, "from_priority": "Low", "to_priority": "High", "compared_index": 1}]
 
 
 def test_ac6_inferred_priority_is_kept_between_previous_and_next_stage():
@@ -514,10 +514,44 @@ def test_ac6_inferred_priority_is_kept_between_previous_and_next_stage():
     too_low = [_stage("High"), _stage("Low"), _stage("Medium")]
     too_high = [_stage("Medium"), _stage("High"), _stage("Low")]
 
-    assert manual_task_crud.adjust_inferred_priorities(too_low, inferred_indexes={1}) == [2]
-    assert manual_task_crud.adjust_inferred_priorities(too_high, inferred_indexes={1}) == [2]
+    assert manual_task_crud.adjust_inferred_priorities(too_low, inferred_indexes={1}) == [
+        {"index": 1, "from_priority": "Low", "to_priority": "Medium", "compared_index": 2},
+    ]
+    assert manual_task_crud.adjust_inferred_priorities(too_high, inferred_indexes={1}) == [
+        {"index": 1, "from_priority": "High", "to_priority": "Medium", "compared_index": 0},
+    ]
     assert [s["priority"] for s in too_low] == ["High", "Medium", "Medium"]
     assert [s["priority"] for s in too_high] == ["Medium", "Medium", "Low"]
+
+
+def test_issue32_ac2_lowered_stage_is_compared_with_previous_stage_even_if_it_was_adjusted():
+    """issue-32 AC2：被調低時比較的是前一個階段；前一個階段也是 AI 推斷、先被調整過時，比的是它調整後的值。"""
+    stages = [_stage("Medium"), _stage("High"), _stage("High")]
+
+    adjusted = manual_task_crud.adjust_inferred_priorities(stages, inferred_indexes={1, 2})
+
+    assert adjusted == [
+        {"index": 1, "from_priority": "High", "to_priority": "Medium", "compared_index": 0},
+        {"index": 2, "from_priority": "High", "to_priority": "Medium", "compared_index": 1},
+    ]
+
+
+def test_issue32_ac2_raised_stage_is_compared_with_highest_later_user_filled_stage_first_on_tie():
+    """issue-32 AC2 / 需求 4：被調高時比較的是後面「不是 AI 推斷」的階段裡最高的那個；同樣高取最前面，AI 推斷的階段不算。"""
+    stages = [_stage("Low"), _stage("High"), _stage("Medium"), _stage("High"), _stage("High")]
+
+    adjusted = manual_task_crud.adjust_inferred_priorities(stages, inferred_indexes={0, 1})
+
+    assert adjusted == [{"index": 0, "from_priority": "Low", "to_priority": "High", "compared_index": 3}]
+
+
+def test_issue32_ac2_inserted_stage_is_compared_with_all_existing_later_stages():
+    """issue-32 AC2 / 需求 4：新增單一階段時，後面的既有階段都算在比較範圍，取最高、同樣高取最前面。"""
+    stages = [_stage("High"), _stage("Low"), _stage("Medium"), _stage("Medium"), _stage("Low")]
+
+    adjusted = manual_task_crud.adjust_inferred_priorities(stages, inferred_indexes={1})
+
+    assert adjusted == [{"index": 1, "from_priority": "Low", "to_priority": "Medium", "compared_index": 2}]
 
 
 # ---------- 階段任務：插入、刪除、轉換的原子性（AC39，ADR 0004）----------

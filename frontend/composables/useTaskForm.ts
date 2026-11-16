@@ -5,9 +5,13 @@ import { createSharedComposable } from '@vueuse/core'
 import type { Task, TaskWithSubtasks } from '~/types/manualTask'
 import { getErrorDetail, getFriendlyErrorTitle, isAuthError, logApiError } from '@/utils/errorMessages'
 import { useGoogleCalendarAuth } from '@/composables/useGoogleCalendarAuth'
+import { priorityLabel } from '@/utils/labels'
 
 // 和後端 MAX_SUBTASKS 一致
 const MAX_SUBTASKS = 10
+
+// toast 的說明文字預設不分行，'\n' 會被當成空白
+const MULTILINE_TOAST_UI = { description: 'whitespace-pre-line' }
 
 // 子任務的截止日用日期輸入（YYYY-MM-DD），空字串代表無期限
 interface SubtaskDraft {
@@ -190,17 +194,34 @@ function useTaskFormImpl() {
         return Number.isFinite(n) ? n : null
     }
 
-    // 後端會把 AI 推斷的優先序調到前後階段之間，往上、往下都有可能
-    function adjustedStagesText(adjusted: number[]): string | undefined {
-        if (!adjusted.length) return undefined
-        return `AI 判斷的優先序和前後階段衝突，已把階段 ${adjusted.join('、')} 調成落在前後階段之間`
+    /**
+     * 後端自動調整 AI 推斷的優先序時，提示要寫出哪個階段、從什麼改成什麼、為什麼；沒有可顯示的調整時回傳 undefined。
+     * 每個階段一行，用 '\n' 分隔，toast 要搭配 MULTILINE_TOAST_UI 才會分行。
+     * @param result 建立任務或新增階段的回應；階段標題從同一個回應的 subtasks 依 id 找。
+     */
+    function adjustedStagesText(result: TaskWithSubtasks): string | undefined {
+        const subtasks = result.subtasks ?? []
+        const lines = (result.priority_adjustments ?? []).flatMap((a) => {
+            const adjustedIndex = subtasks.findIndex((s) => s.id === a.subtask_id)
+            const comparedIndex = subtasks.findIndex((s) => s.id === a.compared_subtask_id)
+            // 重送前在別的分頁刪掉了
+            if (adjustedIndex < 0 || comparedIndex < 0) return []
+            const compared = comparedIndex < adjustedIndex ? '前一個階段' : '後面的階段'
+            // 調整就是改成比較的階段當時的值，所以比較的階段的值用 to_priority，不讀它目前的值
+            return [
+                `「${subtasks[adjustedIndex]!.title}」：AI 判斷為「${priorityLabel(a.from_priority)}」，`
+                + `但${compared}「${subtasks[comparedIndex]!.title}」是「${priorityLabel(a.to_priority)}」，`
+                + `已改成「${priorityLabel(a.to_priority)}」`,
+            ]
+        })
+        if (!lines.length) return undefined
+        return ['因後面階段比前面優先序高，已自動調整優先序：', ...lines].join('\n')
     }
 
     function buildStagedSummary(result: TaskWithSubtasks): { title: string; description?: string } {
-        const adjusted = result.priority_adjusted_stages ?? []
         return {
             title: `已建立主任務和 ${result.subtasks?.length ?? 0} 個階段`,
-            description: adjustedStagesText(adjusted),
+            description: adjustedStagesText(result),
         }
     }
 
@@ -308,6 +329,7 @@ function useTaskFormImpl() {
                     description: inferenceSummary.description,
                     color: 'info',
                     icon: 'i-lucide-sparkles',
+                    ui: staged ? MULTILINE_TOAST_UI : undefined,
                 })
             } else {
                 toast.add({ title: '儲存成功', color: 'success', icon: 'i-lucide-check' })
@@ -371,12 +393,12 @@ function useTaskFormImpl() {
                 body: { ...subtaskPayload(subtaskDraft), position: subtaskDraft.position },
                 headers: { Authorization: `Bearer ${token}` },
             })
-            const adjusted = result.priority_adjusted_stages ?? []
             toast.add({
                 title: '已新增階段',
-                description: adjustedStagesText(adjusted),
+                description: adjustedStagesText(result),
                 color: 'success',
                 icon: 'i-lucide-check',
+                ui: MULTILINE_TOAST_UI,
             })
             cancelAddSubtask()
             await fetchTasks()

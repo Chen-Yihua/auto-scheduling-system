@@ -31,6 +31,19 @@ SUBTASK_DELETE_ATTEMPTS = 3
 SUBTASK_DELETE_CONFLICT_DETAIL = "另一個請求正在改動這個主任務的階段，請重新整理後再試"
 
 
+def _adjustments_with_ids(adjustments: list[dict], stage_ids: list[str]) -> list[dict]:
+    """把 adjust_inferred_priorities 回傳的階段位置換成子任務 id；stage_ids 依階段順序排列。"""
+    return [
+        {
+            "subtask_id": stage_ids[a["index"]],
+            "from_priority": a["from_priority"],
+            "to_priority": a["to_priority"],
+            "compared_subtask_id": stage_ids[a["compared_index"]],
+        }
+        for a in adjustments
+    ]
+
+
 def _subtask_doc(subtask: dict, user_id: str, now: datetime) -> dict:
     return {
         **subtask,
@@ -93,8 +106,9 @@ async def _create_with_subtasks(task_input: ManualTaskInput, user_id: str, idemp
         "inferred_fields": [],
     }
     subtask_docs = [{**_subtask_doc(s, user_id, now), "parent_id": parent_id} for s in subtasks]
-    created = await manual_task_crud.create_manual_task_with_subtasks(parent, subtask_docs, idempotency_key)
-    return {**created, "priority_adjusted_stages": adjusted}
+    parent["priority_adjustments"] = _adjustments_with_ids(adjusted, [doc["_id"] for doc in subtask_docs])
+    # 撞上同一個 key 時 crud 回傳的是先寫入的那筆，清單也是那筆存的，不能用這次算的蓋掉
+    return await manual_task_crud.create_manual_task_with_subtasks(parent, subtask_docs, idempotency_key)
 
 
 async def _with_subtasks(task: dict) -> dict:
@@ -203,8 +217,12 @@ async def add_subtask(
     manual_task_crud.validate_stage_priorities(chain)
 
     now = datetime.now(timezone.utc)
+    subtask_doc = _subtask_doc(new_subtask, user_id, now)
+    stage_ids = [s.get("id") or subtask_doc["_id"] for s in chain]
+    adjustments = _adjustments_with_ids(adjusted, stage_ids)
+    subtask_doc["priority_adjustments"] = adjustments
     inserted = await manual_task_crud.insert_subtask(
-        task_id, user_id, _subtask_doc(new_subtask, user_id, now), position, idempotency_key,
+        task_id, user_id, subtask_doc, position, idempotency_key,
         convert=not task.get("is_parent"),
     )
     if not inserted:
@@ -212,7 +230,8 @@ async def add_subtask(
         return await _subtask_result_for_key(task_id, user_id, idempotency_key or "")
 
     parent = await manual_task_crud.get_manual_task_by_id(task_id, user_id)
-    return {**await _with_subtasks(parent), "priority_adjusted_stages": adjusted}
+    # 主任務文件上存的是一次建立時的清單，這次的回應只帶這次新增的
+    return {**await _with_subtasks(parent), "priority_adjustments": adjustments}
 
 
 async def _subtask_result_for_key(task_id: str, user_id: str, idempotency_key: str) -> dict | None:
@@ -226,7 +245,8 @@ async def _subtask_result_for_key(task_id: str, user_id: str, idempotency_key: s
     # 子任務寫入了但還沒放進主任務的順序：同一個 key 的另一個請求還在處理
     if existing["id"] not in {s["id"] for s in result.get("subtasks", [])}:
         raise ConflictError("同一個請求還在處理中，請稍後再試", error_code="REQUEST_IN_PROGRESS")
-    return result
+    # 用這個階段存的清單，蓋掉主任務文件上一次建立時存的
+    return {**result, "priority_adjustments": existing.get("priority_adjustments") or []}
 
 
 @router.get("/me", response_model=list[ManualTaskOut])

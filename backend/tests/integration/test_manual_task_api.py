@@ -435,3 +435,88 @@ async def test_ac40_add_subtask_retry_with_same_idempotency_key_returns_first_re
     assert second.status_code == 201, second.text
     assert [s["id"] for s in second.json()["subtasks"]] == [s["id"] for s in first.json()["subtasks"]]
     assert await db.manual_tasks.count_documents({"parent_id": parent["id"]}) == 2
+
+
+# ---------- issue-32：優先序自動調整的清單 ----------
+
+def _adjusting_inference(priority):
+    """AI 一律推斷成 priority，讓沒填優先序的階段被自動調整。"""
+    async def fake_infer(parent_title, parent_description, subtasks):
+        return [{"priority": priority, "duration": 30, "reason": "AI"} for _ in subtasks]
+    return fake_infer
+
+
+async def _snapshot(ac, parent_id):
+    """重送前後比對任務資料用：主任務的進度、階段順序與每個階段的優先序，以及這個使用者的任務筆數。"""
+    tasks = (await ac.get("/manual-tasks/me")).json()
+    parent = (await ac.get(f"/manual-tasks/{parent_id}")).json()
+    stages = sorted((t for t in tasks if t.get("parent_id") == parent_id), key=lambda t: t["stage"])
+    return parent["progress"], [(s["id"], s["stage"], s["priority"]) for s in stages], len(tasks)
+
+
+@pytest.mark.asyncio
+async def test_issue32_ac3_ac8_create_retry_returns_same_adjustments_and_changes_nothing(logged_in_user, stage_cleanup, monkeypatch):
+    """issue-32 AC3 / AC8：一次建立時有階段被調整，用同一個 key 重送 → 回應的清單和第一次相同，任務資料不變。"""
+    monkeypatch.setattr("routers.manual_task.infer_missing_subtask_fields", _adjusting_inference("High"))
+    payload = _staged_payload([_api_sub("一", priority="Medium"), _api_sub("二", priority=None)])
+    headers = {"Idempotency-Key": "issue32-ac3-key"}
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        first = await ac.post("/manual-tasks/", json=payload, headers=headers)
+        before = await _snapshot(ac, first.json()["id"])
+        second = await ac.post("/manual-tasks/", json=payload, headers=headers)
+        after = await _snapshot(ac, first.json()["id"])
+
+    assert first.status_code == 201, first.text
+    assert second.status_code == 201, second.text
+    adjustments = first.json()["priority_adjustments"]
+    assert [(a["from_priority"], a["to_priority"]) for a in adjustments] == [("High", "Medium")]
+    assert second.json()["priority_adjustments"] == adjustments
+    assert "priority_adjusted_stages" not in first.json()
+    assert after == before
+
+
+@pytest.mark.asyncio
+async def test_issue32_ac6_ac8_add_retry_returns_adjustments_of_that_add_not_parents(logged_in_user, stage_cleanup, monkeypatch):
+    """issue-32 AC6 / AC8：主任務建立時有調整，再新增一個也被調整的階段，用同一個 key 重送新增 → 回應是新增那次的清單，任務資料不變。"""
+    monkeypatch.setattr("routers.manual_task.infer_missing_subtask_fields", _adjusting_inference("High"))
+    headers = {"Idempotency-Key": "issue32-ac6-key"}
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        parent = (await ac.post(
+            "/manual-tasks/", json=_staged_payload([_api_sub("一", priority="Medium"), _api_sub("二", priority=None)]),
+        )).json()
+        first = await ac.post(f"/manual-tasks/{parent['id']}/subtasks", json=_api_sub("三", priority=None), headers=headers)
+        before = await _snapshot(ac, parent["id"])
+        second = await ac.post(f"/manual-tasks/{parent['id']}/subtasks", json=_api_sub("三", priority=None), headers=headers)
+        after = await _snapshot(ac, parent["id"])
+
+    assert first.status_code == 201, first.text
+    assert second.status_code == 201, second.text
+    added_id = first.json()["subtasks"][2]["id"]
+    adjustments = first.json()["priority_adjustments"]
+    assert [a["subtask_id"] for a in adjustments] == [added_id]
+    assert adjustments != parent["priority_adjustments"]
+    assert second.json()["priority_adjustments"] == adjustments
+    assert after == before
+
+
+@pytest.mark.asyncio
+async def test_issue32_ac9_query_apis_do_not_include_adjustments(logged_in_user, stage_cleanup, monkeypatch):
+    """issue-32 AC9：建立有調整的主任務、再新增一個被調整的階段後，GET /me 與 GET /{id} 的主任務、子任務都沒有這份清單。"""
+    monkeypatch.setattr("routers.manual_task.infer_missing_subtask_fields", _adjusting_inference("High"))
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        parent = (await ac.post(
+            "/manual-tasks/", json=_staged_payload([_api_sub("一", priority="Medium"), _api_sub("二", priority=None)]),
+        )).json()
+        added = (await ac.post(f"/manual-tasks/{parent['id']}/subtasks", json=_api_sub("三", priority=None))).json()
+        listed = (await ac.get("/manual-tasks/me")).json()
+        one_parent = (await ac.get(f"/manual-tasks/{parent['id']}")).json()
+        one_subtask = (await ac.get(f"/manual-tasks/{added['subtasks'][2]['id']}")).json()
+
+    assert parent["priority_adjustments"] and added["priority_adjustments"]
+    ours = [t for t in listed if t["id"] == parent["id"] or t.get("parent_id") == parent["id"]]
+    assert len(ours) == 4
+    for task in [*ours, one_parent, one_subtask]:
+        assert "priority_adjustments" not in task

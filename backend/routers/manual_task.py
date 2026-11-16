@@ -283,14 +283,13 @@ async def update_manual_task(
     await manual_task_crud.validate_task_change(task, changes)
 
     now = datetime.now(timezone.utc)
-    task.update({"updated": now})
+    fields = {**changes, "updated": now}
     if taskInput.status is not None:
-        task["completed_at"] = manual_task_crud.completed_at_after_status_change(
+        fields["completed_at"] = manual_task_crud.completed_at_after_status_change(
             task.get("status"), task.get("completed_at"), taskInput.status, now
         )
-    task.update(changes)
 
-    updated_task = await manual_task_crud.update_manual_task_by_id(task_id, task)
+    updated_task = await manual_task_crud.update_manual_task_by_id(task_id, fields)
     return updated_task
 
 async def _calendar_events_to_delete(task: dict, user_id: str) -> list[str]:

@@ -585,3 +585,100 @@ async def _snapshot_all():
             (str(doc) for doc in await collection.find({}).to_list(length=None)),
         )
     return snapshot
+
+
+# ---------- issue-42：Google 日曆上被刪除的事件 ----------
+
+from core.errors import ExternalServiceError, ReauthRequiredError
+
+
+@pytest.mark.asyncio
+async def test_issue42_removed_events_returns_items_with_later_stages(monkeypatch, logged_in_user):
+    """GET /schedule/removed-events → 200，回傳事件已被刪除的項目，每一項帶 later_stages。"""
+    async def mock_get_tasks(user_id):
+        return [
+            {"id": "manual:s1", "source": "manual", "title": "階段1", "status": "To Do", "calendar_event_id": "ev-1",
+             "parent_id": "manual:p", "parent_title": "主任務", "stage": 1, "stage_count": 2},
+            {"id": "manual:s2", "source": "manual", "title": "階段2", "status": "To Do", "calendar_event_id": "ev-2",
+             "parent_id": "manual:p", "parent_title": "主任務", "stage": 2, "stage_count": 2},
+        ]
+
+    async def mock_find_removed(user_id, event_ids):
+        return {"ev-1"}
+
+    monkeypatch.setattr(schedule_router, "get_all_schedulable_items", mock_get_tasks)
+    monkeypatch.setattr(schedule_router, "find_removed_calendar_events", mock_find_removed)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        res = await ac.get("/schedule/removed-events")
+
+    assert res.status_code == status.HTTP_200_OK
+    body = res.json()
+    assert [item["id"] for item in body] == ["manual:s1"]
+    assert body[0]["later_stages"] == [{"task_id": "manual:s2", "stage": 2}]
+
+
+@pytest.mark.asyncio
+async def test_issue42_removed_events_reauth_is_409(monkeypatch, logged_in_user):
+    """GET /schedule/removed-events 查詢遇到授權失效 → 409 REAUTH_REQUIRED。"""
+    async def mock_get_tasks(user_id):
+        return [{"id": "manual:t", "source": "manual", "title": "任務", "status": "To Do", "calendar_event_id": "ev-1"}]
+
+    async def mock_find_removed(user_id, event_ids):
+        raise ReauthRequiredError("Google 授權已失效，請重新連接 Google Calendar")
+
+    monkeypatch.setattr(schedule_router, "get_all_schedulable_items", mock_get_tasks)
+    monkeypatch.setattr(schedule_router, "find_removed_calendar_events", mock_find_removed)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        res = await ac.get("/schedule/removed-events")
+
+    assert res.status_code == status.HTTP_409_CONFLICT
+    assert res.json()["error_code"] == "REAUTH_REQUIRED"
+
+
+@pytest.mark.asyncio
+async def test_issue42_resolve_returns_succeeded_and_failed(logged_in_user):
+    """POST /schedule/removed-events/resolve → 200，回傳成功與失敗的項目；失敗帶原因與 error_code。"""
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        res = await ac.post("/schedule/removed-events/resolve", json={"reschedule": ["bad-id"], "delete": ["github:1"]})
+
+    assert res.status_code == status.HTTP_200_OK
+    body = res.json()
+    assert body["succeeded"] == []
+    assert {f["task_id"] for f in body["failed"]} == {"bad-id", "github:1"}
+    assert all(f["reason"] and f["error_code"] for f in body["failed"])
+
+
+@pytest.mark.asyncio
+async def test_issue42_resolve_google_rate_limited_is_503(monkeypatch, logged_in_user):
+    """POST /schedule/removed-events/resolve 處理中 Google 限流 → 503 UPSTREAM_RATE_LIMITED。"""
+    async def mock_find_removed(user_id, event_ids):
+        raise ExternalServiceError("Google 請求太頻繁，請稍後再試", error_code="UPSTREAM_RATE_LIMITED")
+
+    monkeypatch.setattr(schedule_router, "find_removed_calendar_events", mock_find_removed)
+    await db.manual_tasks.insert_one({
+        "_id": "issue42-api", "user_id": logged_in_user["sub"], "title": "任務", "status": "To Do",
+        "calendar_event_id": "ev-1",
+    })
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+            res = await ac.post("/schedule/removed-events/resolve", json={"reschedule": ["manual:issue42-api"]})
+
+        assert res.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+        assert res.json()["error_code"] == "UPSTREAM_RATE_LIMITED"
+    finally:
+        await db.manual_tasks.delete_many({"_id": "issue42-api"})
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("method, path", [
+    ("GET", "/schedule/removed-events"),
+    ("POST", "/schedule/removed-events/resolve"),
+])
+async def test_issue42_removed_events_endpoints_require_login(method, path):
+    """沒帶登入 token → 被擋在門外（401/403）。"""
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        res = await ac.request(method, path, json={"reschedule": [], "delete": []} if method == "POST" else None)
+
+    assert res.status_code in (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN)

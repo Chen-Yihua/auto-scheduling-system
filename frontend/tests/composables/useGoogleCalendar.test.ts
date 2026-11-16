@@ -428,4 +428,38 @@ describe('useGoogleCalendar composable', () => {
       expect(ctx.unavailable.value).toBe(false)
     })
   })
+
+  describe('issue-42：進入排程精靈前確認連接狀態，依這一次查詢的結果判斷', () => {
+    it('AC26：沒連接 → not_linked', async () => {
+      fetchSpy.mockResolvedValueOnce({ connected: false })
+      expect(await useGoogleCalendar().fetchGoogleCalendars()).toBe('not_linked')
+    })
+
+    it('AC26：授權已失效（抓行事曆清單回 REAUTH_REQUIRED）→ reauth', async () => {
+      fetchSpy.mockResolvedValueOnce({ connected: true })
+      fetchSpy.mockRejectedValueOnce({ response: { status: 409 }, data: { error_code: 'REAUTH_REQUIRED' } })
+      expect(await useGoogleCalendar().fetchGoogleCalendars()).toBe('reauth')
+    })
+
+    it('已連接 → connected', async () => {
+      fetchSpy.mockResolvedValueOnce({ connected: true })
+      fetchSpy.mockResolvedValueOnce({ items: [] })
+      expect(await useGoogleCalendar().fetchGoogleCalendars()).toBe('connected')
+    })
+
+    it('AC28：上一次是沒連接、這一次狀態查詢失敗 → unknown，不沿用上一次的結果', async () => {
+      fetchSpy.mockResolvedValueOnce({ connected: false })
+      const ctx = useGoogleCalendar()
+      await ctx.fetchGoogleCalendars()
+
+      fetchSpy.mockRejectedValueOnce(new Error('網路爆炸'))
+      expect(await ctx.fetchGoogleCalendars()).toBe('unknown')
+    })
+
+    it('AC28：抓行事曆清單遇到暫時性錯誤 → unknown', async () => {
+      fetchSpy.mockResolvedValueOnce({ connected: true })
+      fetchSpy.mockRejectedValueOnce({ response: { status: 503 }, data: { error_code: 'UPSTREAM_RATE_LIMITED' } })
+      expect(await useGoogleCalendar().fetchGoogleCalendars()).toBe('unknown')
+    })
+  })
 })

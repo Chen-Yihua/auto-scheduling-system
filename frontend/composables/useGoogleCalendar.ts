@@ -5,6 +5,9 @@ import type { CalendarListEntry } from '@/types/google';
 import { isAuthError, isNotLinkedError, logApiError } from '@/utils/errorMessages';
 import { useGoogleCalendarAuth } from '@/composables/useGoogleCalendarAuth';
 
+// 這一次查詢的結果；unknown 是不知道有沒有連接（狀態查詢失敗、暫時性錯誤，或結果已經不是最新）
+export type GoogleConnectionCheck = 'connected' | 'not_linked' | 'reauth' | 'unknown';
+
 // 共用狀態：確認排程後要讓 GoogleCalendarEmbed 重新整理 iframe
 const useGoogleCalendarImpl = () => {
   const config = useRuntimeConfig();
@@ -65,9 +68,9 @@ const useGoogleCalendarImpl = () => {
   };
 
   // 只有發出時的連接次數還是最新的，結果才寫回狀態：重新連接前發出的請求比較晚回來時，不能蓋掉新的結果
-  const loadCalendars = async (isCurrent: () => boolean) => {
+  const loadCalendars = async (isCurrent: () => boolean): Promise<GoogleConnectionCheck> => {
     try {
-      if (!isLoaded.value) return;
+      if (!isLoaded.value) return 'unknown';
       switchOwner(userId?.value ?? null);
 
       const token = await getToken.value();
@@ -82,16 +85,16 @@ const useGoogleCalendarImpl = () => {
         });
       } catch (err) {
         logApiError('Google Calendar 授權狀態檢查失敗', err);
-        if (!isCurrent()) return;
+        if (!isCurrent()) return 'unknown';
         if (knownResult === null) unavailable.value = true;
         awaitingFirstResult.value = false;
-        return;
+        return 'unknown';
       }
 
-      if (!isCurrent()) return;
+      if (!isCurrent()) return 'unknown';
       if (!status.connected) {
         setNotLinked();
-        return;
+        return 'not_linked';
       }
 
       const res = await $fetch<{ items: CalendarListEntry[] }>(`${BASE_URL}/oauth/calendars`, {
@@ -101,7 +104,7 @@ const useGoogleCalendarImpl = () => {
         },
       });
 
-      if (!isCurrent()) return;
+      if (!isCurrent()) return 'unknown';
       knownResult = 'loaded';
       awaitingFirstResult.value = false;
       calendars.value = res.items || [];
@@ -110,14 +113,15 @@ const useGoogleCalendarImpl = () => {
 
       const primary = calendars.value.find((item) => item.primary);
       primaryCalendarId.value = primary?.id || '';
+      return 'connected';
     } catch (error) {
-      if (!isCurrent()) return;
+      if (!isCurrent()) return 'unknown';
       logApiError('Google Calendar 資料抓取失敗', error);
 
       // 檢查後到呼叫前授權可能剛好被移除
       if (isNotLinkedError(error)) {
         setNotLinked();
-        return;
+        return 'not_linked';
       }
 
       if (isAuthError(error)) {
@@ -126,20 +130,21 @@ const useGoogleCalendarImpl = () => {
         isConnected.value = false;
         unavailable.value = false;
         calendars.value = [];
-        return;
+        return 'reauth';
       }
 
       // 限流、Google 故障等暫時性錯誤：仍是已連接，之前載入成功的清單照常嵌入
       awaitingFirstResult.value = false;
       isConnected.value = true;
       unavailable.value = knownResult !== 'loaded';
+      return 'unknown';
     }
   };
 
   // 首頁和帳號設定掛載時都會呼叫；同時進行的呼叫共用一個請求，才不會重複發請求。
   // 重新連接後（連接次數變了）要重新發請求，不能沿用連接前的
-  let inFlight: { count: number; promise: Promise<void> } | null = null;
-  const fetchGoogleCalendars = (): Promise<void> => {
+  let inFlight: { count: number; promise: Promise<GoogleConnectionCheck> } | null = null;
+  const fetchGoogleCalendars = (): Promise<GoogleConnectionCheck> => {
     const count = connectedCount.value;
     if (inFlight?.count === count) return inFlight.promise;
 

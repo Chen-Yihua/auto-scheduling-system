@@ -49,4 +49,6 @@ crud、services、platforms 丟 `core/errors.py` 的例外，由 `core/exception
 
 **排程建議與確認**：`POST /schedule/suggest` 以 Google Calendar 空檔扣掉不工作時段後計算建議，並把結果存成快照（存在快取，不存 MongoDB）；`POST /schedule/confirm` 只寫入快照內容，不重新計算，同一份快照只能確認一次。
 
+**在 Google 上被刪除的事件**：確認排程後任務存下 Google 日曆事件編號，有編號就算已排入。進入排程精靈時，`GET /schedule/removed-events` 逐一向 Google 查已排入、還沒完成的項目的事件還在不在，列出已被刪除的讓使用者選擇；`POST /schedule/removed-events/resolve` 照選擇刪除任務或清掉編號（回到待排）。不用資料庫交易：先刪 Google 上的事件、後清編號，清除時以「編號還是處理時讀到的那一個」為條件，中途失敗時留下的項目下次查詢會再列出。修改任務、調整截止日與時長、標記完成都只寫入改到的欄位，不會把清掉的編號寫回。
+
 **AI**：Gemini 用於推估任務的優先度與所需時間（建立任務時未填才呼叫，有限流），以及 GitHub PR 摘要機器人（`POST /webhook`，結果貼到 Discord，供本專案自己的開發流程使用）。

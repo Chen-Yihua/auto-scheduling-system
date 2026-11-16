@@ -198,6 +198,17 @@ def _parse_event_time(value: dict | None) -> datetime | None:
     return to_utc_datetime((value or {}).get("dateTime"))
 
 
+async def _get_event_unless_removed(access_token: str, calendar_id: str, event_id: str) -> dict | None:
+    """事件已被刪除（Google 回 404 / 410，或狀態是 cancelled）時回 None；其他錯誤原樣丟出 httpx 的例外。"""
+    try:
+        event = await get_calendar_event(access_token, calendar_id, event_id)
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code in _EVENT_GONE_STATUSES:
+            return None
+        raise
+    return None if event.get("status") == "cancelled" else event
+
+
 async def get_calendar_event_ends(clerk_id: str, event_ids: list[str]) -> dict[str, datetime | None]:
     """
     事件在 Google 上最新的結束時間（使用者可能在 Google 上拖動過）。
@@ -210,16 +221,53 @@ async def get_calendar_event_ends(clerk_id: str, event_ids: list[str]) -> dict[s
     ends: dict[str, datetime | None] = {}
     for event_id in event_ids:
         try:
-            event = await get_calendar_event(access_token, calendar_id, event_id)
+            event = await _get_event_unless_removed(access_token, calendar_id, event_id)
         except httpx.HTTPStatusError as e:
-            if e.response.status_code in _EVENT_GONE_STATUSES:
-                ends[event_id] = None
-                continue
             raise _google_error(e, "取得行事曆事件失敗")
         except httpx.RequestError as e:
             raise _unreachable(e, "連線 Google Calendar API 失敗")
-        ends[event_id] = None if event.get("status") == "cancelled" else _parse_event_time(event.get("end"))
+        ends[event_id] = _parse_event_time(event.get("end")) if event else None
     return ends
+
+
+def _event_lookup_error(e: httpx.HTTPStatusError) -> AppError:
+    """
+    401 直接要求重新連接：前面取行事曆列表時剛驗證或換過 token，再換也沒用。
+    權限不足同樣要重新連接；其他照 _google_error 分類。
+    """
+    if e.response.status_code == 401 or google_error_code(e.response) == "REAUTH_REQUIRED":
+        logger.warning("查詢 Google Calendar 事件需要重新連接: %s %s", e.response.status_code, e.response.text)
+        return ReauthRequiredError(GOOGLE_REAUTH_DETAIL)
+    return _google_error(e, "取得行事曆事件失敗")
+
+
+async def find_removed_calendar_events(clerk_id: str, event_ids: list[str]) -> set[str]:
+    """
+    回傳 event_ids 裡在 Google 上已被刪除的事件（判斷規則同 get_calendar_event_ends）。
+
+    依序查詢，任何一個失敗就丟出錯誤：沒有連接、Google 回 401 或權限不足丟 ReauthRequiredError；
+    其他錯誤照 _google_error、_unreachable 分類。event_ids 是空的時不呼叫 Google。
+    """
+    if not event_ids:
+        return set()
+    try:
+        access_token, calendar_id = await _get_access_token_and_primary_calendar_id(clerk_id)
+    except InvalidRequestError as e:
+        # 任務還存著事件編號卻沒有連接，代表授權被移除了，要請使用者重新連接
+        if e.error_code == "NOT_LINKED":
+            raise ReauthRequiredError(GOOGLE_REAUTH_DETAIL)
+        raise
+
+    removed = set()
+    for event_id in event_ids:
+        try:
+            if await _get_event_unless_removed(access_token, calendar_id, event_id) is None:
+                removed.add(event_id)
+        except httpx.HTTPStatusError as e:
+            raise _event_lookup_error(e)
+        except httpx.RequestError as e:
+            raise _unreachable(e, "連線 Google Calendar API 失敗")
+    return removed
 
 
 def _delete_error(e: httpx.HTTPStatusError) -> AppError:

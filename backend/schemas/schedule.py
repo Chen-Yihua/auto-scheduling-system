@@ -66,6 +66,35 @@ class SchedulableTaskOut(BaseModel):
     stage_count: Optional[int] = None
 
 
+class LaterStage(BaseModel):
+    """勾選重新排程時，會從 Google 日曆一起移除、重新排程的後面階段。"""
+    task_id: str  # 組合 id
+    stage: int
+
+
+class RemovedCalendarEventOut(SchedulableTaskOut):
+    """Google 日曆上的事件已被刪除的項目。later_stages 依階段順序，用的是查詢當下的資料。"""
+    later_stages: list[LaterStage] = []
+
+
+class ResolveRemovedEventsInput(BaseModel):
+    """使用者在「處理已刪除的事件」步驟的選擇；兩份都是組合 id。"""
+    reschedule: list[str] = []
+    delete: list[str] = []
+
+
+class ResolveRemovedEventsFailure(BaseModel):
+    task_id: str
+    reason: str
+    # 處理時編號已被換掉是 None；其他照 ADR 0011
+    error_code: Optional[str] = None
+
+
+class ResolveRemovedEventsResult(BaseModel):
+    succeeded: list[str]
+    failed: list[ResolveRemovedEventsFailure]
+
+
 class ScheduleReorderItem(BaseModel):
     task_id: str  # 組合 id
     priority: PriorityEnum

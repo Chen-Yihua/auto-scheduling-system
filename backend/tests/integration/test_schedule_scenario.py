@@ -92,3 +92,115 @@ async def test_schedule_wizard_sending_due_date_back_unchanged_keeps_due_date():
         assert to_utc_datetime(github["scheduling_due_date"]) == GITHUB_DUE
     finally:
         await _cleanup()
+
+
+# ---------- issue-42：處理在 Google 日曆上被刪除的事件，再產生排程 ----------
+
+import routers.schedule as schedule_router
+
+FREE_DAY = [{"start": "2030-01-01T09:00:00Z", "end": "2030-01-01T18:00:00Z"}]
+
+
+@pytest.fixture
+def fake_google(monkeypatch):
+    """假的 Google 日曆：gone 是已被刪除的事件 id；deleted 記錄被刪掉的事件。"""
+    state = {"gone": set(), "deleted": []}
+
+    async def find_removed(user_id, event_ids):
+        return {event_id for event_id in event_ids if event_id in state["gone"]}
+
+    async def delete_events(user_id, event_ids):
+        state["deleted"].extend(event_ids)
+
+    async def free_slots(user_id, use_cache=True):
+        return FREE_DAY
+
+    async def event_ends(user_id, event_ids):
+        raise AssertionError("處理後不該還有在等前一個階段事件的子任務")
+
+    monkeypatch.setattr(schedule_router, "find_removed_calendar_events", find_removed)
+    monkeypatch.setattr(schedule_router, "delete_calendar_events", delete_events)
+    monkeypatch.setattr(schedule_router, "get_free_slots_for_user", free_slots)
+    monkeypatch.setattr(schedule_router, "get_calendar_event_ends", event_ends)
+    return state
+
+
+async def _create_staged(ac: AsyncClient, event_ids: list[str | None]) -> list[str]:
+    """建立一個主任務與階段，依序寫入事件 id；回傳子任務 id（依階段順序）。"""
+    res = await ac.post("/manual-tasks/", json={
+        "title": "期末報告", "description": "",
+        "subtasks": [
+            {"title": f"階段{n}", "description": "", "status": "To Do", "priority": "High", "duration": 60}
+            for n in range(1, len(event_ids) + 1)
+        ],
+    })
+    assert res.status_code == status.HTTP_201_CREATED, res.text
+    subtask_ids = [s["id"] for s in res.json()["subtasks"]]
+    for subtask_id, event_id in zip(subtask_ids, event_ids):
+        await db.manual_tasks.update_one({"_id": subtask_id}, {"$set": {"calendar_event_id": event_id}})
+    return subtask_ids
+
+
+@pytest.mark.asyncio
+async def test_issue42_ac1_ac10_task_with_deleted_event_can_be_rescheduled(fake_google):
+    """AC1、AC10：重現步驟——任務的事件在 Google 上被刪掉 → 列在 removed-events；勾選重新排程後沒有事件編號，出現在待排清單，產生排程時照常排入。"""
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+            task_id = await _seed(ac)
+            await db.manual_tasks.update_one({"_id": task_id}, {"$set": {"calendar_event_id": "ev-gone"}})
+            fake_google["gone"] = {"ev-gone"}
+            composite_id = f"manual:{task_id}"
+
+            removed = (await ac.get("/schedule/removed-events")).json()
+            assert [item["id"] for item in removed] == [composite_id]
+
+            res = await ac.post("/schedule/removed-events/resolve", json={"reschedule": [composite_id], "delete": []})
+            assert res.status_code == status.HTTP_200_OK, res.text
+            assert res.json()["succeeded"] == [composite_id]
+
+            items = {item["id"]: item for item in (await ac.get("/schedule/tasks")).json()}
+            assert items[composite_id]["calendar_event_id"] is None
+
+            suggestion = (await ac.post("/schedule/suggest", json={})).json()
+            assert composite_id in [item["task_id"] for item in suggestion["scheduled"]]
+    finally:
+        await _cleanup()
+
+
+@pytest.mark.asyncio
+async def test_issue42_ac29_rescheduled_previous_stage_and_later_stage_are_scheduled_in_order(fake_google):
+    """AC29：前一個階段的事件被刪除、勾選重新排程 → 後面已排入的階段一起回到待排；產生排程時依序排入，後面的在前一個之後。"""
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+            first, second = await _create_staged(ac, ["ev-1", "ev-2"])
+            fake_google["gone"] = {"ev-1"}
+
+            res = await ac.post("/schedule/removed-events/resolve", json={"reschedule": [f"manual:{first}"], "delete": []})
+            assert res.status_code == status.HTTP_200_OK, res.text
+            assert fake_google["deleted"] == ["ev-2"]
+
+            scheduled = {item["task_id"]: item for item in (await ac.post("/schedule/suggest", json={})).json()["scheduled"]}
+            assert to_utc_datetime(scheduled[f"manual:{second}"]["start"]) >= to_utc_datetime(scheduled[f"manual:{first}"]["end"])
+    finally:
+        await _cleanup()
+
+
+@pytest.mark.asyncio
+async def test_issue42_ac30_deleted_previous_stage_renumbers_later_stages_and_schedule_follows(fake_google):
+    """AC30：前一個階段沒勾（被刪除）→ 後面的階段編號往前遞補，產生排程時照遞補後的順序。"""
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+            first, second, third = await _create_staged(ac, ["ev-1", None, None])
+            fake_google["gone"] = {"ev-1"}
+
+            res = await ac.post("/schedule/removed-events/resolve", json={"reschedule": [], "delete": [f"manual:{first}"]})
+            assert res.status_code == status.HTTP_200_OK, res.text
+
+            items = {item["id"]: item for item in (await ac.get("/schedule/tasks")).json()}
+            assert f"manual:{first}" not in items
+            assert (items[f"manual:{second}"]["stage"], items[f"manual:{third}"]["stage"]) == (1, 2)
+
+            scheduled = {item["task_id"]: item for item in (await ac.post("/schedule/suggest", json={})).json()["scheduled"]}
+            assert to_utc_datetime(scheduled[f"manual:{third}"]["start"]) >= to_utc_datetime(scheduled[f"manual:{second}"]["end"])
+    finally:
+        await _cleanup()

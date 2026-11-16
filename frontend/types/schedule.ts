@@ -1,3 +1,5 @@
+import type { SchedulableTask } from './schedulableTask'
+
 export interface ScheduledTask {
   task_id: string
   title: string
@@ -36,6 +38,30 @@ export interface FailedConfirmation {
 export interface ScheduleConfirmResult {
   confirmed: ConfirmedTask[]
   failed: FailedConfirmation[]
+}
+
+// 對應後端 LaterStage：勾選重新排程時會一起從 Google 日曆移除的後面階段
+export interface LaterStage {
+  task_id: string
+  stage: number
+}
+
+// 對應後端 RemovedCalendarEventOut：Google 日曆上的事件已被刪除的項目
+export interface RemovedCalendarEvent extends SchedulableTask {
+  later_stages: LaterStage[]
+}
+
+// 對應後端 ResolveRemovedEventsFailure
+export interface ResolveRemovedEventsFailure {
+  task_id: string
+  reason: string
+  // 處理時編號已被換掉是 null
+  error_code: string | null
+}
+
+export interface ResolveRemovedEventsResult {
+  succeeded: string[]
+  failed: ResolveRemovedEventsFailure[]
 }
 
 // days_of_week：0=週一 ... 6=週日，和後端 weekday() 一致

@@ -32,6 +32,11 @@ vi.mock('~/composables/useSchedule', () => ({
   }),
 }))
 
+const fetchGoogleCalendarsSpy = vi.fn()
+vi.mock('~/composables/useGoogleCalendar', () => ({
+  useGoogleCalendar: () => ({ fetchGoogleCalendars: fetchGoogleCalendarsSpy }),
+}))
+
 const pushSpy = vi.fn()
 vi.mock('vue-router', () => ({
   useRouter: () => ({ push: pushSpy }),
@@ -62,6 +67,12 @@ const uiStubs = {
 
 const render = () => mount(ScheduleSuggestion, { global: { stubs: uiStubs } })
 
+const NOT_CONNECTED_TEXT = 'Google Calendar 未連接或授權已失效，請前往 帳號設定 連接。'
+
+function flushPromises() {
+  return new Promise((resolve) => setTimeout(resolve, 0))
+}
+
 describe('ScheduleSuggestion.vue', () => {
   beforeEach(() => {
     loadingRef.value = false
@@ -73,6 +84,8 @@ describe('ScheduleSuggestion.vue', () => {
     fetchSpy.mockClear()
     confirmSpy.mockClear()
     pushSpy.mockClear()
+    fetchGoogleCalendarsSpy.mockReset()
+    fetchGoogleCalendarsSpy.mockResolvedValue('connected')
   })
 
   it('掛載時不會自動抓排程建議，要等使用者按按鈕', () => {
@@ -86,6 +99,7 @@ describe('ScheduleSuggestion.vue', () => {
     expect(wrapper.text()).toContain('尚未產生排程建議')
 
     await wrapper.findComponent({ name: 'UButton' }).trigger('click')
+    await flushPromises()
 
     expect(pushSpy).toHaveBeenCalledWith('/schedule')
     // 精靈完成後才會產生建議，按下按鈕當下不會
@@ -105,7 +119,8 @@ describe('ScheduleSuggestion.vue', () => {
     hasFetchedRef.value = true
     notLinkedRef.value = true
     const wrapper = render()
-    expect(wrapper.text()).toContain('尚未連接 Google Calendar，請前往 帳號設定 連接。')
+    // issue-42 需求 3 改了這段文字
+    expect(wrapper.text()).toContain(NOT_CONNECTED_TEXT)
     expect(wrapper.find('strong').text()).toBe('帳號設定')
     expect(wrapper.text()).not.toContain('右側卡片')
   })
@@ -153,5 +168,42 @@ describe('ScheduleSuggestion.vue', () => {
     const wrapper = render()
     const confirmButton = wrapper.findAll('button').find((b) => b.text().includes('確認排程並寫入 Calendar'))
     expect(confirmButton).toBeUndefined()
+  })
+
+  describe('issue-42：進入排程精靈前先確認 Google 日曆的連接狀態', () => {
+    it.each(['not_linked', 'reauth'] as const)('AC26：按「產生排程建議」時狀態是 %s → 不進入精靈，卡片顯示未連接的提示', async (result) => {
+      fetchGoogleCalendarsSpy.mockResolvedValue(result)
+      const wrapper = render()
+
+      await wrapper.findComponent({ name: 'UButton' }).trigger('click')
+      await flushPromises()
+
+      expect(fetchGoogleCalendarsSpy).toHaveBeenCalledTimes(1)
+      expect(pushSpy).not.toHaveBeenCalled()
+      expect(wrapper.text()).toContain(NOT_CONNECTED_TEXT)
+      expect(wrapper.find('strong').text()).toBe('帳號設定')
+    })
+
+    it('AC26：按「重新產生」時沒連接 → 不進入精靈，卡片顯示未連接的提示', async () => {
+      hasFetchedRef.value = true
+      fetchGoogleCalendarsSpy.mockResolvedValue('not_linked')
+      const wrapper = render()
+
+      await wrapper.findAll('button').find((b) => b.text() === '重新產生')!.trigger('click')
+      await flushPromises()
+
+      expect(pushSpy).not.toHaveBeenCalled()
+      expect(wrapper.text()).toContain(NOT_CONNECTED_TEXT)
+    })
+
+    it('AC28：確認連接狀態失敗（不知道有沒有連接）→ 照常進入精靈', async () => {
+      fetchGoogleCalendarsSpy.mockResolvedValue('unknown')
+      const wrapper = render()
+
+      await wrapper.findComponent({ name: 'UButton' }).trigger('click')
+      await flushPromises()
+
+      expect(pushSpy).toHaveBeenCalledWith('/schedule')
+    })
   })
 })

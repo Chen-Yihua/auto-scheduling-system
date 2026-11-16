@@ -25,9 +25,21 @@ export interface Task {
     progress?: { done: number; total: number } | null
 }
 
+// 對應後端 PriorityAdjustment：一個 AI 推斷的優先序被自動調整的階段
+export interface PriorityAdjustment {
+    subtask_id: string
+    // AI 原本推斷的值
+    from_priority: 'Low' | 'Medium' | 'High'
+    // 調整後的值，等於比較的階段當時的值
+    to_priority: 'Low' | 'Medium' | 'High'
+    // 被調低時是前一個階段；被調高時是後面不是 AI 推斷的階段裡最高的那個（同樣高取最前面）
+    compared_subtask_id: string
+}
+
 // 對應後端 ManualTaskWithSubtasksOut：建立任務、新增子任務的回應
 export interface TaskWithSubtasks extends Task {
     subtasks?: Task[]
-    // AI 推斷的優先序被調成和前一個階段一樣的階段編號
-    priority_adjusted_stages?: number[]
+    // AI 推斷的優先序比前一個階段高會被調低、比後面的階段低會被調高，每個被調整的階段一筆；
+    // 一次建立是這次建立的、新增單一階段是這次新增的，同一個 Idempotency-Key 重送時也相同
+    priority_adjustments?: PriorityAdjustment[]
 }

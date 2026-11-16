@@ -605,7 +605,7 @@ describe('useTaskForm', () => {
   it('AC1：加了子任務時，送出主任務的標題、描述、截止日和依順序排列的子任務；主任務不帶優先序、時長、提醒、狀態', async () => {
     const ctx = useTaskForm()
     fillStagedForm(ctx)
-    fetchSpy.mockResolvedValueOnce({ id: 'p1', is_parent: true, subtasks: [], priority_adjusted_stages: [] })
+    fetchSpy.mockResolvedValueOnce({ id: 'p1', is_parent: true, subtasks: [], priority_adjustments: [] })
 
     await submitAndFlushTimers(() => ctx.onSubmit(submitEvent(ctx.state)))
 
@@ -625,42 +625,115 @@ describe('useTaskForm', () => {
     expect(ctx.state.subtasks).toHaveLength(10)
   })
 
-  it('AC6：有階段的優先序被自動調整時，建立成功的提示說明是哪些階段', async () => {
+  const stage = (id: string, title: string, priority: Task['priority']) => ({ ...fakeTask(id), title, priority })
+  const ADJUSTED_HEADER = '因後面階段比前面優先序高，已自動調整優先序：'
+
+  it('issue-32 AC10：被調低、被調高的階段各寫一行，用階段標題與中文優先序，說明文字分行顯示', async () => {
     const ctx = useTaskForm()
     fillStagedForm(ctx)
-    fetchSpy.mockResolvedValueOnce({ id: 'p1', is_parent: true, subtasks: [{}, {}], priority_adjusted_stages: [2] })
+    fetchSpy.mockResolvedValueOnce({
+      id: 'p1', is_parent: true,
+      subtasks: [stage('s1', '蒐集資料', 'High'), stage('s2', '寫初稿', 'Medium'), stage('s3', '排版', 'Medium')],
+      priority_adjustments: [
+        { subtask_id: 's1', from_priority: 'Low', to_priority: 'Medium', compared_subtask_id: 's2' },
+        { subtask_id: 's3', from_priority: 'High', to_priority: 'Medium', compared_subtask_id: 's2' },
+      ],
+    })
 
     await submitAndFlushTimers(() => ctx.onSubmit(submitEvent(ctx.state)))
 
     const toast = toastSpy.add.mock.calls[0]![0]
-    expect(toast.title).toContain('2 個階段')
-    expect(toast.description).toContain('階段 2')
+    expect(toast.title).toBe('已建立主任務和 3 個階段')
+    // 「比較的階段的值」用清單裡調整後的值，不讀比較的階段目前的值（s2 目前是中，調整後的值也是中）
+    expect(toast.description.split('\n')).toEqual([
+      ADJUSTED_HEADER,
+      '「蒐集資料」：AI 判斷為「低」，但後面的階段「寫初稿」是「中」，已改成「中」',
+      '「排版」：AI 判斷為「高」，但前一個階段「寫初稿」是「中」，已改成「中」',
+    ])
+    expect(toast.ui?.description).toContain('whitespace-pre-line')
   })
 
-  it('AC6：往上、往下的調整都說明是哪些階段，文字不能只寫「比前一個階段高」', async () => {
+  it('issue-32 AC10：比較的階段的值用清單裡調整後的值，不用它目前的值', async () => {
     const ctx = useTaskForm()
     fillStagedForm(ctx)
-    fetchSpy.mockResolvedValueOnce({ id: 'p1', is_parent: true, subtasks: [{}, {}], priority_adjusted_stages: [1, 2] })
+    // 重送前在別的分頁把比較的階段改成高；提示仍說它當時是中
+    fetchSpy.mockResolvedValueOnce({
+      id: 'p1', is_parent: true,
+      subtasks: [stage('s1', '蒐集資料', 'High'), stage('s2', '寫初稿', 'Medium')],
+      priority_adjustments: [{ subtask_id: 's2', from_priority: 'High', to_priority: 'Medium', compared_subtask_id: 's1' }],
+    })
 
     await submitAndFlushTimers(() => ctx.onSubmit(submitEvent(ctx.state)))
 
-    const description = toastSpy.add.mock.calls[0]![0].description
-    expect(description).toContain('階段 1、2')
-    expect(description).toContain('前後階段')
+    expect(toastSpy.add.mock.calls[0]![0].description).toContain('前一個階段「蒐集資料」是「中」，已改成「中」')
   })
 
-  it('AC10 / AC6：插入的階段優先序被調整時，提示說明是哪個階段', async () => {
+  it('issue-32 AC12：沒有階段被調整時，提示不出現調整說明', async () => {
+    const ctx = useTaskForm()
+    fillStagedForm(ctx)
+    fetchSpy.mockResolvedValueOnce({
+      id: 'p1', is_parent: true, subtasks: [stage('s1', '蒐集資料', 'High'), stage('s2', '寫初稿', 'Low')],
+      priority_adjustments: [],
+    })
+
+    await submitAndFlushTimers(() => ctx.onSubmit(submitEvent(ctx.state)))
+
+    const toast = toastSpy.add.mock.calls[0]![0]
+    expect(toast.title).toBe('已建立主任務和 2 個階段')
+    expect(toast.description).toBeUndefined()
+  })
+
+  it('issue-32 AC15：被調整或被比較的階段不在回應的 subtasks 裡時那一行不顯示；全部不顯示時沒有調整說明', async () => {
+    const ctx = useTaskForm()
+    fillStagedForm(ctx)
+    const subtasks = [stage('s1', '蒐集資料', 'High'), stage('s2', '寫初稿', 'High')]
+    fetchSpy.mockResolvedValueOnce({
+      id: 'p1', is_parent: true, subtasks,
+      priority_adjustments: [
+        { subtask_id: 'gone', from_priority: 'High', to_priority: 'Medium', compared_subtask_id: 's1' },
+        { subtask_id: 's2', from_priority: 'Low', to_priority: 'High', compared_subtask_id: 'gone' },
+        { subtask_id: 's1', from_priority: 'Low', to_priority: 'High', compared_subtask_id: 's2' },
+      ],
+    })
+    fetchSpy.mockResolvedValueOnce([])
+    fetchSpy.mockResolvedValueOnce({
+      id: 'p1', is_parent: true, subtasks,
+      priority_adjustments: [{ subtask_id: 'gone', from_priority: 'High', to_priority: 'Medium', compared_subtask_id: 's1' }],
+    })
+
+    await submitAndFlushTimers(() => ctx.onSubmit(submitEvent(ctx.state)))
+    fillStagedForm(ctx)
+    await submitAndFlushTimers(() => ctx.onSubmit(submitEvent(ctx.state)))
+
+    expect(toastSpy.add.mock.calls[0]![0].description.split('\n')).toEqual([
+      ADJUSTED_HEADER,
+      '「蒐集資料」：AI 判斷為「低」，但後面的階段「寫初稿」是「高」，已改成「高」',
+    ])
+    expect(toastSpy.add.mock.calls[1]![0].description).toBeUndefined()
+  })
+
+  it('issue-32 AC11：新增單一階段被調整時，提示照同樣的格式說明', async () => {
     const ctx = useTaskForm()
     ctx.all_tasks.value = [parentTask(), subtaskOf('p1', 1), subtaskOf('p1', 2)]
     ctx.startEditTask(ctx.all_tasks.value[0]!)
     ctx.startAddSubtask(2)
     ctx.subtaskDraft.title = '插入的階段'
-    fetchSpy.mockResolvedValueOnce({ id: 'p1', is_parent: true, subtasks: [], priority_adjusted_stages: [2] })
+    fetchSpy.mockResolvedValueOnce({
+      id: 'p1', is_parent: true,
+      subtasks: [stage('a', '階段一', 'Medium'), stage('new', '插入的階段', 'Medium'), stage('b', '階段二', 'Low')],
+      priority_adjustments: [{ subtask_id: 'new', from_priority: 'High', to_priority: 'Medium', compared_subtask_id: 'a' }],
+    })
     fetchSpy.mockResolvedValueOnce([parentTask(3)])
 
     await ctx.onAddSubtask()
 
-    expect(toastSpy.add).toHaveBeenCalledWith(expect.objectContaining({ description: expect.stringContaining('階段 2') }))
+    const toast = toastSpy.add.mock.calls[0]![0]
+    expect(toast.title).toBe('已新增階段')
+    expect(toast.description.split('\n')).toEqual([
+      ADJUSTED_HEADER,
+      '「插入的階段」：AI 判斷為「高」，但前一個階段「階段一」是「中」，已改成「中」',
+    ])
+    expect(toast.ui?.description).toContain('whitespace-pre-line')
   })
 
   it('AC4：一次建立失敗時保留整份表單（含子任務），並顯示後端說明的原因', async () => {
@@ -705,7 +778,7 @@ describe('useTaskForm', () => {
     ctx.startAddSubtask(2)
     ctx.subtaskDraft.title = '插入的階段'
     ctx.subtaskDraft.priority = 'Medium'
-    fetchSpy.mockResolvedValueOnce({ id: 'p1', is_parent: true, subtasks: [], priority_adjusted_stages: [] })
+    fetchSpy.mockResolvedValueOnce({ id: 'p1', is_parent: true, subtasks: [], priority_adjustments: [] })
     fetchSpy.mockResolvedValueOnce([parentTask(3)])
 
     await ctx.onAddSubtask()

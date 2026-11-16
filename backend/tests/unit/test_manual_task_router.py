@@ -324,11 +324,11 @@ def deleted_events(monkeypatch):
     return calls
 
 
-async def _create_staged(subtasks, **parent_fields):
+async def _create_staged(subtasks, idempotency_key=None, **parent_fields):
     fields = dict(title="期末報告", description="資料結構", subtasks=subtasks)
     fields.update(parent_fields)
     return await manual_task_router.create_manual_task(
-        request=MagicMock(), taskInput=ManualTaskInput(**fields), clerk_user=STAGE_USER, idempotency_key=None,
+        request=MagicMock(), taskInput=ManualTaskInput(**fields), clerk_user=STAGE_USER, idempotency_key=idempotency_key,
     )
 
 
@@ -336,10 +336,10 @@ def _sub(title, **fields):
     return {"title": title, **fields}
 
 
-async def _add(task_id, **fields):
+async def _add(task_id, idempotency_key=None, **fields):
     return await manual_task_router.add_subtask(
         request=MagicMock(), task_id=task_id, subtaskInput=SubtaskCreate(**fields), clerk_user=STAGE_USER,
-        idempotency_key=None,
+        idempotency_key=idempotency_key,
     )
 
 
@@ -387,13 +387,17 @@ async def test_ac5_only_subtasks_missing_fields_are_inferred_in_one_call_with_pa
 
 @pytest.mark.asyncio
 async def test_ac6_inferred_priority_higher_than_previous_stage_is_lowered_and_reported(stage_db, subtask_infer_calls):
-    """AC6：AI 推斷的優先序比前一個階段高 → 調成和前一個階段一樣，回應列出被調整的階段。"""
+    """AC6 / issue-32 AC1、AC2：AI 推斷的優先序比前一個階段高 → 調成和前一個階段一樣；回應寫出被調整的子任務 id、原本與調整後的值，比較的是前一個階段。"""
     subtask_infer_calls["replies"] = [{"priority": "High", "duration": 30, "reason": "AI 覺得很急"}]
 
     result = await _create_staged([_sub("一", priority="Medium", duration=30), _sub("二", duration=30)])
 
-    assert result["subtasks"][1]["priority"] == "Medium"
-    assert result["priority_adjusted_stages"] == [2]
+    first, second = result["subtasks"]
+    assert second["priority"] == "Medium"
+    assert result["priority_adjustments"] == [
+        {"subtask_id": second["id"], "from_priority": "High", "to_priority": "Medium", "compared_subtask_id": first["id"]},
+    ]
+    assert "priority_adjusted_stages" not in result
 
 
 @pytest.mark.asyncio
@@ -501,8 +505,12 @@ async def test_ac10_inferred_priority_of_inserted_subtask_is_lowered_to_previous
     result = await _add(parent["id"], title="AI 來填", position=2)
 
     assert subtask_infer_calls["calls"] == [("期末報告", "資料結構", ["AI 來填"])]
-    assert (await _stage_docs(parent["id"]))[1]["priority"] == "Medium"
-    assert result["priority_adjusted_stages"] == [2]
+    stages = await _stage_docs(parent["id"])
+    assert stages[1]["priority"] == "Medium"
+    # issue-32 AC5：回應寫出這個階段的調整內容，比較的是前一個階段
+    assert result["priority_adjustments"] == [
+        {"subtask_id": stages[1]["id"], "from_priority": "High", "to_priority": "Medium", "compared_subtask_id": stages[0]["id"]},
+    ]
 
 
 @pytest.mark.asyncio
@@ -1023,8 +1031,12 @@ async def test_ac6_inferred_priority_lower_than_user_filled_next_stage_is_raised
 
     result = await _create_staged([_sub("一", duration=30), _sub("二", priority="High", duration=30)])
 
+    first, second = result["subtasks"]
     assert [s["priority"] for s in result["subtasks"]] == ["High", "High"]
-    assert result["priority_adjusted_stages"] == [1]
+    # issue-32 AC1、AC2：被調高時比較的是後面使用者填的階段
+    assert result["priority_adjustments"] == [
+        {"subtask_id": first["id"], "from_priority": "Medium", "to_priority": "High", "compared_subtask_id": second["id"]},
+    ]
 
 
 @pytest.mark.asyncio
@@ -1035,8 +1047,12 @@ async def test_ac10_inferred_priority_of_inserted_subtask_is_raised_to_next_stag
 
     result = await _add(parent["id"], title="AI 來填", position=2)
 
-    assert [d["priority"] for d in await _stage_docs(parent["id"])] == ["High", "Medium", "Medium", "Low"]
-    assert result["priority_adjusted_stages"] == [2]
+    stages = await _stage_docs(parent["id"])
+    assert [d["priority"] for d in stages] == ["High", "Medium", "Medium", "Low"]
+    # issue-32 AC5：被調高時比較的是後面的既有階段
+    assert result["priority_adjustments"] == [
+        {"subtask_id": stages[1]["id"], "from_priority": "Low", "to_priority": "Medium", "compared_subtask_id": stages[2]["id"]},
+    ]
 
 
 # ---------- 需求 4：Idempotency-Key 衝突的 error_code ----------
@@ -1068,3 +1084,101 @@ async def test_subtask_idempotency_conflicts_have_their_own_error_codes(monkeypa
         await manual_task_router._subtask_result_for_key("task-1", "test_user_123", "key")
 
     assert exc_info.value.error_code == error_code
+
+
+# ---------- issue-32：優先序自動調整的清單存進資料庫，重送時回傳同一份 ----------
+
+def _first_key_lookup_misses(monkeypatch):
+    """讓第一次用 key 查詢查不到，模擬同一個 key 的另一個請求在這次查詢之後才寫入（同時送達）。"""
+    crud = manual_task_router.manual_task_crud
+    real_lookup = crud.get_manual_task_by_idempotency_key
+    state = {"missed": False}
+
+    async def lookup(user_id, key):
+        if not state["missed"]:
+            state["missed"] = True
+            return None
+        return await real_lookup(user_id, key)
+
+    monkeypatch.setattr(crud, "get_manual_task_by_idempotency_key", lookup)
+
+
+@pytest.mark.asyncio
+async def test_issue32_ac4_concurrent_create_hitting_duplicate_returns_adjustments_of_first_write(stage_db, subtask_infer_calls, monkeypatch):
+    """issue-32 AC4：同一個 key 的一次建立同時送達、這次撞上重複 → 回應的清單是先寫入那筆存的，不是這次重新算的。"""
+    from pymongo.errors import BulkWriteError
+
+    subtask_infer_calls["replies"] = [{"priority": "High", "duration": 30, "reason": "AI"}]
+    first = await _create_staged([_sub("一", priority="Medium", duration=30), _sub("二", duration=30)], idempotency_key="ac4-key")
+    assert first["priority_adjustments"]
+
+    # 這次的輸入會算出不同的清單（階段 1 被調高）
+    subtask_infer_calls["replies"] = [{"priority": "Low", "duration": 30, "reason": "AI"}]
+    _first_key_lookup_misses(monkeypatch)
+
+    async def duplicate_insert_many(docs):
+        raise BulkWriteError({"writeErrors": [{"code": 11000}]})
+
+    monkeypatch.setattr(stage_db, "insert_many", duplicate_insert_many)
+
+    second = await _create_staged([_sub("一", duration=30), _sub("二", priority="High", duration=30)], idempotency_key="ac4-key")
+
+    assert second["id"] == first["id"]
+    assert second["priority_adjustments"] == first["priority_adjustments"]
+
+
+@pytest.mark.asyncio
+async def test_issue32_ac6_concurrent_add_subtask_returns_adjustments_of_first_write(stage_db, subtask_infer_calls, monkeypatch):
+    """issue-32 AC6：新增階段同時送達、另一個先寫入（insert_subtask 回 False）→ 回應的清單是先寫入那個階段存的。"""
+    parent = await _three_stage_parent(subtask_infer_calls, priorities=("Medium", "Medium", "Low"))
+    subtask_infer_calls["replies"] = [{"priority": "High", "duration": 40, "reason": "AI"}]
+    first = await _add(parent["id"], idempotency_key="ac6-key", title="AI 來填", position=2)
+    assert first["priority_adjustments"]
+
+    _first_key_lookup_misses(monkeypatch)
+
+    async def already_inserted(*args, **kwargs):
+        return False
+
+    monkeypatch.setattr(manual_task_router.manual_task_crud, "insert_subtask", already_inserted)
+
+    # 這次自己填了優先序，算出的是空清單
+    second = await _add(parent["id"], idempotency_key="ac6-key", title="AI 來填", priority="Medium", duration=40, position=2)
+
+    assert second["priority_adjustments"] == first["priority_adjustments"]
+
+
+@pytest.mark.asyncio
+async def test_issue32_ac7_retry_of_data_stored_before_this_change_returns_empty_adjustments(stage_db):
+    """issue-32 AC7：資料庫裡的主任務、子任務沒有這份清單（舊資料）時，重送建立、重送新增都回空清單，不報錯。"""
+    user_id = STAGE_USER["sub"]
+    now = datetime.now(timezone.utc)
+    common = {"user_id": user_id, "description": "", "created": now, "updated": now, "inferred_fields": []}
+    await stage_db.insert_many([
+        {**common, "_id": "ac7-s1", "title": "一", "parent_id": "ac7-p", "status": "To Do", "priority": "Low", "duration": 30},
+        {**common, "_id": "ac7-s2", "title": "二", "parent_id": "ac7-p", "status": "To Do", "priority": "Low", "duration": 30,
+         "idempotency_key": "ac7-add-key"},
+        {**common, "_id": "ac7-p", "title": "舊主任務", "is_parent": True, "subtask_ids": ["ac7-s1", "ac7-s2"],
+         "idempotency_key": "ac7-create-key"},
+    ])
+
+    created = await _create_staged([_sub("一", priority="Low", duration=30)], idempotency_key="ac7-create-key")
+    added = await _add("ac7-p", idempotency_key="ac7-add-key", title="二", priority="Low", duration=30)
+
+    assert created["id"] == "ac7-p"
+    assert created.get("priority_adjustments", []) == []
+    assert added.get("priority_adjustments", []) == []
+
+
+@pytest.mark.asyncio
+async def test_issue32_ac14_add_without_adjustment_never_returns_parents_stored_adjustments(stage_db, subtask_infer_calls):
+    """issue-32 AC14：主任務建立時存了清單，新增一個沒被調整的階段 → 第一次與重送的回應清單都是空的。"""
+    subtask_infer_calls["replies"] = [{"priority": "High", "duration": 30, "reason": "AI"}]
+    parent = await _create_staged([_sub("一", priority="Medium", duration=30), _sub("二", duration=30)])
+    assert parent["priority_adjustments"]
+
+    first = await _add(parent["id"], idempotency_key="ac14-key", title="三", priority="Low", duration=30)
+    retry = await _add(parent["id"], idempotency_key="ac14-key", title="三", priority="Low", duration=30)
+
+    assert first["priority_adjustments"] == []
+    assert retry["priority_adjustments"] == []

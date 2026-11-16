@@ -3,12 +3,12 @@
 - 規格：[docs/specs/issue-30-delete-calendar-events.md](../../specs/issue-30-delete-calendar-events.md)
 - PR：#111
 - 等級：高風險
-- 輪數：2（第 1 輪 2026-11-16 `c207810`；第 2 輪 2026-11-16 `d8372bf`）
-- 最終結果：沒有阻擋項目（第 2 輪後開發者決定 #2～#4 在這個 PR 處理，修正中）
+- 輪數：3（第 1 輪 2026-11-16 `c207810`；第 2 輪 2026-11-16 `d8372bf`；第 3 輪 2026-11-16 `2453fc1`）
+- 最終結果：沒有阻擋項目
 
 ## 摘要
 
-- 發現：5 項（程式沒照規格做 1、測試抓不到錯的程式 1、沒有錯但可以更好 3；影響小 2、只供參考 3）
+- 發現：6 項（程式沒照規格做 1、測試抓不到錯的程式 1、沒有錯但可以更好 4；影響小 2、只供參考 4）
 - 開發者決策：1 項
 - 尚未處理：0 項
 
@@ -17,17 +17,20 @@
 | 輪 | 日期／commit | 新發現（阻擋） | 這一輪之後改了什麼 |
 |---|---|---|---|
 | 1 | 2026-11-16 `c207810` | #1–#5（#1） | #1 請 feature-implementer 補 docstring；#5 更正規格「測試對應」的測試名稱；#2–#4 開 issue |
-| 2 | 2026-11-16 `d8372bf` | 無 | 重審整個功能：#1、#5 已解決，AC1～AC24 通過，安全與一致性檢查都有涵蓋或不適用 |
+| 2 | 2026-11-16 `d8372bf` | 無 | 重審整個功能：#1、#5 已解決，AC1～AC24 通過，安全與一致性檢查都有涵蓋或不適用；之後開發者決定 #2～#4 在這個 PR 處理（AC25、AC26） |
+| 3 | 2026-11-16 `2453fc1` | #6（無） | 重審整個功能：#2～#4 已解決，AC1～AC26 通過；#6 由主 session 更正規格的測試對應 |
 
 ## 發現與處理
 
 | # | 輪 | 標題 | 類型 | 嚴重程度 | 阻擋合併 | 涉及安全／架構 | 根本原因 | 處理 | 決定者 | 結果 |
 |---|---|---|---|---|---|---|---|---|---|---|
 | 1 | 1 | 前端 `onDelete`、`onDeleteSubtask`、`isOnlySubtask` 沒有 docstring | 程式沒照規格做 | 影響小 | 是 | 否 | 前端刪除函式缺說明 | 請 feature-implementer 補 JSDoc | 規則 | `d8372bf` |
-| 2 | 1 | 第 3 步「已不在清單 → 刪掉剩下的子任務文件」沒有測試會在刪錯時失敗 | 測試抓不到錯的程式 | 只供參考 | 否 | 否 | — | 先開 issue；開發者決定在這個 PR 處理 → AC25 | 開發者 | 修正中（Closes [#112](https://github.com/Chen-Yihua/auto-scheduling-system/issues/112)） |
-| 3 | 1 | 前端清單過期時，刪掉實際上唯一的子任務後，編輯視窗沒關閉 | 沒有錯，但可以更好 | 影響小 | 否 | 否 | — | 先開 issue；開發者決定在這個 PR 處理 → AC26 | 開發者 | 修正中（Closes [#113](https://github.com/Chen-Yihua/auto-scheduling-system/issues/113)） |
-| 4 | 1 | 刪除相關測試留下不會被呼叫的假函式與輔助函式 | 沒有錯，但可以更好 | 只供參考 | 否 | 否 | — | 先開 issue；開發者決定在這個 PR 處理 → AC13／AC14 測試對應 | 開發者 | 修正中（Closes [#114](https://github.com/Chen-Yihua/auto-scheduling-system/issues/114)） |
+| 2 | 1 | 第 3 步「已不在清單 → 刪掉剩下的子任務文件」沒有測試會在刪錯時失敗 | 測試抓不到錯的程式 | 只供參考 | 否 | 否 | — | 先開 issue；開發者決定在這個 PR 處理 → AC25 | 開發者 | `2453fc1`（Closes [#112](https://github.com/Chen-Yihua/auto-scheduling-system/issues/112)） |
+| 3 | 1 | 前端清單過期時，刪掉實際上唯一的子任務後，編輯視窗沒關閉 | 沒有錯，但可以更好 | 影響小 | 否 | 否 | — | 先開 issue；開發者決定在這個 PR 處理 → AC26 | 開發者 | `2453fc1`（Closes [#113](https://github.com/Chen-Yihua/auto-scheduling-system/issues/113)） |
+| 4 | 1 | 刪除相關測試留下不會被呼叫的假函式與輔助函式 | 沒有錯，但可以更好 | 只供參考 | 否 | 否 | — | 先開 issue；開發者決定在這個 PR 處理 → AC13／AC14 測試對應 | 開發者 | `2453fc1`（Closes [#114](https://github.com/Chen-Yihua/auto-scheduling-system/issues/114)） |
 | 5 | 1 | 規格「測試對應」寫的還是改名前的測試名稱 | 沒有錯，但可以更好 | 只供參考 | 否 | 否 | — | 在這個 PR 更正規格的測試名稱（AC 不變） | 主 session | `d8372bf` |
+
+| 6 | 3 | 寫法：規格「測試對應」的 AC25、AC26 沒寫出實際的測試位置與全部測試 | 沒有錯，但可以更好 | 只供參考 | 否 | 否 | — | 更正規格的測試對應（AC 不變） | 主 session | 修正中 |
 
 ## 問題說明
 
@@ -50,6 +53,10 @@
 ### #5 規格的測試名稱過時
 
 規格「測試對應」AC8、AC9、AC13／AC14 寫的是改名前的名稱；實際是 `test_issue30_ac8_...`、`test_issue30_ac9_...`、`test_issue30_ac13_ac14_...`（`test_google_calendar_service.py:569`、`:612`、`:624`）。
+
+### #6 規格的 AC25、AC26 測試對應過時
+
+「測試對應」AC25 寫「router 或 crud」，實際只在 `backend/tests/unit/test_manual_task_router.py:945`；AC26 只列一個測試，實際還有「主任務還在 → 視窗保持開著」（`frontend/tests/composables/useTaskForm.test.ts:797`），它擋住「一律關閉」的錯誤實作。
 
 ## 開發者決策
 

@@ -9,7 +9,6 @@ from pymongo.errors import BulkWriteError, DuplicateKeyError, PyMongoError
 logger = logging.getLogger(__name__)
 
 PRIORITY_RANK = {"Low": 0, "Medium": 1, "High": 2}
-LAST_SUBTASK_DETAIL = "主任務只剩這一個子任務，不能刪除；要刪除請改刪主任務"
 PRIORITY_LABEL = {"Low": "低", "Medium": "中", "High": "高"}
 TASK_NOT_FOUND_DETAIL = "Task not found"
 
@@ -261,10 +260,15 @@ async def insert_subtask(
     return True
 
 
-async def delete_subtask(subtask: dict) -> None:
+async def delete_subtask(subtask: dict) -> bool:
     """
-    從主任務的順序移除子任務再刪掉文件。「至少還有 2 個」寫在同一次更新的 filter 裡，
-    同時送出的刪除也不會刪到一個都不剩。
+    主任務還有其他子任務時，把這個子任務移出主任務的 subtask_ids，再刪掉它的文件。
+
+    參數：
+    - subtask：要刪的子任務，至少要有 id、parent_id、user_id。
+
+    「清單裡有它、而且至少 2 個」寫在同一次更新的 filter 裡（ADR 0004），同時送出的刪除也不會刪到一個都不剩。
+    條件不成立（它是唯一的子任務，或已經不在清單裡）時什麼都不改，回傳 False；成功回傳 True。
     """
     result = await db.manual_tasks.update_one(
         {
@@ -274,12 +278,65 @@ async def delete_subtask(subtask: dict) -> None:
         {"$pull": {"subtask_ids": subtask["id"]}, "$set": {"updated": datetime.now(timezone.utc)}},
     )
     if result.matched_count == 0:
-        raise InvalidRequestError(LAST_SUBTASK_DETAIL)
+        return False
     # 這一步失敗時，子任務已不在順序裡，讀取時不會出現
+    await delete_subtask_document(subtask)
+    return True
+
+
+async def delete_parent_if_only_subtask(subtask: dict) -> bool:
+    """
+    主任務的 subtask_ids 正好只有這個子任務時，刪掉主任務和它底下所有子任務的文件。
+
+    參數：
+    - subtask：要刪的子任務，至少要有 id、parent_id、user_id。
+
+    「正好只有它」寫在刪除主任務的 filter 裡，用的是當下清單的內容，不是另外讀到的數量。
+    條件不成立時什麼都不改，回傳 False；成功回傳 True。
+    """
+    result = await db.manual_tasks.delete_one({
+        "_id": subtask["parent_id"], "user_id": subtask["user_id"],
+        "subtask_ids": subtask["id"], "subtask_ids.1": {"$exists": False},
+    })
+    if result.deleted_count == 0:
+        return False
+    # 主任務已經刪掉：之後刪子任務失敗時，留下的子任務沒有主任務，讀取時不會出現
+    await db.manual_tasks.delete_many({"user_id": subtask["user_id"], "parent_id": subtask["parent_id"]})
+    return True
+
+
+async def is_subtask_listed(subtask: dict) -> bool:
+    """
+    主任務還在、而且它的 subtask_ids 還有這個子任務時回傳 True。
+
+    參數：
+    - subtask：要查的子任務，至少要有 id、parent_id、user_id。
+    """
+    parent = await db.manual_tasks.find_one(
+        {"_id": subtask["parent_id"], "user_id": subtask["user_id"], "subtask_ids": subtask["id"]},
+        {"_id": 1},
+    )
+    return parent is not None
+
+
+async def delete_subtask_document(subtask: dict) -> None:
+    """
+    只刪子任務本身的文件，不動主任務的 subtask_ids；給已經不在清單裡的子任務用。
+
+    參數：
+    - subtask：要刪的子任務，至少要有 id、user_id。
+    """
     await db.manual_tasks.delete_one({"_id": subtask["id"], "user_id": subtask["user_id"]})
 
 
 async def delete_parent_with_subtasks(parent_id: str, user_id: str) -> None:
+    """
+    刪掉主任務，以及 parent_id 是這個主任務的所有子任務文件。
+
+    參數：
+    - parent_id：要刪的主任務 id。
+    - user_id：任務擁有者，只刪這個使用者的文件。
+    """
     # 先刪主任務：之後刪子任務失敗時，留下的子任務沒有主任務，讀取時不會出現
     await db.manual_tasks.delete_one({"_id": parent_id, "user_id": user_id})
     await db.manual_tasks.delete_many({"user_id": user_id, "parent_id": parent_id})
@@ -396,13 +453,6 @@ async def set_calendar_event_id(task_id: str, user_id: str, calendar_event_id: s
         {"$set": {"calendar_event_id": calendar_event_id, "updated": datetime.now(timezone.utc)}},
     )
 
-async def clear_calendar_event_id(task_id: str, user_id: str, calendar_event_id: str) -> None:
-    """事件已從 Google 刪掉、任務卻留下時呼叫，讓任務能重新排程。只清還指向這個事件的任務。"""
-    await db.manual_tasks.update_one(
-        {"_id": task_id, "user_id": user_id, "calendar_event_id": calendar_event_id},
-        {"$set": {"calendar_event_id": None, "updated": datetime.now(timezone.utc)}},
-    )
-
 async def update_manual_task_by_id(task_id: str, data: dict):
     logger.debug("Updating manual task %s with data=%s", task_id, data)
     # id 對應 _id，不能更新；狀態（主任務）、進度、階段編號是讀取時算的；
@@ -422,7 +472,16 @@ async def update_manual_task_by_id(task_id: str, data: dict):
         return await _with_stage_fields(task)
     return task
 
-async def delete_manual_task_by_id(task_id: str):
-    result = await db.manual_tasks.delete_one({"_id": task_id})
+async def delete_manual_task_by_id(task_id: str, user_id: str) -> None:
+    """
+    刪掉一個任務的文件（一般任務用）。
+
+    參數：
+    - task_id：要刪的任務 id。
+    - user_id：任務擁有者；不是這個使用者的任務刪不到。
+
+    沒有刪到任何文件時丟 NotFoundError（404）。
+    """
+    result = await db.manual_tasks.delete_one({"_id": task_id, "user_id": user_id})
     if result.deleted_count == 0:
         raise NotFoundError(TASK_NOT_FOUND_DETAIL)

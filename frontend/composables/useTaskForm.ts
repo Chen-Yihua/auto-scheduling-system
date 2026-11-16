@@ -389,40 +389,92 @@ function useTaskFormImpl() {
         }
     }
 
-    async function onDeleteSubtask(subtask: Task) {
-        if (!window.confirm(`你確定要刪除「${subtask.title}」這個階段嗎？`)) return
+    // 一次只送一個刪除，避免連點重複送出；任務本身與每個階段的「刪除」共用
+    const deleting = ref(false)
+
+    /**
+     * 判斷子任務是不是所屬主任務唯一的子任務。
+     * 用前端已載入的任務清單判斷；另一個分頁剛改過子任務時，結果可能和後端不同。
+     * @param subtask 要判斷的子任務；用它的 parent_id 找同一個主任務的子任務。
+     */
+    function isOnlySubtask(subtask: Task): boolean {
+        return all_tasks.value.filter((t) => t.parent_id === subtask.parent_id).length <= 1
+    }
+
+    /**
+     * 刪除子任務時的確認文字。從主任務的階段列表、從子任務自己的編輯視窗刪除都用這個。
+     * @param subtask 要刪的子任務；同一個主任務的其他子任務與主任務名稱從已載入的任務清單找。
+     */
+    function subtaskDeleteConfirmMessage(subtask: Task): string {
+        const question = `你確定要刪除「${subtask.title}」這個階段嗎？`
+        if (!isOnlySubtask(subtask)) return question
+        const parent = all_tasks.value.find((t) => t.id === subtask.parent_id)
+        return `${question}\n這是最後一個階段，刪除後「${parent?.title ?? ''}」整個任務都會刪除。`
+    }
+
+    /**
+     * 刪除主任務時的確認文字，依階段順序列出會一起刪除的子任務。
+     * @param subtasks 這個主任務的子任務，已依階段排序。
+     */
+    function parentDeleteConfirmMessage(subtasks: Task[]): string {
+        return [
+            `這個主任務和底下 ${subtasks.length} 個子任務會一起刪除：`,
+            ...subtasks.map((s, index) => `${index + 1}. ${s.title}`),
+            '確定嗎？',
+        ].join('\n')
+    }
+
+    /**
+     * 使用者確認後送出 DELETE，成功後重抓任務清單。另一個刪除送出中時直接回傳，不送出。
+     * 成功後 closeAfterDelete 為 true，或編輯中的任務已經不在重抓的清單裡時，關閉編輯視窗。
+     * 失敗時顯示錯誤（授權失效時顯示重新連接 Google Calendar 的提示），編輯視窗保持開著。
+     * @param task 要刪的任務（主任務、子任務或一般任務）。
+     * @param confirmMessage 確認對話框的文字；使用者按取消就不刪。
+     * @param closeAfterDelete 刪除成功後是否一定關閉編輯視窗；用送出前已載入的清單判斷編輯中的任務會不會一起刪掉。
+     */
+    async function deleteTask(task: Task, confirmMessage: string, closeAfterDelete: boolean) {
+        if (deleting.value) return
+        if (!window.confirm(confirmMessage)) return
+        deleting.value = true
         try {
             const token = await getToken.value()
-            await $fetch(`${BASE_URL}/manual-tasks/${subtask.id}`, {
+            await $fetch(`${BASE_URL}/manual-tasks/${task.id}`, {
                 method: 'DELETE',
                 headers: { Authorization: `Bearer ${token}` },
             })
             toast.add({ title: '刪除成功', color: 'success', icon: 'i-lucide-trash-2' })
+            const editingId = editing_task.value?.id
             await fetchTasks()
+            const editingGone = !!editingId && !all_tasks.value.some((t) => t.id === editingId)
+            if (closeAfterDelete || editingGone) resetAndClose()
         } catch (err) {
             showDeleteError(err)
+        } finally {
+            deleting.value = false
         }
     }
 
-    async function onDelete() {
-        if (!editing_task.value?.id) return
-        const confirmMessage = editing_task.value.is_parent
-            ? `這個主任務和底下 ${editing_task.value.progress?.total ?? editingSubtasks.value.length} 個子任務會一起刪除，確定嗎？`
-            : '你確定要刪除這個任務嗎？'
-        if (!window.confirm(confirmMessage)) return
+    /**
+     * 從主任務的階段列表刪除一個子任務。
+     * 刪的是唯一的子任務時，主任務也一起刪掉，成功後關閉編輯視窗；
+     * 已載入的清單過期（例如另一個分頁已刪掉其他階段）、重抓後主任務已經不在時也關閉；否則編輯視窗保持開著。
+     * @param subtask 要刪的子任務。
+     */
+    async function onDeleteSubtask(subtask: Task) {
+        await deleteTask(subtask, subtaskDeleteConfirmMessage(subtask), isOnlySubtask(subtask))
+    }
 
-        try {
-            const token = await getToken.value()
-            await $fetch(`${BASE_URL}/manual-tasks/${editing_task.value.id}`, {
-                method: 'DELETE',
-                headers: { Authorization: `Bearer ${token}` }
-            })
-            toast.add({ title: '刪除成功', color: 'success', icon: 'i-lucide-trash-2' })
-            await fetchTasks()
-            resetAndClose()
-        } catch (err) {
-            showDeleteError(err)
-        }
+    /**
+     * 刪除編輯視窗中的任務，成功後關閉編輯視窗。
+     * 確認文字依任務種類選：主任務列出會一起刪除的子任務，子任務用子任務的確認文字，一般任務用通用的確認文字。
+     */
+    async function onDelete() {
+        const task = editing_task.value
+        if (!task?.id) return
+        let confirmMessage = '你確定要刪除這個任務嗎？'
+        if (task.is_parent) confirmMessage = parentDeleteConfirmMessage(editingSubtasks.value)
+        else if (task.parent_id) confirmMessage = subtaskDeleteConfirmMessage(task)
+        await deleteTask(task, confirmMessage, true)
     }
 
 
@@ -465,6 +517,7 @@ function useTaskFormImpl() {
         cancelAddSubtask,
         onAddSubtask,
         onDeleteSubtask,
+        deleting,
     }
 }
 

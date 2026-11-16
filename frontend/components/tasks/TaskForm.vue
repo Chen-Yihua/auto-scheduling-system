@@ -42,6 +42,7 @@ const {
   cancelAddSubtask,
   onAddSubtask,
   onDeleteSubtask,
+  deleting,
 } = useTaskForm()
 
 // 主任務的優先序、時長、給 AI 的提醒由子任務決定，表單上不顯示
@@ -150,18 +151,9 @@ async function handleAddSubtask() {
   await fetchSchedulableTasks()
 }
 
-// 一次只送一個刪除：同時刪最後兩個階段時，後到的會被「只剩一個」擋下
-const deletingSubtask = ref(false)
-
 async function handleDeleteSubtask(subtask: Task) {
-  if (deletingSubtask.value) return
-  deletingSubtask.value = true
-  try {
-    await onDeleteSubtask(subtask)
-    await fetchSchedulableTasks()
-  } finally {
-    deletingSubtask.value = false
-  }
+  await onDeleteSubtask(subtask)
+  await fetchSchedulableTasks()
 }
 
 // 兩個 fetch 各自處理錯誤，不用再包 try/catch
@@ -355,7 +347,7 @@ onMounted(async () => {
                   size="xs"
                   variant="ghost"
                   color="error"
-                  :disabled="deletingSubtask"
+                  :disabled="deleting"
                   @click="handleDeleteSubtask(subtask)"
                 >
                   刪除
@@ -412,6 +404,7 @@ onMounted(async () => {
                 color="error"
                 variant="soft"
                 icon="i-lucide-trash-2"
+                :disabled="deleting"
                 @click="handleDelete"
               >
                 刪除

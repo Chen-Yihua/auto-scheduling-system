@@ -1,6 +1,6 @@
 """以使用者為單位操作 Google Calendar，access_token 過期時自動換新重試。"""
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
 
 import httpx
 from core.errors import AppError, ExternalServiceError, InvalidRequestError, NotFoundError, ReauthRequiredError
@@ -234,36 +234,30 @@ def _delete_error(e: httpx.HTTPStatusError) -> AppError:
     return _google_error(e, "刪除 Google Calendar 事件失敗")
 
 
-async def delete_upcoming_calendar_events(clerk_id: str, event_ids: list[str], now: datetime | None = None) -> list[str]:
+async def delete_calendar_events(clerk_id: str, event_ids: list[str]) -> None:
     """
-    刪除開始時間晚於現在的事件，已經開始或過去的保留；事件已不存在（404 / 410）當作刪除成功。
-    回傳這次真的刪掉的事件 id。
+    刪除使用者主要行事曆上的事件，不管事件已經開始、已經過去都刪；事件已不存在（404 / 410）當作刪除成功。
 
-    沒有連接或授權失效丟 ReauthRequiredError；Google 5xx、429 或連不上丟 ExternalServiceError。
-    中途失敗時已刪掉的事件不復原，呼叫端要等這裡成功才刪任務，重試時已刪的事件會走 404 / 410。
+    參數：
+    - clerk_id：要操作哪個使用者的 Google Calendar。
+    - event_ids：要刪的事件 id（任務的 calendar_event_id）。空的時直接回傳，不檢查連接、不呼叫 Google。
+
+    沒有連接、或 Google 回 401（授權失效）丟 ReauthRequiredError；Google 5xx、429 或連不上丟 ExternalServiceError；
+    其他錯誤依 Google 的原因分類（_google_error）。
+    中途失敗時已刪掉的事件不復原，任務仍保留這些事件 id；所以呼叫端要等這裡成功才刪任務，重試時已刪的事件會走 404 / 410。
     """
     if not event_ids:
-        return []
-    now = now or datetime.now(timezone.utc)
+        return
     if not await is_google_calendar_connected(clerk_id):
         raise ReauthRequiredError(GOOGLE_REAUTH_DETAIL)
     access_token, calendar_id = await _get_access_token_and_primary_calendar_id(clerk_id)
 
-    deleted = []
     for event_id in event_ids:
         try:
-            event = await get_calendar_event(access_token, calendar_id, event_id)
-            if event.get("status") == "cancelled":
-                continue
-            start = _parse_event_time(event.get("start"))
-            if start is None or start <= now:
-                continue
             await delete_calendar_event(access_token, calendar_id, event_id)
-            deleted.append(event_id)
         except httpx.HTTPStatusError as e:
             if e.response.status_code in _EVENT_GONE_STATUSES:
                 continue
             raise _delete_error(e)
         except httpx.RequestError as e:
             raise _unreachable(e, "連線 Google Calendar API 失敗", DELETE_RETRY_DETAIL)
-    return deleted

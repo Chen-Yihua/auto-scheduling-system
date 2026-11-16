@@ -2,7 +2,7 @@ import logging
 from fastapi import APIRouter, Depends, Header, Request
 from crud import manual_task as manual_task_crud
 from core.errors import ConflictError, InvalidRequestError
-from services.google_calendar import delete_upcoming_calendar_events
+from services.google_calendar import delete_calendar_events
 from services.task_inference import infer_missing_subtask_fields, infer_missing_task_fields
 from schemas.manual_task import (
     MAX_SUBTASKS,
@@ -26,6 +26,9 @@ router = APIRouter(prefix="/manual-tasks", tags=["manual-tasks"])
 # 主任務只當容器，這些欄位由子任務決定
 PARENT_ONLY_FROM_SUBTASKS = ("priority", "duration", "inference_hint", "status")
 PARENT_FIELDS_REJECTED = "主任務不能設定優先序、時長、給 AI 的提醒或狀態，這些由子任務決定"
+# 每一輪的條件都不成立，代表別的請求一直在改同一個主任務的階段；不無限重試
+SUBTASK_DELETE_ATTEMPTS = 3
+SUBTASK_DELETE_CONFLICT_DETAIL = "另一個請求正在改動這個主任務的階段，請重新整理後再試"
 
 
 def _subtask_doc(subtask: dict, user_id: str, now: datetime) -> dict:
@@ -270,35 +273,90 @@ async def update_manual_task(
     updated_task = await manual_task_crud.update_manual_task_by_id(task_id, task)
     return updated_task
 
+async def _calendar_events_to_delete(task: dict, user_id: str) -> list[str]:
+    """
+    刪除這個任務時，要一起從 Google Calendar 刪掉的事件 id。
+
+    參數：
+    - task：要刪的任務（主任務、子任務或一般任務），已確認屬於 user_id。
+    - user_id：任務擁有者。
+
+    主任務 → 所有子任務的事件（主任務本身不會排入行事曆）；子任務、一般任務 → 自己的事件。
+    刪子任務時就算最後是刪整個主任務，也只有它自己的事件：那時它一定是清單裡唯一的子任務，
+    其他子任務的事件已經由它們各自的刪除請求在移出清單前刪掉。
+    """
+    if task.get("is_parent"):
+        subtasks = await manual_task_crud.get_subtasks(task["id"], user_id)
+        return [s["calendar_event_id"] for s in subtasks if s.get("calendar_event_id")]
+    event_id = task.get("calendar_event_id")
+    return [event_id] if event_id else []
+
+
+async def _delete_subtask_records(subtask: dict) -> None:
+    """
+    從資料庫刪掉一個子任務；它是主任務唯一的子任務時，連主任務一起刪。
+
+    參數：
+    - subtask：要刪的子任務，已確認屬於這個使用者，它的事件已經刪掉。
+
+    每一步的條件都寫在同一次寫入的 filter 裡（ADR 0004），依序嘗試：
+    1. 清單裡有它、而且至少 2 個 → 只刪它。
+    2. 清單正好只有它 → 刪整個主任務。
+    3. 都不成立時重新讀取：主任務不在、或它已經不在清單裡（前一次刪除已生效）→ 刪掉它剩下的文件，算成功；
+       還在清單裡（另一個請求剛好新增或刪除了階段）→ 回到第 1 步。
+    嘗試 SUBTASK_DELETE_ATTEMPTS 輪仍不成立丟 ConflictError（409 REQUEST_IN_PROGRESS）；
+    這時子任務還在清單裡、事件已刪，重試時事件會被當作已刪除。
+    """
+    for _ in range(SUBTASK_DELETE_ATTEMPTS):
+        if await manual_task_crud.delete_subtask(subtask):
+            return
+        if await manual_task_crud.delete_parent_if_only_subtask(subtask):
+            return
+        if not await manual_task_crud.is_subtask_listed(subtask):
+            await manual_task_crud.delete_subtask_document(subtask)
+            return
+    raise ConflictError(SUBTASK_DELETE_CONFLICT_DETAIL, error_code="REQUEST_IN_PROGRESS")
+
+
+async def _delete_task_records(task: dict, user_id: str) -> None:
+    """
+    從資料庫刪掉任務，呼叫前事件要已經刪掉。
+
+    參數：
+    - task：要刪的任務，已確認屬於 user_id。
+    - user_id：任務擁有者。
+
+    主任務 → 主任務和所有子任務；子任務 → 見 _delete_subtask_records；一般任務 → 只刪它。
+    """
+    if task.get("is_parent"):
+        await manual_task_crud.delete_parent_with_subtasks(task["id"], user_id)
+    elif task.get("parent_id"):
+        await _delete_subtask_records(task)
+    else:
+        await manual_task_crud.delete_manual_task_by_id(task["id"], user_id)
+
+
 @router.delete("/{task_id}")
 async def delete_manual_task(
     task_id: str,
     clerk_user: dict = Depends(get_current_clerk_user)
 ):
     """
-    刪除指定的任務，只能刪自己的。刪除主任務會一併刪除所有子任務；
-    主任務和子任務會先刪掉子任務在 Google Calendar 上還沒開始的事件，成功後才刪任務，
-    所以刪事件失敗時任務都還在，可以重試。一般任務不動行事曆。
+    刪除自己的任務，連同它在 Google Calendar 上的事件；不管事件的時間、也不管任務有沒有完成。
+
+    參數：
+    - task_id：要刪的任務 id，可以是主任務、子任務或一般任務。
+    - clerk_user：登入的使用者，只能刪自己的任務；別人的或不存在的回 404，不刪任何東西。
+
+    三種任務都照同一個順序：檢查擁有者 → 決定要刪的事件 → 刪事件 → 刪資料庫。
+    - 主任務：刪主任務、所有子任務，以及所有子任務的事件。
+    - 子任務：刪它和它的事件；它是主任務唯一的子任務時，整個主任務一起刪。
+    - 一般任務：刪它和它的事件。
+    刪事件失敗（要重新連接 Google 409、Google 暫時失敗 502／503／504）時任務都保留，已刪的事件不復原，
+    使用者可以重試，重試時已經不存在的事件當作刪除成功。
     """
     user_id = clerk_user["sub"]
     task = await manual_task_crud.get_manual_task_by_id(task_id, user_id)  # 確認是自己的任務，不存在會 404
-
-    if task.get("is_parent"):
-        subtasks = await manual_task_crud.get_subtasks(task_id, user_id)
-        await delete_upcoming_calendar_events(user_id, [s["calendar_event_id"] for s in subtasks if s.get("calendar_event_id")])
-        await manual_task_crud.delete_parent_with_subtasks(task_id, user_id)
-    elif task.get("parent_id"):
-        if len(await manual_task_crud.get_subtasks(task["parent_id"], user_id)) <= 1:
-            raise InvalidRequestError(manual_task_crud.LAST_SUBTASK_DETAIL)
-        event_id = task.get("calendar_event_id")
-        deleted_event_ids = await delete_upcoming_calendar_events(user_id, [event_id] if event_id else [])
-        try:
-            await manual_task_crud.delete_subtask(task)
-        except InvalidRequestError:
-            # 同時刪除時預檢擋不住，事件已刪但任務被留下；不清掉的話這個階段永遠不會再被排入
-            if event_id in deleted_event_ids:
-                await manual_task_crud.clear_calendar_event_id(task_id, user_id, event_id)
-            raise
-    else:
-        await manual_task_crud.delete_manual_task_by_id(task_id)
+    await delete_calendar_events(user_id, await _calendar_events_to_delete(task, user_id))
+    await _delete_task_records(task, user_id)
     return {"task ID": task_id,"deleted": True}

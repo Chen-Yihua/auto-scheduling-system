@@ -547,7 +547,7 @@ describe('pages/schedule.vue：issue-42 處理已刪除的事件', () => {
     await clickNext(wrapper)
 
     expect(confirmSpy).toHaveBeenCalledTimes(1)
-    expect(confirmSpy.mock.calls[0]![0]).toContain('沒勾的 1 個任務會從系統刪除，無法復原')
+    expect(confirmSpy.mock.calls[0]![0]).toContain('沒勾的 1 個任務會從系統刪除，無法復原，確定嗎？')
     expect(resolveRemovedEventsSpy).not.toHaveBeenCalled()
     expect(wrapper.text()).toContain('處理已刪除的事件')
   })
@@ -581,7 +581,7 @@ describe('pages/schedule.vue：issue-42 處理已刪除的事件', () => {
 
     await boxes[0]!.setValue(false)
     await clickNext(wrapper)
-    expect(confirmSpy.mock.calls[1]![0]).toContain('沒勾的 2 個任務會從系統刪除，無法復原')
+    expect(confirmSpy.mock.calls[1]![0]).toContain('沒勾的 2 個任務會從系統刪除，無法復原，確定嗎？')
     expect(confirmSpy.mock.calls[1]![0]).toContain('主任務「期末報告」會一起刪除')
   })
 

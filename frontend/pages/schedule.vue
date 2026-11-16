@@ -79,7 +79,7 @@ function laterStagesNote(item: RemovedCalendarEvent): string | null {
 function confirmMessage(toDelete: RemovedCalendarEvent[], toReschedule: RemovedCalendarEvent[]): string | null {
   const lines: string[] = []
   if (toDelete.length > 0) {
-    lines.push(`沒勾的 ${toDelete.length} 個任務會從系統刪除，無法復原`)
+    lines.push(`沒勾的 ${toDelete.length} 個任務會從系統刪除，無法復原，確定嗎？`)
     const stagesByParent = new Map<string, RemovedCalendarEvent[]>()
     for (const item of toDelete) {
       if (item.parent_id) stagesByParent.set(item.parent_id, [...(stagesByParent.get(item.parent_id) ?? []), item])

@@ -73,7 +73,7 @@
 **按「下一步」**
 
 16. 有沒勾的項目，或有需求 13 會被移除的後面階段時，先跳出確認對話框；按取消就留在這一步，什麼都不送出。
-17. 對話框寫出「沒勾的 N 個任務會從系統刪除，無法復原」（有沒勾的項目時）。
+17. 對話框寫出「沒勾的 N 個任務會從系統刪除，無法復原，確定嗎？」（有沒勾的項目時）。
 18. 沒勾的階段包含某個主任務目前所有的階段時，對話框另外寫明「主任務「X」會一起刪除」。
 19. 對話框寫出「會從 Google 日曆移除 M 個後面階段的事件（包括時間已經過去的事件），一起重新排程」（有需求 13 的階段時）。同一個階段不重複計算。
 
@@ -120,6 +120,7 @@
 - 外部項目的「不排程」狀態、「外部已結案」的顯示：#121。外部項目在這一步暫時不能取消勾選。
 - 挑選這次要排程的任務：#120。
 - 排程相關 API 的限流：#122。
+- 同一個主任務的好幾個階段都列在這一步、都勾選重新排程，按「下一步」前使用者又在 Google 復原了後面某個階段的事件：處理時那個階段算成功、不處理，前面的階段回到待排，產生排程時順序可能顛倒，之後也不會再列出。很少發生，開發者決定接受（實作審查第 1 輪 #1）。
 - 樂觀鎖（每筆任務帶版本號，根據舊畫面送出的修改被擋下）：#123。在那之前，確認對話框的數字是畫面載入時算的，後端處理時用當下的資料，兩者可能不同。
 - 處理 API 收到重複的 id，或同一個 id 同時在兩份清單：正常前端不會發生，開發者決定不處理，發生時再開 issue。
 - 事件還在、時間已過、任務卻沒完成：這次不處理。
@@ -226,7 +227,8 @@
 |---|---|---|
 | AC1、AC2 | `backend/tests/unit/test_google_calendar_service.py`（404、410、`cancelled` 算刪除；200 不算）；`backend/tests/unit/test_schedule_router.py`（`removed-events` 回傳事件被刪除的項目） | 是 |
 | AC3 | `backend/tests/unit/test_schedule_router.py`：已完成、主任務、沒有編號的項目不送去 Google 查 | 是 |
-| AC4、AC5、AC6、AC7、AC31 | `frontend/tests/pages/schedule.test.ts` | 是 |
+| AC4 | `frontend/tests/pages/schedule.test.ts` | 否（原本的程式就不會出現這一步） |
+| AC5、AC6、AC7、AC31 | `frontend/tests/pages/schedule.test.ts` | 是 |
 | AC8、AC9 | `frontend/tests/pages/schedule.test.ts`（或 composable 測試）：跳出確認的條件、數量、主任務一起刪的文字、取消時不送出 | 是 |
 | AC10 | `backend/tests/unit/test_schedule_router.py`：`resolve` 後編號清空；`backend/tests/integration/test_schedule_scenario.py`：清空後出現在 `/schedule/tasks` 的待排項目 | 是 |
 | AC11 | `backend/tests/unit/test_schedule_router.py`：後面已排入的階段的事件被刪、編號清空；已完成的不變 | 是 |
@@ -236,16 +238,21 @@
 | AC18、AC19 | `backend/tests/unit/test_schedule_router.py`：刪除外部項目、別人的項目、格式錯的 id 都失敗，其他項目照常處理 | 是 |
 | AC20、AC21、AC22、AC23 | `frontend/tests/pages/schedule.test.ts`：全部成功進入拖拉排序；有失敗時顯示「處理失敗，請重試」並重新查詢、新項目預設勾選、空清單進入拖拉排序；授權失效跳 `reauthToast`；重新查詢失敗保留清單 | 是 |
 | AC24、AC25 | `backend/tests/unit/test_google_calendar_service.py`（401、權限不足、沒有連接 → `REAUTH_REQUIRED`；429 → `UPSTREAM_RATE_LIMITED`；逾時 → `UPSTREAM_TIMEOUT`；5xx → `UPSTREAM_ERROR`）；`frontend/tests/pages/schedule.test.ts`（提示文字、不跳 toast、從拖拉排序開始） | 是 |
-| AC26、AC28 | `frontend/tests/components/ScheduleSuggestion.test.ts`：沒連接時不導頁並顯示提示；狀態查詢失敗時照常導頁 | 是 |
+| AC26 | `frontend/tests/components/ScheduleSuggestion.test.ts`：沒連接時不導頁並顯示提示 | 是 |
+| AC28 | `frontend/tests/components/ScheduleSuggestion.test.ts`：狀態查詢失敗時照常導頁 | 否（原本的按鈕一律進入精靈） |
+| AC28 | `frontend/tests/pages/schedule.test.ts`、`frontend/tests/composables/useGoogleCalendar.test.ts`：這一次的查詢失敗時照常進入精靈 | 是 |
 | AC27 | `frontend/tests/pages/schedule.test.ts` | 是 |
 | AC29、AC30 | `backend/tests/integration/test_schedule_scenario.py`：重新排程後前一個階段在前、後面階段依序；刪除後的遞補 | 是 |
-| AC32、AC33 | `backend/tests/unit/test_manual_task_crud.py` 或 `test_schedulable_items.py`：讀取後、寫回前另一邊清掉編號（或改了其他欄位），寫回後編號仍是 None、其他欄位不被舊值蓋掉；修改任務、調整截止日與時長、標記完成各一 | 是 |
+| AC32、AC33 | `backend/tests/unit/test_schedulable_items.py`（調整截止日與時長、標記完成）、`backend/tests/unit/test_manual_task_router.py`（修改任務）：讀取後、寫回前另一邊清掉編號（或改了其他欄位），寫回後編號仍是 None、其他欄位不被舊值蓋掉；修改任務、調整截止日與時長、標記完成各一 | 是 |
 | 新 API 的接線 | `backend/tests/integration/test_schedule_api.py`：成功、典型錯誤、沒登入被擋 | — |
 
 ## 修改紀錄
 
 | 日期 | 修改 | 原因 | 確認者 |
 |---|---|---|---|
+| 2026-11-17 | 需求 17：對話框文字補上「確定嗎？」 | 開發者在需求問答確認的文字有這句，寫規格時漏掉 → 需求 17；檢查過 AC8 不用改（只要求寫出數量） | 開發者 |
+| 2026-11-17 | 「不做」：接受列出的後面階段在處理前被復原時順序可能顛倒 | 開發者決定接受（實作審查第 1 輪 #1）→「不做」；檢查過需求 14、21、AC12、AC15、AC29 不用改 | 開發者 |
+| 2026-11-17 | 測試對應：AC4、AC28 的「改程式前是否失敗」照實際結果；AC32、AC33 補上修改任務的測試檔 | 實作後的實際結果（實作審查第 1 輪 #3）→ 測試對應；驗收條件不變 | 開發者 |
 
 ## 請你決定
 

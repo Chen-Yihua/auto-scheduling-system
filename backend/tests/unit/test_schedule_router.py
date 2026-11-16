@@ -860,6 +860,28 @@ async def test_issue42_ac16_own_event_id_replaced_meanwhile_fails_and_is_not_cle
 
 
 @pytest.mark.asyncio
+async def test_issue42_ac16_external_event_id_replaced_meanwhile_fails_and_is_not_cleared(removed_google):
+    """AC16：外部項目確認事件不存在之後，編號被換成別的（另一個分頁剛排入）→ 不清除，這一項失敗。"""
+    await db.github_issues.insert_one({
+        "id": 4204, "user_id": REMOVED_USER["sub"], "title": "外部項目", "status": "open", "calendar_event_id": "ev-gh",
+    })
+    removed_google["gone"] = {"ev-gh"}
+
+    async def rescheduled_in_other_tab(event_ids):
+        await db.github_issues.update_one(
+            {"user_id": REMOVED_USER["sub"], "id": 4204}, {"$set": {"calendar_event_id": "ev-gh-new"}},
+        )
+
+    removed_google["on_query"] = rescheduled_in_other_tab
+
+    result = await _resolve(reschedule=["github:4204"])
+
+    assert _failed_ids(result) == ["github:4204"]
+    github = await db.github_issues.find_one({"user_id": REMOVED_USER["sub"], "id": 4204})
+    assert github is not None and github["calendar_event_id"] == "ev-gh-new"
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("error", [
     ExternalServiceError("Google 暫時無法處理請求", error_code="UPSTREAM_ERROR"),
     ReauthRequiredError("請重新連接"),

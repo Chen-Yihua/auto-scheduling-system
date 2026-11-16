@@ -426,10 +426,11 @@ function useTaskFormImpl() {
 
     /**
      * 使用者確認後送出 DELETE，成功後重抓任務清單。另一個刪除送出中時直接回傳，不送出。
+     * 成功後 closeAfterDelete 為 true，或編輯中的任務已經不在重抓的清單裡時，關閉編輯視窗。
      * 失敗時顯示錯誤（授權失效時顯示重新連接 Google Calendar 的提示），編輯視窗保持開著。
      * @param task 要刪的任務（主任務、子任務或一般任務）。
      * @param confirmMessage 確認對話框的文字；使用者按取消就不刪。
-     * @param closeAfterDelete 刪除成功後是否關閉編輯視窗；編輯中的任務已經不在時要關。
+     * @param closeAfterDelete 刪除成功後是否一定關閉編輯視窗；用送出前已載入的清單判斷編輯中的任務會不會一起刪掉。
      */
     async function deleteTask(task: Task, confirmMessage: string, closeAfterDelete: boolean) {
         if (deleting.value) return
@@ -442,8 +443,10 @@ function useTaskFormImpl() {
                 headers: { Authorization: `Bearer ${token}` },
             })
             toast.add({ title: '刪除成功', color: 'success', icon: 'i-lucide-trash-2' })
+            const editingId = editing_task.value?.id
             await fetchTasks()
-            if (closeAfterDelete) resetAndClose()
+            const editingGone = !!editingId && !all_tasks.value.some((t) => t.id === editingId)
+            if (closeAfterDelete || editingGone) resetAndClose()
         } catch (err) {
             showDeleteError(err)
         } finally {
@@ -453,7 +456,8 @@ function useTaskFormImpl() {
 
     /**
      * 從主任務的階段列表刪除一個子任務。
-     * 刪的是唯一的子任務時，主任務也一起刪掉，成功後關閉編輯視窗；否則編輯視窗保持開著。
+     * 刪的是唯一的子任務時，主任務也一起刪掉，成功後關閉編輯視窗；
+     * 已載入的清單過期（例如另一個分頁已刪掉其他階段）、重抓後主任務已經不在時也關閉；否則編輯視窗保持開著。
      * @param subtask 要刪的子任務。
      */
     async function onDeleteSubtask(subtask: Task) {

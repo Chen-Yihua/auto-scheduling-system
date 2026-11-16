@@ -63,7 +63,7 @@
 ## 假設
 
 1. 確認對話框列出的子任務，來自前端已經載入的任務清單；另一個分頁剛改過子任務時，列出的名稱可能和後端實際刪掉的不同（現在的確認文字也用前端資料）。
-2. 刪除唯一的子任務成功後，主任務已經不在，編輯視窗關閉，和刪除主任務一樣。
+2. 刪除唯一的子任務成功後，主任務已經不在，編輯視窗關閉，和刪除主任務一樣（前端清單過期的情況由 AC26 涵蓋）。
 
 ## 驗收條件
 
@@ -93,6 +93,8 @@
 | AC22 | 主任務有兩個以上子任務時，刪除子任務的確認對話框是「你確定要刪除「名稱」這個階段嗎？」（從階段列表刪除時維持原文字；從子任務自己的編輯視窗刪除時，由「你確定要刪除這個任務嗎？」改成這句） |
 | AC23 | 一個刪除請求送出中時，編輯視窗裡所有「刪除」按鈕（任務本身與每個階段的）都停用；請求完成（成功或失敗）後恢復 |
 | AC24 | 不變條件：主任務有兩個以上子任務時，同時或重複送出同一個子任務的刪除（例如兩個分頁、或資料庫中途失敗後重試），系統只刪除這個子任務和它的事件，其他子任務的欄位與事件不變，主任務照常存在；後到的請求回成功、404，或照 AC10、AC13 回錯誤。只有一個子任務時，重複刪除的結果照 AC6 |
+| AC25 | 不變條件：子任務已經不在主任務的 `subtask_ids` 裡、但它的文件還在時（前一次刪除移出清單後，刪文件失敗），走到資料庫步驟第 3 步的刪除請求要刪掉這份文件 |
+| AC26 | 從主任務編輯視窗的階段列表刪除成功、重新載入任務清單後，編輯中的主任務已經不在清單裡時（例如前端清單過期，刪掉的其實是唯一的子任務），系統要關閉編輯視窗 |
 
 ## 不適用的情境
 
@@ -167,7 +169,7 @@
 | AC10 | `test_manual_task_router.py`：已排入的一般任務在沒連接時回 409，任務還在；`test_google_calendar_service.py`：既有 `test_delete_events_without_connection_is_reauth_required` |
 | AC11 | `test_google_calendar_service.py`：第二個事件回 401 → `ReauthRequiredError`，第一個已刪 |
 | AC12 | `frontend/tests/composables/useTaskForm.test.ts`：刪除一般任務收到 `REAUTH_REQUIRED` 顯示重新連接提示 |
-| AC13、AC14 | `test_google_calendar_service.py`：`test_issue30_ac13_ac14_failure_midway_asks_to_retry_and_keeps_already_deleted_events_deleted`（由既有 `test_ac33_...` 改名）；`backend/tests/integration/test_manual_task_scenario.py`：一般任務刪除時 Google 5xx → 任務還在 → 重試（事件已 404）→ 刪除成功 |
+| AC13、AC14 | `test_google_calendar_service.py`：`test_issue30_ac13_ac14_failure_midway_asks_to_retry_and_keeps_already_deleted_events_deleted`（由既有 `test_ac33_...` 改名）；`backend/tests/integration/test_manual_task_scenario.py`：一般任務刪除時 Google 5xx → 任務還在 → 重試（事件已 404）→ 刪除成功；主任務刪除中途失敗後重試的情境，假的 Google 對已刪的事件回 404，實際走到 AC9 的處理；測試不留沒有被呼叫的假函式（#114） |
 | AC15、AC16 | 由 AC1、AC3、AC6、AC10、AC13、AC17 的測試一起驗證：成功時檢查事件都被刪，失敗時檢查任務還在 |
 | AC17 | `test_manual_task_router.py`：同時刪最後兩個子任務 → 主任務、子任務、兩個事件都不在（取代 `test_issue37_ac1_...`、`test_issue37_ac2_...`：舊規則被取代） |
 | AC18 | `test_manual_task_router.py`：既有 `test_delete_manual_task_refuses_other_users_task_and_keeps_it`，補上不呼叫 Google 的檢查 |
@@ -176,11 +178,14 @@
 | AC21、AC22 | `useTaskForm.test.ts`：一般任務的確認文字不變；兩個入口刪不是唯一的子任務，都是「你確定要刪除「名稱」這個階段嗎？」 |
 | AC24 | `test_manual_task_router.py`：同一個子任務同時刪兩次（三個子任務、兩個子任務各一例）→ 只有它被刪、其他子任務與事件還在、後到的請求回成功或 404；移出清單後刪文件失敗、重試 → 回 404，其他子任務不變；兩個子任務 A、B，同時刪 A 兩次、第二個請求在資料庫步驟前 A 已被移出 → B 和它的事件還在；第 1 步與第 2 步都不成立、重新讀取時另一個請求新增了階段 → 重試後只刪 A；三輪都不成立 → 回 409 `REQUEST_IN_PROGRESS`，A 與其他子任務都還在；只有 A 一個子任務時同時刪 A 兩次 → 主任務、子任務、事件都不在，兩個請求回成功或 404 |
 | AC23 | `frontend/tests/components/TaskForm.actions.test.ts`：改寫 `#37 AC3：一個階段刪除中，所有階段的「刪除」都停用`，涵蓋任務本身的「刪除」按鈕 |
+| AC25 | `test_manual_task_router.py` 或 `test_manual_task_crud.py`：子任務已不在清單、文件還在，呼叫 `_delete_subtask_records` → 文件被刪掉（#112） |
+| AC26 | `useTaskForm.test.ts`：前端清單顯示兩個階段、後端重新載入後主任務已不在 → 刪除成功後編輯視窗關閉（#113） |
 
 ## 修改紀錄
 
 | 日期 | 修改 | 原因 | 確認者 |
 |---|---|---|---|
+| 2026-11-16 | 新增 AC25、AC26；AC13／AC14 的測試對應補上主任務情境的 404 與清掉沒用到的假函式；假設 2 註明清單過期由 AC26 涵蓋 | 開發者決定實作審查的 #112、#113、#114 在這個 PR 處理 → AC25（#112）、AC26（#113）、AC13／AC14 測試對應（#114，測試品質，不改行為）；檢查過 AC6、AC20、AC24 與假設 1 不用改 | 開發者 |
 
 ## 請你決定
 

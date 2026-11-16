@@ -781,6 +781,31 @@ describe('useTaskForm', () => {
     expect(ctx.showEditModal.value).toBe(false)
   })
 
+  it('#30 AC26：畫面上顯示兩個階段，從階段列表刪除成功後重新載入，主任務已經不在清單裡 → 關閉編輯視窗', async () => {
+    const ctx = useTaskForm()
+    confirmWith(true)
+    ctx.all_tasks.value = twoSubtasksOf('p1')
+    ctx.startEditTask(ctx.all_tasks.value[0]!)
+    fetchSpy.mockResolvedValueOnce({ deleted: true }).mockResolvedValueOnce([fakeTask('other')])
+
+    await ctx.onDeleteSubtask(ctx.all_tasks.value[1]!)
+
+    expect(ctx.all_tasks.value.map((t) => t.id)).toEqual(['other'])
+    expect(ctx.showEditModal.value).toBe(false)
+  })
+
+  it('#30 AC26：從階段列表刪除成功後重新載入，主任務還在清單裡 → 編輯視窗保持開著', async () => {
+    const ctx = useTaskForm()
+    confirmWith(true)
+    ctx.all_tasks.value = twoSubtasksOf('p1')
+    ctx.startEditTask(ctx.all_tasks.value[0]!)
+    fetchSpy.mockResolvedValueOnce({ deleted: true }).mockResolvedValueOnce(subtaskOnlyOf('p1'))
+
+    await ctx.onDeleteSubtask(ctx.all_tasks.value[1]!)
+
+    expect(ctx.showEditModal.value).toBe(true)
+  })
+
   it('#30 AC21：刪除一般任務的確認文字維持原樣', async () => {
     const ctx = useTaskForm()
     const confirmSpy = confirmWith(false)

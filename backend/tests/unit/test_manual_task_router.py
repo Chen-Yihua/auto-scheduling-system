@@ -942,6 +942,21 @@ async def test_issue30_ac24_retry_after_document_deletion_failed_returns_404(sta
 
 
 @pytest.mark.asyncio
+async def test_issue30_ac25_subtask_already_removed_from_list_has_its_document_deleted(stage_db, subtask_infer_calls):
+    """issue-30 AC25：子任務已經不在主任務的清單裡、文件還在（前一次刪文件失敗）→ 刪掉這份文件，其他子任務和主任務不變。"""
+    parent, ids = await _two_stage_parent()
+    other_before = await _doc(ids[1])
+    leftover = await manual_task_router.manual_task_crud.get_manual_task_by_id(ids[0], STAGE_USER["sub"])
+    await db.manual_tasks.update_one({"_id": parent["id"]}, {"$pull": {"subtask_ids": ids[0]}})
+
+    await manual_task_router._delete_subtask_records(leftover)
+
+    assert await _doc(ids[0]) is None
+    assert await _doc(ids[1]) == other_before
+    assert [d["id"] for d in await _stage_docs(parent["id"])] == [ids[1]]
+
+
+@pytest.mark.asyncio
 async def test_issue30_ac24_stage_added_meanwhile_retries_and_deletes_only_this_subtask(stage_db, subtask_infer_calls, deleted_events, monkeypatch):
     """
     issue-30 AC24：刪唯一的子任務 A 時，另一個請求剛好新增了階段 B（「至少 2 個」和「只剩它」都不成立）

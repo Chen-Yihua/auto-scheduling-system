@@ -524,10 +524,6 @@ async def test_create_calendar_events_network_error_marks_task_as_failed(monkeyp
 
 # ========== 刪除任務時一起刪除行事曆事件 ==========
 
-def _event(start_iso):
-    return {"id": "ev", "status": "confirmed", "start": {"dateTime": start_iso}, "end": {"dateTime": start_iso}}
-
-
 @pytest.fixture
 def google_events(monkeypatch):
     """假的 Google 事件：events 是 event_id → 事件或要丟的例外；delete_errors 是刪除時要丟的例外；記錄實際刪掉哪些。"""

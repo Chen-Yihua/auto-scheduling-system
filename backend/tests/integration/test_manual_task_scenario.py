@@ -143,8 +143,8 @@ async def test_manual_task_ai_inference_fills_missing_fields_and_survives_full_l
 @pytest.mark.asyncio
 async def test_staged_task_delete_parent_fails_midway_then_retry_succeeds(monkeypatch):
     """
-    issue-30 AC3、AC13、AC14：建立主任務加兩個階段 → 兩個階段都排入行事曆 → 刪除主任務時第二個事件刪失敗（502），
-    任務全部保留、第一個事件不復原 → 重試後主任務和子任務都刪掉。
+    issue-30 AC3、AC13、AC14、AC9：建立主任務加兩個階段 → 兩個階段都排入行事曆 → 刪除主任務時第二個事件刪失敗（502），
+    任務全部保留、第一個事件不復原 → 重試時第一個事件已經不存在（404）當作成功，主任務和子任務都刪掉。
     """
     import httpx
     from core.crypto import encrypt_secret
@@ -164,22 +164,18 @@ async def test_staged_task_delete_parent_fails_midway_then_retry_succeeds(monkey
     fail_next_delete_of = {"ev-2"}
 
     def _error(status):
-        request = httpx.Request("GET", "https://example.com")
+        request = httpx.Request("DELETE", "https://example.com")
         return httpx.HTTPStatusError("error", request=request, response=httpx.Response(status, request=request))
 
-    async def fake_get_event(access_token, calendar_id, event_id):
+    async def fake_delete_event(access_token, calendar_id, event_id):
         if event_id not in remaining_events:
             raise _error(404)
-        return {"status": "confirmed", "start": {"dateTime": "2099-01-01T09:00:00Z"}, "end": {"dateTime": "2099-01-01T10:00:00Z"}}
-
-    async def fake_delete_event(access_token, calendar_id, event_id):
         if event_id in fail_next_delete_of:
             fail_next_delete_of.discard(event_id)
             raise _error(503)
         remaining_events.discard(event_id)
 
     monkeypatch.setattr(calendar_service, "fetch_google_calendar_list", fake_calendar_list)
-    monkeypatch.setattr(calendar_service, "get_calendar_event", fake_get_event)
     monkeypatch.setattr(calendar_service, "delete_calendar_event", fake_delete_event)
 
     try:

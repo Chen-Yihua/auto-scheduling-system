@@ -178,8 +178,8 @@
 | AC21、AC22 | `useTaskForm.test.ts`：一般任務的確認文字不變；兩個入口刪不是唯一的子任務，都是「你確定要刪除「名稱」這個階段嗎？」 |
 | AC24 | `test_manual_task_router.py`：同一個子任務同時刪兩次（三個子任務、兩個子任務各一例）→ 只有它被刪、其他子任務與事件還在、後到的請求回成功或 404；移出清單後刪文件失敗、重試 → 回 404，其他子任務不變；兩個子任務 A、B，同時刪 A 兩次、第二個請求在資料庫步驟前 A 已被移出 → B 和它的事件還在；第 1 步與第 2 步都不成立、重新讀取時另一個請求新增了階段 → 重試後只刪 A；三輪都不成立 → 回 409 `REQUEST_IN_PROGRESS`，A 與其他子任務都還在；只有 A 一個子任務時同時刪 A 兩次 → 主任務、子任務、事件都不在，兩個請求回成功或 404 |
 | AC23 | `frontend/tests/components/TaskForm.actions.test.ts`：改寫 `#37 AC3：一個階段刪除中，所有階段的「刪除」都停用`，涵蓋任務本身的「刪除」按鈕 |
-| AC25 | `test_manual_task_router.py` 或 `test_manual_task_crud.py`：子任務已不在清單、文件還在，呼叫 `_delete_subtask_records` → 文件被刪掉（#112） |
-| AC26 | `useTaskForm.test.ts`：前端清單顯示兩個階段、後端重新載入後主任務已不在 → 刪除成功後編輯視窗關閉（#113） |
+| AC25 | `test_manual_task_router.py`：`test_issue30_ac25_subtask_already_removed_from_list_has_its_document_deleted`（子任務已不在清單、文件還在，呼叫 `_delete_subtask_records` → 文件被刪掉；#112） |
+| AC26 | `useTaskForm.test.ts`：前端清單顯示兩個階段、後端重新載入後主任務已不在 → 刪除成功後編輯視窗關閉；重新載入後主任務還在 → 編輯視窗保持開著（#113） |
 
 ## 修改紀錄
 

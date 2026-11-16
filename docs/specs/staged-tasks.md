@@ -1,6 +1,6 @@
 # 階段任務（主任務拆成子任務）
 
-- 狀態：部分被 [刪除任務時一起刪除 Google Calendar 上的事件](issue-30-delete-calendar-events.md) 取代（AC28、AC29、AC30、AC34）
+- 狀態：部分被 [刪除任務時一起刪除 Google Calendar 上的事件](issue-30-delete-calendar-events.md) 取代（AC28、AC29、AC30、AC34）；部分被 [在 Google 日曆刪掉事件後，讓使用者選擇重新排程或刪除任務](issue-42-removed-calendar-events.md) 取代（AC24 中使用者在「處理已刪除的事件」步驟處理了的情況；查詢失敗、或沒按「下一步」就離開時仍照 AC24）
 - PR：#31
 
 ## 背景

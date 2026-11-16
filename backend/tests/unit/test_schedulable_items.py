@@ -285,6 +285,64 @@ async def test_set_done_external_item_sets_done_flag():
         await _cleanup()
 
 
+# ---------- issue-42：同時修改任務不會寫回讀取當時的舊值 ----------
+
+def _other_tab_changes_task_after_read(monkeypatch):
+    """讀出任務之後、寫回之前，另一個分頁清掉 Google 日曆事件編號並改了標題。"""
+    original = schedulable_items.get_manual_task_by_id
+
+    async def read_then_changed(task_id, user_id):
+        task = await original(task_id, user_id)
+        await db.manual_tasks.update_one(
+            {"_id": task_id}, {"$set": {"calendar_event_id": None, "title": "另一個分頁改的標題"}},
+        )
+        return task
+
+    monkeypatch.setattr(schedulable_items, "get_manual_task_by_id", read_then_changed)
+
+
+async def _insert_scheduled_task():
+    await db.manual_tasks.insert_one({
+        "_id": "t1", "user_id": "sched-user", "title": "任務", "description": "d",
+        "status": "To Do", "priority": "Low", "duration": 60, "calendar_event_id": "ev-old",
+    })
+
+
+@pytest.mark.asyncio
+async def test_issue42_ac32_ac33_fields_update_does_not_write_back_stale_fields(monkeypatch):
+    """AC32、AC33：調整截止日與時長時，另一邊剛清掉事件編號、改了標題 → 只寫入時長，編號仍是 None、標題不被舊值蓋掉。"""
+    try:
+        await _insert_scheduled_task()
+        _other_tab_changes_task_after_read(monkeypatch)
+
+        await schedulable_items.update_scheduling_fields("sched-user", "manual:t1", {"duration": 90})
+
+        updated = await db.manual_tasks.find_one({"_id": "t1"})
+        assert updated["duration"] == 90
+        assert updated["calendar_event_id"] is None
+        assert updated["title"] == "另一個分頁改的標題"
+    finally:
+        await _cleanup()
+
+
+@pytest.mark.asyncio
+async def test_issue42_ac32_ac33_marking_done_does_not_write_back_stale_fields(monkeypatch):
+    """AC32、AC33：標記完成時，另一邊剛清掉事件編號、改了標題 → 只寫入狀態相關欄位，編號仍是 None、標題不被舊值蓋掉。"""
+    try:
+        await _insert_scheduled_task()
+        _other_tab_changes_task_after_read(monkeypatch)
+
+        await schedulable_items.set_done("sched-user", "manual:t1", True)
+
+        updated = await db.manual_tasks.find_one({"_id": "t1"})
+        assert updated["status"] == "Done"
+        assert updated["completed_at"] is not None
+        assert updated["calendar_event_id"] is None
+        assert updated["title"] == "另一個分頁改的標題"
+    finally:
+        await _cleanup()
+
+
 # ---------- set_calendar_event_id_for_composite ----------
 
 @pytest.mark.asyncio

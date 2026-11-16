@@ -744,3 +744,89 @@ async def test_delete_events_without_connection_is_reauth_required(monkeypatch):
         await calendar_service.delete_calendar_events("uid123", ["evt1"])
 
     assert exc_info.value.error_code == "REAUTH_REQUIRED"
+
+
+# ========== issue-42：查哪些事件在 Google 上已被刪除 ==========
+
+@pytest.mark.asyncio
+async def test_issue42_ac2_only_404_410_and_cancelled_count_as_deleted(google_events):
+    """AC2：Google 對事件回 404、410，或事件狀態是 cancelled，才算已被刪除；事件存在（200）不算。"""
+    google_events["events"] = {
+        "gone-404": _http_error(404),
+        "gone-410": _http_error(410),
+        "cancelled": {"status": "cancelled"},
+        "alive": {"status": "confirmed", "end": {"dateTime": "2030-01-02T14:30:00Z"}},
+    }
+
+    removed = await calendar_service.find_removed_calendar_events("uid123", ["gone-404", "gone-410", "cancelled", "alive"])
+
+    assert removed == {"gone-404", "gone-410", "cancelled"}
+
+
+@pytest.mark.asyncio
+async def test_issue42_ac3_no_event_ids_does_not_call_google(monkeypatch):
+    """AC3：沒有要查的事件 → 不呼叫 Google，沒連接也不丟錯。"""
+    async def fail_if_called(*args, **kwargs):
+        raise AssertionError("不該呼叫 Google")
+
+    monkeypatch.setattr(google_tokens.db.googleCalendarTokens, "find_one", fail_if_called)
+    monkeypatch.setattr(calendar_service, "fetch_google_calendar_list", fail_if_called)
+
+    assert await calendar_service.find_removed_calendar_events("uid123", []) == set()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "error", [_http_error(401), _google_status_error(403, "insufficientPermissions")], ids=["401", "403-permission"],
+)
+async def test_issue42_ac24_event_lookup_auth_failure_requires_reauth(google_events, error):
+    """AC24：查事件時 Google 回 401 或權限不足 → REAUTH_REQUIRED（409）。"""
+    google_events["events"] = {"ev-1": error}
+
+    with pytest.raises(ReauthRequiredError) as exc_info:
+        await calendar_service.find_removed_calendar_events("uid123", ["ev-1"])
+
+    assert status_for_error_code(exc_info.value.error_code) == 409
+
+
+@pytest.mark.asyncio
+async def test_issue42_ac24_not_connected_requires_reauth(monkeypatch):
+    """AC24：已經沒有連接 Google → REAUTH_REQUIRED，不是 NOT_LINKED。"""
+    async def mock_find_one(query):
+        return None
+
+    monkeypatch.setattr(google_tokens.db.googleCalendarTokens, "find_one", mock_find_one)
+
+    with pytest.raises(ReauthRequiredError):
+        await calendar_service.find_removed_calendar_events("uid123", ["ev-1"])
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("error, status_code, error_code", [
+    (_google_status_error(429), 503, "UPSTREAM_RATE_LIMITED"),
+    (httpx.ReadTimeout("slow"), 504, "UPSTREAM_TIMEOUT"),
+    (_google_status_error(500), 502, "UPSTREAM_ERROR"),
+    (httpx.ConnectError("連不上"), 502, "UPSTREAM_ERROR"),
+    (_google_status_error(400), 500, "INTERNAL_ERROR"),
+], ids=["429", "timeout", "5xx", "unreachable", "400"])
+async def test_issue42_ac25_event_lookup_errors_follow_adr_0011(google_events, error, status_code, error_code):
+    """AC25：查事件時的其他 Google 錯誤照 ADR 0011 給 error_code 與狀態碼。"""
+    google_events["events"] = {"ev-1": error}
+
+    with pytest.raises(AppError) as exc_info:
+        await calendar_service.find_removed_calendar_events("uid123", ["ev-1"])
+
+    assert exc_info.value.error_code == error_code
+    assert status_for_error_code(exc_info.value.error_code) == status_code
+
+
+@pytest.mark.asyncio
+async def test_issue42_ac25_no_primary_calendar_is_409(monkeypatch):
+    """AC25：找不到主要行事曆 → 409 NO_PRIMARY_CALENDAR。"""
+    _connected(monkeypatch, calendar_list=[{"id": "other"}])
+
+    with pytest.raises(AppError) as exc_info:
+        await calendar_service.find_removed_calendar_events("uid123", ["ev-1"])
+
+    assert exc_info.value.error_code == "NO_PRIMARY_CALENDAR"
+    assert status_for_error_code(exc_info.value.error_code) == 409

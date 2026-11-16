@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from core.errors import InvalidRequestError, NotFoundError
 from crud.manual_task import (
     TASK_NOT_FOUND_DETAIL,
+    clear_calendar_event_id,
     completed_at_after_status_change,
     get_manual_task_by_id,
     get_manual_tasks_by_user_id,
@@ -166,9 +167,7 @@ async def update_scheduling_fields(user_id: str, composite_id: str, data: dict):
         if task.get("is_parent") and "duration" in data:
             raise InvalidRequestError("主任務沒有時長，請修改子任務")
         await validate_task_change(task, data)
-        task.update({"updated": datetime.now(timezone.utc)})
-        task.update(data)
-        await update_manual_task_by_id(raw_id, task)
+        await update_manual_task_by_id(raw_id, {**data, "updated": datetime.now(timezone.utc)})
         return
 
     await _find_own_external(source, raw_id, user_id)
@@ -188,9 +187,8 @@ async def set_done(user_id: str, composite_id: str, done: bool):
             raise InvalidRequestError("主任務的狀態依子任務自動計算，不能手動標記完成")
         now = datetime.now(timezone.utc)
         status = "Done" if done else "To Do"
-        task["completed_at"] = completed_at_after_status_change(task.get("status"), task.get("completed_at"), status, now)
-        task.update({"status": status, "updated": now})
-        await update_manual_task_by_id(raw_id, task)
+        completed_at = completed_at_after_status_change(task.get("status"), task.get("completed_at"), status, now)
+        await update_manual_task_by_id(raw_id, {"status": status, "completed_at": completed_at, "updated": now})
         return
 
     doc = await _find_own_external(source, raw_id, user_id)
@@ -198,6 +196,29 @@ async def set_done(user_id: str, composite_id: str, done: bool):
     if done:
         completed_at = doc.get("completed_at") if doc.get("done") else datetime.now(timezone.utc)
     await _update_external(source, raw_id, user_id, {"done": done, "completed_at": completed_at})
+
+
+async def get_external_calendar_event_id(user_id: str, composite_id: str) -> str | None:
+    """外部項目目前的 Google 日曆事件編號。來源不認得是 400；不存在或不屬於自己是 404，訊息同手動任務。"""
+    source, raw_id = parse_composite_id(composite_id)
+    doc = await _find_own_external(source, raw_id, user_id)
+    return doc.get("calendar_event_id")
+
+
+async def clear_calendar_event_id_for_composite(user_id: str, composite_id: str, calendar_event_id: str) -> bool:
+    """
+    項目的 Google 日曆事件編號還是 calendar_event_id 時清成 None，條件寫在同一次寫入的 filter 裡。
+    編號已被換掉、項目不存在或不屬於自己時什麼都不改，回傳 False。
+    """
+    source, raw_id = parse_composite_id(composite_id)
+    if source == SOURCE_MANUAL:
+        return await clear_calendar_event_id(raw_id, user_id, calendar_event_id)
+    platform = _external_platform(source)
+    result = await platform.collection.update_one(
+        {"id": _external_id(platform, raw_id), "user_id": user_id, "calendar_event_id": calendar_event_id},
+        {"$set": {"calendar_event_id": None}},
+    )
+    return result.matched_count == 1
 
 
 async def set_calendar_event_id_for_composite(user_id: str, composite_id: str, calendar_event_id: str):

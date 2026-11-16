@@ -459,7 +459,23 @@ async def set_calendar_event_id(task_id: str, user_id: str, calendar_event_id: s
         {"$set": {"calendar_event_id": calendar_event_id, "updated": datetime.now(timezone.utc)}},
     )
 
+async def clear_calendar_event_id(task_id: str, user_id: str, calendar_event_id: str) -> bool:
+    """
+    任務的 Google 日曆事件編號還是 calendar_event_id 時清成 None；條件寫在同一次寫入的 filter 裡。
+    編號已被換掉、任務不存在或不屬於 user_id 時什麼都不改，回傳 False。
+    """
+    result = await db.manual_tasks.update_one(
+        {"_id": task_id, "user_id": user_id, "calendar_event_id": calendar_event_id},
+        {"$set": {"calendar_event_id": None, "updated": datetime.now(timezone.utc)}},
+    )
+    return result.matched_count == 1
+
+
 async def update_manual_task_by_id(task_id: str, data: dict):
+    """
+    只寫入 data 裡的欄位。呼叫端只傳這次操作改到的欄位，不傳整筆讀到的任務：
+    讀取後別的請求可能改了其他欄位（例如清掉 calendar_event_id），寫回舊值會蓋掉。
+    """
     logger.debug("Updating manual task %s with data=%s", task_id, data)
     # id 對應 _id，不能更新；狀態（主任務）、進度、階段編號是讀取時算的；
     # 階段關係只由插入、刪除子任務的流程改，這裡寫回讀到的舊值會蓋掉同時進行的插入或刪除

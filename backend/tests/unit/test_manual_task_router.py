@@ -135,7 +135,7 @@ async def test_create_manual_task_with_used_idempotency_key_returns_existing_tas
 
 @pytest.mark.asyncio
 async def test_update_manual_task_keeps_original_values_for_fields_not_provided(monkeypatch):
-    """更新時沒帶的欄位（priority、duration）保留原本的值，不會被空值蓋掉；有帶的欄位（title）換成新值。"""
+    """更新時沒帶的欄位（priority、duration）不寫入，資料庫保留原本的值；有帶的欄位（title）換成新值。"""
     existing = {
         "id": "t1", "user_id": "test_user_123", "title": "舊標題", "description": "描述",
         "status": "To Do", "priority": "High", "duration": 90,
@@ -156,8 +156,8 @@ async def test_update_manual_task_keeps_original_values_for_fields_not_provided(
     await manual_task_router.update_manual_task("t1", ManualTaskUpdate(title="新標題"), clerk_user=mock_user)
 
     assert saved["title"] == "新標題"
-    assert saved["priority"] == "High"
-    assert saved["duration"] == 90
+    assert "priority" not in saved
+    assert "duration" not in saved
     assert saved["updated"] > existing["updated"]  # 更新時間有刷新
 
 
@@ -204,10 +204,41 @@ async def test_update_manual_task_keeps_completed_at_when_still_done_or_status_n
     saved_update["existing"] = _existing_task(status="Done", completed_at=done_at)
 
     await manual_task_router.update_manual_task("t1", ManualTaskUpdate(title="新標題"), clerk_user=mock_user)
-    assert saved_update["saved"]["completed_at"] == done_at
+    assert "completed_at" not in saved_update["saved"]  # 沒改狀態就不寫入，資料庫保留原值
 
     await manual_task_router.update_manual_task("t1", ManualTaskUpdate(status="Done"), clerk_user=mock_user)
     assert saved_update["saved"]["completed_at"] == done_at
+
+
+@pytest.mark.asyncio
+async def test_issue42_ac32_ac33_edit_does_not_write_back_stale_fields(monkeypatch):
+    """AC32、AC33：編輯任務時，另一邊剛清掉 Google 日曆事件編號、改了標題 → 只寫入這次改的描述，編號仍是 None、標題不被舊值蓋掉。"""
+    await db.manual_tasks.insert_one({
+        "_id": "issue42-t1", "user_id": mock_user["sub"], "title": "標題", "description": "舊描述",
+        "status": "To Do", "priority": "Low", "duration": 60, "calendar_event_id": "ev-old",
+    })
+    original = manual_task_router.manual_task_crud.get_manual_task_by_id
+
+    async def read_then_changed(task_id, user_id):
+        task = await original(task_id, user_id)
+        await db.manual_tasks.update_one(
+            {"_id": task_id}, {"$set": {"calendar_event_id": None, "title": "另一個分頁改的標題"}},
+        )
+        return task
+
+    monkeypatch.setattr(manual_task_router.manual_task_crud, "get_manual_task_by_id", read_then_changed)
+    try:
+        await manual_task_router.update_manual_task(
+            "issue42-t1", ManualTaskUpdate(description="新描述"), clerk_user=mock_user,
+        )
+
+        updated = await db.manual_tasks.find_one({"_id": "issue42-t1"})
+        assert updated is not None
+        assert updated["description"] == "新描述"
+        assert updated["calendar_event_id"] is None
+        assert updated["title"] == "另一個分頁改的標題"
+    finally:
+        await db.manual_tasks.delete_many({"_id": "issue42-t1"})
 
 
 @pytest.mark.asyncio

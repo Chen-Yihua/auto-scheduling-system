@@ -3,7 +3,7 @@
 - 狀態：已核准
 - 等級：高風險（改變和 Google 日曆同步的一致性：系統要依 Google 的回應清掉任務存的 Google 日曆事件編號、刪除 Google 上的事件或刪除任務，判斷錯會重複排入或誤刪）
 - issue：[#42](https://github.com/Chen-Yihua/auto-scheduling-system/issues/42)
-- PR：#NN
+- PR：#124
 
 ## 簡短說明
 

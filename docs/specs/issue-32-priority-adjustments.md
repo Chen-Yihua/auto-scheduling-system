@@ -3,7 +3,7 @@
 - 狀態：已核准
 - 等級：一般（改的是回應格式與提示文字，另外新增一個選填欄位；舊資料沒有這個欄位照常讀得出來，重送不改任務資料的保證不變）
 - issue：[#32](https://github.com/Chen-Yihua/auto-scheduling-system/issues/32)、[#39](https://github.com/Chen-Yihua/auto-scheduling-system/issues/39)
-- PR：#NN
+- PR：#119
 
 ## 簡短說明
 

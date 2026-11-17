@@ -174,3 +174,18 @@ def test_compute_free_times_unsorted_busy_blocks_are_handled():
         {"start": "2026-09-10T03:00:00Z", "end": "2026-09-10T05:00:00Z"},
         {"start": "2026-09-10T06:00:00Z", "end": "2026-09-10T08:00:00Z"},
     ]
+
+
+@pytest.mark.parametrize(
+    ("busy", "window_start", "window_end"),
+    [
+        ([], "", "2026-09-10T08:00:00Z"),
+        ([], "2026-09-10T00:00:00Z", ""),
+        ([{"start": "", "end": "2026-09-10T03:00:00Z"}], "2026-09-10T00:00:00Z", "2026-09-10T08:00:00Z"),
+        ([{"start": "2026-09-10T02:00:00Z", "end": ""}], "2026-09-10T00:00:00Z", "2026-09-10T08:00:00Z"),
+    ],
+)
+def test_compute_free_times_rejects_empty_required_time_fields(busy, window_start, window_end):
+    """AC4：視窗或 busy 時段的必要時間欄位是空字串時立即丟 ValueError，避免後續比較產生間接錯誤。"""
+    with pytest.raises(ValueError, match="required time field"):
+        gcal.compute_free_times(busy, window_start, window_end)

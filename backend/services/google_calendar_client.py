@@ -68,11 +68,17 @@ def compute_free_times(busy: list[dict], window_start: str, window_end: str) -> 
 
     start = to_utc_datetime(window_start)
     end   = to_utc_datetime(window_end)
+    if start is None or end is None:
+        raise ValueError("required time field cannot be empty")
 
-    intervals = sorted([
-        (to_utc_datetime(i["start"]), to_utc_datetime(i["end"]))
-        for i in busy
-    ], key=lambda x: x[0])
+    intervals = []
+    for item in busy:
+        busy_start = to_utc_datetime(item["start"])
+        busy_end = to_utc_datetime(item["end"])
+        if busy_start is None or busy_end is None:
+            raise ValueError("required time field cannot be empty")
+        intervals.append((busy_start, busy_end))
+    intervals.sort(key=lambda x: x[0])
 
     free = []
     cursor = start

@@ -3,7 +3,7 @@
 - 狀態：已核准
 - 等級：一般（只補既有登入驗證函式的單元測試，不改程式行為、API、資料或安全規則）
 - issue：#92（https://github.com/Chen-Yihua/auto-scheduling-system/issues/92）
-- PR：尚未建立
+- PR：#132
 
 ## 簡短說明
 

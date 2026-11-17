@@ -56,23 +56,24 @@ GitHub Actions 會把用 `${{ secrets.X }}` 帶入的值在 log 裡遮成 `***`�
 | AC5 | AC3 遇到循環參照時會結束，複製品保留同樣的參照關係 | 不變條件 |
 | AC6 | 要清理的錯誤自己的屬性（`message`、`stack`、`cause` 以外），以及 AC3 複製品裡的屬性，名稱（不分大小寫）含有 `authorization`、`cookie`、`password`、`token`、`secret`、`apikey`、`api_key`、`jwt`、`session` 任一個字的，值整個換成 `[redacted]`，不論值是什麼類型 | 不變條件（安全） |
 | AC7 | AC3 清理時，物件的 `name` 是字串、而且含有 AC6 的任一個字（不分大小寫）時，同一個物件的 `value` 整個換成 `[redacted]`，不論值是什麼類型 | 不變條件（安全） |
-| AC8 | 清理時讀某個屬性出錯（例如 getter 丟出錯誤），該屬性的值換成 `[unserializable]`，其他屬性照常清理；`withSanitizedErrors` 丟出的仍是原本那個清理過的錯誤 | 不變條件（安全） |
+| AC8 | 清理時讀某個屬性出錯（例如 getter（讀取時才算出值的屬性）丟出錯誤），該屬性的值換成 `[unserializable]`，其他屬性照常清理；`withSanitizedErrors` 丟出的仍是原本那個清理過的錯誤 | 不變條件（安全） |
 | AC9 | 清理後，要清理的錯誤的 `actual`、`expected`、`message`、`stack` 仍可寫入（vitest 之後會寫入 `actual`、`expected`）；「已接受的風險」第 2 點列的情況除外 | 不變條件 |
 | AC10 | `dashboard.e2e.ts` 的 `secrets` 清單包含 `NUXT_CLERK_SECRET_KEY` 的值，log 與錯誤裡出現這個值時遮成 `[redacted]` | 不變條件（安全） |
 | AC11 | #46 規格 AC2 的行為不變：回傳同一個錯誤物件、類型不變，`message`、`stack`、`cause` 照舊清理 | 不變條件 |
+| AC12 | 清理途中出錯（例如寫回屬性失敗）時，`withSanitizedErrors` 丟出一個新的 `Error`，訊息是固定文字加上經過 #46 清理的出錯訊息，不含原本錯誤沒清理的內容 | 不變條件（安全） |
 
 ## 不適用的情境
 | 情境 | 原因 |
 |---|---|
 | 未登入／無權限、空資料、載入中 | 只改 e2e 測試程式的錯誤清理，沒有使用者畫面與 API |
 | 資料處理、併發 | 不讀寫資料庫；清理是同步處理一個錯誤物件 |
-| 失敗 | 讀屬性出錯時見 AC8；錯誤沒有 `actual`、`expected` 或其他屬性時，維持 #46 的行為（AC11） |
+| 失敗 | 讀屬性出錯時見 AC8；清理途中其他出錯見 AC12；錯誤沒有 `actual`、`expected` 或其他屬性時，維持 #46 的行為（AC11） |
 
 ## 已接受的風險
-- 錯誤類別在原型上定義的 getter（讀取時才算出值的屬性），vitest 會讀出來印，這次不處理：`AssertionError` 原型上的 `name`、`ok` 回傳固定值；Playwright `TimeoutError` 沒有原型 getter。
-- 下面幾種情況，清理途中會丟出 `TypeError`，`withSanitizedErrors` 丟出的是這個 `TypeError`，原本的錯誤不會印出：不會外洩，但看不到原本的失敗原因。目前查不到會產生這些值的來源。
-  - 自有屬性不可寫、也不可重新定義（`writable: false` 而且 `configurable: false`）。
-  - `message` 或 `stack` 只有 getter，沒有 setter。
+- 錯誤類別在原型上定義的 getter，vitest 會讀出來印，這次不處理：`AssertionError` 原型上的 `name`、`ok` 回傳固定值；Playwright `TimeoutError` 沒有原型 getter。
+- 下面幾種情況，清理途中會出錯，`withSanitizedErrors` 改丟 AC12 的新錯誤：不會外洩，但看不到原本的失敗原因。目前查不到會產生這些值的來源。
+  - 自有屬性不可寫、也不可重新定義（`writable: false` 而且 `configurable: false`），包括 `message`、`stack`。
+  - `message` 或 `stack` 只有 getter、沒有 setter，而且不可重新定義。
   - 值是已撤銷的 Proxy（判斷型別時就會出錯）。
 - 複製品是一般物件，diff 裡的類別名稱會變成 `Object`（例如原本是 `Response {`）；`Map`、`Set`、`Date`、`URL`、`Headers` 這類沒有自有屬性的物件變成空物件，看不到內容。
 - 兩個只差在 query 的網址，清理後變成一樣的字串，diff 看不出差異。
@@ -92,7 +93,8 @@ GitHub Actions 會把用 `${{ secrets.X }}` 帶入的值在 log 裡遮成 `***`�
      - 其他型別（數字、布林、`null`、`undefined`、函式、symbol）照原樣回傳。
    - `sanitizeError` 在處理完 `message`、`stack`、`cause` 之後，逐一處理錯誤的 `Object.getOwnPropertyNames`（略過這三個）：名稱敏感的換成 `[redacted]`，其餘交給 `sanitizeValue`。寫回時：屬性可重新定義（`configurable: true`）的，用 `Object.defineProperty` 寫回成一般屬性，`writable: true`、`configurable: true`，保留原本的 `enumerable`，才換得掉 getter，vitest 之後也寫得進去（AC9）；不可重新定義但可寫的，直接賦值；兩者都不行的，見「已接受的風險」。
    - `sanitizeError` 的 `seen` 與 `sanitizeValue` 共用同一份記錄，同一個錯誤不會處理兩次。
-   - `withSanitizedErrors` 不用改：讀屬性出錯已在上面換成 `[unserializable]`（AC8）。
+   - `message`、`stack` 寫回時也用上面同一套規則（可重新定義的用 `Object.defineProperty`，否則可寫就直接賦值），不再一律直接賦值：唯讀但可重新定義的 `message` 才清得掉。
+   - `withSanitizedErrors` 的 `catch` 裡，`sanitizeError` 自己丟出錯誤時，接住它，改丟 `new Error('[e2e] 錯誤清理失敗：' + sanitizeForLog(出錯訊息, secrets))`（AC12）。不能原樣丟出：Node 的 `TypeError` 訊息會附上原本錯誤的字串形式，例如 `Cannot assign to read only property 'message' of object 'Error: <原本的 message>'`。
    - 更新第 91 行的註解，寫出 vitest 還會印 `actual`／`expected` 的 diff 與其他屬性。
 2. `frontend/tests/e2e/dashboard.e2e.ts`：`secrets` 改成 `[process.env.E2E_CLERK_TEST_EMAIL ?? '', process.env.NUXT_CLERK_SECRET_KEY ?? '']`。`sanitizeForLog` 已會略過空字串。
 
@@ -120,10 +122,13 @@ GitHub Actions 會把用 `${{ secrets.X }}` 帶入的值在 log 裡遮成 `***`�
 | AC9 | AC2、AC8 的例子清理後，對 `actual`、`expected`、`message`、`stack` 賦值不會丟出錯誤，讀回來是新的值 |
 | AC10 | 不寫 unit 測試：PR 描述附上 `dashboard.e2e.ts` `secrets` 那一行的內容。遮蔽本身已有 #46 AC7 的測試 |
 | AC11 | #46 既有的 `sanitizeError`、`withSanitizedErrors` 測試保留並通過 |
+| AC12 | 錯誤的 `message` 唯讀而且不可重新定義、內容帶 query 與 email：`withSanitizedErrors` 丟出的錯誤訊息以 `[e2e] 錯誤清理失敗：` 開頭，不含 query 的值與 email。另一例：`message` 唯讀但可重新定義時，丟出的是原本那個錯誤，`message` 已清理 |
 
 ## 修改紀錄
 | 日期 | 修改 | 原因 | 確認者 |
 |---|---|---|---|
+| 2026-11-17 | 新增 AC12；改寫「已接受的風險」第 2 點；實作計畫 `message`、`stack` 寫回方式與 `withSanitizedErrors` 的處理 | 開發者決定清理途中出錯時改丟清理過的新錯誤（實作審查第 1 輪 #1，選 A）→ AC12、已接受的風險第 2 點、實作計畫 1、測試對應 AC12；檢查過 AC8（讀取出錯仍丟原本的錯誤，不衝突）、AC9（除外條件仍指第 2 點）、AC11（正常情況仍回傳同一個錯誤）不用改 | 開發者 |
+| 2026-11-17 | AC8 第一次出現 getter 時加白話說明，「已接受的風險」第 1 點拿掉重複的說明 | 開發者確認修正寫法（實作審查第 1 輪 #4）→ AC8；意思不變，其他 AC 不用改 | 開發者 |
 
 ## 請你決定
 無

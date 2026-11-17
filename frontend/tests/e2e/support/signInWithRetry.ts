@@ -147,9 +147,9 @@ export function sanitizeError(error: unknown, secrets: string[], seen = new Map<
   if (!(error instanceof Error)) return new Error(sanitizeForLog(String(error), secrets))
   if (seen.has(error)) return error
   seen.set(error, error)
-  error.message = sanitizeValue(readProperty(error, 'message'), secrets, seen) as string
+  replaceProperty(error, 'message', sanitizeValue(readProperty(error, 'message'), secrets, seen))
   const stack = readProperty(error, 'stack')
-  if (stack) error.stack = sanitizeValue(stack, secrets, seen) as string
+  if (stack) replaceProperty(error, 'stack', sanitizeValue(stack, secrets, seen))
   const cause = readProperty(error, 'cause')
   if (cause !== undefined) replaceProperty(error, 'cause', sanitizeError(cause, secrets, seen))
   for (const key of Object.getOwnPropertyNames(error)) {
@@ -172,7 +172,15 @@ export function withSanitizedErrors(secrets: string[], test: () => Promise<void>
     try {
       await test()
     } catch (error) {
-      throw sanitizeError(error, secrets)
+      let sanitized: Error
+      try {
+        sanitized = sanitizeError(error, secrets)
+      } catch (cleanupError) {
+        // 不能原樣丟出：Node 的 TypeError 訊息會附上原本錯誤沒清理的字串形式
+        const reason = cleanupError instanceof Error ? readProperty(cleanupError, 'message') : cleanupError
+        throw new Error('[e2e] 錯誤清理失敗：' + sanitizeForLog(String(reason), secrets))
+      }
+      throw sanitized
     }
   }
 }

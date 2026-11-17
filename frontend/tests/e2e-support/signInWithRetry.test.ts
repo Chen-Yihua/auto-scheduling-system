@@ -488,6 +488,9 @@ describe('sanitizeError（#46）', () => {
         apiKey: 'k',
         items: [{ password: 1 }],
         sessionId: 's',
+        Cookie: 'c=1',
+        clientSecret: 'cs',
+        x_api_key: 'ak',
       },
       token: 12345,
     })
@@ -499,6 +502,9 @@ describe('sanitizeError（#46）', () => {
       apiKey: '[redacted]',
       items: [{ password: '[redacted]' }],
       sessionId: '[redacted]',
+      Cookie: '[redacted]',
+      clientSecret: '[redacted]',
+      x_api_key: '[redacted]',
     })
     expect(error.token).toBe('[redacted]')
   })
@@ -508,6 +514,9 @@ describe('sanitizeError（#46）', () => {
       actual: [
         { name: '__clerk_db_jwt', value: 'dvb_abc' },
         { name: 'Authorization', value: 'Bearer opaque123' },
+        { name: 'Set-Cookie', value: 'c=1' },
+        { name: 'client_secret', value: 'cs' },
+        { name: 'x_api_key', value: 'ak' },
         { name: 'theme', value: 'dark' },
       ],
     })
@@ -517,6 +526,9 @@ describe('sanitizeError（#46）', () => {
     expect(error.actual).toEqual([
       { name: '__clerk_db_jwt', value: '[redacted]' },
       { name: 'Authorization', value: '[redacted]' },
+      { name: 'Set-Cookie', value: '[redacted]' },
+      { name: 'client_secret', value: '[redacted]' },
+      { name: 'x_api_key', value: '[redacted]' },
       { name: 'theme', value: 'dark' },
     ])
   })
@@ -569,6 +581,34 @@ describe('sanitizeError（#46）', () => {
       expect(error.message).toBe('new message')
       expect(error.stack).toBe('new stack')
     }
+  })
+
+  it('#50 AC12：清理途中寫回 message 失敗時，丟出訊息經過清理的新錯誤', async () => {
+    const error = new Error('failed')
+    Object.defineProperty(error, 'message', { value: `/cb?code=abc ${EMAIL}`, writable: false, configurable: false })
+
+    const rejected = await withSanitizedErrors([EMAIL], async () => {
+      throw error
+    })().catch((reason: unknown) => reason)
+
+    expect(rejected).not.toBe(error)
+    expect(rejected).toBeInstanceOf(Error)
+    const { message } = rejected as Error
+    expect(message.startsWith('[e2e] 錯誤清理失敗：')).toBe(true)
+    expect(message).not.toContain('code=abc')
+    expect(message).not.toContain(EMAIL)
+  })
+
+  it('#50 AC12：message 唯讀但可重新定義時，丟出原本的錯誤，message 已清理', async () => {
+    const error = new Error('failed')
+    Object.defineProperty(error, 'message', { value: `/cb?code=abc ${EMAIL}`, writable: false, configurable: true })
+
+    const rejected = await withSanitizedErrors([EMAIL], async () => {
+      throw error
+    })().catch((reason: unknown) => reason)
+
+    expect(rejected).toBe(error)
+    expect(error.message).toBe('/cb [redacted]')
   })
 })
 

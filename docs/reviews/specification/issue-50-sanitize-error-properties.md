@@ -55,7 +55,7 @@ Playwright 用 { name, value } 陣列存 header、cookie（`frontend/node_module
 chai 的 AssertionError 原型上有 name、ok getter（`frontend/node_modules/chai/chai.js:160-165`）；e2e 有三個 expect（`frontend/tests/e2e/dashboard.e2e.ts:80`、`:82`、`:137`）。結論不變。
 
 ### #9 實作計畫有三種情況會在清理途中丟出錯誤
-不可重新定義但可寫的屬性用 defineProperty 改 configurable 會失敗；只有 getter 的 message／stack 直接賦值會失敗；已撤銷的 Proxy 判斷型別就失敗（Node 20 實測）。結果是丟出新的 TypeError，原錯誤不印，不外洩。
+不可重新定義但可寫的屬性用 defineProperty 改 configurable 會失敗；只有 getter 的 message／stack 直接賦值會失敗；已撤銷的 Proxy（包住另一個物件、攔截讀寫的物件；撤銷後任何操作都會出錯）判斷型別就失敗（Node 20 實測）。結果是丟出新的 TypeError，原錯誤不印，不外洩。
 
 ### #10 AC6 只套用在字串與物件，卻寫不論類型
 AC6 用「AC2、AC3 清理時」界定範圍，但 AC2 只管字串、AC3 只管物件與陣列，`err.token = 12345` 照字面不在範圍內，和實作計畫不一致。

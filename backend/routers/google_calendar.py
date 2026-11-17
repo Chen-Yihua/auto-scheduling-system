@@ -1,4 +1,6 @@
 import logging
+from typing import cast
+
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -69,11 +71,8 @@ async def oauth_callback(
         raise _token_exchange_error(e.response)
 
     token_data = google_token_payload(res)
-    access_token = token_data.get("access_token")
+    access_token = cast(str, token_data["access_token"])
     refresh_token = token_data.get("refresh_token")
-
-    if not access_token:
-        raise InvalidRequestError("Google 沒有回傳授權，請稍後再試", error_code="UPSTREAM_ERROR")
 
     await save_google_calendar_token(clerk_user["sub"], access_token, refresh_token)
 

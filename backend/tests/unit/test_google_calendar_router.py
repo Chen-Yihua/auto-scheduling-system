@@ -266,6 +266,7 @@ async def test_oauth_callback_without_access_token_is_upstream_error(monkeypatch
             payload=google_calendar_router.OAuthCallbackPayload(code="c"), clerk_user=mock_user)
 
     assert exc_info.value.error_code == "UPSTREAM_ERROR"
+    assert exc_info.value.detail == UPSTREAM_DETAIL
 
 
 @pytest.mark.asyncio

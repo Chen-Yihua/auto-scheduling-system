@@ -34,11 +34,13 @@ function setup(
   return { lines, waitForReady, isSignedIn, onError, run }
 }
 
-function expectOriginalMessageWithEmailRedacted(error: unknown, original: string) {
+function expectOriginalMessageWithEmailRedacted(error: unknown, originalError: Error) {
   expect(error).toBeInstanceOf(Error)
-  expect((error as Error).message).toBe(original.split(EMAIL).join('[redacted]'))
+  expect((error as Error).message).toBe(originalError.message.split(EMAIL).join('[redacted]'))
   expect((error as Error).message).toContain('[redacted]')
   expect((error as Error).message).not.toContain(EMAIL)
+  // #50 AC14：比對 stack，signInWithRetry 改丟訊息相同的新錯誤時才抓得到
+  expect((error as Error).stack).toBe(sanitizeForLog(originalError.stack!, [EMAIL]))
 }
 
 describe('signInWithRetry', () => {
@@ -114,7 +116,7 @@ describe('signInWithRetry', () => {
 
     const error = await withSanitizedErrors([EMAIL], run)().catch((error: unknown) => error)
 
-    expectOriginalMessageWithEmailRedacted(error, NAVIGATION_ERROR.message)
+    expectOriginalMessageWithEmailRedacted(error, navigationError)
 
     expect(signIn).toHaveBeenCalledTimes(3)
     expect(onError).toHaveBeenCalledTimes(3)
@@ -130,7 +132,7 @@ describe('signInWithRetry', () => {
 
     const error = await withSanitizedErrors([EMAIL], run)().catch((error: unknown) => error)
 
-    expectOriginalMessageWithEmailRedacted(error, NAVIGATION_ERROR.message)
+    expectOriginalMessageWithEmailRedacted(error, navigationError)
 
     expect(signIn).toHaveBeenCalledTimes(1)
     expect(waitForReady).toHaveBeenCalledTimes(2)
@@ -151,7 +153,7 @@ describe('signInWithRetry', () => {
 
       const error = await withSanitizedErrors([EMAIL], run)().catch((error: unknown) => error)
 
-      expectOriginalMessageWithEmailRedacted(error, otherMessage)
+      expectOriginalMessageWithEmailRedacted(error, otherError)
 
       expect(signIn, failingStep).toHaveBeenCalledTimes(1)
       expect(waitForReady, failingStep).toHaveBeenCalledTimes(1)
@@ -171,7 +173,7 @@ describe('signInWithRetry', () => {
 
     const error = await withSanitizedErrors([EMAIL], run)().catch((error: unknown) => error)
 
-    expectOriginalMessageWithEmailRedacted(error, otherMessage)
+    expectOriginalMessageWithEmailRedacted(error, otherError)
 
     expect(signIn).toHaveBeenCalledTimes(1)
     expect(onError).toHaveBeenCalledTimes(1)
@@ -637,6 +639,19 @@ describe('sanitizeError（#46）', () => {
     expect(result.message).toBe('/cb [redacted]')
   })
 
+  it('#50 AC11：錯誤用 Object.create(另一個錯誤) 建立時，原型上的 message、stack、actual 也經過清理', () => {
+    const inner = withProperties(new Error(`/cb?code=abc ${EMAIL}`), { actual: `/x?token=1 ${EMAIL}` })
+    const error = Object.create(inner) as Error
+
+    const result = sanitizeError(error, [EMAIL]) as ErrorWithProperties
+
+    expect(result).toBeInstanceOf(Error)
+    expect(result.message).toBe('/cb [redacted]')
+    expect(result.actual).toBe('/x [redacted]')
+    expect(result.stack).not.toContain('code=abc')
+    expect(result.stack).not.toContain(EMAIL)
+  })
+
   it('#50 AC13：值是二進位資料時整個換成 [binary]，不保留內容', () => {
     const error = withProperties(new Error('failed'), {
       actual: Buffer.from('/cb?code=SECRET'),
@@ -651,7 +666,7 @@ describe('sanitizeError（#46）', () => {
     expect(result.response).toEqual({ body: '[binary]' })
   })
 
-  it('#50 AC12：丟出的值是已撤銷的 Proxy 時，丟出固定文字加上出錯原因的新錯誤', async () => {
+  it('#50 AC12 例子（1）：丟出的值是已撤銷的 Proxy 時，丟出固定文字加上出錯原因的新錯誤', async () => {
     const { proxy, revoke } = Proxy.revocable(new Error(`/cb?code=abc ${EMAIL}`), {})
     revoke()
 
@@ -665,7 +680,22 @@ describe('sanitizeError（#46）', () => {
     expect(message).toContain('revoked')
   })
 
-  it('#50 AC12：出錯原因轉成文字時又出錯，丟出的訊息只有固定文字加 [unserializable]', async () => {
+  it('#50 AC12 例子（2）：出錯原因是帶 query 與 email 的字串時，丟出的訊息是固定文字加上清理過的出錯原因', async () => {
+    const thrown = {
+      toString() {
+        throw `/cb?code=abc ${EMAIL}`
+      },
+    }
+
+    const rejected = await withSanitizedErrors([EMAIL], async () => {
+      throw thrown
+    })().catch((error: unknown) => error)
+
+    expect(rejected).toBeInstanceOf(Error)
+    expect((rejected as Error).message).toBe('[e2e] 錯誤清理失敗：/cb [redacted]')
+  })
+
+  it('#50 AC12 例子（3）：出錯原因轉成文字時又出錯，丟出的訊息只有固定文字加 [unserializable]', async () => {
     const reason = {
       toString() {
         throw `/cb?code=abc ${EMAIL}`

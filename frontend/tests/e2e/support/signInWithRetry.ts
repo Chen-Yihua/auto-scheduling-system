@@ -153,13 +153,21 @@ export function sanitizeError(error: unknown, secrets: string[], seen = new Map<
   Object.setPrototypeOf(copy, Object.getPrototypeOf(error))
   delete copy.stack
   seen.set(error, copy)
-  for (const key of Object.getOwnPropertyNames(error)) {
-    const value = readProperty(error, key)
-    let sanitized: unknown
-    if (key === 'cause') sanitized = value === undefined ? value : sanitizeError(value, secrets, seen)
-    else if (key === 'message' || key === 'stack' || !isSensitiveName(key)) sanitized = sanitizeValue(value, secrets, seen)
-    else sanitized = REDACTED
-    defineValue(copy, key, sanitized, Object.getOwnPropertyDescriptor(error, key)?.enumerable)
+  const done = new Set<string>()
+  // Object.create(另一個錯誤) 這種原型帶內容的：copy 沿用同一個原型，不清理的話 vitest 會從原型讀到原本的內容
+  for (let source: object | null = error; source; source = Object.getPrototypeOf(source)) {
+    if (source !== error && Object.prototype.hasOwnProperty.call(source, 'constructor')) break
+    for (const key of Object.getOwnPropertyNames(source)) {
+      if (done.has(key)) continue
+      done.add(key)
+      // 從 error 讀：getter 的 this 才和 vitest 讀到的相同；比 source 近的層都沒有這個名稱
+      const value = readProperty(error, key)
+      let sanitized: unknown
+      if (key === 'cause') sanitized = value === undefined ? value : sanitizeError(value, secrets, seen)
+      else if (key === 'message' || key === 'stack' || !isSensitiveName(key)) sanitized = sanitizeValue(value, secrets, seen)
+      else sanitized = REDACTED
+      defineValue(copy, key, sanitized, Object.getOwnPropertyDescriptor(source, key)?.enumerable)
+    }
   }
   return copy
 }

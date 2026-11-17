@@ -639,7 +639,7 @@ describe('sanitizeError（#46）', () => {
     expect(result.message).toBe('/cb [redacted]')
   })
 
-  it('#50 AC11：錯誤用 Object.create(另一個錯誤) 建立時，原型上的 message、stack、actual 也經過清理', () => {
+  it('#50 AC15 例子（1）：錯誤用 Object.create(另一個錯誤) 建立時，原型上的 message、stack、actual 也經過清理', () => {
     const inner = withProperties(new Error(`/cb?code=abc ${EMAIL}`), { actual: `/x?token=1 ${EMAIL}` })
     const error = Object.create(inner) as Error
 
@@ -650,6 +650,18 @@ describe('sanitizeError（#46）', () => {
     expect(result.actual).toBe('/x [redacted]')
     expect(result.stack).not.toContain('code=abc')
     expect(result.stack).not.toContain(EMAIL)
+  })
+
+  it('#50 AC15 例子（2）：三層原型時，每一層的屬性都經過清理，同名時離原本的錯誤越近的優先', () => {
+    const inner = new Error(`/i?q=1 ${EMAIL}`)
+    const middle = withProperties(Object.create(inner) as Error, { actual: `/m?q=1 ${EMAIL}`, message: '/m?q=2' })
+    const error = withProperties(Object.create(middle) as Error, { message: '/e?q=1' })
+
+    const result = sanitizeError(error, [EMAIL]) as ErrorWithProperties
+
+    expect(result.message).toBe('/e')
+    expect(result.actual).toBe('/m [redacted]')
+    expect(result.stack?.split('\n')[0]).toBe('Error: /i [redacted]')
   })
 
   it('#50 AC13：值是二進位資料時整個換成 [binary]，不保留內容', () => {

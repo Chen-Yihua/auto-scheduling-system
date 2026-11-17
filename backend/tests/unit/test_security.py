@@ -341,10 +341,19 @@ async def test_get_current_clerk_user_returns_decoded_payload_on_success():
 
 
 @pytest.mark.asyncio
-async def test_get_current_clerk_user_raises_401_when_credentials_missing():
+@pytest.mark.parametrize(
+    "credentials",
+    [
+        None,
+        HTTPAuthorizationCredentials(
+            scheme="Bearer", credentials="token", decoded=None
+        ),
+    ],
+)
+async def test_get_current_clerk_user_raises_401_when_credentials_missing(credentials):
     """AC5：完全沒有 credentials → 401 UNAUTHENTICATED，並帶 WWW-Authenticate: Bearer 標頭。"""
     with pytest.raises(AppError) as exc_info:
-        await security.get_current_clerk_user(credentials=None)
+        await security.get_current_clerk_user(credentials=credentials)
 
     assert exc_info.value.error_code == "UNAUTHENTICATED"
     assert exc_info.value.detail == "Invalid authentication credentials"

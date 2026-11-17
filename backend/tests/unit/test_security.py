@@ -351,7 +351,7 @@ async def test_get_current_clerk_user_returns_decoded_payload_on_success():
     ],
 )
 async def test_get_current_clerk_user_raises_401_when_credentials_missing(credentials):
-    """AC5：完全沒有 credentials → 401 UNAUTHENTICATED，並帶 WWW-Authenticate: Bearer 標頭。"""
+    """Missing credentials or decoded payload raises 401 UNAUTHENTICATED with a Bearer challenge."""
     with pytest.raises(AppError) as exc_info:
         await security.get_current_clerk_user(credentials=credentials)
 

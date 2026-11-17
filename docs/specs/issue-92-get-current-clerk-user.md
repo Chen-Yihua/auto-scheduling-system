@@ -53,12 +53,16 @@
 | AC1 | `backend/tests/unit/test_security.py` 的 `get_current_clerk_user` 錯誤案例，加入 `decoded=None` 參數案例 | 錯誤實作時是；目前沒有該案例，若把條件改成只檢查 credentials，新增測試應攔截錯誤 |
 | AC2 | `test_get_current_clerk_user_returns_decoded_payload_on_success` | 否 |
 | AC3 | `test_get_current_clerk_user_raises_401_when_credentials_missing` | 否 |
+| AC4 | 規格審查修正 AC3 用詞後，規格修改紀錄要記載該修正的內容、原因與確認者。 | 不適用；文件檢查 |
+| AC5 | `get_current_clerk_user` 錯誤測試的 docstring 要描述 credentials 缺失與 decoded payload 缺失兩種情境，且不引用過時的驗收條件。 | 不適用；文件檢查 |
 
 ## 修改紀錄
 
 | 日期 | 修改 | 原因 | 確認者 |
 |---|---|---|---|
 | 2026-11-17 | 建立規格草稿 | 依 #92 確認補足 `decoded=None` 的測試缺口 | 開發者 |
+| 2026-11-17 | 修正 AC3 用詞並補記規格修改紀錄 | 規格審查確認例外是「丟出」而非「回傳」；檢查 AC1、AC2、AC3 與實作計畫、測試對應後僅需補記此項 | 開發者 |
+| 2026-11-17 | 更新錯誤測試 docstring | 開發者決定在本 PR 處理實作審查建議；檢查 AC1、AC2、AC3 不需修改，新增 AC5 | 開發者 |
 
 ## 請你決定
 

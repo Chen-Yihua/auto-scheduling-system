@@ -3,7 +3,7 @@
 - 狀態：已核准
 - 等級：高風險（改的是「token、email 不出現在公開的 CI log」這項保證）
 - issue：[#50](https://github.com/Chen-Yihua/auto-scheduling-system/issues/50)
-- PR：（建立後填）
+- PR：[#126](https://github.com/Chen-Yihua/auto-scheduling-system/pull/126)
 
 ## 簡短說明
 e2e 測試失敗時，vitest 會把錯誤的 `actual`／`expected` diff 與其他屬性印進公開的 CI log。這份規格讓這些內容在交給 vitest 前，和 `message`、`stack`、`cause` 一樣經過 #46 的清理。

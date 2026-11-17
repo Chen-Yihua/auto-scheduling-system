@@ -76,6 +76,12 @@ cd frontend && npm run lint && npm run typecheck && npm run test
 
 流程用語的意思見 `docs/README.md`「術語表」。
 
+## 問題處理順序
+
+遇到問題時，先確認是否有現有且實作可行的工具可以使用。
+再查一般實務上如何處理同類問題。
+前兩者都不足以解決時，才自行設計解法。
+
 ## 共用的開發環境
 
 開發者通常同時開著自己的 `npm run dev`，以及正在編輯同一批檔案的 VS Code。

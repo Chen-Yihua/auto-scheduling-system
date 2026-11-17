@@ -1,9 +1,10 @@
 """向 Google 換新 access_token。"""
 import logging
 import os
+from typing import cast
 
 import httpx
-from core.errors import ConfigurationError, ExternalServiceError, InvalidRequestError, ReauthRequiredError
+from core.errors import ConfigurationError, ExternalServiceError, ReauthRequiredError
 from pymongo.errors import PyMongoError
 
 from core.crypto import SecretDecryptError
@@ -26,6 +27,17 @@ def google_oauth_error(res: httpx.Response) -> str | None:
     except ValueError:
         return None
     return body.get("error") if isinstance(body, dict) else None
+
+
+def google_token_payload(res: httpx.Response) -> dict:
+    """驗證成功 HTTP 回應是可用的 OAuth token JSON object。"""
+    try:
+        body = res.json()
+    except ValueError:
+        raise ExternalServiceError(UPSTREAM_DETAIL)
+    if not isinstance(body, dict) or not isinstance(body.get("access_token"), str) or not body["access_token"]:
+        raise ExternalServiceError(UPSTREAM_DETAIL)
+    return body
 
 
 async def refresh_google_calendar_token(clerk_id: str) -> str:
@@ -52,7 +64,7 @@ async def refresh_google_calendar_token(clerk_id: str) -> str:
             if res.status_code != 200:
                 logger.warning("Google token refresh failed: %s", res.text)
             res.raise_for_status()
-            token_data = res.json()
+            token_data = google_token_payload(res)
     except httpx.RequestError as e:
         logger.error("連線 Google Token Endpoint 失敗: %s", e)
         code, detail = request_error_code(e)
@@ -83,11 +95,8 @@ async def refresh_google_calendar_token(clerk_id: str) -> str:
         raise ExternalServiceError(UPSTREAM_DETAIL)
 
     # Google 不一定會回新的 refresh_token
-    access_token = token_data.get("access_token")
+    access_token = cast(str, token_data["access_token"])
     new_refresh_token = token_data.get("refresh_token", refresh_token)
-    if not access_token:
-        raise InvalidRequestError("Google 沒有回傳新的授權，請稍後再試", error_code="UPSTREAM_ERROR")
-
     await update_google_calendar_token(clerk_id, access_token, new_refresh_token)
     logger.info("Refreshed Google Calendar token for clerk_id=%s", clerk_id)
     return access_token

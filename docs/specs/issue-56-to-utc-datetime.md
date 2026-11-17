@@ -3,7 +3,7 @@
 - 狀態：已核准
 - 等級：一般（修正既有型別標註與執行行為的契約，不涉及資料一致性、認證授權、個資、外部系統可靠性或重大架構決策）
 - issue：[#56](https://github.com/Chen-Yihua/auto-scheduling-system/issues/56)
-- PR：尚未建立
+- PR：[#135](https://github.com/Chen-Yihua/auto-scheduling-system/pull/135)
 
 ## 簡短說明
 

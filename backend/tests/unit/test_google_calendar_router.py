@@ -3,8 +3,10 @@ import logging
 
 import pytest
 import httpx
+import json
 
 import routers.google_calendar as google_calendar_router
+from services.google_errors import UPSTREAM_DETAIL
 
 mock_user = {"sub": "uid123"}
 
@@ -264,3 +266,36 @@ async def test_oauth_callback_without_access_token_is_upstream_error(monkeypatch
             payload=google_calendar_router.OAuthCallbackPayload(code="c"), clerk_user=mock_user)
 
     assert exc_info.value.error_code == "UPSTREAM_ERROR"
+    assert exc_info.value.detail == UPSTREAM_DETAIL
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("response_body", ["<html>google-oauth-raw-5d1e</html>", [1], '"text"', "null", "{}"])
+async def test_oauth_callback_invalid_200_token_payload_is_fixed_upstream_error(
+    monkeypatch, response_body
+):
+    """AC1、AC3、AC4、AC5、AC6：Google 200 token payload 無效 → 固定 502 detail，且不儲存 token。"""
+    saved = False
+
+    async def mock_save(*args):
+        nonlocal saved
+        saved = True
+
+    def handler(request):
+        if isinstance(response_body, str) and response_body.startswith("<"):
+            return httpx.Response(200, text=response_body, headers={"content-type": "text/plain"})
+        return httpx.Response(200, content=json.dumps(response_body).encode())
+
+    _token_endpoint(monkeypatch, handler)
+    monkeypatch.setattr(google_calendar_router, "save_google_calendar_token", mock_save)
+
+    with pytest.raises(AppError) as exc_info:
+        await google_calendar_router.oauth_callback(
+            payload=google_calendar_router.OAuthCallbackPayload(code="c"), clerk_user=mock_user
+        )
+
+    assert exc_info.value.error_code == "UPSTREAM_ERROR"
+    assert status_for_error_code(exc_info.value.error_code) == 502
+    assert exc_info.value.detail == UPSTREAM_DETAIL
+    assert "google-oauth-raw-5d1e" not in exc_info.value.detail
+    assert saved is False

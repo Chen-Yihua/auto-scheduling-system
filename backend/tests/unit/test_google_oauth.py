@@ -1,14 +1,16 @@
 """services/google_oauth.py：用 refresh_token 向 Google 換新 access_token。"""
 import logging
-from core.errors import ConfigurationError, ExternalServiceError, InvalidRequestError, ReauthRequiredError
+from core.errors import ConfigurationError, ExternalServiceError, ReauthRequiredError
 
 import pytest
 import httpx
+import json
 from pymongo.errors import PyMongoError
 
 import services.google_oauth as google_oauth
 from core.crypto import encrypt_secret, decrypt_secret
 from core.database import db
+from core.error_codes import status_for_error_code
 
 @pytest.mark.asyncio
 async def test_refresh_google_token_logs_info_on_success(monkeypatch, caplog):
@@ -47,7 +49,7 @@ async def test_refresh_google_token_logs_info_on_success(monkeypatch, caplog):
     monkeypatch.setattr(db.googleCalendarTokens, "update_one", mock_update_one)
     monkeypatch.setattr(google_oauth.httpx, "AsyncClient", lambda *a, **kw: MockClient())
 
-    with caplog.at_level(logging.INFO, logger="crud.google_tokens"):
+    with caplog.at_level(logging.INFO, logger="services.google_oauth"):
         token = await google_oauth.refresh_google_calendar_token("uid123")
 
     assert token == "new-token"
@@ -176,8 +178,8 @@ async def test_refresh_google_calendar_token_still_401s_when_cleanup_delete_fail
 
 
 @pytest.mark.asyncio
-async def test_refresh_google_calendar_token_raises_400_when_google_response_missing_access_token(monkeypatch):
-    """Google 回 200 但回應裡沒有 access_token → 400。"""
+async def test_refresh_google_calendar_token_raises_502_when_google_response_missing_access_token(monkeypatch):
+    """Google 回 200 但回應裡沒有 access_token → 502。"""
     async def mock_find_one(query):
         return {"_id": "uid123", "refresh_token": encrypt_secret("old-rt")}
 
@@ -204,7 +206,7 @@ async def test_refresh_google_calendar_token_raises_400_when_google_response_mis
     monkeypatch.setattr(db.googleCalendarTokens, "find_one", mock_find_one)
     monkeypatch.setattr(google_oauth.httpx, "AsyncClient", lambda *a, **kw: MockClient())
 
-    with pytest.raises(InvalidRequestError):
+    with pytest.raises(ExternalServiceError):
         await google_oauth.refresh_google_calendar_token("uid123")
 
 
@@ -292,6 +294,52 @@ async def test_refresh_error_codes(monkeypatch, status_code, text, http_status, 
 
     assert exc_info.value.error_code == error_code
     assert status_for_error_code(exc_info.value.error_code) == http_status
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("response_body", ["<html>google-oauth-raw-5d1e</html>", [1], '"text"', "null", "{}"])
+async def test_refresh_invalid_200_token_payload_is_fixed_upstream_error_and_keeps_tokens(
+    monkeypatch, response_body
+):
+    """AC2、AC3、AC4、AC5、AC6：Google 200 token payload 無效 → 固定 502 detail，且不異動 token。"""
+    updated = False
+    deleted = False
+
+    async def mock_find_one(query):
+        return {"_id": "uid123", "refresh_token": encrypt_secret("valid-rt")}
+
+    async def mock_update_one(*args, **kwargs):
+        nonlocal updated
+        updated = True
+
+    async def mock_delete_one(*args, **kwargs):
+        nonlocal deleted
+        deleted = True
+
+    def handler(request):
+        if isinstance(response_body, str) and response_body.startswith("<"):
+            return httpx.Response(200, text=response_body, headers={"content-type": "text/plain"})
+        return httpx.Response(200, content=json.dumps(response_body).encode())
+
+    real_client = httpx.AsyncClient
+    monkeypatch.setattr(db.googleCalendarTokens, "find_one", mock_find_one)
+    monkeypatch.setattr(db.googleCalendarTokens, "update_one", mock_update_one)
+    monkeypatch.setattr(db.googleCalendarTokens, "delete_one", mock_delete_one)
+    monkeypatch.setattr(
+        google_oauth.httpx,
+        "AsyncClient",
+        lambda *args, **kwargs: real_client(transport=httpx.MockTransport(handler)),
+    )
+
+    with pytest.raises(ExternalServiceError) as exc_info:
+        await google_oauth.refresh_google_calendar_token("uid123")
+
+    assert exc_info.value.error_code == "UPSTREAM_ERROR"
+    assert status_for_error_code(exc_info.value.error_code) == 502
+    assert exc_info.value.detail == google_oauth.UPSTREAM_DETAIL
+    assert "google-oauth-raw-5d1e" not in exc_info.value.detail
+    assert updated is False
+    assert deleted is False
 
 
 @pytest.mark.asyncio

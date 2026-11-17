@@ -1,6 +1,6 @@
 # e2e 診斷 log 沒有清掉網址的 query string
 
-- 狀態：已核准（2026-11-07 改版，見修改紀錄）
+- 狀態：部分被 [issue-50-sanitize-error-properties](issue-50-sanitize-error-properties.md) 取代（AC2）
 - issue：[#46](https://github.com/Chen-Yihua/auto-scheduling-system/issues/46)
 - PR：[#49](https://github.com/Chen-Yihua/auto-scheduling-system/pull/49)
 

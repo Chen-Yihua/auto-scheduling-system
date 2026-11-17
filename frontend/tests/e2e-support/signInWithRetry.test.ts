@@ -114,7 +114,6 @@ describe('signInWithRetry', () => {
 
     const error = await withSanitizedErrors([EMAIL], run)().catch((error: unknown) => error)
 
-    expect(error).toBe(navigationError)
     expectOriginalMessageWithEmailRedacted(error, NAVIGATION_ERROR.message)
 
     expect(signIn).toHaveBeenCalledTimes(3)
@@ -131,7 +130,6 @@ describe('signInWithRetry', () => {
 
     const error = await withSanitizedErrors([EMAIL], run)().catch((error: unknown) => error)
 
-    expect(error).toBe(navigationError)
     expectOriginalMessageWithEmailRedacted(error, NAVIGATION_ERROR.message)
 
     expect(signIn).toHaveBeenCalledTimes(1)
@@ -153,7 +151,6 @@ describe('signInWithRetry', () => {
 
       const error = await withSanitizedErrors([EMAIL], run)().catch((error: unknown) => error)
 
-      expect(error, failingStep).toBe(otherError)
       expectOriginalMessageWithEmailRedacted(error, otherMessage)
 
       expect(signIn, failingStep).toHaveBeenCalledTimes(1)
@@ -174,7 +171,6 @@ describe('signInWithRetry', () => {
 
     const error = await withSanitizedErrors([EMAIL], run)().catch((error: unknown) => error)
 
-    expect(error).toBe(otherError)
     expectOriginalMessageWithEmailRedacted(error, otherMessage)
 
     expect(signIn).toHaveBeenCalledTimes(1)
@@ -352,22 +348,25 @@ describe('createDiagnosticLogger（#46）', () => {
 })
 
 describe('withSanitizedErrors（#46）', () => {
-  it('#46 AC2：包住的函式丟出帶 query 與 email 的錯誤時，reject 出來的是清理過的同一個錯誤', async () => {
+  it('#46 AC2、#50 AC11：包住的函式丟出帶 query 與 email 的錯誤時，reject 出來的是清理過的新錯誤，類型不變', async () => {
     const error = new TypeError(`GET https://h/a?t=1 ${EMAIL}`)
 
     const rejected = await withSanitizedErrors([EMAIL], async () => {
       throw error
     })().catch((reason: unknown) => reason)
 
-    expect(rejected).toBe(error)
-    expect(error.message).toBe('GET h/a [redacted]')
-    expect(error.stack).not.toContain('t=1')
-    expect(error.stack).not.toContain(EMAIL)
+    expect(rejected).not.toBe(error)
+    expect(rejected).toBeInstanceOf(TypeError)
+    const { name, message, stack } = rejected as TypeError
+    expect(name).toBe('TypeError')
+    expect(message).toBe('GET h/a [redacted]')
+    expect(stack).not.toContain('t=1')
+    expect(stack).not.toContain(EMAIL)
   })
 })
 
 describe('sanitizeError（#46）', () => {
-  it('#46 AC2：清理 message、stack 與兩層 cause，回傳同一個物件、類型不變', () => {
+  it('#46 AC2、#50 AC11：清理 message、stack 與兩層 cause，回傳原型相同的新錯誤', () => {
     const inner = new Error(`inner /v1/c?t=3 ${EMAIL}`)
     const middle = new Error('middle https://h/b?t=2', { cause: inner })
     const error = new TypeError(`outer /v1/a?t=1 ${EMAIL}`, { cause: middle })
@@ -375,21 +374,23 @@ describe('sanitizeError（#46）', () => {
 
     const result = sanitizeError(error, [EMAIL])
 
-    expect(result).toBe(error)
+    expect(result).not.toBe(error)
     expect(result).toBeInstanceOf(TypeError)
+    expect(result.name).toBe('TypeError')
     expect(result.message).toBe('outer /v1/a [redacted]')
     expect(result.stack).toBe('TypeError: outer /v1/a [redacted]\n    at f (127.0.0.1:3000/_nuxt/a.js)')
-    expect(middle.message).toBe('middle h/b')
-    expect(middle.cause).toBe(inner)
-    expect(inner.message).toBe('inner /v1/c [redacted]')
+    const resultMiddle = result.cause as Error
+    expect(resultMiddle).not.toBe(middle)
+    expect(resultMiddle.message).toBe('middle h/b')
+    expect((resultMiddle.cause as Error).message).toBe('inner /v1/c [redacted]')
   })
 
   it('#46 AC2：cause 是字串時也清理', () => {
     const error = new Error('outer', { cause: `GET /v1/a?t=1 ${EMAIL}` })
 
-    sanitizeError(error, [EMAIL])
+    const result = sanitizeError(error, [EMAIL])
 
-    const cause = error.cause instanceof Error ? error.cause.message : String(error.cause)
+    const cause = result.cause instanceof Error ? result.cause.message : String(result.cause)
     expect(cause).toBe('GET /v1/a [redacted]')
   })
 
@@ -403,69 +404,94 @@ describe('sanitizeError（#46）', () => {
   it('#50 AC1：AssertionError 的 actual、expected 字串經過清理', () => {
     const error = assertionError(`https://h/cb?code=abc ${EMAIL}`, `https://h/cb?code=xyz ${EMAIL}`)
 
-    sanitizeError(error, [EMAIL])
+    const result = sanitizeError(error, [EMAIL]) as ErrorWithProperties
 
-    expect(error.actual).toBe('h/cb [redacted]')
-    expect(error.expected).toBe('h/cb [redacted]')
+    expect(result.actual).toBe('h/cb [redacted]')
+    expect(result.expected).toBe('h/cb [redacted]')
   })
 
   it('#50 AC1：cause 是 AssertionError 時，cause 的 actual、expected 也經過清理', () => {
     const cause = assertionError(`/cb?code=abc ${EMAIL}`, `/cb?code=xyz ${EMAIL}`)
     const error = new Error('outer', { cause })
 
-    sanitizeError(error, [EMAIL])
+    const result = sanitizeError(error, [EMAIL])
 
-    expect(cause.actual).toBe('/cb [redacted]')
-    expect(cause.expected).toBe('/cb [redacted]')
+    const resultCause = result.cause as ErrorWithProperties
+    expect(resultCause.actual).toBe('/cb [redacted]')
+    expect(resultCause.expected).toBe('/cb [redacted]')
+  })
+
+  it('#50 AC1：message 唯讀而且不可重新定義時，清理結果的 message 仍經過清理', () => {
+    const error = new Error('failed')
+    Object.defineProperty(error, 'message', { value: `/cb?code=abc ${EMAIL}`, writable: false, configurable: false })
+
+    const result = sanitizeError(error, [EMAIL])
+
+    expect(result.message).toBe('/cb [redacted]')
   })
 
   it('#50 AC2：可列舉、不可列舉的字串屬性與自有 getter 都經過清理，enumerable 不變', () => {
     const error = makeAc2Error()
 
-    sanitizeError(error, [EMAIL])
+    const result = sanitizeError(error, [EMAIL]) as ErrorWithProperties
 
-    expect(error.detail).toBe('/v1/a [token]')
-    expect(error.hidden).toBe('/v1/b [token]')
-    expect(error.computed).toBe('/v1/c')
-    expect(Object.getOwnPropertyDescriptor(error, 'detail')?.enumerable).toBe(true)
-    expect(Object.getOwnPropertyDescriptor(error, 'hidden')?.enumerable).toBe(false)
+    expect(result.detail).toBe('/v1/a [token]')
+    expect(result.hidden).toBe('/v1/b [token]')
+    expect(result.computed).toBe('/v1/c')
+    expect(Object.getOwnPropertyDescriptor(result, 'detail')?.enumerable).toBe(true)
+    expect(Object.getOwnPropertyDescriptor(result, 'hidden')?.enumerable).toBe(false)
+  })
+
+  it('#50 AC2：不可重新定義的 getter 加上不存值的 setter，清理結果的值仍經過清理', () => {
+    const error = new Error('failed') as ErrorWithProperties
+    Object.defineProperty(error, 'detail', { get: () => '/v1/a?t=1', set: () => {}, enumerable: true, configurable: false })
+
+    const result = sanitizeError(error, [EMAIL]) as ErrorWithProperties
+
+    expect(result.detail).toBe('/v1/a')
   })
 
   it('#50 AC3：actual 是物件、陣列時換成每一層都清理過的複製品；Map 變成空物件', () => {
     const error = assertionError({ url: '/cb?code=abc', nested: [{ note: EMAIL }] }, {})
     const mapError = assertionError(new Map([['k', EMAIL]]), {})
 
-    sanitizeError(error, [EMAIL])
-    sanitizeError(mapError, [EMAIL])
+    const result = sanitizeError(error, [EMAIL]) as ErrorWithProperties
+    const mapResult = sanitizeError(mapError, [EMAIL]) as ErrorWithProperties
 
-    expect(error.actual).toEqual({ url: '/cb', nested: [{ note: '[redacted]' }] })
-    expect(mapError.actual).toEqual({})
-    expect(mapError.actual).not.toBeInstanceOf(Map)
+    expect(result.actual).toEqual({ url: '/cb', nested: [{ note: '[redacted]' }] })
+    expect(mapResult.actual).toEqual({})
+    expect(mapResult.actual).not.toBeInstanceOf(Map)
   })
 
   it('#50 AC3：AggregateError.errors 裡的 Error 也經過清理', () => {
     const error = new AggregateError([new Error(`/v1/a?t=1 ${JWT}`)])
 
-    sanitizeError(error, [EMAIL])
+    const result = sanitizeError(error, [EMAIL]) as AggregateError
 
-    const inner = error.errors[0] as Error
+    const inner = result.errors[0] as Error
     expect(inner.message).not.toContain('t=1')
     expect(inner.message).not.toContain(JWT)
   })
 
-  it('#50 AC4：原本的 actual 物件不變；AggregateError.errors[0] 是同一個物件、已清理', () => {
+  it('#50 AC4：原本的 actual 物件與錯誤都不變；清理結果的 errors[0] 是另一個已清理的物件', () => {
     const actual = { url: '/cb?code=abc', nested: [{ note: EMAIL }] }
     const error = assertionError(actual, {})
+    const originalMessage = error.message
     const inner = new Error(`/v1/a?t=1 ${JWT}`)
-    const aggregate = new AggregateError([inner])
+    const aggregate = new AggregateError([inner], `outer /v1/b?t=2`)
 
-    sanitizeError(error, [EMAIL])
-    sanitizeError(aggregate, [EMAIL])
+    const result = sanitizeError(error, [EMAIL]) as ErrorWithProperties
+    const aggregateResult = sanitizeError(aggregate, [EMAIL]) as AggregateError
 
     expect(actual).toEqual({ url: '/cb?code=abc', nested: [{ note: EMAIL }] })
-    expect(error.actual).not.toBe(actual)
+    expect(error.actual).toBe(actual)
+    expect(error.message).toBe(originalMessage)
+    expect(result.actual).not.toBe(actual)
+    expect(aggregate.message).toBe('outer /v1/b?t=2')
     expect(aggregate.errors[0]).toBe(inner)
-    expect(inner.message).toBe('/v1/a [token]')
+    expect(inner.message).toBe(`/v1/a?t=1 ${JWT}`)
+    expect(aggregateResult.errors[0]).not.toBe(inner)
+    expect((aggregateResult.errors[0] as Error).message).toBe('/v1/a [token]')
   })
 
   it('#50 AC5：actual 有循環參照時清理會結束，複製品的 self 指向複製品', () => {
@@ -473,12 +499,23 @@ describe('sanitizeError（#46）', () => {
     actual.self = actual
     const error = withProperties(new Error('failed'), { actual })
 
-    sanitizeError(error, [EMAIL])
+    const result = sanitizeError(error, [EMAIL]) as ErrorWithProperties
 
-    const copy = error.actual as Record<string, unknown>
+    const copy = result.actual as Record<string, unknown>
     expect(copy).not.toBe(actual)
     expect(copy.url).toBe('/cb')
     expect(copy.self).toBe(copy)
+  })
+
+  it('#50 AC5：錯誤的 cause 指回自己時清理會結束，清理結果的 cause 指向清理結果', () => {
+    const error = new Error('failed /v1/a?t=1')
+    error.cause = error
+
+    const result = sanitizeError(error, [EMAIL])
+
+    expect(result).not.toBe(error)
+    expect(result.message).toBe('failed /v1/a')
+    expect(result.cause).toBe(result)
   })
 
   it('#50 AC6：名稱看起來是機密的屬性，不論值的類型都換成 [redacted]', () => {
@@ -492,12 +529,13 @@ describe('sanitizeError（#46）', () => {
         clientSecret: 'cs',
         x_api_key: 'ak',
       },
+      expected: { session: { id: 'abc' } },
       token: 12345,
     })
 
-    sanitizeError(error, [EMAIL])
+    const result = sanitizeError(error, [EMAIL]) as ErrorWithProperties
 
-    expect(error.actual).toEqual({
+    expect(result.actual).toEqual({
       headers: { Authorization: '[redacted]' },
       apiKey: '[redacted]',
       items: [{ password: '[redacted]' }],
@@ -506,10 +544,11 @@ describe('sanitizeError（#46）', () => {
       clientSecret: '[redacted]',
       x_api_key: '[redacted]',
     })
-    expect(error.token).toBe('[redacted]')
+    expect(result.expected).toEqual({ session: '[redacted]' })
+    expect(result.token).toBe('[redacted]')
   })
 
-  it('#50 AC7：{ name, value } 的 name 看起來是機密時，value 換成 [redacted]', () => {
+  it('#50 AC7：{ name, value } 的 name 看起來是機密時，value 不論類型都換成 [redacted]', () => {
     const error = withProperties(new Error('failed'), {
       actual: [
         { name: '__clerk_db_jwt', value: 'dvb_abc' },
@@ -517,37 +556,40 @@ describe('sanitizeError（#46）', () => {
         { name: 'Set-Cookie', value: 'c=1' },
         { name: 'client_secret', value: 'cs' },
         { name: 'x_api_key', value: 'ak' },
+        { name: 'session', value: { id: 'abc' } },
         { name: 'theme', value: 'dark' },
       ],
     })
 
-    sanitizeError(error, [EMAIL])
+    const result = sanitizeError(error, [EMAIL]) as ErrorWithProperties
 
-    expect(error.actual).toEqual([
+    expect(result.actual).toEqual([
       { name: '__clerk_db_jwt', value: '[redacted]' },
       { name: 'Authorization', value: '[redacted]' },
       { name: 'Set-Cookie', value: '[redacted]' },
       { name: 'client_secret', value: '[redacted]' },
       { name: 'x_api_key', value: '[redacted]' },
+      { name: 'session', value: '[redacted]' },
       { name: 'theme', value: 'dark' },
     ])
   })
 
-  it('#50 AC8：讀屬性出錯時值換成 [unserializable]，其他屬性照常清理，丟出的仍是原本的錯誤', async () => {
+  it('#50 AC8：讀屬性出錯時值換成 [unserializable]，其他屬性照常清理，丟出的是清理過的錯誤', async () => {
     const error = makeAc8Error()
 
-    const rejected = await withSanitizedErrors([EMAIL], async () => {
+    const rejected = (await withSanitizedErrors([EMAIL], async () => {
       throw error
-    })().catch((reason: unknown) => reason)
+    })().catch((reason: unknown) => reason)) as ErrorWithProperties
 
-    expect(rejected).toBe(error)
-    expect(error.broken).toBe('[unserializable]')
-    expect(error.actual).toEqual({ broken: '[unserializable]', url: '/cb' })
-    expect(error.detail).toBe('[redacted]')
-    expect(error.message).toBe('failed /v1/a')
+    // 不用 not.toBe：兩者不同時 vitest 會逐一比對屬性，讀到原本錯誤會丟出錯誤的 getter
+    expect(rejected === error).toBe(false)
+    expect(rejected.message).toBe('failed /v1/a')
+    expect(rejected.broken).toBe('[unserializable]')
+    expect(rejected.actual).toEqual({ broken: '[unserializable]', url: '/cb' })
+    expect(rejected.detail).toBe('[redacted]')
   })
 
-  it('#50 AC8：cause 的 getter 丟出錯誤時，丟出的仍是原本那個清理過的錯誤', async () => {
+  it('#50 AC8：cause 的 getter 丟出錯誤時，丟出的是清理過的錯誤', async () => {
     const error = withProperties(new Error(`failed /v1/a?t=1`), { detail: EMAIL })
     Object.defineProperty(error, 'cause', {
       get: () => {
@@ -556,31 +598,43 @@ describe('sanitizeError（#46）', () => {
       configurable: true,
     })
 
-    const rejected = await withSanitizedErrors([EMAIL], async () => {
+    const rejected = (await withSanitizedErrors([EMAIL], async () => {
       throw error
-    })().catch((reason: unknown) => reason)
+    })().catch((reason: unknown) => reason)) as ErrorWithProperties
 
-    expect(rejected).toBe(error)
-    expect((error.cause as Error).message).toBe('[unserializable]')
-    expect(error.detail).toBe('[redacted]')
+    // 不用 not.toBe：兩者不同時 vitest 會逐一比對屬性，讀到原本錯誤會丟出錯誤的 getter
+    expect(rejected === error).toBe(false)
+    expect(rejected.message).toBe('failed /v1/a')
+    expect((rejected.cause as Error).message).toBe('[unserializable]')
+    expect(rejected.detail).toBe('[redacted]')
   })
 
-  it('#50 AC9：清理後 actual、expected、message、stack 仍可寫入', () => {
+  it('#50 AC9：清理結果的 actual、expected、message、stack 仍可寫入', () => {
     for (const error of [makeAc2Error(), makeAc8Error()]) {
-      // 只有 getter 的 expected：清理時要換成一般屬性，vitest 之後才寫得進去
+      // 只有 getter 的 expected：清理結果要是一般屬性，vitest 之後才寫得進去
       Object.defineProperty(error, 'expected', { get: () => '/v1/e?t=1', configurable: true })
-      sanitizeError(error, [EMAIL])
+      const result = sanitizeError(error, [EMAIL]) as ErrorWithProperties
 
-      error.actual = 'new actual'
-      error.expected = 'new expected'
-      error.message = 'new message'
-      error.stack = 'new stack'
+      result.actual = 'new actual'
+      result.expected = 'new expected'
+      result.message = 'new message'
+      result.stack = 'new stack'
 
-      expect(error.actual).toBe('new actual')
-      expect(error.expected).toBe('new expected')
-      expect(error.message).toBe('new message')
-      expect(error.stack).toBe('new stack')
+      expect(result.actual).toBe('new actual')
+      expect(result.expected).toBe('new expected')
+      expect(result.message).toBe('new message')
+      expect(result.stack).toBe('new stack')
     }
+  })
+
+  it('#50 AC11：丟出的錯誤是攔截定義屬性卻不寫入的 Proxy 時，清理結果的 message 仍經過清理', () => {
+    const error = new Proxy(new Error(`/cb?code=abc ${EMAIL}`), { defineProperty: () => true })
+
+    const result = sanitizeError(error, [EMAIL])
+
+    expect(result).not.toBe(error)
+    expect(result).toBeInstanceOf(Error)
+    expect(result.message).toBe('/cb [redacted]')
   })
 
   it('#50 AC13：值是二進位資料時整個換成 [binary]，不保留內容', () => {
@@ -590,39 +644,45 @@ describe('sanitizeError（#46）', () => {
       response: { body: Buffer.from(EMAIL) },
     })
 
-    sanitizeError(error, [EMAIL])
+    const result = sanitizeError(error, [EMAIL]) as ErrorWithProperties
 
-    expect(error.actual).toBe('[binary]')
-    expect(error.expected).toBe('[binary]')
-    expect(error.response).toEqual({ body: '[binary]' })
+    expect(result.actual).toBe('[binary]')
+    expect(result.expected).toBe('[binary]')
+    expect(result.response).toEqual({ body: '[binary]' })
   })
 
-  it('#50 AC12：清理途中寫回 message 失敗時，丟出訊息經過清理的新錯誤', async () => {
-    const error = new Error('failed')
-    Object.defineProperty(error, 'message', { value: `/cb?code=abc ${EMAIL}`, writable: false, configurable: false })
+  it('#50 AC12：丟出的值是已撤銷的 Proxy 時，丟出固定文字加上出錯原因的新錯誤', async () => {
+    const { proxy, revoke } = Proxy.revocable(new Error(`/cb?code=abc ${EMAIL}`), {})
+    revoke()
 
     const rejected = await withSanitizedErrors([EMAIL], async () => {
-      throw error
+      throw proxy
     })().catch((reason: unknown) => reason)
 
-    expect(rejected).not.toBe(error)
     expect(rejected).toBeInstanceOf(Error)
     const { message } = rejected as Error
     expect(message.startsWith('[e2e] 錯誤清理失敗：')).toBe(true)
-    expect(message).not.toContain('code=abc')
-    expect(message).not.toContain(EMAIL)
+    expect(message).toContain('revoked')
   })
 
-  it('#50 AC12：message 唯讀但可重新定義時，丟出原本的錯誤，message 已清理', async () => {
-    const error = new Error('failed')
-    Object.defineProperty(error, 'message', { value: `/cb?code=abc ${EMAIL}`, writable: false, configurable: true })
+  it('#50 AC12：出錯原因轉成文字時又出錯，丟出的訊息只有固定文字加 [unserializable]', async () => {
+    const reason = {
+      toString() {
+        throw `/cb?code=abc ${EMAIL}`
+      },
+    }
+    const thrown = {
+      toString() {
+        throw reason
+      },
+    }
 
     const rejected = await withSanitizedErrors([EMAIL], async () => {
-      throw error
-    })().catch((reason: unknown) => reason)
+      throw thrown
+    })().catch((error: unknown) => error)
 
-    expect(rejected).toBe(error)
-    expect(error.message).toBe('/cb [redacted]')
+    expect(rejected).toBeInstanceOf(Error)
+    expect((rejected as Error).message).toBe('[e2e] 錯誤清理失敗：[unserializable]')
   })
 })
 

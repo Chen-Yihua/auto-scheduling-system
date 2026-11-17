@@ -28,6 +28,7 @@ cd frontend && npm run lint && npm run typecheck && npm run test
    - 更新 PR 描述用 `gh api -X PATCH repos/{owner}/{repo}/pulls/<號碼> -F body=@<檔案>`；改 issue 標籤用 `gh api repos/{owner}/{repo}/issues/<號碼>/labels`。不用 `gh pr edit` / `gh issue edit`，`gh pr view` / `gh issue view` 一定要加 `--json`：本機的 gh 2.45 會查 GitHub 已停用的 classic Projects 欄位而失敗。
 4. CI 失敗時用 `gh run view --log-failed` 讀錯誤，修正後 push 到同一個分支。
 5. 合併由開發者決定，不要自己 `gh pr merge`。
+6. PR 合併後確認來源分支已刪除；若 GitHub 沒有自動刪除，就手動刪除該分支。
 
 ## 做這類任務前先讀
 

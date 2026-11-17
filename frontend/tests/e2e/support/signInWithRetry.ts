@@ -154,9 +154,8 @@ export function sanitizeError(error: unknown, secrets: string[], seen = new Map<
   delete copy.stack
   seen.set(error, copy)
   const done = new Set<string>()
-  // Object.create(另一個錯誤) 這種原型帶內容的：copy 沿用同一個原型，不清理的話 vitest 會從原型讀到原本的內容
-  for (let source: object | null = error; source; source = Object.getPrototypeOf(source)) {
-    if (source !== error && Object.prototype.hasOwnProperty.call(source, 'constructor')) break
+  // copy 沿用同一個原型，vitest 會沿原型鏈讀到 Object.prototype 之前；原型上的內容不清理就會原樣印出
+  for (let source: object | null = error; source && source !== Object.prototype; source = Object.getPrototypeOf(source)) {
     for (const key of Object.getOwnPropertyNames(source)) {
       if (done.has(key)) continue
       done.add(key)

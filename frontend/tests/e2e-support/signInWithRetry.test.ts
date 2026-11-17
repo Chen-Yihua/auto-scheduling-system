@@ -664,6 +664,21 @@ describe('sanitizeError（#46）', () => {
     expect(result.stack?.split('\n')[0]).toBe('Error: /i [redacted]')
   })
 
+  it('#50 AC15 例子（3）：舊式寫法把錯誤物件設成類別的原型時，原型上的 stack 也經過清理', () => {
+    function MyErr(this: Error, m: string) {
+      this.message = m
+    }
+    MyErr.prototype = new Error(`proto ${EMAIL}`)
+    MyErr.prototype.constructor = MyErr
+    const error = new (MyErr as unknown as new (m: string) => Error)('/a?x=1')
+
+    const result = sanitizeError(error, [EMAIL])
+
+    expect(result.message).toBe('/a')
+    expect(result.stack?.split('\n')[0]).toBe('Error: proto [redacted]')
+    expect(result).toBeInstanceOf(MyErr)
+  })
+
   it('#50 AC13：值是二進位資料時整個換成 [binary]，不保留內容', () => {
     const error = withProperties(new Error('failed'), {
       actual: Buffer.from('/cb?code=SECRET'),

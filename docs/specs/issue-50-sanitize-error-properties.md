@@ -63,7 +63,7 @@ GitHub Actions 會把用 `${{ secrets.X }}` 帶入的值在 log 裡遮成 `***`�
 | AC12 | 清理途中出錯（例如判斷型別時出錯）時，`withSanitizedErrors` 丟出一個新的 `Error`，訊息是固定文字加上經過 #46 清理的出錯訊息；出錯訊息本身取不到（例如轉成文字時又出錯）時，只用固定文字加 `[unserializable]`。丟出的內容不含原本錯誤沒清理的內容 | 不變條件（安全） |
 | AC13 | AC1～AC3 清理時，值是二進位資料（`ArrayBuffer.isView` 為真，例如 `Buffer`、`Uint8Array`）時，整個換成 `[binary]`，不保留內容 | 不變條件（安全） |
 | AC14 | #28 規格 AC2「照原本的錯誤讓測試失敗」不變：`signInWithRetry` 丟出的錯誤經過 `withSanitizedErrors` 後，清理結果的 `stack` 等於原本那個錯誤的 `stack` 經過 #46 清理後的值 | 不變條件 |
-| AC15 | 原本的錯誤的原型本身是帶內容的物件時（例如 `Object.create(另一個錯誤)`），從原本的錯誤沿原型鏈往上、到第一個有自有 `constructor` 的物件（類別的原型）之前，途中每一層的屬性也照 AC11 的規則清理後定義在新錯誤上；同名時離原本的錯誤越近的優先 | 不變條件（安全） |
+| AC15 | 從原本的錯誤沿原型鏈往上、到 `Object.prototype` 之前，每一層（包括類別的原型與 `Error.prototype`）的屬性都照 AC11 的規則清理後定義在新錯誤上；值一律從原本的錯誤讀取；同名時離原本的錯誤越近的優先。這個範圍和 vitest 序列化錯誤時讀取的範圍相同 | 不變條件（安全） |
 
 ## 不適用的情境
 | 情境 | 原因 |
@@ -73,12 +73,11 @@ GitHub Actions 會把用 `${{ secrets.X }}` 帶入的值在 log 裡遮成 `***`�
 | 失敗 | 讀屬性出錯時見 AC8；清理途中其他出錯見 AC12；錯誤沒有 `actual`、`expected` 或其他屬性時，照 AC11 只清理 `message`、`stack`、`cause` |
 
 ## 已接受的風險
-- 錯誤類別在原型上定義的 getter，vitest 會讀出來印，這次不處理：`AssertionError` 原型上的 `name`、`ok` 回傳固定值；Playwright `TimeoutError` 沒有原型 getter。
 - 值是已撤銷的 Proxy（包住另一個物件、攔截讀寫的物件；撤銷後任何操作都會出錯）時，判斷型別就會出錯，`withSanitizedErrors` 改丟 AC12 的新錯誤：不會外洩，但看不到原本的失敗原因。目前查不到會產生這種值的來源。
 - 測試程式如果還留著原本那個錯誤的參照，讀到的是沒清理的內容（AC4 不改原本的錯誤）：交給 vitest 的只有新錯誤，`withSanitizedErrors` 之後沒有程式會再讀原本的錯誤。
 - 複製品是一般物件，diff 裡的類別名稱會變成 `Object`（例如原本是 `Response {`）；`Map`、`Set`、`Date`、`URL`、`Headers` 這類沒有自有屬性的物件變成空物件，看不到內容。
 - 兩個只差在 query 的網址，清理後變成一樣的字串，diff 看不出差異。
-- 物件有 `toJSON`、而且回傳的不是自有屬性時，vitest 會印 `toJSON` 的結果：和原型上的 getter 同一類，這次不處理。
+- 物件有 `toJSON`、而且回傳的不是自有屬性時，vitest 會印 `toJSON` 的結果：`toJSON` 是函式，照原樣複製，它回傳的內容（例如閉包裡的資料）這次不處理。
 - 名稱含 `token`、`session` 等字的一般欄位（例如 `tokenCount`、`sessionCount`）也會被遮掉；`{ name, value }` 的 `name` 是這類一般名稱時（例如 `{ name: 'sessionCount', value: 3 }`），`value` 也會被遮掉：和 #46「偏向多刪不漏刪」的取向相同。
 
 ## 實作計畫
@@ -96,7 +95,7 @@ GitHub Actions 會把用 `${{ secrets.X }}` 帶入的值在 log 裡遮成 `***`�
    - `sanitizeError` 改成建立新的錯誤，不改原本的錯誤（AC4、AC11）：
      - `const copy = new Error()`，再 `Object.setPrototypeOf(copy, Object.getPrototypeOf(error))`：用 `new Error()` 建立，`copy` 才是真的錯誤物件；換原型，`instanceof` 與類型名稱才和原本相同。`new Error()` 會自帶 `stack`，原本的錯誤沒有 `stack` 時要刪掉。
      - 先 `seen.set(error, copy)`，再處理屬性（AC5）。
-     - 逐一處理原本錯誤的 `Object.getOwnPropertyNames`（包括 `message`、`stack`、`cause`），接著沿原型鏈往上處理每一層，直到遇到有自有 `constructor` 的物件就停（AC15）；已處理過的屬性名稱不再處理。原型鏈上的物件也一樣，讀取一律用安全讀取：`message`、`stack` 是字串時 `sanitizeForLog`；`cause` 照 #46 的規則（`Error` 遞迴、不是 `Error` 時轉成字串清理後包成 `Error`）；其他屬性名稱敏感的換成 `[redacted]`，其餘交給 `sanitizeValue`。
+     - 逐一處理原本錯誤的 `Object.getOwnPropertyNames`（包括 `message`、`stack`、`cause`），接著沿原型鏈往上處理每一層，遇到 `Object.prototype` 就停（AC15）；不用判斷哪一層是類別的原型；已處理過的屬性名稱不再處理。原型鏈上的物件也一樣，讀取一律用安全讀取：`message`、`stack` 是字串時 `sanitizeForLog`；`cause` 照 #46 的規則（`Error` 遞迴、不是 `Error` 時轉成字串清理後包成 `Error`）；其他屬性名稱敏感的換成 `[redacted]`，其餘交給 `sanitizeValue`。
      - 用 `Object.defineProperty` 定義在 `copy` 上：`writable: true`、`configurable: true`，保留原本的 `enumerable`（AC2、AC9）。`copy` 是自己建立的一般物件，寫入一定生效，不必處理 setter、唯讀屬性或 Proxy 攔截寫入的情況。
      - 回傳 `copy`。
    - `sanitizeError` 的 `seen` 與 `sanitizeValue` 共用同一份記錄，同一個錯誤不會處理兩次。
@@ -133,7 +132,7 @@ GitHub Actions 會把用 `${{ secrets.X }}` 帶入的值在 log 裡遮成 `***`�
 | AC12 | 三個例子：（1）丟出的值是已撤銷的 Proxy：丟出的錯誤訊息以 `[e2e] 錯誤清理失敗：` 開頭，而且含有出錯原因（`revoked`）。（2）丟出 `{ toString() { throw '/cb?code=abc ' + EMAIL } }`：清理時轉成文字丟出的是一個帶 query 與 email 的字串，這個字串就是出錯原因，丟出的錯誤訊息**完全等於** `'[e2e] 錯誤清理失敗：/cb [redacted]'`。（3）丟出的值的 `toString` 丟出一個物件，那個物件的 `toString` 又丟出帶 query 與 email 的字串：出錯原因轉不成文字，丟出的錯誤訊息**完全等於** `'[e2e] 錯誤清理失敗：[unserializable]'` |
 | AC13 | `actual` 是 `Buffer.from('/cb?code=SECRET')`、`expected` 是 `new Uint8Array([1, 2])`、錯誤的其他屬性是 `{ body: Buffer.from(EMAIL) }`：清理後分別是 `[binary]`、`[binary]`、`{ body: '[binary]' }` |
 | AC14 | #28 AC2 的 4 個測試共用的輔助函式 `expectOriginalMessageWithEmailRedacted` 加一行：清理結果的 `stack` 完全等於 `sanitizeForLog(原本錯誤.stack, [EMAIL])`。把 `signInWithRetry` 改成重新丟出訊息相同的新錯誤時，4 個測試都會失敗 |
-| AC15 | 兩個例子：（1）`inner` 是 `message` 為 `'/cb?code=abc ' + EMAIL`、`actual` 為 `'/x?token=1 ' + EMAIL` 的錯誤，丟出 `Object.create(inner)`：清理結果的 `message` 完全等於 `'/cb [redacted]'`，`actual` 完全等於 `'/x [redacted]'`，`stack` 不含 `code=abc` 與 EMAIL，`instanceof Error` 為真。（2）`inner = new Error('/i?q=1 ' + EMAIL)`；`middle = Object.create(inner)`，自有 `actual` 為 `'/m?q=1 ' + EMAIL`、自有 `message` 為 `'/m?q=2'`；`error = Object.create(middle)`，自有 `message` 為 `'/e?q=1'`：清理結果的 `message` 完全等於 `'/e'`，`actual` 完全等於 `'/m [redacted]'`，`stack` 的第一行完全等於 `'Error: /i [redacted]'`。用「只清理一層原型」的錯誤實作確認例子（2）會失敗 |
+| AC15 | 三個例子：（1）`inner` 是 `message` 為 `'/cb?code=abc ' + EMAIL`、`actual` 為 `'/x?token=1 ' + EMAIL` 的錯誤，丟出 `Object.create(inner)`：清理結果的 `message` 完全等於 `'/cb [redacted]'`，`actual` 完全等於 `'/x [redacted]'`，`stack` 不含 `code=abc` 與 EMAIL，`instanceof Error` 為真。（2）`inner = new Error('/i?q=1 ' + EMAIL)`；`middle = Object.create(inner)`，自有 `actual` 為 `'/m?q=1 ' + EMAIL`、自有 `message` 為 `'/m?q=2'`；`error = Object.create(middle)`，自有 `message` 為 `'/e?q=1'`：清理結果的 `message` 完全等於 `'/e'`，`actual` 完全等於 `'/m [redacted]'`，`stack` 的第一行完全等於 `'Error: /i [redacted]'`。用「只清理一層原型」的錯誤實作確認例子（2）會失敗。（3）舊式寫法：`function MyErr(m) { this.message = m }`、`MyErr.prototype = new Error('proto ' + EMAIL)`、`MyErr.prototype.constructor = MyErr`，丟出 `new MyErr('/a?x=1')`：清理結果的 `message` 完全等於 `'/a'`，`stack` 的第一行完全等於 `'Error: proto [redacted]'`，`instanceof MyErr` 為真。用「碰到有自有 `constructor` 的物件就停」的錯誤實作確認例子（3）會失敗 |
 
 ## 修改紀錄
 | 日期 | 修改 | 原因 | 確認者 |
@@ -145,6 +144,7 @@ GitHub Actions 會把用 `${{ secrets.X }}` 帶入的值在 log 裡遮成 `***`�
 | 2026-11-17 | AC11 補原型鏈上的內容；新增 AC14；測試對應 AC11、AC12 寫出完整的預期字串，新增 AC14 | 開發者決定：實作審查第 3 輪 #10 選 A（原型鏈到類別原型之前的每一層都清理）→ AC11、實作計畫 1、測試對應 AC11；#9 補「出錯原因經過清理」的測試，預期字串寫死 → 測試對應 AC12；#11 在這個 PR 修 → AC14、測試對應 AC14。檢查過 AC4（原型鏈上的物件只讀不寫）、AC5（原型鏈不會循環，不用記進 `seen`）、AC8（讀取出錯換 `[unserializable]`）、AC12 的條件不用改 | 開發者 |
 | 2026-11-17 | 測試對應 AC11 的 `actual` 例子改成 `'/x?token=1 '`；修正測試對應 AC11 的表格格式；修正上一筆修改紀錄的 AC5 說明 | 開發者確認修正規格錯誤（feature-implementer 回報：`x?token=1` 不是 #46 的網址候選，原本的預期值照規則做不出來）→ 測試對應 AC11；行為不變，其他 AC 不用改 | 開發者 |
 | 2026-11-17 | AC11 的原型鏈規則拆成新的 AC15；測試對應 AC15 新增三層原型的例子（原本 AC11 的 `Object.create(inner)` 例子移到 AC15）；刪掉實作計畫重複的半句 | 開發者確認：實作審查第 4 輪 #12 補多層原型的測試 → 測試對應 AC15；#13 拆 AC11、刪重複 → AC11、AC15、實作計畫 1。行為不變，其他 AC 不用改 | 開發者 |
+| 2026-11-17 | AC15 拿掉「到類別的原型為止」的停止條件，改成走到 `Object.prototype` 之前；刪掉「已接受的風險」的原型 getter 一點；實作計畫 1 的停止條件；測試對應 AC15 新增例子（3） | 開發者決定（實作審查第 5 輪 #15，選 A）：清理範圍和 vitest 讀取的範圍一致 → AC15、已接受的風險、實作計畫 1、測試對應 AC15。檢查過 AC11（`message`、`stack` 從原型讀到時也會清理，不再有例外）、AC4（原型鏈只讀不寫）、AC8（讀取出錯換 `[unserializable]`）、AC12 不用改 | 開發者 |
 
 ## 請你決定
 無

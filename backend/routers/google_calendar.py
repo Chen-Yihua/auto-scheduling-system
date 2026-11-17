@@ -6,7 +6,7 @@ from crud.google_tokens import save_google_calendar_token, is_google_calendar_co
 from core.errors import ExternalServiceError, InvalidRequestError
 from services.google_calendar import list_calendars_for_user
 from services.google_errors import RATE_LIMITED_DETAIL, UPSTREAM_DETAIL, is_rate_limited, rate_limit_headers, request_error_code
-from services.google_oauth import google_oauth_error
+from services.google_oauth import google_oauth_error, google_token_payload
 from services.google_calendar_client import GOOGLE_HTTP_TIMEOUT
 from core.security import get_current_clerk_user
 import httpx
@@ -68,7 +68,7 @@ async def oauth_callback(
         logger.warning("Google OAuth 換 token 失敗: %s %s", e.response.status_code, e.response.text)
         raise _token_exchange_error(e.response)
 
-    token_data = res.json()
+    token_data = google_token_payload(res)
     access_token = token_data.get("access_token")
     refresh_token = token_data.get("refresh_token")
 

@@ -61,6 +61,7 @@ GitHub Actions 會把用 `${{ secrets.X }}` 帶入的值在 log 裡遮成 `***`�
 | AC10 | `dashboard.e2e.ts` 的 `secrets` 清單包含 `NUXT_CLERK_SECRET_KEY` 的值，log 與錯誤裡出現這個值時遮成 `[redacted]` | 不變條件（安全） |
 | AC11 | #46 規格 AC2 的行為不變：回傳同一個錯誤物件、類型不變，`message`、`stack`、`cause` 照舊清理 | 不變條件 |
 | AC12 | 清理途中出錯（例如寫回屬性失敗）時，`withSanitizedErrors` 丟出一個新的 `Error`，訊息是固定文字加上經過 #46 清理的出錯訊息，不含原本錯誤沒清理的內容 | 不變條件（安全） |
+| AC13 | AC1～AC3 清理時，值是二進位資料（`ArrayBuffer.isView` 為真，例如 `Buffer`、`Uint8Array`）時，整個換成 `[binary]`，不保留內容 | 不變條件（安全） |
 
 ## 不適用的情境
 | 情境 | 原因 |
@@ -86,6 +87,7 @@ GitHub Actions 會把用 `${{ secrets.X }}` 帶入的值在 log 裡遮成 `***`�
    - 新增一個安全讀取屬性的函式：讀取時出錯就回傳 `[unserializable]`（AC8）。下面讀屬性的地方都用它；`Object.getOwnPropertyNames` 本身出錯時（例如已撤銷的 Proxy），整個值換成 `[unserializable]`。
    - 新增 `sanitizeValue(value, secrets, seen)`，`seen` 是「原本的物件 → 清理結果」的 `Map`：
      - 字串：`sanitizeForLog`。
+     - 二進位資料（`ArrayBuffer.isView` 為真）：回傳 `[binary]`（AC13）。要在一般物件之前判斷：`Buffer` 有以數字為名稱的自有屬性，當成一般物件複製會保留每個位元組。
      - `Error`：交給 `sanitizeError`（直接清理，和 `cause` 相同）。
      - 陣列：建立新陣列，每個元素遞迴處理。
      - 其他物件：建立新的一般物件，逐一處理 `Object.getOwnPropertyNames` 的每個屬性：名稱敏感的值換成 `[redacted]`；物件有字串的 `name` 而且名稱敏感時，`value` 換成 `[redacted]`（AC7）；其餘遞迴處理。
@@ -123,12 +125,14 @@ GitHub Actions 會把用 `${{ secrets.X }}` 帶入的值在 log 裡遮成 `***`�
 | AC10 | 不寫 unit 測試：PR 描述附上 `dashboard.e2e.ts` `secrets` 那一行的內容。遮蔽本身已有 #46 AC7 的測試 |
 | AC11 | #46 既有的 `sanitizeError`、`withSanitizedErrors` 測試保留並通過 |
 | AC12 | 錯誤的 `message` 唯讀而且不可重新定義、內容帶 query 與 email：`withSanitizedErrors` 丟出的錯誤訊息以 `[e2e] 錯誤清理失敗：` 開頭，不含 query 的值與 email。另一例：`message` 唯讀但可重新定義時，丟出的是原本那個錯誤，`message` 已清理 |
+| AC13 | `actual` 是 `Buffer.from('/cb?code=SECRET')`、`expected` 是 `new Uint8Array([1, 2])`、錯誤的其他屬性是 `{ body: Buffer.from(EMAIL) }`：清理後分別是 `[binary]`、`[binary]`、`{ body: '[binary]' }` |
 
 ## 修改紀錄
 | 日期 | 修改 | 原因 | 確認者 |
 |---|---|---|---|
 | 2026-11-17 | 新增 AC12；改寫「已接受的風險」第 2 點；實作計畫 `message`、`stack` 寫回方式與 `withSanitizedErrors` 的處理 | 開發者決定清理途中出錯時改丟清理過的新錯誤（實作審查第 1 輪 #1，選 A）→ AC12、已接受的風險第 2 點、實作計畫 1、測試對應 AC12；檢查過 AC8（讀取出錯仍丟原本的錯誤，不衝突）、AC9（除外條件仍指第 2 點）、AC11（正常情況仍回傳同一個錯誤）不用改 | 開發者 |
 | 2026-11-17 | AC8 第一次出現 getter 時加白話說明，「已接受的風險」第 1 點拿掉重複的說明 | 開發者確認修正寫法（實作審查第 1 輪 #4）→ AC8；意思不變，其他 AC 不用改 | 開發者 |
+| 2026-11-17 | 新增 AC13；實作計畫 `sanitizeValue` 加二進位資料；測試對應 AC13 | 開發者決定在這個 PR 修實作審查第 1 輪 #3，二進位資料整個換成 `[binary]`（選 A）→ AC13、實作計畫 1、測試對應 AC13；檢查過 AC3（Map、Set 規則不變，二進位資料另由 AC13 處理）、AC4、AC5、AC6、AC7 不用改 | 開發者 |
 
 ## 請你決定
 無

@@ -583,6 +583,20 @@ describe('sanitizeError（#46）', () => {
     }
   })
 
+  it('#50 AC13：值是二進位資料時整個換成 [binary]，不保留內容', () => {
+    const error = withProperties(new Error('failed'), {
+      actual: Buffer.from('/cb?code=SECRET'),
+      expected: new Uint8Array([1, 2]),
+      response: { body: Buffer.from(EMAIL) },
+    })
+
+    sanitizeError(error, [EMAIL])
+
+    expect(error.actual).toBe('[binary]')
+    expect(error.expected).toBe('[binary]')
+    expect(error.response).toEqual({ body: '[binary]' })
+  })
+
   it('#50 AC12：清理途中寫回 message 失敗時，丟出訊息經過清理的新錯誤', async () => {
     const error = new Error('failed')
     Object.defineProperty(error, 'message', { value: `/cb?code=abc ${EMAIL}`, writable: false, configurable: false })

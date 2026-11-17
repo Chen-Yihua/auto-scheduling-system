@@ -91,6 +91,7 @@ export function sanitizeForLog(text: string, secrets: string[]): string {
 const SENSITIVE_NAME = /authorization|cookie|password|token|secret|apikey|api_key|jwt|session/i
 const REDACTED = '[redacted]'
 const UNSERIALIZABLE = '[unserializable]'
+const BINARY = '[binary]'
 const HANDLED_ERROR_KEYS = new Set(['message', 'stack', 'cause'])
 
 function isSensitiveName(name: string): boolean {
@@ -116,6 +117,8 @@ function sanitizeValue(value: unknown, secrets: string[], seen: Map<object, unkn
   if (typeof value === 'string') return sanitizeForLog(value, secrets)
   if (value === null || typeof value !== 'object') return value
   if (seen.has(value)) return seen.get(value)
+  // Buffer 有以數字為名稱的自有屬性，當成一般物件複製會保留每個位元組
+  if (ArrayBuffer.isView(value)) return BINARY
   // Error 和 cause 一樣直接清理，不複製：AggregateError.errors 裡仍是同一個錯誤
   if (value instanceof Error) return sanitizeError(value, secrets, seen)
   if (Array.isArray(value)) {

@@ -88,15 +88,82 @@ export function sanitizeForLog(text: string, secrets: string[]): string {
     .replace(/eyJ[\w-]+\.[\w-]+\.[\w-]*/g, '[token]')
 }
 
-// vitest 會把往上丟的錯誤連同 stack、cause 印進 CI log
-export function sanitizeError(error: unknown, secrets: string[], seen = new Set<unknown>()): Error {
+const SENSITIVE_NAME = /authorization|cookie|password|token|secret|apikey|api_key|jwt|session/i
+const REDACTED = '[redacted]'
+const UNSERIALIZABLE = '[unserializable]'
+const HANDLED_ERROR_KEYS = new Set(['message', 'stack', 'cause'])
+
+function isSensitiveName(name: string): boolean {
+  return SENSITIVE_NAME.test(name)
+}
+
+// getter 可能丟出錯誤；不接住的話，沒清理完的錯誤會被這個新錯誤取代往上丟
+function readProperty(target: object, key: string): unknown {
+  try {
+    return (target as Record<string, unknown>)[key]
+  } catch {
+    return UNSERIALIZABLE
+  }
+}
+
+// 不用賦值：key 是 __proto__ 時會改到複製品的原型
+function defineValue(target: object, key: string, value: unknown, enumerable = true) {
+  Object.defineProperty(target, key, { value, writable: true, configurable: true, enumerable })
+}
+
+// seen 記錄「原本的物件 → 清理結果」，循環參照時複製品保留同樣的參照關係
+function sanitizeValue(value: unknown, secrets: string[], seen: Map<object, unknown>): unknown {
+  if (typeof value === 'string') return sanitizeForLog(value, secrets)
+  if (value === null || typeof value !== 'object') return value
+  if (seen.has(value)) return seen.get(value)
+  // Error 和 cause 一樣直接清理，不複製：AggregateError.errors 裡仍是同一個錯誤
+  if (value instanceof Error) return sanitizeError(value, secrets, seen)
+  if (Array.isArray(value)) {
+    const copy: unknown[] = []
+    seen.set(value, copy)
+    for (let i = 0; i < value.length; i++) copy.push(sanitizeValue(readProperty(value, String(i)), secrets, seen))
+    return copy
+  }
+  let keys: string[]
+  try {
+    keys = Object.getOwnPropertyNames(value)
+  } catch {
+    return UNSERIALIZABLE
+  }
+  const copy = {}
+  seen.set(value, copy)
+  const name = readProperty(value, 'name')
+  // Playwright 的 header、cookie 是 { name, value }：機密在 value，名稱在 name
+  const redactValue = typeof name === 'string' && isSensitiveName(name)
+  for (const key of keys) {
+    const redact = isSensitiveName(key) || (key === 'value' && redactValue)
+    defineValue(copy, key, redact ? REDACTED : sanitizeValue(readProperty(value, key), secrets, seen))
+  }
+  return copy
+}
+
+// vitest 會把往上丟的錯誤連同 stack、cause、actual／expected 的 diff 與其他自有屬性（含不可列舉的）印進 CI log
+export function sanitizeError(error: unknown, secrets: string[], seen = new Map<object, unknown>()): Error {
   if (!(error instanceof Error)) return new Error(sanitizeForLog(String(error), secrets))
   if (seen.has(error)) return error
-  seen.add(error)
-  error.message = sanitizeForLog(error.message, secrets)
-  if (error.stack) error.stack = sanitizeForLog(error.stack, secrets)
-  if (error.cause !== undefined) error.cause = sanitizeError(error.cause, secrets, seen)
+  seen.set(error, error)
+  error.message = sanitizeValue(readProperty(error, 'message'), secrets, seen) as string
+  const stack = readProperty(error, 'stack')
+  if (stack) error.stack = sanitizeValue(stack, secrets, seen) as string
+  const cause = readProperty(error, 'cause')
+  if (cause !== undefined) replaceProperty(error, 'cause', sanitizeError(cause, secrets, seen))
+  for (const key of Object.getOwnPropertyNames(error)) {
+    if (HANDLED_ERROR_KEYS.has(key)) continue
+    replaceProperty(error, key, isSensitiveName(key) ? REDACTED : sanitizeValue(readProperty(error, key), secrets, seen))
+  }
   return error
+}
+
+// 換成一般的可寫屬性：getter 才換得掉，vitest 之後也寫得進 actual、expected
+function replaceProperty(error: Error, key: string, value: unknown) {
+  const descriptor = Object.getOwnPropertyDescriptor(error, key)
+  if (descriptor?.configurable) defineValue(error, key, value, descriptor.enumerable)
+  else (error as unknown as Record<string, unknown>)[key] = value
 }
 
 // e2e 的測試函式都要包這層：測試函式丟出的錯誤會連同 stack、cause 印進公開的 CI log

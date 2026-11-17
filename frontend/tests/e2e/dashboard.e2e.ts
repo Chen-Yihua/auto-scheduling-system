@@ -24,7 +24,7 @@ await setup({
 // 需要 Clerk 測試環境的使用者（E2E_CLERK_TEST_EMAIL）；沒設定時（本機、fork 的 PR）跳過。
 // 用 sign-in ticket 而不是密碼：密碼模式遇到額外驗證時會悄悄失敗，ticket 模式會直接報錯。
 const hasClerkTestUser = !!process.env.E2E_CLERK_TEST_EMAIL
-const secrets = [process.env.E2E_CLERK_TEST_EMAIL ?? '']
+const secrets = [process.env.E2E_CLERK_TEST_EMAIL ?? '', process.env.NUXT_CLERK_SECRET_KEY ?? '']
 const logger = createDiagnosticLogger({ secrets })
 
 // 金鑰設定錯誤時 Clerk 只會報 infinite redirect loop，所以先檢查並指出是哪個 secret 有問題

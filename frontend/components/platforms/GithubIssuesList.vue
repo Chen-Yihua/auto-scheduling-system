@@ -46,6 +46,7 @@ const openIssue = (url: string) => {
     <StaleDataBanner
       :stale="isStale ?? false"
       :synced-at="syncedAt ?? null"
+      :has-items="issues.length > 0"
       :auth-error="authError ?? false"
       platform-label="GitHub"
     />

@@ -1,18 +1,18 @@
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
-import { useUser } from '@clerk/vue'
-import { useSchedulableTasks } from '~/composables/useSchedulableTasks'
-import { useSchedule } from '~/composables/useSchedule'
-import { useScheduleWizard, PRIORITIES, type PriorityKey } from '~/composables/useScheduleWizard'
-import { useGoogleCalendar } from '~/composables/useGoogleCalendar'
-import { useGoogleCalendarAuth } from '~/composables/useGoogleCalendarAuth'
-import { useRemovedCalendarEvents } from '~/composables/useRemovedCalendarEvents'
-import AppHeader from '~/components/header/AppHeader.vue'
-import LoginRequiredCard from '~/components/LoginRequiredCard.vue'
-import { priorityLabel } from '~/utils/labels'
-import { stageMoveBlockReason } from '~/utils/stages'
-import type { SchedulableTask } from '~/types/schedulableTask'
+import { ref, reactive, computed, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
+import { useUser } from '@clerk/vue';
+import { useSchedulableTasks } from '~/composables/useSchedulableTasks';
+import { useSchedule } from '~/composables/useSchedule';
+import { useScheduleWizard, PRIORITIES, type PriorityKey } from '~/composables/useScheduleWizard';
+import { useGoogleCalendar } from '~/composables/useGoogleCalendar';
+import { useGoogleCalendarAuth } from '~/composables/useGoogleCalendarAuth';
+import { useRemovedCalendarEvents } from '~/composables/useRemovedCalendarEvents';
+import AppHeader from '~/components/header/AppHeader.vue';
+import LoginRequiredCard from '~/components/LoginRequiredCard.vue';
+import { priorityLabel } from '~/utils/labels';
+import { stageMoveBlockReason } from '~/utils/stages';
+import type { SchedulableTask } from '~/types/schedulableTask';
 import type { BlockedRecurringRule, BlockedException, RemovedCalendarEvent } from '~/types/schedule'
 
 const router = useRouter()
@@ -180,7 +180,7 @@ function moveIfAllowed(targetColumn: PriorityKey, targetIndex: number) {
 
 function onDropOnRow(targetColumn: PriorityKey, targetIndex: number) {
   moveIfAllowed(targetColumn, targetIndex)
-}
+};
 
 function onDropOnColumnEnd(targetColumn: PriorityKey) {
   moveIfAllowed(targetColumn, columns[targetColumn].length)

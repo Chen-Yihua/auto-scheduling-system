@@ -1,37 +1,37 @@
-import { describe, it, expect } from 'vitest'
-import { mount } from '@vue/test-utils'
-import { defineComponent, h } from 'vue'
-import GoogleCalendarEmbed from '~/components/dashboard/GoogleCalendarEmbed.vue'
+import { describe, it, expect } from 'vitest';
+import { mount } from '@vue/test-utils';
+import { defineComponent, h } from 'vue';
+import GoogleCalendarEmbed from '~/components/dashboard/GoogleCalendarEmbed.vue';
 
 // UCard 預設的 stub 不渲染 slot，改用會渲染 slot 的假元件
 const UCardStub = defineComponent({
   name: 'UCard',
   setup(_, { slots }) {
-    return () => h('div', { class: 'u-card-stub' }, [slots.header?.(), slots.default?.()])
+    return () => h('div', { class: 'u-card-stub' }, [slots.header?.(), slots.default?.()]);
   },
-})
+});
 
 const USkeletonStub = defineComponent({
   name: 'USkeleton',
   setup() {
-    return () => h('div', { class: 'u-skeleton-stub' })
+    return () => h('div', { class: 'u-skeleton-stub' });
   },
-})
+});
 
-const uiStubs = { UIcon: true, UCard: UCardStub, USkeleton: USkeletonStub }
+const uiStubs = { UIcon: true, UCard: UCardStub, USkeleton: USkeletonStub };
 
-const NEEDS_CONNECT_TEXT = 'Google Calendar 未連接或授權已失效，請前往 帳號設定 連接。'
+const NEEDS_CONNECT_TEXT = 'Google Calendar 未連接或授權已失效，請前往 帳號設定 連接。';
 
 describe('GoogleCalendarEmbed.vue', () => {
   it('connect=true 且有 calendarIds 時會嵌入 Google Calendar iframe', () => {
-    const ids = ['cal1@group', '特殊字串 2']
+    const ids = ['cal1@group', '特殊字串 2'];
     const wrapper = mount(GoogleCalendarEmbed, {
       props: { calendarIds: ids, id: 'foo', connect: true },
       global: { stubs: uiStubs },
-    })
+    });
 
-    const html = wrapper.html()
-    expect(html).toContain('calendar.google.com')
+    const html = wrapper.html();
+    expect(html).toContain('calendar.google.com');
     ids.forEach((id) =>
       expect(html).toContain(`src=${encodeURIComponent(id)}`),
     )

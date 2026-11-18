@@ -1,19 +1,19 @@
 // 三個平台清單共用的同步狀態：上次同步時間、立即同步按鈕、授權失效提示（issue #13）
-import { describe, it, expect, vi, afterEach } from 'vitest'
-import { mount } from '@vue/test-utils'
-import { defineComponent, h, type Component } from 'vue'
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { mount } from '@vue/test-utils';
+import { defineComponent, h, type Component } from 'vue';
 
-import GithubIssuesList from '~/components/platforms/GithubIssuesList.vue'
-import JiraIssuesList from '~/components/platforms/JiraIssuesList.vue'
-import MoodleAssignmentsList from '~/components/platforms/MoodleAssignmentsList.vue'
+import GithubIssuesList from '~/components/platforms/GithubIssuesList.vue';
+import JiraIssuesList from '~/components/platforms/JiraIssuesList.vue';
+import MoodleAssignmentsList from '~/components/platforms/MoodleAssignmentsList.vue';
 
 // UCard 預設的 stub 不渲染 slot，改用會渲染 slot 的假元件
 const UCardStub = defineComponent({
   name: 'UCard',
   setup(_, { slots }) {
-    return () => h('div', [slots.header?.(), slots.default?.(), slots.footer?.()])
+    return () => h('div', [slots.header?.(), slots.default?.(), slots.footer?.()]);
   },
-})
+});
 
 const UButtonStub = defineComponent({
   name: 'UButton',

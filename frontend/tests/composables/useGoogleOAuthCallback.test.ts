@@ -1,72 +1,72 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { mount, flushPromises } from '@vue/test-utils'
-import { createSSRApp, defineComponent, ref, type Ref } from 'vue'
-import { renderToString } from 'vue/server-renderer'
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { mount, flushPromises } from '@vue/test-utils';
+import { createSSRApp, defineComponent, ref, type Ref } from 'vue';
+import { renderToString } from 'vue/server-renderer';
 
-import { useGoogleOAuthCallback } from '~/composables/useGoogleOAuthCallback'
+import { useGoogleOAuthCallback } from '~/composables/useGoogleOAuthCallback';
 
 // ---------- 可由測試控制的 route / router / Clerk / toast / $fetch ----------
-const route = { path: '/oauth/callback', query: {} as Record<string, string> }
-const replaceSpy = vi.fn()
-const toastAddSpy = vi.fn()
-const fetchSpy = vi.fn()
-const getTokenSpy = vi.fn()
+const route = { path: '/oauth/callback', query: {} as Record<string, string> };
+const replaceSpy = vi.fn();
+const toastAddSpy = vi.fn();
+const fetchSpy = vi.fn();
+const getTokenSpy = vi.fn();
 
 vi.mock('vue-router', () => ({
   useRoute: () => route,
   useRouter: () => ({ replace: replaceSpy }),
-}))
+}));
 vi.mock('@clerk/vue', () => ({
   useAuth: () => ({ getToken: { value: getTokenSpy } }),
-}))
-vi.stubGlobal('useToast', () => ({ add: toastAddSpy }))
-vi.stubGlobal('useRuntimeConfig', () => ({ public: { apiBaseUrl: 'http://api.test' } }))
-vi.stubGlobal('$fetch', fetchSpy)
+}));
+vi.stubGlobal('useToast', () => ({ add: toastAddSpy }));
+vi.stubGlobal('useRuntimeConfig', () => ({ public: { apiBaseUrl: 'http://api.test' } }));
+vi.stubGlobal('$fetch', fetchSpy);
 
 // Nuxt 的 useState：同一個 key 在所有元件之間共用同一份狀態
-const stateStore = new Map<string, Ref<unknown>>()
+const stateStore = new Map<string, Ref<unknown>>();
 vi.stubGlobal('useState', (key: string, init: () => unknown) => {
-  if (!stateStore.has(key)) stateStore.set(key, ref(init()))
-  return stateStore.get(key)
-})
+  if (!stateStore.has(key)) stateStore.set(key, ref(init()));
+  return stateStore.get(key);
+});
 
-const connecting = () => stateStore.get('googleCalendarConnecting')?.value ?? false
-const connectedCount = () => stateStore.get('googleCalendarConnectedCount')?.value ?? 0
+const connecting = () => stateStore.get('googleCalendarConnecting')?.value ?? false;
+const connectedCount = () => stateStore.get('googleCalendarConnectedCount')?.value ?? 0;
 
 // composable 要在元件的 setup 裡呼叫，用一個空元件來承載
 const Host = defineComponent({
   setup() {
-    useGoogleOAuthCallback()
-    return () => null
+    useGoogleOAuthCallback();
+    return () => null;
   },
-})
+});
 
 describe('useGoogleOAuthCallback', () => {
   beforeEach(() => {
-    route.path = '/oauth/callback'
-    route.query = {}
-    replaceSpy.mockReset()
-    toastAddSpy.mockReset()
-    fetchSpy.mockReset()
-    getTokenSpy.mockReset()
-    getTokenSpy.mockResolvedValue('jwt-token')
-    stateStore.clear()
-    vi.spyOn(console, 'error').mockImplementation(() => {})
-  })
+    route.path = '/oauth/callback';
+    route.query = {};
+    replaceSpy.mockReset();
+    toastAddSpy.mockReset();
+    fetchSpy.mockReset();
+    getTokenSpy.mockReset();
+    getTokenSpy.mockResolvedValue('jwt-token');
+    stateStore.clear();
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
 
   it('有授權碼：伺服器端渲染時就已經是「連接中」（不用等瀏覽器載入完 JavaScript）', async () => {
-    route.query.code = 'auth-code'
+    route.query.code = 'auth-code';
 
     // SSR 只跑 setup，狀態要在 setup 就設好
-    await renderToString(createSSRApp(Host))
+    await renderToString(createSSRApp(Host));
 
-    expect(connecting()).toBe(true)
-    expect(fetchSpy).not.toHaveBeenCalled()
-  })
+    expect(connecting()).toBe(true);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
 
   it('有授權碼：先把網址換成 /，換 token 在背景進行，這段期間仍是「連接中」', async () => {
-    route.query.code = 'auth-code'
-    let finish: (value: unknown) => void = () => {}
+    route.query.code = 'auth-code';
+    let finish: (value: unknown) => void = () => {};
     fetchSpy.mockReturnValue(new Promise((resolve) => { finish = resolve })) // 先不回應
 
     mount(Host)
@@ -132,16 +132,16 @@ describe('useGoogleOAuthCallback', () => {
     await flushPromises()
 
     expect(fetchSpy).not.toHaveBeenCalled()
-    expect(connecting()).toBe(false)
+    expect(connecting()).toBe(false);
     expect(toastAddSpy).toHaveBeenCalledWith(expect.objectContaining({ title: 'Google 授權失敗：access_denied' }))
     expect(replaceSpy).toHaveBeenCalledWith('/')
   })
 
   it('直接打開 /oauth/callback、沒有授權碼：不呼叫後端，直接回首頁，也不會卡在「連接中」', async () => {
-    mount(Host)
-    await flushPromises()
+    mount(Host);
+    await flushPromises();
 
-    expect(fetchSpy).not.toHaveBeenCalled()
+    expect(fetchSpy).not.toHaveBeenCalled();
     expect(replaceSpy).toHaveBeenCalledWith('/')
     expect(connecting()).toBe(false)
   })
@@ -150,10 +150,10 @@ describe('useGoogleOAuthCallback', () => {
     route.path = '/'
     route.query.code = 'something-else'
 
-    mount(Host)
-    await flushPromises()
+    mount(Host);
+    await flushPromises();
 
-    expect(fetchSpy).not.toHaveBeenCalled()
+    expect(fetchSpy).not.toHaveBeenCalled();
     expect(replaceSpy).not.toHaveBeenCalled()
     expect(toastAddSpy).not.toHaveBeenCalled()
     expect(connecting()).toBe(false)

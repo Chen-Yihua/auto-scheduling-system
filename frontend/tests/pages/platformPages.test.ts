@@ -1,29 +1,29 @@
 // GitHub、Jira、Moodle 三個平台頁面：打開時只讀資料，立即同步按鈕接到那一頁平台的 syncNow（issue #13）
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { mount, flushPromises, enableAutoUnmount } from '@vue/test-utils'
-import { ref, watch, h, defineComponent } from 'vue'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { mount, flushPromises, enableAutoUnmount } from '@vue/test-utils';
+import { ref, watch, h, defineComponent } from 'vue';
 
-import GithubPage from '~/pages/github.vue'
-import JiraPage from '~/pages/jira.vue'
-import MoodlePage from '~/pages/moodle.vue'
+import GithubPage from '~/pages/github.vue';
+import JiraPage from '~/pages/jira.vue';
+import MoodlePage from '~/pages/moodle.vue';
 
-vi.stubGlobal('watch', watch)
+vi.stubGlobal('watch', watch);
 
 vi.mock('@clerk/vue', async () => {
-  const { ref } = await import('vue')
-  return { useUser: () => ({ isSignedIn: ref(true) }) }
-})
+  const { ref } = await import('vue');
+  return { useUser: () => ({ isSignedIn: ref(true) }) };
+});
 
 const spies = {
   github: { fetchItems: vi.fn(), syncNow: vi.fn() },
   jira: { fetchItems: vi.fn(), syncNow: vi.fn() },
   moodle: { fetchItems: vi.fn(), syncNow: vi.fn() },
-}
-const requested: string[] = []
+};
+const requested: string[] = [];
 
 vi.mock('~/composables/usePlatformItems', () => ({
   usePlatformItems: (platform: 'github' | 'jira' | 'moodle') => {
-    requested.push(platform)
+    requested.push(platform);
     return {
       items: ref([]),
       account: ref(undefined),
@@ -37,9 +37,9 @@ vi.mock('~/composables/usePlatformItems', () => ({
       needsReauth: ref(false),
       unavailable: ref(false),
       loading: ref(false),
-    }
+    };
   },
-}))
+}));
 
 const stubs = {
   AppHeader: defineComponent({ setup: () => () => h('div') }),
@@ -49,9 +49,9 @@ const stubs = {
   GithubIssuesList: true,
   JiraIssuesList: true,
   MoodleAssignmentsList: true,
-}
+};
 
-enableAutoUnmount(afterEach)
+enableAutoUnmount(afterEach);
 
 describe.each([
   { platform: 'github', page: GithubPage, list: 'GithubIssuesList' },
@@ -59,7 +59,7 @@ describe.each([
   { platform: 'moodle', page: MoodlePage, list: 'MoodleAssignmentsList' },
 ] as const)('pages/$platform 頁面', ({ platform, page, list }) => {
   beforeEach(() => {
-    requested.length = 0
+    requested.length = 0;
     Object.values(spies).forEach((s) => { s.fetchItems.mockReset(); s.syncNow.mockReset() })
   })
 

@@ -1,13 +1,13 @@
-import { describe, it, expect, vi } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { describe, it, expect, vi } from 'vitest';
+import { mount } from '@vue/test-utils';
 
-import { h, defineComponent } from 'vue'
+import { h, defineComponent } from 'vue';
 
-import MoodleAssignmentsList from '~/components/platforms/MoodleAssignmentsList.vue'
-import type { MoodleAssignment } from '~/types/moodle'
+import MoodleAssignmentsList from '~/components/platforms/MoodleAssignmentsList.vue';
+import type { MoodleAssignment } from '~/types/moodle';
 
-const openSpy = vi.fn()
-vi.stubGlobal('open', openSpy)
+const openSpy = vi.fn();
+vi.stubGlobal('open', openSpy);
 
 // UCard 預設的 stub 不渲染 slot，改用會渲染 slot 的假元件
 const UCardStub = defineComponent({
@@ -50,7 +50,7 @@ describe('MoodleAssignmentsList.vue', () => {
   it('Loading 顯示 icon', () => {
     const wrapper = render({ loading: true })
     expect(wrapper.find('u-icon-stub').exists()).toBe(true)
-  })
+  });
 
   it('有作業時渲染卡片並可點擊開啟', async () => {
     const wrapper = render({

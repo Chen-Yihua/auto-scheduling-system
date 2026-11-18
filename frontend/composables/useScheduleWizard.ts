@@ -1,36 +1,36 @@
-import { ref, reactive, computed } from 'vue'
-import { useAuth } from '@clerk/vue'
-import { createSharedComposable } from '@vueuse/core'
-import type { SchedulableTask } from '@/types/schedulableTask'
-import type { SchedulePreferences } from '@/types/schedule'
-import { defaultSchedulePreferences } from '@/types/schedule'
-import { getErrorDetail, getFriendlyErrorTitle } from '@/utils/errorMessages'
+import { ref, reactive, computed } from 'vue';
+import { useAuth } from '@clerk/vue';
+import { createSharedComposable } from '@vueuse/core';
+import type { SchedulableTask } from '@/types/schedulableTask';
+import type { SchedulePreferences } from '@/types/schedule';
+import { defaultSchedulePreferences } from '@/types/schedule';
+import { getErrorDetail, getFriendlyErrorTitle } from '@/utils/errorMessages';
 
-export const PRIORITIES = ['Low', 'Medium', 'High'] as const
-export type PriorityKey = (typeof PRIORITIES)[number]
+export const PRIORITIES = ['Low', 'Medium', 'High'] as const;
+export type PriorityKey = (typeof PRIORITIES)[number];
 
 // 欄內順序：有 sort_order 的在前，其餘依 due_date，和後端排程規則一致
 function defaultOrderWithinColumn(a: SchedulableTask, b: SchedulableTask): number {
-  const aOrder = a.sort_order ?? null
-  const bOrder = b.sort_order ?? null
-  if (aOrder !== null && bOrder !== null) return aOrder - bOrder
-  if (aOrder !== null) return -1
-  if (bOrder !== null) return 1
+  const aOrder = a.sort_order ?? null;
+  const bOrder = b.sort_order ?? null;
+  if (aOrder !== null && bOrder !== null) return aOrder - bOrder;
+  if (aOrder !== null) return -1;
+  if (bOrder !== null) return 1;
 
-  const aDue = a.due_date ? new Date(a.due_date).getTime() : Number.POSITIVE_INFINITY
-  const bDue = b.due_date ? new Date(b.due_date).getTime() : Number.POSITIVE_INFINITY
-  return aDue - bDue
+  const aDue = a.due_date ? new Date(a.due_date).getTime() : Number.POSITIVE_INFINITY;
+  const bDue = b.due_date ? new Date(b.due_date).getTime() : Number.POSITIVE_INFINITY;
+  return aDue - bDue;
 }
 
 // 共用狀態：排程精靈頁面和其中的元件要用同一份資料
 function useScheduleWizardImpl() {
-  const toast = useToast()
-  const config = useRuntimeConfig()
-  const { getToken } = useAuth()
-  const BASE_URL = config.public.apiBaseUrl
+  const toast = useToast();
+  const config = useRuntimeConfig();
+  const { getToken } = useAuth();
+  const BASE_URL = config.public.apiBaseUrl;
 
-  const step = ref<1 | 2>(1)
-  const saving = ref(false)
+  const step = ref<1 | 2>(1);
+  const saving = ref(false);
   // 依 priority 分三欄，拖到別欄即改變 priority
   const columns = reactive<Record<PriorityKey, SchedulableTask[]>>({ Low: [], Medium: [], High: [] })
 

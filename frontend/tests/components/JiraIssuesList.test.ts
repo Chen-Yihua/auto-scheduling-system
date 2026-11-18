@@ -1,7 +1,7 @@
-import { describe, it, expect, vi } from 'vitest'
-import { mount } from '@vue/test-utils'
-import { defineComponent, h } from 'vue'
-import JiraIssuesList from '~/components/platforms/JiraIssuesList.vue'
+import { describe, it, expect, vi } from 'vitest';
+import { mount } from '@vue/test-utils';
+import { defineComponent, h } from 'vue';
+import JiraIssuesList from '~/components/platforms/JiraIssuesList.vue';
 
 // UCard 預設的 stub 不渲染 slot，改用會渲染 slot 的假元件
 const UCardStub = defineComponent({
@@ -13,9 +13,9 @@ const UCardStub = defineComponent({
         slots.header?.(),
         slots.default?.(),
         slots.footer?.(),
-      ])
+      ]);
   },
-})
+});
 
 const uiStubs = {
   USkeleton: true,
@@ -25,10 +25,10 @@ const uiStubs = {
   UAlert: true,
   UIcon: true,
   NuxtLink: { template: '<a><slot /></a>' },
-}
+};
 
-const openSpy = vi.fn()
-vi.stubGlobal('open', openSpy)
+const openSpy = vi.fn();
+vi.stubGlobal('open', openSpy);
 
 const baseIssue = {
   id: '1',
@@ -41,51 +41,51 @@ const baseIssue = {
   avatar: '',
   iconUrl: '',
   updated_at: '2025-07-01T00:00:00Z',
-}
+};
 
 describe('JiraIssuesList.vue', () => {
   it('loading 時顯示 Skeleton，不顯示任何清單內容', () => {
     const wrapper = mount(JiraIssuesList, {
       props: { issues: [], loading: true },
       global: { stubs: uiStubs },
-    })
+    });
 
-    expect(wrapper.find('u-skeleton-stub').exists()).toBe(true)
-    expect(wrapper.text()).not.toContain('尚無資料')
-  })
+    expect(wrapper.find('u-skeleton-stub').exists()).toBe(true);
+    expect(wrapper.text()).not.toContain('尚無資料');
+  });
 
   it('notLinked 為 true 時顯示尚未綁定提示，不顯示 Skeleton 或清單', () => {
     const wrapper = mount(JiraIssuesList, {
       props: { issues: [], loading: false, notLinked: true },
       global: { stubs: uiStubs },
-    })
+    });
 
-    expect(wrapper.text()).toContain('尚未綁定 Jira 帳號')
-    expect(wrapper.find('u-skeleton-stub').exists()).toBe(false)
-  })
+    expect(wrapper.text()).toContain('尚未綁定 Jira 帳號');
+    expect(wrapper.find('u-skeleton-stub').exists()).toBe(false);
+  });
 
   it('已連結但沒有 issues 時顯示尚無資料', () => {
     const wrapper = mount(JiraIssuesList, {
       props: { issues: [], loading: false, notLinked: false },
       global: { stubs: uiStubs },
-    })
+    });
 
-    expect(wrapper.text()).toContain('尚無資料')
-  })
+    expect(wrapper.text()).toContain('尚無資料');
+  });
 
   it('有 issues 時渲染卡片，點擊會用 domain 開啟對應的 Jira 網址', async () => {
     const wrapper = mount(JiraIssuesList, {
       props: { issues: [baseIssue], loading: false, domain: 'my-team.atlassian.net' },
       global: { stubs: uiStubs },
-    })
+    });
 
-    expect(wrapper.text()).toContain('ISSUE-1')
-    expect(wrapper.text()).toContain('Fix the bug')
+    expect(wrapper.text()).toContain('ISSUE-1');
+    expect(wrapper.text()).toContain('Fix the bug');
 
     // index 0 是外層容器，index 1 才是這筆 issue 的卡片
-    const cards = wrapper.findAll('.u-card-stub')
-    expect(cards.length).toBe(2)
-    await cards[1].trigger('click')
+    const cards = wrapper.findAll('.u-card-stub');
+    expect(cards.length).toBe(2);
+    await cards[1].trigger('click');
 
     expect(openSpy).toHaveBeenCalledWith(
       'https://my-team.atlassian.net/browse/ISSUE-1',

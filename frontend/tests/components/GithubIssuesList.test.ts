@@ -1,7 +1,7 @@
-import { describe, it, expect } from 'vitest'
-import { mount } from '@vue/test-utils'
-import { defineComponent, h } from 'vue'
-import GithubIssuesList from '~/components/platforms/GithubIssuesList.vue'
+import { describe, it, expect } from 'vitest';
+import { mount } from '@vue/test-utils';
+import { defineComponent, h } from 'vue';
+import GithubIssuesList from '~/components/platforms/GithubIssuesList.vue';
 
 // UCard 預設的 stub 不渲染 slot，改用會渲染 slot 的假元件
 const UCardStub = defineComponent({
@@ -33,5 +33,5 @@ describe('GithubIssuesList.vue', () => {
 
   it('尚未綁定時照常顯示尚未綁定', () => {
     expect(render({ notLinked: true }).text()).toContain('尚未綁定 GitHub 帳號')
-  })
+  });
 })

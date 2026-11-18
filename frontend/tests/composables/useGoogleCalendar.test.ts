@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { ref as vueRef, computed as vueComputed, nextTick, type Ref } from 'vue'
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { ref as vueRef, computed as vueComputed, nextTick, type Ref } from 'vue';
 
 // ---------- 載入被測 composable ----------
 // 共用狀態（包括最近一次已知的結果）存在模組裡，每個測試重新載入才不會互相影響
@@ -87,7 +87,7 @@ describe('useGoogleCalendar composable', () => {
         method: 'GET',
         headers: { Authorization: 'Bearer jwt-token' },
       }),
-    )
+    );
     expect(ctx.isConnected.value).toBe(true)
     expect(ctx.calendarIds.value).toEqual(['cal1', 'cal2'])
     expect(ctx.calendarNames.value).toEqual(['主行事曆', '側行事曆'])
@@ -197,7 +197,7 @@ describe('useGoogleCalendar composable', () => {
 
     fetchSpy.mockResolvedValueOnce({ connected: true })
     fetchSpy.mockResolvedValueOnce({ items: [{ id: 'cal1', summary: '主行事曆', primary: true }] })
-    await ctx.fetchGoogleCalendars()
+    await ctx.fetchGoogleCalendars();
 
     expect(ctx.isConnected.value).toBe(true)
     expect(ctx.primaryCalendarId.value).toBe('cal1')

@@ -1,5 +1,5 @@
-import { useAuth } from '@clerk/vue'
-import { createSharedComposable } from '@vueuse/core'
+import { useAuth } from '@clerk/vue';
+import { createSharedComposable } from '@vueuse/core';
 import type { ScheduleSuggestion, ScheduledTask, UnscheduledTask, ScheduleConfirmResult, SchedulePreferences } from '@/types/schedule'
 import { defaultSchedulePreferences } from '@/types/schedule'
 import { describeError, getFriendlyErrorTitle, isAuthError, isNotLinkedError, isSuggestionExpiredError, logApiError } from '@/utils/errorMessages'

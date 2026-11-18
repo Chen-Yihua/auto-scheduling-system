@@ -1,14 +1,14 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { mount } from '@vue/test-utils'
-import { ref, watch, h, defineComponent } from 'vue'
-import type { SetupContext } from 'vue'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { mount } from '@vue/test-utils';
+import { ref, watch, h, defineComponent } from 'vue';
+import type { SetupContext } from 'vue';
 
-import AppHeader from '~/components/header/AppHeader.vue'
+import AppHeader from '~/components/header/AppHeader.vue';
 
-vi.stubGlobal('watch', watch)
+vi.stubGlobal('watch', watch);
 
 // ---------- Clerk mock：isSignedIn／user 可由測試動態控制 ----------
-const isSignedInRef = ref<boolean | undefined>(undefined)
+const isSignedInRef = ref<boolean | undefined>(undefined);
 const userRef = ref<{ id: string; fullName: string; firstName: string; lastName: string } | null>(null)
 
 vi.mock('@clerk/vue', () => ({

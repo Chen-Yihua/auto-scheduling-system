@@ -1,10 +1,10 @@
 // 授權碼在背景換 token 時，讓行事曆卡片顯示「連接中」
 export const useGoogleCalendarAuth = () => {
-  const connecting = useState('googleCalendarConnecting', () => false)
+  const connecting = useState('googleCalendarConnecting', () => false);
   // 每次連接成功遞增，供其他元件 watch
-  const connectedCount = useState('googleCalendarConnectedCount', () => 0)
+  const connectedCount = useState('googleCalendarConnectedCount', () => 0);
 
-  const config = useRuntimeConfig()
+  const config = useRuntimeConfig();
   const goToGoogleAuth = () => {
     const params = new URLSearchParams({
       client_id: config.public.apiGoogleClientId,

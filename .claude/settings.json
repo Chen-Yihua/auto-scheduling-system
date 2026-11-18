@@ -5,7 +5,7 @@
       "Bash(gh pr view *)",
       "Bash(gh run view *)",
       "Bash(gh run list *)",
-      "Bash(git push *)",
+      "Bash(git push origin *)",
       "Bash(gh pr create *)",
       "Bash(gh issue view *)",
       "Bash(gh issue list *)",
@@ -14,11 +14,20 @@
       "Bash(gh label list *)"
     ],
     "deny": [
-      "Read(**/.env)",
-      "Read(**/.env.local)",
+      "Read(**/.env*)",
+      "Read(**/*.pem)",
+      "Read(**/*.key)",
+      "Read(**/*secret*)",
+      "Read(**/*credential*)",
+      "Bash(*--force*)",
+      "Bash(* -f *)",
+      "Bash(git push * main*)",
+      "Bash(git push * master*)",
       "Bash(gh pr merge *)",
       "Bash(gh api *merge*)",
-      "Bash(gh api *Merge*)"
+      "Bash(gh api *Merge*)",
+      "Bash(rm -rf *)",
+      "Bash(git reset --hard *)"
     ]
   }
 }

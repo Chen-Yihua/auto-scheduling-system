@@ -1,9 +1,9 @@
 // 階段任務在排程頁拖拉時的檢查，規則和後端的階段鏈驗證一致：後面的階段優先序不能高於前面的階段
-import type { SchedulableTask } from '~/types/schedulableTask'
+import type { SchedulableTask } from '~/types/schedulableTask';
 
-type Priority = 'Low' | 'Medium' | 'High'
+type Priority = 'Low' | 'Medium' | 'High';
 
-const PRIORITY_RANK: Record<Priority, number> = { Low: 0, Medium: 1, High: 2 }
+const PRIORITY_RANK: Record<Priority, number> = { Low: 0, Medium: 1, High: 2 };
 
 // 模擬 useScheduleWizard 的 moveTask，回傳會讓階段限制被違反的原因；沒問題回 null
 export function stageMoveBlockReason(
@@ -14,13 +14,13 @@ export function stageMoveBlockReason(
   toColumn: Priority,
   toIndex: number,
 ): string | null {
-  const moved = columns[fromColumn][fromIndex]
-  if (!moved?.parent_id || !moved.stage) return null
+  const moved = columns[fromColumn][fromIndex];
+  if (!moved?.parent_id || !moved.stage) return null;
 
-  const source = [...columns[fromColumn]]
-  source.splice(fromIndex, 1)
-  const target = fromColumn === toColumn ? source : [...columns[toColumn]]
-  target.splice(Math.max(0, Math.min(toIndex, target.length)), 0, moved)
+  const source = [...columns[fromColumn]];
+  source.splice(fromIndex, 1);
+  const target = fromColumn === toColumn ? source : [...columns[toColumn]];
+  target.splice(Math.max(0, Math.min(toIndex, target.length)), 0, moved);
 
   // 不在欄位裡的階段（已完成、已排入行事曆）用原本的優先序
   const priorityById = new Map<string, Priority | null | undefined>(allTasks.map((t) => [t.id, t.priority]))

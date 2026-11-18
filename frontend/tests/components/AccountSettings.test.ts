@@ -1,17 +1,17 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { mount } from '@vue/test-utils'
-import { defineComponent, h, ref, watch, onMounted } from 'vue'
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { mount } from '@vue/test-utils';
+import { defineComponent, h, ref, watch, onMounted } from 'vue';
 
-import AccountSettings from '~/components/header/AccountSettings.vue'
+import AccountSettings from '~/components/header/AccountSettings.vue';
 
-vi.stubGlobal('ref', ref)
-vi.stubGlobal('watch', watch)
-vi.stubGlobal('onMounted', onMounted)
-vi.stubGlobal('useToast', () => ({ add: vi.fn() }))
+vi.stubGlobal('ref', ref);
+vi.stubGlobal('watch', watch);
+vi.stubGlobal('onMounted', onMounted);
+vi.stubGlobal('useToast', () => ({ add: vi.fn() }));
 
 // UserButton 與 UserProfilePage 只要把 slot 畫出來
 vi.mock('@clerk/vue', async () => {
-  const { defineComponent, h } = await import('vue')
+  const { defineComponent, h } = await import('vue');
   const passthrough = defineComponent({ setup: (_, { slots }) => () => h('div', slots.default?.()) })
   return { UserButton: Object.assign(passthrough, { UserProfilePage: passthrough }) }
 })
@@ -31,7 +31,7 @@ vi.mock('~/composables/useGoogleCalendar', () => ({
 }))
 vi.mock('~/composables/useGoogleCalendarAuth', () => ({
   useGoogleCalendarAuth: () => ({ connectedCount: ref(0), goToGoogleAuth: vi.fn() }),
-}))
+}));
 
 const UButtonStub = defineComponent({ setup: (_, { slots }) => () => h('button', slots.default?.()) })
 const UBadgeStub = defineComponent({ setup: (_, { slots }) => () => h('span', { class: 'badge' }, slots.default?.()) })
@@ -75,4 +75,4 @@ describe('AccountSettings.vue', () => {
     expect(wrapper.findAll('button').map((b) => b.text())).toContain('刪除')
     expect(wrapper.text()).toContain('****1234')
   })
-})
+});

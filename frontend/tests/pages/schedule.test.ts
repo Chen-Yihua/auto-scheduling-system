@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { mount } from '@vue/test-utils';
 import { ref as vueRef, reactive as vueReactive, computed as vueComputed, h, defineComponent } from 'vue'
 
 import SchedulePage from '~/pages/schedule.vue'
@@ -23,7 +23,7 @@ const schedulableTasksRef = vueRef<SchedulableTask[]>([])
 const fetchSchedulableTasksSpy = vi.fn()
 vi.mock('~/composables/useSchedulableTasks', () => ({
   useSchedulableTasks: () => ({ tasks: schedulableTasksRef, fetchSchedulableTasks: fetchSchedulableTasksSpy }),
-}))
+}));
 
 const fetchGoogleCalendarsSpy = vi.fn()
 vi.mock('~/composables/useGoogleCalendar', () => ({
@@ -210,7 +210,7 @@ describe('pages/schedule.vue', () => {
   })
 
   it('step 1：沒有任何任務時「下一步」按鈕 disabled', async () => {
-    const wrapper = await render()
+    const wrapper = await render();
     const nextButton = wrapper.findAll('button').find((b) => b.text() === '下一步')
     expect(nextButton?.attributes('disabled')).toBeDefined()
   })
@@ -236,12 +236,12 @@ describe('pages/schedule.vue', () => {
 
     await wrapper.findAll('button').find((b) => b.text() === '取消')!.trigger('click')
     expect(pushSpy).toHaveBeenCalledWith('/')
-  })
+  });
 
   it('step 2：顯示可編輯欄位，改動會呼叫 updateDueDate／updateDuration', async () => {
     stepRef.value = 2
     columnsRef.Medium = [fakeTask({ id: 'a', title: '任務 A', due_date: '2026-10-01T09:00:00Z', duration: 30 })]
-    const wrapper = await render()
+    const wrapper = await render();
 
     expect(wrapper.text()).toContain('任務 A')
 
@@ -305,7 +305,7 @@ describe('pages/schedule.vue', () => {
 
       await wrapper.findAll('button').find((b) => b.text() === '移除')!.trigger('click')
       expect(removeBlockedExceptionSpy).toHaveBeenCalledWith(0)
-    })
+    });
 
     it('緩衝時間跟每天上限分鐘數會綁定到 preferences', async () => {
       const wrapper = await render()
@@ -626,13 +626,13 @@ describe('pages/schedule.vue：issue-42 處理已刪除的事件', () => {
     expect(fetchSchedulableTasksSpy).toHaveBeenCalledTimes(2)
     expect(wrapper.text()).toContain(STEP1_HINT)
     expect(wrapper.text()).not.toContain(RESOLVE_FAILED)
-  })
+  });
 
   it('AC22：按「下一步」時授權失效 → 跳 reauthToast，留在這一步、保留勾選，不重新查詢、不顯示失敗提示', async () => {
     removedQueries([removedItem({ id: 'manual:a' }), removedItem({ id: 'manual:b' })])
     resolveRemovedEventsSpy.mockResolvedValue('reauth')
 
-    const wrapper = await render()
+    const wrapper = await render();
     await wrapper.findAll('input[type="checkbox"]')[1]!.setValue(false)
     await clickNext(wrapper)
 

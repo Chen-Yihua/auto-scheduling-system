@@ -1,16 +1,16 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { shallowMount, flushPromises } from '@vue/test-utils'
-import { ref, defineComponent, h } from 'vue'
-import type { Component } from 'vue'
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { shallowMount, flushPromises } from '@vue/test-utils';
+import { ref, defineComponent, h } from 'vue';
+import type { Component } from 'vue';
 
 // ---------- 2. 被測元件 ----------
-import TaskForm from '~/components/tasks/TaskForm.vue'
-import { useTaskForm } from '~/composables/useTaskForm'
+import TaskForm from '~/components/tasks/TaskForm.vue';
+import { useTaskForm } from '~/composables/useTaskForm';
 
 // ---------- 1. Nuxt/全域依賴 Stub ----------
-const tokenSpy = vi.fn().mockResolvedValue('dummy-token')
-const toastSpy = { add: vi.fn() }
-let fetchSpy = vi.fn()
+const tokenSpy = vi.fn().mockResolvedValue('dummy-token');
+const toastSpy = { add: vi.fn() };
+let fetchSpy = vi.fn();
 
 vi.stubGlobal('useAuth',         () => ({ getToken: { value: tokenSpy } }))
 vi.stubGlobal('useUser',         () => ({ user: ref({ id: 'u1' }) }))
@@ -22,7 +22,7 @@ vi.stubGlobal('useState',        (_key: string, init: () => unknown) => ref(init
 // useSchedulableTasks 明確 import useAuth，stubGlobal 攔不到，要 mock 整個模組
 vi.mock('@clerk/vue', () => ({
   useAuth: () => ({ getToken: { value: tokenSpy } }),
-}))
+}));
 
 // ---------- 3. UI 元件 Stub ----------
 // 要轉傳原生事件，否則 @click.stop 會對 undefined 呼叫 stopPropagation
@@ -318,5 +318,5 @@ describe('TaskForm.vue (render)', () => {
     expect(wrapper.text()).toContain('任務0')
     expect(wrapper.text()).not.toContain('任務1')
     expect(wrapper.text()).toContain('查看全部（3）')
-  })
+  });
 })

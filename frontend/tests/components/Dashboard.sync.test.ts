@@ -1,38 +1,38 @@
 // 儀表板的立即同步接上真的 usePlatformItems：一個平台失敗時，其他平台照常更新，只對失敗的平台跳錯誤訊息（issue #13）
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { mount, flushPromises, enableAutoUnmount } from '@vue/test-utils'
-import { ref, computed, watch, onMounted, h, defineComponent, type Ref } from 'vue'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { mount, flushPromises, enableAutoUnmount } from '@vue/test-utils';
+import { ref, computed, watch, onMounted, h, defineComponent, type Ref } from 'vue';
 
-import Dashboard from '~/components/dashboard/Dashboard.vue'
+import Dashboard from '~/components/dashboard/Dashboard.vue';
 
-vi.stubGlobal('ref', ref)
-vi.stubGlobal('computed', computed)
-vi.stubGlobal('watch', watch)
-vi.stubGlobal('onMounted', onMounted)
+vi.stubGlobal('ref', ref);
+vi.stubGlobal('computed', computed);
+vi.stubGlobal('watch', watch);
+vi.stubGlobal('onMounted', onMounted);
 
-const stateStore = new Map<string, Ref<unknown>>()
+const stateStore = new Map<string, Ref<unknown>>();
 vi.stubGlobal('useState', (key: string, init: () => unknown) => {
-  if (!stateStore.has(key)) stateStore.set(key, ref(init()))
-  return stateStore.get(key)
-})
-vi.stubGlobal('useRuntimeConfig', () => ({ public: { apiBaseUrl: 'http://api' } }))
+  if (!stateStore.has(key)) stateStore.set(key, ref(init()));
+  return stateStore.get(key);
+});
+vi.stubGlobal('useRuntimeConfig', () => ({ public: { apiBaseUrl: 'http://api' } }));
 
-const isSignedInRef = ref<boolean | undefined>(true)
+const isSignedInRef = ref<boolean | undefined>(true);
 vi.mock('@clerk/vue', async () => {
-  const { ref } = await import('vue')
+  const { ref } = await import('vue');
   return {
     useUser: () => ({ isSignedIn: isSignedInRef }),
     useAuth: () => ({ getToken: { value: async () => 'jwt-token' }, userId: ref('user_a') }),
-  }
-})
+  };
+});
 
-const toastSpy = { add: vi.fn() }
-vi.stubGlobal('useToast', () => toastSpy)
+const toastSpy = { add: vi.fn() };
+vi.stubGlobal('useToast', () => toastSpy);
 const linkedKeys = ref([
   { platform: 'github', value: 'KEY****' },
   { platform: 'jira', value: 'KEY****', domain: 'team.atlassian.net' },
   { platform: 'moodle', value: 'PW****' },
-])
+]);
 vi.stubGlobal('useLinkedAccount', () => ({ keys: linkedKeys, fetchKeys: vi.fn().mockResolvedValue(undefined) }))
 vi.stubGlobal('useGoogleCalendar', () => ({
   awaitingFirstResult: ref(false),

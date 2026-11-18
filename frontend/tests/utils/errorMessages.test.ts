@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi } from 'vitest';
 import {
   describeError,
   getFriendlyErrorTitle,
@@ -7,12 +7,12 @@ import {
   isNotLinkedError,
   isSuggestionExpiredError,
   logApiError,
-} from '~/utils/errorMessages'
+} from '~/utils/errorMessages';
 
 const backendError = (status: number, errorCode: string, detail = '後端說明') => ({
   response: { status },
   data: { error_code: errorCode, detail },
-})
+});
 
 describe('getFriendlyErrorTitle', () => {
   it.each(['RATE_LIMITED', 'UPSTREAM_RATE_LIMITED'])('AC12：%s 回傳限流訊息，不論狀態碼', (code) => {
@@ -29,7 +29,7 @@ describe('getFriendlyErrorTitle', () => {
     expect(getFriendlyErrorTitle(backendError(429, 'INTERNAL_ERROR'), 'XXX 抓取失敗')).toBe('XXX 抓取失敗')
     expect(getFriendlyErrorTitle(new Error('network error'), 'XXX 抓取失敗')).toBe('XXX 抓取失敗')
     expect(getFriendlyErrorTitle(undefined, 'XXX 抓取失敗')).toBe('XXX 抓取失敗')
-  })
+  });
 })
 
 describe('依 error_code 判斷原因，不看狀態碼', () => {

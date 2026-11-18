@@ -1,11 +1,11 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { ref as vueRef, computed as vueComputed } from 'vue'
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { ref as vueRef, computed as vueComputed } from 'vue';
 
 vi.mock('@vueuse/core', () => ({
   until: () => ({
     toBe: async () => {},   // 直接返回 resolved promise
   }),
-}))
+}));
 
 /* ---------- Clerk & Nuxt helpers mock ---------- */
 vi.mock('@clerk/vue', () => ({
@@ -16,17 +16,17 @@ vi.mock('@clerk/vue', () => ({
   useUser: () => ({
     user: vueRef({ username: 'tester' }),
   }),
-}))
+}));
 
 /* ---------- 全域 auto-import helpers ---------- */
-vi.stubGlobal('ref', vueRef)
-vi.stubGlobal('computed', vueComputed)
+vi.stubGlobal('ref', vueRef);
+vi.stubGlobal('computed', vueComputed);
 
 /* ---------- $fetch / toast ---------- */
-let fetchSpy = vi.fn()
-vi.stubGlobal('$fetch', (...a: unknown[]) => fetchSpy(...a))
-const toastSpy = { add: vi.fn() }
-vi.stubGlobal('useToast', () => toastSpy)
+let fetchSpy = vi.fn();
+vi.stubGlobal('$fetch', (...a: unknown[]) => fetchSpy(...a));
+const toastSpy = { add: vi.fn() };
+vi.stubGlobal('useToast', () => toastSpy);
 
 /* ---------- 動態載入 Composable ---------- */
 const load = async () =>
@@ -167,7 +167,7 @@ describe('useLinkedAccount', () => {
     expect(jira.domain).toBe('')
     expect(toastSpy.add).toHaveBeenCalledWith(
       expect.objectContaining({ title: 'Jira Key 已刪除', color: 'success' }),
-    )
+    );
   })
 
   it('saveKey 被限流（429）時，顯示「請求太頻繁」而不是一般的儲存失敗訊息', async () => {
@@ -323,7 +323,7 @@ describe('useLinkedAccount', () => {
 
   it('deleteKey 失敗時顯示錯誤，不能把畫面上的資料清掉', async () => {
     const { keys, deleteKey } = (await load())()
-    const git = keys.value.find((k) => k.platform === 'github')!
+    const git = keys.value.find((k) => k.platform === 'github')!;
     git.value = 'GKEY*****'
     vi.spyOn(console, 'error').mockImplementationOnce(() => {})
 
@@ -355,8 +355,8 @@ describe('useLinkedAccount', () => {
 
     expect(toastSpy.add).toHaveBeenCalledWith(
       expect.objectContaining({ title: 'GitHub Key 儲存失敗', description: detail, color: 'error' }),
-    )
-  })
+    );
+  });
 
   it('AC12：新增時已綁定（ALREADY_EXISTS）→ 顯示已綁定', async () => {
     const { keys, openEdit, saveKey } = (await load())()

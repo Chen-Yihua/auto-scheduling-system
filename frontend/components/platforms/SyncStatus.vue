@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { formatRelativeTime } from '@/utils/time'
+import { formatRelativeTime } from '@/utils/time';
 
 defineProps<{
-  syncedAt: string | null
+  syncedAt: string | null;
   // 有傳才顯示「立即同步」按鈕：平台頁面有，儀表板的卡片沒有
-  onSync?: () => void | Promise<void>
-  syncing?: boolean
-}>()
+  onSync?: () => void | Promise<void>;
+  syncing?: boolean;
+}>();
 </script>
 
 <template>

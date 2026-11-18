@@ -1,38 +1,38 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { effectScope, ref as vueRef } from 'vue'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { effectScope, ref as vueRef } from 'vue';
 
-import { useProductivity } from '~/composables/useProductivity'
+import { useProductivity } from '~/composables/useProductivity';
 
 vi.mock('@clerk/vue', () => ({
   useAuth: () => ({
     getToken: { value: vi.fn().mockResolvedValue('jwt-token') },
   }),
-}))
+}));
 
-vi.stubGlobal('ref', vueRef)
+vi.stubGlobal('ref', vueRef);
 
-const toastSpy = { add: vi.fn() }
-vi.stubGlobal('useToast', () => toastSpy)
+const toastSpy = { add: vi.fn() };
+vi.stubGlobal('useToast', () => toastSpy);
 vi.stubGlobal('useRuntimeConfig', () => ({
   public: { apiBaseUrl: 'http://api' },
-}))
+}));
 
-let fetchSpy = vi.fn()
-vi.stubGlobal('$fetch', (...args: unknown[]) => fetchSpy(...args))
+let fetchSpy = vi.fn();
+vi.stubGlobal('$fetch', (...args: unknown[]) => fetchSpy(...args));
 
 describe('useProductivity composable', () => {
   beforeEach(() => {
-    fetchSpy = vi.fn()
-    toastSpy.add.mockClear()
-  })
+    fetchSpy = vi.fn();
+    toastSpy.add.mockClear();
+  });
 
   it('帶瀏覽器時區呼叫 GET /analytics/productivity，週趨勢才會依當地時間切分', async () => {
-    const summary = { total: 1 }
-    fetchSpy.mockResolvedValueOnce(summary)
-    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone
+    const summary = { total: 1 };
+    fetchSpy.mockResolvedValueOnce(summary);
+    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-    const ctx = useProductivity()
-    await ctx.fetchSummary()
+    const ctx = useProductivity();
+    await ctx.fetchSummary();
 
     expect(fetchSpy).toHaveBeenCalledWith(
       'http://api/analytics/productivity',
@@ -41,37 +41,37 @@ describe('useProductivity composable', () => {
         query: { timezone: timeZone },
         headers: { Authorization: 'Bearer jwt-token' },
       }),
-    )
-    expect(ctx.summary.value).toEqual(summary)
-    expect(ctx.loading.value).toBe(false)
-  })
+    );
+    expect(ctx.summary.value).toEqual(summary);
+    expect(ctx.loading.value).toBe(false);
+  });
 
   it('失敗時跳出錯誤 toast，summary 維持 null', async () => {
-    fetchSpy.mockRejectedValueOnce(new Error('boom'))
+    fetchSpy.mockRejectedValueOnce(new Error('boom'));
 
-    const ctx = useProductivity()
-    await ctx.fetchSummary()
+    const ctx = useProductivity();
+    await ctx.fetchSummary();
 
     expect(toastSpy.add).toHaveBeenCalledWith(
       expect.objectContaining({ title: '工作效率統計載入失敗', color: 'error' }),
-    )
-    expect(ctx.summary.value).toBeNull()
-    expect(ctx.loading.value).toBe(false)
-  })
+    );
+    expect(ctx.summary.value).toBeNull();
+    expect(ctx.loading.value).toBe(false);
+  });
 
   it('AC14：429 失敗時 toast 標題用 getFriendlyErrorTitle 的限流訊息，不是預設文字', async () => {
-    fetchSpy.mockRejectedValueOnce({ status: 429 })
+    fetchSpy.mockRejectedValueOnce({ status: 429 });
 
-    const ctx = useProductivity()
-    await ctx.fetchSummary()
+    const ctx = useProductivity();
+    await ctx.fetchSummary();
 
     expect(toastSpy.add).toHaveBeenCalledWith(
       expect.objectContaining({ title: '請求太頻繁，請稍後再試', color: 'error' }),
-    )
-  })
+    );
+  });
 
   it('AC16：呼叫 API 期間 loading 為 true，回應後回到 false', async () => {
-    let resolve: (value: unknown) => void = () => {}
+    let resolve: (value: unknown) => void = () => {};
     fetchSpy.mockReturnValueOnce(new Promise((r) => { resolve = r }))
 
     const ctx = useProductivity()

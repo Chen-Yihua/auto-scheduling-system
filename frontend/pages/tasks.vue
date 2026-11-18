@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { useUser } from '@clerk/vue'
-import AppHeader from '~/components/header/AppHeader.vue'
-import TaskForm from '~/components/tasks/TaskForm.vue'
-import LoginRequiredCard from '~/components/LoginRequiredCard.vue'
+import { useUser } from '@clerk/vue';
+import AppHeader from '~/components/header/AppHeader.vue';
+import TaskForm from '~/components/tasks/TaskForm.vue';
+import LoginRequiredCard from '~/components/LoginRequiredCard.vue';
 
-const { isSignedIn } = useUser()
+const { isSignedIn } = useUser();
 </script>
 
 <template>

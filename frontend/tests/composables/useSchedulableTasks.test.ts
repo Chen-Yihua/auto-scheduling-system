@@ -1,25 +1,25 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { ref as vueRef } from 'vue'
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { ref as vueRef } from 'vue';
 
-import { useSchedulableTasks } from '~/composables/useSchedulableTasks'
-import type { SchedulableTask } from '~/types/schedulableTask'
+import { useSchedulableTasks } from '~/composables/useSchedulableTasks';
+import type { SchedulableTask } from '~/types/schedulableTask';
 
 vi.mock('@clerk/vue', () => ({
   useAuth: () => ({
     getToken: { value: vi.fn().mockResolvedValue('jwt-token') },
   }),
-}))
+}));
 
-vi.stubGlobal('ref', vueRef)
+vi.stubGlobal('ref', vueRef);
 
-const toastSpy = { add: vi.fn() }
-vi.stubGlobal('useToast', () => toastSpy)
+const toastSpy = { add: vi.fn() };
+vi.stubGlobal('useToast', () => toastSpy);
 vi.stubGlobal('useRuntimeConfig', () => ({
   public: { apiBaseUrl: 'http://api' },
-}))
+}));
 
-let fetchSpy = vi.fn()
-vi.stubGlobal('$fetch', (...args: unknown[]) => fetchSpy(...args))
+let fetchSpy = vi.fn();
+vi.stubGlobal('$fetch', (...args: unknown[]) => fetchSpy(...args));
 
 function fakeTask(overrides: Partial<SchedulableTask> = {}): SchedulableTask {
   return {

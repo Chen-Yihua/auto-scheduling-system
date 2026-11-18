@@ -1,16 +1,16 @@
 <script setup lang="ts">
-import { computed, watch } from 'vue'
-import { useUser } from '@clerk/vue'
-import { useProductivity } from '~/composables/useProductivity'
-import AppHeader from '~/components/header/AppHeader.vue'
-import LoginRequiredCard from '~/components/LoginRequiredCard.vue'
-import WeeklyBarChart from '~/components/productivity/WeeklyBarChart.vue'
-import ProgressList from '~/components/productivity/ProgressList.vue'
-import { formatDateTime, formatMinutes, formatPercent } from '~/utils/format'
-import { formatRelativeTime } from '~/utils/time'
-import { priorityLabel, sourceLabel } from '~/utils/labels'
+import { computed, watch } from 'vue';
+import { useUser } from '@clerk/vue';
+import { useProductivity } from '~/composables/useProductivity';
+import AppHeader from '~/components/header/AppHeader.vue';
+import LoginRequiredCard from '~/components/LoginRequiredCard.vue';
+import WeeklyBarChart from '~/components/productivity/WeeklyBarChart.vue';
+import ProgressList from '~/components/productivity/ProgressList.vue';
+import { formatDateTime, formatMinutes, formatPercent } from '~/utils/format';
+import { formatRelativeTime } from '~/utils/time';
+import { priorityLabel, sourceLabel } from '~/utils/labels';
 
-const { isSignedIn } = useUser()
+const { isSignedIn } = useUser();
 const { summary, loading, error, fetchSummary, startAutoRefresh, stopAutoRefresh } = useProductivity()
 const { keys, fetchKeys } = useLinkedAccount()
 

@@ -1,18 +1,18 @@
-import { useAuth } from '@clerk/vue'
-import { logApiError } from '@/utils/errorMessages'
+import { useAuth } from '@clerk/vue';
+import { logApiError } from '@/utils/errorMessages';
 
 // 登入後確認後端有這個使用者，沒有就建立。
 // 確認失敗只記 console；確定沒有使用者卻建立失敗時才提示使用者。
 
 type ClerkUserLike = {
-  id: string
-  primaryEmailAddress?: { emailAddress?: string } | null
-  fullName?: string | null
-}
+  id: string;
+  primaryEmailAddress?: { emailAddress?: string } | null;
+  fullName?: string | null;
+};
 
 // 沒有狀態碼代表連不上伺服器；沒有 error_code（例如 Cloud Run 自己回的）時依狀態碼判斷
 function describeCreateFailure(status?: number, errorCode?: string): string {
-  if (status === undefined) return '無法連線到伺服器，請確認網路後重新整理頁面'
+  if (status === undefined) return '無法連線到伺服器，請確認網路後重新整理頁面';
   if (errorCode) {
     if (errorCode === 'RATE_LIMITED' || errorCode === 'UPSTREAM_RATE_LIMITED') return '請求太頻繁，請稍後再重新整理頁面'
     if (errorCode === 'UNAUTHENTICATED') return '登入狀態驗證失敗，請重新登入後再試'

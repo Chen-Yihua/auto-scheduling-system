@@ -1,32 +1,32 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import type { WeeklyCompletion } from '~/types/analytics'
-import { formatMinutes } from '~/utils/format'
+import { computed } from 'vue';
+import type { WeeklyCompletion } from '~/types/analytics';
+import { formatMinutes } from '~/utils/format';
 
-const props = defineProps<{ weeks: WeeklyCompletion[] }>()
+const props = defineProps<{ weeks: WeeklyCompletion[] }>();
 
-const COLUMN_WIDTH = 48
-const BAR_WIDTH = 24
-const RADIUS = 4
+const COLUMN_WIDTH = 48;
+const BAR_WIDTH = 24;
+const RADIUS = 4;
 const TOP = 20 // 柱頂數值的空間
-const PLOT_HEIGHT = 120
-const BASELINE = TOP + PLOT_HEIGHT
+const PLOT_HEIGHT = 120;
+const BASELINE = TOP + PLOT_HEIGHT;
 
-const width = computed(() => props.weeks.length * COLUMN_WIDTH)
+const width = computed(() => props.weeks.length * COLUMN_WIDTH);
 
 // week_start 是 YYYY-MM-DD；不用 new Date 解析，否則會被當成 UTC 而在西半球顯示成前一天
 function weekLabel(weekStart: string): string {
-  const [, month, day] = weekStart.split('-')
-  return `${month}/${day}`
+  const [, month, day] = weekStart.split('-');
+  return `${month}/${day}`;
 }
 
 const columns = computed(() => {
-  const max = Math.max(0, ...props.weeks.map((w) => w.completed))
+  const max = Math.max(0, ...props.weeks.map((w) => w.completed));
   return props.weeks.map((week, index) => {
-    const height = max === 0 ? 0 : (week.completed / max) * PLOT_HEIGHT
-    const x = index * COLUMN_WIDTH + (COLUMN_WIDTH - BAR_WIDTH) / 2
-    const y = BASELINE - height
-    const r = Math.min(RADIUS, height)
+    const height = max === 0 ? 0 : (week.completed / max) * PLOT_HEIGHT;
+    const x = index * COLUMN_WIDTH + (COLUMN_WIDTH - BAR_WIDTH) / 2;
+    const y = BASELINE - height;
+    const r = Math.min(RADIUS, height);
     return {
       week,
       label: weekLabel(week.week_start),
@@ -35,9 +35,9 @@ const columns = computed(() => {
       y,
       // 只有柱頂圓角，底部貼齊基線
       path: `M${x},${BASELINE} V${y + r} Q${x},${y} ${x + r},${y} H${x + BAR_WIDTH - r} Q${x + BAR_WIDTH},${y} ${x + BAR_WIDTH},${y + r} V${BASELINE} Z`,
-    }
-  })
-})
+    };
+  });
+});
 </script>
 
 <template>

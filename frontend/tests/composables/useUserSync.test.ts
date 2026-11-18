@@ -1,72 +1,72 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { useUserSync } from '~/composables/useUserSync'
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { useUserSync } from '~/composables/useUserSync';
 
 // ---------- mock @clerk/vue：getToken 用可控的 spy ----------
-const { tokenSpy } = vi.hoisted(() => ({ tokenSpy: vi.fn() }))
+const { tokenSpy } = vi.hoisted(() => ({ tokenSpy: vi.fn() }));
 vi.mock('@clerk/vue', () => ({
   useAuth: () => ({ getToken: { value: tokenSpy } }),
-}))
+}));
 
 // ---------- Nuxt auto-import 的全域 stub ----------
-const toastSpy = { add: vi.fn() }
-const fetchSpy = vi.fn()
-vi.stubGlobal('useToast', () => toastSpy)
-vi.stubGlobal('useRuntimeConfig', () => ({ public: { apiBaseUrl: 'http://api' } }))
-vi.stubGlobal('fetch', (...args: unknown[]) => fetchSpy(...args))
+const toastSpy = { add: vi.fn() };
+const fetchSpy = vi.fn();
+vi.stubGlobal('useToast', () => toastSpy);
+vi.stubGlobal('useRuntimeConfig', () => ({ public: { apiBaseUrl: 'http://api' } }));
+vi.stubGlobal('fetch', (...args: unknown[]) => fetchSpy(...args));
 
 const clerkUser = {
   id: 'user_1',
   primaryEmailAddress: { emailAddress: 'a@b.com' },
   fullName: '王小明',
-}
+};
 
 // 原生 fetch 遇到 4xx/5xx 不會丟例外
-const response = (status: number) => ({ ok: status >= 200 && status < 300, status }) as Response
+const response = (status: number) => ({ ok: status >= 200 && status < 300, status }) as Response;
 
 // 依序回覆：第一次是 GET /users/me，第二次是 POST /users/
 const replies = (...statuses: number[]) => {
-  statuses.forEach((s) => fetchSpy.mockResolvedValueOnce(response(s)))
-}
+  statuses.forEach((s) => fetchSpy.mockResolvedValueOnce(response(s)));
+};
 
 describe('useUserSync：登入後確認並建立後端使用者', () => {
   beforeEach(() => {
-    fetchSpy.mockReset()
-    toastSpy.add.mockClear()
-    tokenSpy.mockReset().mockResolvedValue('jwt-token')
-    vi.spyOn(console, 'error').mockImplementation(() => {})
-  })
+    fetchSpy.mockReset();
+    toastSpy.add.mockClear();
+    tokenSpy.mockReset().mockResolvedValue('jwt-token');
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
 
   it('後端已經有這個使用者時，不會再建立，也不跳任何提示', async () => {
-    replies(200)
+    replies(200);
 
-    await useUserSync().ensureUserRecord(clerkUser)
+    await useUserSync().ensureUserRecord(clerkUser);
 
-    expect(fetchSpy).toHaveBeenCalledTimes(1)
-    expect(fetchSpy.mock.calls[0][0]).toBe('http://api/users/me')
-    expect(toastSpy.add).not.toHaveBeenCalled()
-  })
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(fetchSpy.mock.calls[0][0]).toBe('http://api/users/me');
+    expect(toastSpy.add).not.toHaveBeenCalled();
+  });
 
   it('後端沒有這個使用者（404）時建立它，帶上正確的資料與登入憑證，成功不跳提示', async () => {
-    replies(404, 200)
+    replies(404, 200);
 
-    await useUserSync().ensureUserRecord(clerkUser)
+    await useUserSync().ensureUserRecord(clerkUser);
 
-    expect(fetchSpy).toHaveBeenCalledTimes(2)
-    const [url, init] = fetchSpy.mock.calls[1]
-    expect(url).toBe('http://api/users/')
-    expect(init.method).toBe('POST')
-    expect(init.headers.Authorization).toBe('Bearer jwt-token')
-    expect(JSON.parse(init.body)).toEqual({ clerk_id: 'user_1', email: 'a@b.com', name: '王小明' })
-    expect(toastSpy.add).not.toHaveBeenCalled()
-  })
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    const [url, init] = fetchSpy.mock.calls[1];
+    expect(url).toBe('http://api/users/');
+    expect(init.method).toBe('POST');
+    expect(init.headers.Authorization).toBe('Bearer jwt-token');
+    expect(JSON.parse(init.body)).toEqual({ clerk_id: 'user_1', email: 'a@b.com', name: '王小明' });
+    expect(toastSpy.add).not.toHaveBeenCalled();
+  });
 
   it('建立時回 409（使用者剛好已被建好，例如另一個分頁）不算失敗，不跳提示', async () => {
-    replies(404, 409)
+    replies(404, 409);
 
-    await useUserSync().ensureUserRecord(clerkUser)
+    await useUserSync().ensureUserRecord(clerkUser);
 
-    expect(toastSpy.add).not.toHaveBeenCalled()
-  })
+    expect(toastSpy.add).not.toHaveBeenCalled();
+  });
 
   it.each([
     [503, '資料庫暫時無法使用'],
@@ -74,16 +74,16 @@ describe('useUserSync：登入後確認並建立後端使用者', () => {
     [429, '請求太頻繁'],
     [401, '登入狀態驗證失敗'],
   ])('建立失敗（狀態碼 %i）要讓使用者知道，並說明原因', async (status, expectedText) => {
-    replies(404, status)
+    replies(404, status);
 
-    await useUserSync().ensureUserRecord(clerkUser)
+    await useUserSync().ensureUserRecord(clerkUser);
 
-    expect(toastSpy.add).toHaveBeenCalledTimes(1)
-    const toast = toastSpy.add.mock.calls[0][0]
-    expect(toast.title).toBe('無法建立你的使用者資料')
-    expect(toast.description).toContain(expectedText)
-    expect(toast.color).toBe('error')
-  })
+    expect(toastSpy.add).toHaveBeenCalledTimes(1);
+    const toast = toastSpy.add.mock.calls[0][0];
+    expect(toast.title).toBe('無法建立你的使用者資料');
+    expect(toast.description).toContain(expectedText);
+    expect(toast.color).toBe('error');
+  });
 
   it('建立時根本連不上伺服器（網路錯誤）也要讓使用者知道', async () => {
     fetchSpy.mockResolvedValueOnce(response(404)).mockRejectedValueOnce(new TypeError('Failed to fetch'))

@@ -1,4 +1,4 @@
-import type { DailyChallengeResponse } from '~/types/leetcode'
+import type { DailyChallengeResponse } from '~/types/leetcode';
 
 export default defineEventHandler(async () => {
   const query = `
@@ -16,7 +16,7 @@ export default defineEventHandler(async () => {
           content
         }
       }
-    }`
+    }`;
 
   const res = await $fetch<DailyChallengeResponse>('https://leetcode.com/graphql', {
     method: 'POST',
@@ -24,7 +24,7 @@ export default defineEventHandler(async () => {
       'Content-Type': 'application/json'
     },
     body: { query }
-  })
+  });
 
-  return res.data.activeDailyCodingChallengeQuestion
-})
+  return res.data.activeDailyCodingChallengeQuestion;
+});

@@ -1,14 +1,14 @@
 <script setup lang="ts">
-import { useTaskForm } from '~/composables/useTaskForm'
-import { useSchedulableTasks } from '~/composables/useSchedulableTasks'
-import { onMounted, computed, ref } from 'vue'
-import type { FormSubmitEvent } from '@nuxt/ui'
-import type { SchedulableTask } from '~/types/schedulableTask'
-import type { Task } from '~/types/manualTask'
-import { priorityLabel } from '~/utils/labels'
+import { useTaskForm } from '~/composables/useTaskForm';
+import { useSchedulableTasks } from '~/composables/useSchedulableTasks';
+import { onMounted, computed, ref } from 'vue';
+import type { FormSubmitEvent } from '@nuxt/ui';
+import type { SchedulableTask } from '~/types/schedulableTask';
+import type { Task } from '~/types/manualTask';
+import { priorityLabel } from '~/utils/labels';
 
 // 不傳 limit 則顯示全部
-const props = defineProps<{ limit?: number }>()
+const props = defineProps<{ limit?: number }>();
 
 const {
   user,
@@ -43,7 +43,7 @@ const {
   onAddSubtask,
   onDeleteSubtask,
   deleting,
-} = useTaskForm()
+} = useTaskForm();
 
 // 主任務的優先序、時長、給 AI 的提醒由子任務決定，表單上不顯示
 const hidesOwnSchedulingFields = computed(() => isEditingParent.value || (!isEditMode.value && state.subtasks.length > 0))
@@ -92,7 +92,7 @@ function startEditSchedulableTask(item: SchedulableTask) {
   const rawId = item.id.replace(/^manual:/, '')
   const task = all_tasks.value.find((t) => t.id === rawId)
   if (task) startEditTask(task)
-}
+};
 
 function openSchedulableTask(item: SchedulableTask) {
   if (item.url) window.open(item.url, '_blank')
@@ -143,17 +143,17 @@ async function handleSubmit(e: FormSubmitEvent<typeof state>) {
 
 async function handleDelete() {
   await onDelete()
-  await fetchSchedulableTasks()
+  await fetchSchedulableTasks();
 }
 
 async function handleAddSubtask() {
   await onAddSubtask()
-  await fetchSchedulableTasks()
+  await fetchSchedulableTasks();
 }
 
 async function handleDeleteSubtask(subtask: Task) {
   await onDeleteSubtask(subtask)
-  await fetchSchedulableTasks()
+  await fetchSchedulableTasks();
 }
 
 // 兩個 fetch 各自處理錯誤，不用再包 try/catch

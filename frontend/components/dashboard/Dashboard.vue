@@ -1,17 +1,17 @@
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
-import { usePlatformItems } from '@/composables/usePlatformItems'
-import { useUser } from '@clerk/vue'
-import { useGoogleCalendarAuth } from '@/composables/useGoogleCalendarAuth'
-import GithubIssuesList from '~/components/platforms/GithubIssuesList.vue'
-import LoginRequiredCard from '~/components/LoginRequiredCard.vue'
-import Leetcode from '~/components/dashboard/Leetcode.vue'
-import JiraIssuesList from '~/components/platforms/JiraIssuesList.vue'
-import News from '~/components/dashboard/News.vue'
-import TaskForm from '~/components/tasks/TaskForm.vue'
-import ScheduleSuggestion from '~/components/tasks/ScheduleSuggestion.vue'
-import GoogleCalendarEmbed from '~/components/dashboard/GoogleCalendarEmbed.vue'
-import MoodleAssignmentsList from '~/components/platforms/MoodleAssignmentsList.vue'
+import { reactive, ref } from 'vue';
+import { usePlatformItems } from '@/composables/usePlatformItems';
+import { useUser } from '@clerk/vue';
+import { useGoogleCalendarAuth } from '@/composables/useGoogleCalendarAuth';
+import GithubIssuesList from '~/components/platforms/GithubIssuesList.vue';
+import LoginRequiredCard from '~/components/LoginRequiredCard.vue';
+import Leetcode from '~/components/dashboard/Leetcode.vue';
+import JiraIssuesList from '~/components/platforms/JiraIssuesList.vue';
+import News from '~/components/dashboard/News.vue';
+import TaskForm from '~/components/tasks/TaskForm.vue';
+import ScheduleSuggestion from '~/components/tasks/ScheduleSuggestion.vue';
+import GoogleCalendarEmbed from '~/components/dashboard/GoogleCalendarEmbed.vue';
+import MoodleAssignmentsList from '~/components/platforms/MoodleAssignmentsList.vue';
 
 // reactive 讓 template 可以直接寫 github.items
 const github = reactive(usePlatformItems('github'));

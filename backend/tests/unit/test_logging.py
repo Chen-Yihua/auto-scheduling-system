@@ -1,5 +1,8 @@
 import logging
 import os
+import re
+import subprocess
+import sys
 
 import pytest
 
@@ -19,6 +22,65 @@ MODULES_CONVERTED_TO_LOGGING = [
     "routers/manual_task.py",
 ]
 BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+
+
+def _run_main_in_clean_process(clerk_secret: str | None, github_secret: str | None) -> subprocess.CompletedProcess:
+    """AC1-AC4：從乾淨子行程載入實際 backend.main，驗證四種 webhook 密鑰組合。"""
+    env = {
+        "PATH": "/usr/bin:/bin",
+        "PYTHONPATH": BACKEND_DIR,
+        "CLERK_JWKS_URL": "https://fake.clerk.dev/.well-known/jwks.json",
+        "CLERK_ISSUER": "https://fake.clerk.dev",
+        "GEMINI_API_KEY": "fake-gemini-key",
+    }
+    if clerk_secret is not None:
+        env["CLERK_WEBHOOK_SIGNING_SECRET"] = clerk_secret
+    if github_secret is not None:
+        env["GITHUB_WEBHOOK_SECRET"] = github_secret
+
+    return subprocess.run(
+        [sys.executable, "-c", "import main"],
+        cwd="/tmp",
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+
+@pytest.mark.parametrize(
+    ("clerk_secret", "github_secret", "expected_loggers"),
+    [
+        (None, None, ["routers.user", "routers.pr_review_webhook"]),
+        (None, "github-configured-secret", ["routers.user"]),
+        ("clerk-configured-secret", None, ["routers.pr_review_webhook"]),
+        ("clerk-configured-secret", "github-configured-secret", []),
+    ],
+)
+def test_main_startup_webhook_secret_logs(clerk_secret, github_secret, expected_loggers):
+    """AC1-AC4：實際載入 backend.main 時，四種密鑰組合只產生對應的啟動 error log。"""
+    result = _run_main_in_clean_process(clerk_secret, github_secret)
+
+    assert result.returncode == 0, result.stderr
+    webhook_error_lines = [
+        line
+        for line in result.stderr.splitlines()
+        if "未設定" in line and (
+            "CLERK_WEBHOOK_SIGNING_SECRET" in line
+            or "GITHUB_WEBHOOK_SECRET" in line
+        )
+    ]
+    actual_loggers = []
+    for line in webhook_error_lines:
+        match = re.search(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d{3} ERROR ([^:]+): ", line)
+        assert match, line
+        actual_loggers.append(match.group(1))
+
+    assert actual_loggers == expected_loggers
+    assert len(webhook_error_lines) == len(expected_loggers)
+    if clerk_secret is not None:
+        assert clerk_secret not in result.stderr
+    if github_secret is not None:
+        assert github_secret not in result.stderr
 
 
 # ========== logging_config ==========

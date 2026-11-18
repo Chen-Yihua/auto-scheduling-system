@@ -3,11 +3,14 @@ load_dotenv()
 
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends
-from routers import user, linked_account, pr_review_webhook, manual_task, google_calendar, schedule, analytics, scheduled_sync
-from platforms.router import platform_routers
 from fastapi.middleware.cors import CORSMiddleware
 import os
 from core.logging_config import setup_logging
+
+setup_logging()
+
+from routers import user, linked_account, pr_review_webhook, manual_task, google_calendar, schedule, analytics, scheduled_sync
+from platforms.router import platform_routers
 from core.database import ensure_indexes
 from slowapi.errors import RateLimitExceeded
 from core.rate_limit import limiter, rate_limit_exceeded_handler
@@ -25,10 +28,6 @@ from core.exception_handlers import (
 from fastapi.exceptions import RequestValidationError
 from redis.exceptions import RedisError
 from starlette.exceptions import HTTPException as StarletteHTTPException
-
-
-setup_logging()
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -99,4 +98,3 @@ if __name__ == "__main__":
         host="0.0.0.0",
         port=int(os.environ.get("PORT", 8080))
     )
-

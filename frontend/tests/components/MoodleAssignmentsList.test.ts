@@ -4,6 +4,7 @@ import { mount } from '@vue/test-utils';
 import { h, defineComponent } from 'vue';
 
 import MoodleAssignmentsList from '~/components/platforms/MoodleAssignmentsList.vue';
+import StaleDataBanner from '~/components/platforms/StaleDataBanner.vue';
 import type { MoodleAssignment } from '~/types/moodle';
 
 const openSpy = vi.fn();
@@ -33,7 +34,7 @@ const uiStubs = {
   UAlert: true,
   NuxtLink: { template: '<a><slot /></a>' },
 }
-const render = (props: { assignments?: MoodleAssignment[]; loading?: boolean; notLinked?: boolean; needsReauth?: boolean; unavailable?: boolean; limit?: number } = {}) =>
+const render = (props: { assignments?: MoodleAssignment[]; loading?: boolean; notLinked?: boolean; needsReauth?: boolean; unavailable?: boolean; limit?: number; authError?: boolean; syncedAt?: string | null } = {}) =>
   mount(MoodleAssignmentsList, {
     props: { assignments: [], loading: false, ...props },
     global: { stubs: uiStubs },
@@ -98,5 +99,21 @@ describe('MoodleAssignmentsList.vue', () => {
     const wrapper = render({ needsReauth: true })
     expect(wrapper.text()).toContain('重新連結')
     expect(wrapper.text()).not.toContain('尚未綁定')
+  })
+
+  it('AC5：授權失效提示收到 Moodle 清單是否有項目的資料狀態', () => {
+    const withItem = mount(MoodleAssignmentsList, {
+      props: {
+        assignments: [{ course_name: '課程 A', title: '作業', due_date: '2025-07-01', url: 'https://moodle/hw1' }],
+        loading: false,
+        authError: true,
+        syncedAt: null,
+      },
+      global: { stubs: uiStubs },
+    })
+    const empty = render({ assignments: [], authError: true, syncedAt: null })
+
+    expect(withItem.findComponent(StaleDataBanner).props('hasItems')).toBe(true)
+    expect(empty.findComponent(StaleDataBanner).props('hasItems')).toBe(false)
   })
 })

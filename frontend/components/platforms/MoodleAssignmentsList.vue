@@ -43,7 +43,13 @@ const openAssignment = (url: string) => {
 
     <SyncStatus :synced-at="syncedAt ?? null" :on-sync="onSync" :syncing="syncing ?? false" />
 
-    <StaleDataBanner :stale="isStale ?? false" :synced-at="syncedAt ?? null" :auth-error="authError ?? false" platform-label="Moodle" />
+    <StaleDataBanner
+      :stale="isStale ?? false"
+      :synced-at="syncedAt ?? null"
+      :has-items="assignments.length > 0"
+      :auth-error="authError ?? false"
+      platform-label="Moodle"
+    />
 
     <div
       v-if="unavailable"
@@ -101,4 +107,3 @@ const openAssignment = (url: string) => {
     </template>
   </UCard>
 </template>
-

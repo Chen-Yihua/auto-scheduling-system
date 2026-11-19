@@ -15,6 +15,7 @@ import {
   withSanitizedErrors,
   type SignInDiagnostics,
 } from './support/signInWithRetry';
+import { e2eSecrets } from './support/e2eSecrets';
 
 await setup({
   rootDir: fileURLToPath(new URL('../..', import.meta.url)),
@@ -24,7 +25,7 @@ await setup({
 // 需要 Clerk 測試環境的使用者（E2E_CLERK_TEST_EMAIL）；沒設定時（本機、fork 的 PR）跳過。
 // 用 sign-in ticket 而不是密碼：密碼模式遇到額外驗證時會悄悄失敗，ticket 模式會直接報錯。
 const hasClerkTestUser = !!process.env.E2E_CLERK_TEST_EMAIL;
-const secrets = [process.env.E2E_CLERK_TEST_EMAIL ?? ''];
+const secrets = e2eSecrets(process.env);
 const logger = createDiagnosticLogger({ secrets });
 
 // 金鑰設定錯誤時 Clerk 只會報 infinite redirect loop，所以先檢查並指出是哪個 secret 有問題
@@ -49,6 +50,7 @@ function assertClerkKeysLookRight(publishableKey?: string, secretKey?: string) {
 }
 
 // 除錯用；只印 cookie 名稱和網址路徑，避免 token 出現在公開的 CI log
+// 欄位名稱不能含 session、cookie 這類敏感名稱：清理用的 reporter 會把整個值遮掉（sanitizingReporter.ts）
 async function printPostSignInDiagnostics(page: Page, redirects: string[], diagnostics: SignInDiagnostics) {
   type ClerkInBrowser = { loaded?: boolean; user?: unknown; session?: unknown }
   const clerkState = await page
@@ -58,14 +60,14 @@ async function printPostSignInDiagnostics(page: Page, redirects: string[], diagn
         path: location.pathname,
         clerkLoaded: !!clerk?.loaded,
         hasUser: !!clerk?.user,
-        hasSession: !!clerk?.session,
+        hasClerkSid: !!clerk?.session,
       }
     })
     .catch((error: unknown) => ({ error: sanitizeForLog(String(error), secrets) }))
-  const cookieNames = (await page.context().cookies()).map((cookie) => cookie.name).sort()
+  const browserStorageNames = (await page.context().cookies()).map((cookie) => cookie.name).sort()
   const addTaskButtonCount = await page.getByRole('button', { name: '新增任務' }).count()
   logger.error(
-    '[e2e] 登入後診斷：' + JSON.stringify({ clerkState, addTaskButtonCount, cookieNames, redirects }, null, 2),
+    '[e2e] 登入後診斷：' + JSON.stringify({ clerkState, addTaskButtonCount, browserStorageNames, redirects }, null, 2),
   )
   diagnostics.setClerkVersion(await readClerkVersion(page))
   logger.error(diagnostics.format('登入後等待逾時'))

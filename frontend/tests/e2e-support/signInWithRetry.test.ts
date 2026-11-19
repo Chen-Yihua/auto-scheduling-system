@@ -611,6 +611,24 @@ describe('sanitizeError（#46）', () => {
     expect(rejected.detail).toBe('[redacted]')
   })
 
+  it('#50 AC8：actual 是讀 length 會出錯的陣列 Proxy 時，actual 換成 [unserializable]，其他屬性照常清理', async () => {
+    const actual = new Proxy([`/a?q=1 ${EMAIL}`], {
+      get: (target, key, receiver) => {
+        if (key === 'length') throw new Error('length failed')
+        return Reflect.get(target, key, receiver) as unknown
+      },
+    })
+    const error = withProperties(new Error('failed /v1/a?t=1'), { actual, detail: '/v1/d?q=1' })
+
+    const rejected = (await withSanitizedErrors([EMAIL], async () => {
+      throw error
+    })().catch((reason: unknown) => reason)) as ErrorWithProperties
+
+    expect(rejected.message.startsWith('[e2e] 錯誤清理失敗：')).toBe(false)
+    expect(rejected.actual).toBe('[unserializable]')
+    expect(rejected.detail).toBe('/v1/d')
+  })
+
   it('#50 AC9：清理結果的 actual、expected、message、stack 仍可寫入', () => {
     for (const error of [makeAc2Error(), makeAc8Error()]) {
       // 只有 getter 的 expected：清理結果要是一般屬性，vitest 之後才寫得進去
@@ -637,6 +655,25 @@ describe('sanitizeError（#46）', () => {
     expect(result).not.toBe(error)
     expect(result).toBeInstanceOf(Error)
     expect(result.message).toBe('/cb [redacted]')
+  })
+
+  it('#50 AC11：原型是列舉屬性時藏起 stack、cause 的 Proxy，stack、cause 仍從原本的錯誤直接讀取並清理', () => {
+    // 原型要接到 Error.prototype，丟出的值才是 Error，不會走「不是 Error 的值」那條路
+    const target = Object.assign(Object.create(Error.prototype) as object, {
+      stack: `Error: /b?q=1 ${EMAIL}`,
+      cause: new Error(`/c?q=1 ${EMAIL}`),
+    })
+    const hidden = new Set<PropertyKey>(['stack', 'cause'])
+    const p = new Proxy(target, {
+      ownKeys: (t) => Reflect.ownKeys(t).filter((key) => !hidden.has(key)),
+      getOwnPropertyDescriptor: (t, key) => (hidden.has(key) ? undefined : Reflect.getOwnPropertyDescriptor(t, key)),
+    })
+    const error = Object.create(p) as Error
+
+    const result = sanitizeError(error, [EMAIL])
+
+    expect(result.stack?.split('\n')[0]).toBe('Error: /b [redacted]')
+    expect((result.cause as Error).message).toBe('/c [redacted]')
   })
 
   it('#50 AC15 例子（1）：錯誤用 Object.create(另一個錯誤) 建立時，原型上的 message、stack、actual 也經過清理', () => {

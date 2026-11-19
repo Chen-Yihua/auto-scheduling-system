@@ -59,7 +59,7 @@ GitHub Actions 會把用 `${{ secrets.X }}` 帶入的值在 log 裡遮成 `***`�
 | AC8 | 清理時讀某個屬性出錯（例如 getter（讀取時才算出值的屬性）丟出錯誤），該屬性的值換成 `[unserializable]`，其他屬性照常清理；`withSanitizedErrors` 照常丟出 AC11 的清理過的錯誤，不改丟 AC12 的錯誤 | 不變條件（安全） |
 | AC9 | 清理後，要清理的錯誤的 `actual`、`expected`、`message`、`stack` 仍可寫入（vitest 之後會寫入 `actual`、`expected`） | 不變條件 |
 | AC10 | `dashboard.e2e.ts` 的 `secrets` 清單包含 `NUXT_CLERK_SECRET_KEY` 的值，log 與錯誤裡出現這個值時遮成 `[redacted]` | 不變條件（安全） |
-| AC11 | 取代 #46 規格 AC2 的「回傳同一個錯誤物件」：`sanitizeError` 回傳一個新的錯誤物件，原型和原本的錯誤相同（`instanceof` 與類型名稱不變），只帶清理過的屬性；`message`、`stack`、`cause` 照 #46 的規則清理；不是 `Error` 的值照 #46 轉成字串清理後包成 `Error` | 不變條件（安全） |
+| AC11 | 取代 #46 規格 AC2 的「回傳同一個錯誤物件」：`sanitizeError` 回傳一個新的錯誤物件，原型和原本的錯誤相同（`instanceof` 與類型名稱不變），只帶清理過的屬性；`message`、`stack`、`cause` 照 #46 的規則清理，而且這三個名稱一律從原本的錯誤直接讀取，不論列出屬性名稱時有沒有出現（讀到 `undefined` 時不定義）；不是 `Error` 的值照 #46 轉成字串清理後包成 `Error` | 不變條件（安全） |
 | AC12 | 清理途中出錯（例如判斷型別時出錯）時，`withSanitizedErrors` 丟出一個新的 `Error`，訊息是固定文字加上經過 #46 清理的出錯訊息；出錯訊息本身取不到（例如轉成文字時又出錯）時，只用固定文字加 `[unserializable]`。丟出的內容不含原本錯誤沒清理的內容 | 不變條件（安全） |
 | AC13 | AC1～AC3 清理時，值是二進位資料（`ArrayBuffer.isView` 為真，例如 `Buffer`、`Uint8Array`）時，整個換成 `[binary]`，不保留內容 | 不變條件（安全） |
 | AC14 | #28 規格 AC2「照原本的錯誤讓測試失敗」不變：`signInWithRetry` 丟出的錯誤經過 `withSanitizedErrors` 後，清理結果的 `stack` 等於原本那個錯誤的 `stack` 經過 #46 清理後的值 | 不變條件 |
@@ -73,9 +73,9 @@ GitHub Actions 會把用 `${{ secrets.X }}` 帶入的值在 log 裡遮成 `***`�
 | 失敗 | 讀屬性出錯時見 AC8；清理途中其他出錯見 AC12；錯誤沒有 `actual`、`expected` 或其他屬性時，照 AC11 只清理 `message`、`stack`、`cause` |
 
 ## 已接受的風險
-- 值、丟出的錯誤或原型鏈上的物件是 Proxy（包住另一個物件、攔截讀寫的物件）時，有兩種情況這次不處理。目前在 e2e 用到的套件裡查不到會產生這兩種 Proxy 的來源。
-  - 已撤銷的 Proxy（撤銷後任何操作都會出錯）：判斷型別時就會出錯，`withSanitizedErrors` 改丟 AC12 的新錯誤。不會外洩，但看不到原本的失敗原因。
-  - 會說謊的 Proxy：列出屬性名稱時藏起某個屬性、讀取時卻回傳值，或每次被問原型都給不同答案。清理列不到那個屬性，vitest 可能經由原型讀到沒清理的值（AC1、AC2、AC15 在這個情況不成立）。main 上同樣會外洩。
+- 值、丟出的錯誤或原型鏈上的物件是 Proxy（包住另一個物件、攔截讀寫的物件），而且攔截行為前後不一致時，這次不處理；`message`、`stack`、`cause` 除外（AC11 一律直接讀取）。目前在 e2e 用到的套件裡查不到會產生這種 Proxy 的來源。
+  - 已撤銷的 Proxy（撤銷後任何操作都會出錯），或列舉屬性、讀取屬性描述時攔截函式丟出錯誤：`withSanitizedErrors` 改丟 AC12 的新錯誤。不會外洩，但看不到原本的失敗原因。
+  - 會說謊的 Proxy：列出屬性名稱時藏起某個屬性、讀取時卻回傳值，或每次被問原型都給不同答案。清理列不到那個屬性，vitest 可能經由原型讀到沒清理的值；在這個情況 AC1～AC3、AC6、AC7、AC13、AC15 不成立。`actual` 這類屬性 main 上同樣會外洩。
 - 測試程式如果還留著原本那個錯誤的參照，讀到的是沒清理的內容（AC4 不改原本的錯誤）：交給 vitest 的只有新錯誤，`withSanitizedErrors` 之後沒有程式會再讀原本的錯誤。
 - 複製品是一般物件，diff 裡的類別名稱會變成 `Object`（例如原本是 `Response {`）；`Map`、`Set`、`Date`、`URL`、`Headers` 這類沒有自有屬性的物件變成空物件，看不到內容。
 - 兩個只差在 query 的網址，清理後變成一樣的字串，diff 看不出差異。
@@ -90,14 +90,15 @@ GitHub Actions 會把用 `${{ secrets.X }}` 帶入的值在 log 裡遮成 `***`�
      - 字串：`sanitizeForLog`。
      - 二進位資料（`ArrayBuffer.isView` 為真）：回傳 `[binary]`（AC13）。要在一般物件之前判斷：`Buffer` 有以數字為名稱的自有屬性，當成一般物件複製會保留每個位元組。
      - `Error`：交給 `sanitizeError`，換成清理過的新錯誤。
-     - 陣列：建立新陣列，每個元素遞迴處理。
+     - 陣列：建立新陣列，每個元素遞迴處理；`length` 也用安全讀取，讀取出錯時整個值換成 `[unserializable]`（AC8）。
      - 其他物件：建立新的一般物件，逐一處理 `Object.getOwnPropertyNames` 的每個屬性：名稱敏感的值換成 `[redacted]`；物件有字串的 `name` 而且名稱敏感時，`value` 換成 `[redacted]`（AC7）；其餘遞迴處理。
      - 物件與陣列在遞迴前先放進 `seen`；遇到已在 `seen` 的物件直接回傳它的清理結果（AC5）。
      - 其他型別（數字、布林、`null`、`undefined`、函式、symbol）照原樣回傳。
    - `sanitizeError` 改成建立新的錯誤，不改原本的錯誤（AC4、AC11）：
      - `const copy = new Error()`，再 `Object.setPrototypeOf(copy, Object.getPrototypeOf(error))`：用 `new Error()` 建立，`copy` 才是真的錯誤物件；換原型，`instanceof` 與類型名稱才和原本相同。`new Error()` 會自帶 `stack`，原本的錯誤沒有 `stack` 時要刪掉。
      - 先 `seen.set(error, copy)`，再處理屬性（AC5）。
-     - 逐一處理原本錯誤的 `Object.getOwnPropertyNames`（包括 `message`、`stack`、`cause`），接著沿原型鏈往上處理每一層，遇到 `Object.prototype` 就停（AC15）；不用判斷哪一層是類別的原型；已處理過的屬性名稱不再處理。原型鏈上的物件也一樣，讀取一律用安全讀取：`message`、`stack` 是字串時 `sanitizeForLog`；`cause` 照 #46 的規則（`Error` 遞迴、不是 `Error` 時轉成字串清理後包成 `Error`）；其他屬性名稱敏感的換成 `[redacted]`，其餘交給 `sanitizeValue`。
+     - `message`、`stack`、`cause` 先用安全讀取直接從原本的錯誤讀出（`error.message` 這樣讀，會經過原型鏈），不是 `undefined` 就清理後定義在 `copy` 上（AC11）；之後列舉時遇到這三個名稱跳過。
+     - 逐一處理原本錯誤的 `Object.getOwnPropertyNames`，接著沿原型鏈往上處理每一層，遇到 `Object.prototype` 就停（AC15）；不用判斷哪一層是類別的原型；已處理過的屬性名稱不再處理。原型鏈上的物件也一樣，讀取一律用安全讀取：`message`、`stack` 是字串時 `sanitizeForLog`；`cause` 照 #46 的規則（`Error` 遞迴、不是 `Error` 時轉成字串清理後包成 `Error`）；其他屬性名稱敏感的換成 `[redacted]`，其餘交給 `sanitizeValue`。
      - 用 `Object.defineProperty` 定義在 `copy` 上：`writable: true`、`configurable: true`，保留原本的 `enumerable`（AC2、AC9）。`copy` 是自己建立的一般物件，寫入一定生效，不必處理 setter、唯讀屬性或 Proxy 攔截寫入的情況。
      - 回傳 `copy`。
    - `sanitizeError` 的 `seen` 與 `sanitizeValue` 共用同一份記錄，同一個錯誤不會處理兩次。
@@ -127,10 +128,10 @@ GitHub Actions 會把用 `${{ secrets.X }}` 帶入的值在 log 裡遮成 `***`�
 | AC5 | 物件自己參照自己（`obj.self = obj`）當 `actual`，清理會結束，複製品的 `self` 指向複製品；錯誤的 `cause` 指回自己時，清理會結束，清理結果的 `cause` 指向清理結果 |
 | AC6 | `actual` 是 `{ headers: { Authorization: 'Bearer opaque123' }, apiKey: 'k', items: [{ password: 1 }], sessionId: 's' }`，清理後四個值都是 `[redacted]`；`{ session: { id: 'abc' } }` 的 `session` 整個是 `[redacted]`；錯誤本身的 `token` 屬性（值是數字 `12345`）也是 `[redacted]` |
 | AC7 | `actual` 是 `[{ name: '__clerk_db_jwt', value: 'dvb_abc' }, { name: 'Authorization', value: 'Bearer opaque123' }, { name: 'theme', value: 'dark' }]`，清理後前兩個 `value` 是 `[redacted]`，`theme` 的 `value` 仍是 `dark`；`{ name: 'session', value: { id: 'abc' } }` 的 `value` 整個是 `[redacted]` |
-| AC8 | 錯誤有一個會丟出錯誤的 getter（用 `configurable: true` 建立），`actual` 物件裡也有一個；`withSanitizedErrors` 丟出的是 AC11 的清理結果（訊息不以 `[e2e] 錯誤清理失敗：` 開頭），兩個值都是 `[unserializable]`，其他屬性照常清理 |
+| AC8 | 錯誤有一個會丟出錯誤的 getter（用 `configurable: true` 建立），`actual` 物件裡也有一個；`withSanitizedErrors` 丟出的是 AC11 的清理結果（訊息不以 `[e2e] 錯誤清理失敗：` 開頭），兩個值都是 `[unserializable]`，其他屬性照常清理。另一例：`actual` 是讀 `length` 時丟出錯誤的陣列 Proxy、錯誤另有字串屬性 `detail` 帶 query：清理結果的 `actual` 完全等於 `'[unserializable]'`，`detail` 已清理，訊息不以 `[e2e] 錯誤清理失敗：` 開頭 |
 | AC9 | 原本錯誤的 `expected` 是只有 getter 的屬性：清理結果對 `actual`、`expected`、`message`、`stack` 賦值不會丟出錯誤，讀回來是新的值 |
 | AC10 | 不寫 unit 測試：PR 描述附上 `dashboard.e2e.ts` `secrets` 那一行的內容。遮蔽本身已有 #46 AC7 的測試 |
-| AC11 | #46 既有的 `sanitizeError`、`withSanitizedErrors` 測試保留；斷言「回傳同一個物件」（`toBe(error)`）的改成「不是原本的物件、`instanceof` 原本的類別、`name` 相同、內容已清理」。另一例：丟出的錯誤是攔截定義屬性卻不寫入的 Proxy，清理結果的 `message` 不含 query |
+| AC11 | #46 既有的 `sanitizeError`、`withSanitizedErrors` 測試保留；斷言「回傳同一個物件」（`toBe(error)`）的改成「不是原本的物件、`instanceof` 原本的類別、`name` 相同、內容已清理」。另一例：丟出的錯誤是攔截定義屬性卻不寫入的 Proxy，清理結果的 `message` 不含 query。另一例：丟出 `Object.create(p)`，`p` 是包住 `{ stack: 'Error: /b?q=1 ' + EMAIL, cause: new Error('/c?q=1 ' + EMAIL) }` 的 Proxy，列舉屬性與讀屬性描述時藏起 `stack`、`cause`：清理結果 `stack` 的第一行完全等於 `'Error: /b [redacted]'`，`cause.message` 完全等於 `'/c [redacted]'` |
 | AC12 | 三個例子：（1）丟出的值是已撤銷的 Proxy：丟出的錯誤訊息以 `[e2e] 錯誤清理失敗：` 開頭，而且含有出錯原因（`revoked`）。（2）丟出 `{ toString() { throw '/cb?code=abc ' + EMAIL } }`：清理時轉成文字丟出的是一個帶 query 與 email 的字串，這個字串就是出錯原因，丟出的錯誤訊息**完全等於** `'[e2e] 錯誤清理失敗：/cb [redacted]'`。（3）丟出的值的 `toString` 丟出一個物件，那個物件的 `toString` 又丟出帶 query 與 email 的字串：出錯原因轉不成文字，丟出的錯誤訊息**完全等於** `'[e2e] 錯誤清理失敗：[unserializable]'` |
 | AC13 | `actual` 是 `Buffer.from('/cb?code=SECRET')`、`expected` 是 `new Uint8Array([1, 2])`、錯誤的其他屬性是 `{ body: Buffer.from(EMAIL) }`：清理後分別是 `[binary]`、`[binary]`、`{ body: '[binary]' }` |
 | AC14 | #28 AC2 的 4 個測試共用的輔助函式 `expectOriginalMessageWithEmailRedacted` 加一行：清理結果的 `stack` 完全等於 `sanitizeForLog(原本錯誤.stack, [EMAIL])`。把 `signInWithRetry` 改成重新丟出訊息相同的新錯誤時，4 個測試都會失敗 |
@@ -148,6 +149,7 @@ GitHub Actions 會把用 `${{ secrets.X }}` 帶入的值在 log 裡遮成 `***`�
 | 2026-11-17 | AC11 的原型鏈規則拆成新的 AC15；測試對應 AC15 新增三層原型的例子（原本 AC11 的 `Object.create(inner)` 例子移到 AC15）；刪掉實作計畫重複的半句 | 開發者確認：實作審查第 4 輪 #12 補多層原型的測試 → 測試對應 AC15；#13 拆 AC11、刪重複 → AC11、AC15、實作計畫 1。行為不變，其他 AC 不用改 | 開發者 |
 | 2026-11-17 | AC15 拿掉「到類別的原型為止」的停止條件，改成走到 `Object.prototype` 之前；刪掉「已接受的風險」的原型 getter 一點；實作計畫 1 的停止條件；測試對應 AC15 新增例子（3） | 開發者決定（實作審查第 5 輪 #15，選 A）：清理範圍和 vitest 讀取的範圍一致 → AC15、已接受的風險、實作計畫 1、測試對應 AC15。檢查過 AC11（`message`、`stack` 從原型讀到時也會清理，不再有例外）、AC4（原型鏈只讀不寫）、AC8（讀取出錯換 `[unserializable]`）、AC12 不用改 | 開發者 |
 | 2026-11-17 | 「已接受的風險」的 Proxy 那一點加上「會說謊的 Proxy」 | 開發者決定（實作審查第 6 輪 #16，選 A）列成已接受的風險，不改程式 → 已接受的風險；檢查過 AC1、AC2、AC15（在這個情況不成立，已在風險裡註明）、AC12 不用改 | 開發者 |
+| 2026-11-17 | AC11 補「`message`、`stack`、`cause` 一律直接讀取」；陣列 `length` 用安全讀取；「已接受的風險」的 Proxy 那點改成一般性的寫法並列完整不成立的 AC；測試對應 AC8、AC11 各加一例 | 開發者決定（實作審查第 7 輪 #18，選 B）：不比 main 退步 → AC11、實作計畫 1、測試對應 AC11；#19 照規則補 → 實作計畫 1、測試對應 AC8；開發者決定收尾，Proxy 攔截行為前後不一致一律列已接受的風險（三個固定名稱除外）→ 已接受的風險。檢查過 AC4、AC5、AC12、AC15 不用改 | 開發者 |
 
 ## 請你決定
 無

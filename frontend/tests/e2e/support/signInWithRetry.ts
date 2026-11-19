@@ -120,9 +120,11 @@ function sanitizeValue(value: unknown, secrets: string[], seen: Map<object, unkn
   if (ArrayBuffer.isView(value)) return BINARY
   if (value instanceof Error) return sanitizeError(value, secrets, seen)
   if (Array.isArray(value)) {
+    const length = readProperty(value, 'length')
+    if (typeof length !== 'number') return UNSERIALIZABLE
     const copy: unknown[] = []
     seen.set(value, copy)
-    for (let i = 0; i < value.length; i++) copy.push(sanitizeValue(readProperty(value, String(i)), secrets, seen))
+    for (let i = 0; i < length; i++) copy.push(sanitizeValue(readProperty(value, String(i)), secrets, seen))
     return copy
   }
   let keys: string[]
@@ -154,6 +156,14 @@ export function sanitizeError(error: unknown, secrets: string[], seen = new Map<
   delete copy.stack
   seen.set(error, copy)
   const done = new Set<string>()
+  // 不靠列舉：Proxy 可以在列舉時藏起這三個名稱，vitest 卻會直接讀到
+  for (const key of ['message', 'stack', 'cause']) {
+    done.add(key)
+    const value = readProperty(error, key)
+    if (value === undefined) continue
+    const sanitized = key === 'cause' ? sanitizeError(value, secrets, seen) : sanitizeValue(value, secrets, seen)
+    defineValue(copy, key, sanitized, isEnumerableOnChain(error, key))
+  }
   // copy 沿用同一個原型，vitest 會沿原型鏈讀到 Object.prototype 之前；原型上的內容不清理就會原樣印出
   for (let source: object | null = error; source && source !== Object.prototype; source = Object.getPrototypeOf(source)) {
     for (const key of Object.getOwnPropertyNames(source)) {
@@ -161,14 +171,19 @@ export function sanitizeError(error: unknown, secrets: string[], seen = new Map<
       done.add(key)
       // 從 error 讀：getter 的 this 才和 vitest 讀到的相同；比 source 近的層都沒有這個名稱
       const value = readProperty(error, key)
-      let sanitized: unknown
-      if (key === 'cause') sanitized = value === undefined ? value : sanitizeError(value, secrets, seen)
-      else if (key === 'message' || key === 'stack' || !isSensitiveName(key)) sanitized = sanitizeValue(value, secrets, seen)
-      else sanitized = REDACTED
+      const sanitized = isSensitiveName(key) ? REDACTED : sanitizeValue(value, secrets, seen)
       defineValue(copy, key, sanitized, Object.getOwnPropertyDescriptor(source, key)?.enumerable)
     }
   }
   return copy
+}
+
+function isEnumerableOnChain(error: Error, key: string): boolean {
+  for (let source: object | null = error; source && source !== Object.prototype; source = Object.getPrototypeOf(source)) {
+    const descriptor = Object.getOwnPropertyDescriptor(source, key)
+    if (descriptor) return descriptor.enumerable ?? false
+  }
+  return false
 }
 
 // e2e 的測試函式都要包這層：測試函式丟出的錯誤會連同 stack、cause 印進公開的 CI log

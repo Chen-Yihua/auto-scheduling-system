@@ -68,6 +68,7 @@ npm run coverage    # 單元測試 + 覆蓋率報表
     ```
 
     這個使用者必須存在於上面那組 Clerk 金鑰所屬的專案裡。沒有設定時，登入後的測試會自動跳過（不會讓整個測試失敗）。CI 上這個變數和 Clerk 金鑰都存在 GitHub repo 的 Actions secrets 裡。
+  - 印進 CI log 的錯誤與 `console` 輸出由 `tests/e2e/support/sanitizingReporter.ts` 清理，改 `vitest.e2e.config.ts` 的 `reporters` 時要保留它排第一個。
 
 ## 專案結構說明
 

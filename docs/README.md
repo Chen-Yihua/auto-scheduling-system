@@ -20,13 +20,13 @@
 |---|---|---|
 | 永久保存（歷史紀錄） | `specs/`、`reviews/specification/`、`reviews/implementation/`、`reviews/*-round<N>.md`、`decisions/` | 不刪除，也不因為過時就改寫內容。被取代時只改狀態並連結新的文件：規格照 [specs/README.md](specs/README.md)「規格和目前系統的關係」，ADR 照 [decisions/README.md](decisions/README.md)。記錄的是當時的決定，不是目前的系統 |
 | 持續更新（目前狀態） | `api.md`、`architecture.md`、`architecture.drawio`、`issues.md`、`glossary.md` | 和程式碼、流程保持一致，改動時在同一個 PR 更新（時機見上表）。不記歷史，歷史看 git、規格與 ADR |
-| 暫存（不 commit） | scratchpad（`<功能>-` 開頭的暫存檔，種類與檔名見 `.claude/skills/feature/references/resume.md` 的暫存檔表） | 只放當下的開發需要的內容。核准後由 `feature-implementer` 照交付清單把規格存進 `specs/`、ADR 草稿存進 `decisions/`、術語合併進 `glossary.md`；規格審查紀錄草稿由主 session 存進 `reviews/specification/`（`implement-and-review`「審查紀錄的 commit」）。流程回報前確認已確認的內容都已在規格、審查紀錄、ADR 或術語表（文字修正對照 PR 的改動與描述），還沒做完的後續動作列在回報的「待辦」（`/feature`「清理暫存」）。已確認、會影響實作的決定，核准前一定要寫進規格、ADR 草稿或 `<功能>-glossary.md`（要寫在術語表的），不能只留在暫存或對話裡 |
+| 暫存（不 commit） | 草稿資料夾（`.drafts/`；`<功能>-` 開頭的暫存檔，種類與檔名見 `.claude/skills/feature/references/resume.md` 的暫存檔表） | 只放當下的開發需要的內容，不會進 git。核准後由誰把哪個暫存檔存成正式文件見 `implement-and-review`「Commit 責任」，審查紀錄的 commit 步驟見同一個檔案「審查紀錄的 commit」；回報前的確認與刪除見 `/feature`「清理暫存」 |
 | 選擇性保存（實驗） | `experiments/` | README 寫實驗目的、指標與結論，TEMPLATE 是紀錄格式，`records/` 保留有參考價值的紀錄。流程的版本用紀錄裡的「流程版本」（commit）對應，不另外備份每一版的 skill。既有紀錄不自動刪除，也不為了符合新規則修改；要刪除時先寫出它沒有參考價值的理由，由開發者決定 |
 
 暫存的取消與暫停（`/feature`「取消」、`feature/references/resume.md`）：
 
 - **取消**：核准前取消時這次確定的術語怎麼處理，見 `/feature`「取消」。
-- **暫停與接續**：暫停、接續，以及 scratchpad 遺失時以暫存檔為單位的恢復，見 `feature/references/resume.md`。
+- **暫停與接續**：暫停、接續，以及草稿資料夾裡這次的暫存檔遺失時以暫存檔為單位的恢復，見 `feature/references/resume.md`。
 
 ## 術語表
 
@@ -76,8 +76,9 @@ skill（主 session 照著做的流程說明，在 `.claude/skills/`）、agent�
 **主 session**：
 和開發者對話、指派其他 agent 的那個 Claude。
 
-**scratchpad**：
-這次對話專用的暫存資料夾，不會進 repo。
+**草稿資料夾**：
+repo 根目錄的 `.drafts/`，放核准前的草稿與開發中的暫存檔，不會進 git。
+_避免_：scratchpad
 
 **已接受的風險**：
 確定不處理、之後審查也不再提出的風險。

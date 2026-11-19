@@ -1,6 +1,6 @@
 ---
 name: feature
-description: 開發新功能或行為變更：先做需求問答，再寫出規格（需求、假設、驗收條件與計畫）交給開發者核准，核准後交給 feature-implementer 實作、開 PR，再交給 acceptance-reviewer 審查
+description: 開發新功能或行為變更：需求問答、寫規格交給開發者核准、交給 agent 實作與審查。用 /feature <需求> 執行。
 disable-model-invocation: true
 ---
 
@@ -14,6 +14,8 @@ disable-model-invocation: true
 
 進入每個步驟前，先用 Skill 工具載入該步驟的 skill，照它的指示做。
 
+開始前，先看草稿資料夾（`.drafts/`）裡有沒有這次的暫存檔（`references/resume.md` 暫存檔表列出的檔名）。有的話，用 `clarify-requirements`「需求問答」的格式問開發者：接續（照 `references/resume.md`「暫停與接續」），還是刪掉重來（照「清理暫存」的方式刪）。開發者回答前，不讀這些檔案的內容當作已確認的決定。
+
 | 步驟 | 做什麼 | 載入 |
 |---|---|---|
 | 1. 判斷等級 | 自己讀程式碼，依本檔「判斷等級」判斷 | 本檔 |
@@ -22,19 +24,19 @@ disable-model-invocation: true
 | 4. 實作與審查 | 開發者核准後：交給 `feature-implementer` 實作，再交給 `acceptance-reviewer` 審查，處理發現 | `implement-and-review` |
 | 5. 回報 | 見本檔「回報」 | 本檔 |
 
-暫停、接續、scratchpad 遺失時，讀 `references/resume.md`。
+暫停、接續、草稿資料夾裡這次的暫存檔遺失時，讀 `references/resume.md`。
 
 
 ## 硬規則
 
 任何階段、任何等級都適用。
 
-1. **不用 plan mode**，也不用 ExitPlanMode 請開發者核准（`docs/decisions/0008-grilling-without-plan-mode.md`）。開發者在 plan mode 中叫出這個流程時，先請開發者退出 plan mode：plan mode 中不能寫 scratchpad。
-2. **核准前只寫 scratchpad**，不改 repo 的檔案、不開分支。這次開發的暫存檔都以 `<功能>-` 開頭，種類與遺失時的恢復方式見 `references/resume.md` 的暫存檔表。
+1. **不用 plan mode**，也不用 ExitPlanMode 請開發者核准（`docs/decisions/0008-grilling-without-plan-mode.md`）。開發者在 plan mode 中叫出這個流程時，先請開發者退出 plan mode：plan mode 中不能寫檔案。
+2. **核准前只寫草稿資料夾**（`.drafts/`），不改 repo 裡其他檔案、不開分支。這次開發的暫存檔都以 `<功能>-` 開頭，只建立 `references/resume.md` 暫存檔表上的暫存檔；種類與遺失時的恢復方式見同一張表。
 3. **核准的定義**：開發者明確表示核准（例如「核准」）才算；提出修改、回答問題或沒有回應都不算。
 4. **向開發者提問**：所有等級、所有階段都用 `clarify-requirements`「需求問答」的 ❓／➡️ 文字格式，不用 AskUserQuestion。
-5. **漏洞**：發現可被利用的程式漏洞時（任何階段、任何角色），立刻停止這一項。漏洞的位置與利用方式只寫在給開發者的回報裡，不能出現在 issue、PR 描述、commit 訊息、程式註解、規格檔、測試名稱與 docstring、`docs/reviews/`，也不能把修正推送到公開的 repo（包括這個 PR 的分支）。接著載入 `implement-and-review`，照「漏洞的處理」。
-6. **不可合併 PR**：合併一律由開發者決定。
+5. **漏洞**：照 CLAUDE.md「漏洞」。
+6. **不可合併 PR**：照 CLAUDE.md「開發流程」第 5 點。
 
 ## 判斷等級
 
@@ -57,18 +59,18 @@ disable-model-invocation: true
 指新增服務或外部依賴、改變模組分層、改資料庫結構或部署方式。「改資料庫結構」指新增 collection 或索引、改既有欄位的型別或意義、要轉換既有資料；新增選填欄位不算。
 
 - 屬於重大架構決策的變更是高風險。
-- 核准前寫成 scratchpad 的 ADR 草稿 `<功能>-adr-<名稱>.md`，和規格一起核准（見 `write-spec`「已確認的決定寫進規格」）。
+- 核准前寫成草稿資料夾的 ADR 草稿 `<功能>-adr-<名稱>.md`，和規格一起核准（見 `write-spec`「已確認的決定寫進規格」）。
 - 審查階段才發現的，照 `implement-and-review`「發現處理表」處理。
 
 ## 文字修正的流程
 
-在 scratchpad 的 `<功能>-spec.md` 寫改動清單：要改的檔案、改前與改後的文字、為什麼屬於文字修正，交給開發者核准（核准方式見「硬規則」）。核准後從 `main` 開分支，自己修改，跑改到範圍的檢查（只改 `.md` 時不用），開 PR、等 CI，回報等級（文字修正）、PR 連結、CI 結果，以及「回報」的「目前所有 open 的 PR」的合併狀態，並照「清理暫存」確認暫存的內容；`implement-and-review` 的審查與「回報」的「驗收條件、測試與結果的對照表」不適用。
+在草稿資料夾的 `<功能>-spec.md` 寫改動清單：要改的檔案、改前與改後的文字、為什麼屬於文字修正，交給開發者核准（核准方式見「硬規則」）。核准後從 `main` 開分支，自己修改，跑改到範圍的檢查（只改 `.md` 時不用），開 PR、等 CI，回報等級（文字修正）、PR 連結、CI 結果，以及「回報」的「目前所有 open 的 PR」的合併狀態，並照「清理暫存」確認暫存的內容；`implement-and-review` 的審查與「回報」的「驗收條件、測試與結果的對照表」不適用。
 
-- 修改中發現可被利用的漏洞，照 `implement-and-review`「漏洞的處理」。
+- 修改中發現可被利用的漏洞，照 CLAUDE.md「漏洞」。
 - 發現和這次修改無關的問題，照 `implement-and-review`「不阻擋的發現開 issue」（沒有審查紀錄，來源只附 PR 連結）。
 - 修改中發現會改變程式行為（包括改了測試斷言會看到的文字），就停下來，告訴開發者，重新判斷等級，照新等級的流程從寫規格開始（照 `clarify-requirements`「做到一半改成較高的等級」先補做問答）；已經改的部分照同一節處理。
 
-## 4. 回報
+## 回報
 
 PR 連結、等級、「驗收條件、測試與結果的對照表」（驗收條件 → 對應的測試 → 結果）、假設清單、規格修改紀錄、規格審查與實作審查紀錄的檔案連結與阻擋項目的處理結果、這次開了或留言了哪些 issue、建立或沿用了哪些 advisory（只寫編號）。給開發者看的回報要附上檔案與測試的連結（`檔案:行號`），不要只寫摘要。PR 描述放同一張對照表；更新 PR 描述照 CLAUDE.md「開發流程」的方式。
 
@@ -79,8 +81,12 @@ PR 連結、等級、「驗收條件、測試與結果的對照表」（驗收�
 
 ## 清理暫存
 
-見 `docs/README.md`「生命週期」。回報前確認 scratchpad 裡已確認的內容（規格、決定、術語、審查結果）都已經在規格、審查紀錄、ADR 或術語表裡（要寫在「術語表」的決定，在 `docs/glossary.md` 找得到就算）；文字修正沒有規格與審查紀錄，對照 PR 的改動與描述；還沒做完的後續動作（例如合併後要在 issue 留言），列在回報的「待辦」，不要只留在 scratchpad。
+回報前確認草稿資料夾裡已確認的內容（規格、決定、術語、審查結果）都已經在規格、審查紀錄、ADR 或術語表裡（要寫在「術語表」的決定，在 `docs/glossary.md` 找得到就算）；文字修正沒有規格與審查紀錄，對照 PR 的改動與描述；還沒做完的後續動作（例如合併後要在 issue 留言），列在回報的「待辦」，不要只留在草稿資料夾。
+
+確認完，刪掉草稿資料夾裡這次的暫存檔：只刪 `references/resume.md` 暫存檔表列出的檔名，不用「`<功能>-` 開頭」比對，避免刪到名稱開頭相同的其他功能。回報後還要修改時，照 `references/resume.md` 從 PR 分支複製回來。
 
 ## 取消
 
 核准前開發者表示不做時，列出 `<功能>-glossary.md` 的術語（有的話），用 `clarify-requirements`「需求問答」的格式請開發者決定保留或不保留。保留：另外照「文字修正的流程」開 PR，只改 `docs/glossary.md`；開 PR 前同樣 `git fetch origin main`，對照 `origin/main` 的 `docs/glossary.md` 有沒有相同或相近的術語，有的話問開發者。核准後 PR 被關閉時不另外處理：改動只在分支上。
+
+術語處理完，照「清理暫存」的方式刪掉這次的暫存檔。

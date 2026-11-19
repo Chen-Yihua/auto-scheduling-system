@@ -19,3 +19,6 @@ frontend-coverage.txt
 /package-lock.json
 
 /scripts
+
+# /feature、/issue 核准前的草稿（docs/decisions/0014-drafts-folder.md）
+/.drafts/

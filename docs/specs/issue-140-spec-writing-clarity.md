@@ -71,7 +71,7 @@
 | AC8 | `specification-reviewer.md` 第 6 項包括需求 9 的四點 |
 | AC9 | `acceptance-reviewer.md` 第 6 項檢查「寫作規則」第 1、2、5 條，檢查範圍仍是這個 PR 改到的 md 檔 |
 | AC10 | 在這個 PR 的實作審查中，`acceptance-reviewer` 照改完的 `specification-reviewer.md` 第 6 項與「寫作規則」第 5 條檢查 `docs/specs/issue-69-context-in-repo.md`，結果是列出「測試對應」缺少步驟或預期結果的發現 |
-| AC11 | 在這個 PR 的實作審查中，`acceptance-reviewer` 照同樣的規則檢查 `docs/specs/issue-139-protection-scope.md`，結果是沒有需求 9 那四點的發現 |
+| AC11 | 在這個 PR 的實作審查中，`acceptance-reviewer` 照同樣的規則檢查 `docs/specs/issue-139-protection-scope.md`，結果是發現 AC13 的「測試對應」缺少檢查檔案路徑的步驟；需求 9 的其他三點符合規則 |
 | AC12 | 新增的文字引用的檔案路徑、節名稱都存在 |
 | AC13 | `write-spec/SKILL.md` 的「驗收條件」與「計畫與測試對應」內容和需求 11、12 相同 |
 | AC14 | PR 描述有 `Closes #140` |
@@ -110,7 +110,7 @@ AC10、AC11 是這個 PR 對新審查規則做的一次性驗證，不改 `accep
 | AC8 | 讀改完的 `specification-reviewer.md` 第 6 項 | 包括需求 9 的四點 |
 | AC9 | 讀改完的 `acceptance-reviewer.md` 第 6 項 | 寫「第 1、2、5 條」；範圍仍是「這個 PR 改到的 md 檔」 |
 | AC10 | 照改完的 `specification-reviewer.md` 第 6 項與「寫作規則」第 5 條，檢查 `docs/specs/issue-69-context-in-repo.md` | 至少一項「測試對應」缺少步驟或預期結果的發現 |
-| AC11 | 照同樣的規則，檢查 `docs/specs/issue-139-protection-scope.md` | 沒有需求 9 那四點的發現 |
+| AC11 | 照同樣的規則，檢查 `docs/specs/issue-139-protection-scope.md` | 發現 AC13 的「測試對應」缺少檢查檔案路徑的步驟；需求 9 的其他三點符合規則 |
 | AC12 | 對新文字裡每個引用的節名稱跑 `grep -n "<節名稱>" <檔案>`；對每個引用的檔案路徑跑 `test -e <路徑>` | 每個節名稱都找得到；每個路徑都存在 |
 | AC13 | 讀改完的 `.claude/skills/write-spec/SKILL.md`「規格內容」 | 「驗收條件」與「計畫與測試對應」兩條內容和需求 11、12 相同 |
 | AC14 | 跑 `gh api repos/{owner}/{repo}/pulls/<PR> --jq .body` | 輸出有 `Closes #140` |
@@ -119,6 +119,7 @@ AC10、AC11 是這個 PR 對新審查規則做的一次性驗證，不改 `accep
 
 | 日期 | 修改 | 原因 | 確認者 |
 |---|---|---|---|
+| 2026-11-20 | AC11 與「測試對應」AC11 的預期結果，從「沒有需求 9 那四點的發現」改成「發現 AC13 的『測試對應』缺少檢查檔案路徑的步驟；需求 9 的其他三點符合規則」 | 原預期結果有誤：第 1 輪實作審查依原預期結果判定 AC11 不通過。reviewer 找到的 `docs/specs/issue-139-protection-scope.md:127` 只查節名稱、沒查檔案路徑，是真實缺漏，所以修正預期結果 → AC11、「測試對應」AC11；檢查過 AC10、需求 9 不用改 | 開發者 |
 
 ## 請你決定
 

@@ -131,7 +131,7 @@ GitHub Actions 會把用 `${{ secrets.X }}` 帶入的值在 log 裡遮成 `***`�
 | AC8 | 錯誤有一個會丟出錯誤的 getter（用 `configurable: true` 建立），`actual` 物件裡也有一個；`withSanitizedErrors` 丟出的是 AC11 的清理結果（訊息不以 `[e2e] 錯誤清理失敗：` 開頭），兩個值都是 `[unserializable]`，其他屬性照常清理。另一例：`actual` 是讀 `length` 時丟出錯誤的陣列 Proxy、錯誤另有字串屬性 `detail` 帶 query：清理結果的 `actual` 完全等於 `'[unserializable]'`，`detail` 已清理，訊息不以 `[e2e] 錯誤清理失敗：` 開頭 |
 | AC9 | 原本錯誤的 `expected` 是只有 getter 的屬性：清理結果對 `actual`、`expected`、`message`、`stack` 賦值不會丟出錯誤，讀回來是新的值 |
 | AC10 | 不寫 unit 測試：PR 描述附上 `dashboard.e2e.ts` `secrets` 那一行的內容。遮蔽本身已有 #46 AC7 的測試 |
-| AC11 | #46 既有的 `sanitizeError`、`withSanitizedErrors` 測試保留；斷言「回傳同一個物件」（`toBe(error)`）的改成「不是原本的物件、`instanceof` 原本的類別、`name` 相同、內容已清理」。另一例：丟出的錯誤是攔截定義屬性卻不寫入的 Proxy，清理結果的 `message` 不含 query。另一例：丟出 `Object.create(p)`，`p` 是包住 `{ stack: 'Error: /b?q=1 ' + EMAIL, cause: new Error('/c?q=1 ' + EMAIL) }` 的 Proxy，列舉屬性與讀屬性描述時藏起 `stack`、`cause`：清理結果 `stack` 的第一行完全等於 `'Error: /b [redacted]'`，`cause.message` 完全等於 `'/c [redacted]'` |
+| AC11 | #46 既有的 `sanitizeError`、`withSanitizedErrors` 測試保留；斷言「回傳同一個物件」（`toBe(error)`）的改成「不是原本的物件、`instanceof` 原本的類別、`name` 相同、內容已清理」。另一例：丟出的錯誤是攔截定義屬性卻不寫入的 Proxy，清理結果的 `message` 不含 query。另一例：丟出 `Object.create(p)`，`p` 是包住一個以 `Error.prototype` 為原型、帶有 `stack: 'Error: /b?q=1 ' + EMAIL` 與 `cause: new Error('/c?q=1 ' + EMAIL)` 的物件的 Proxy，列舉屬性與讀屬性描述時藏起 `stack`、`cause`：清理結果 `stack` 的第一行完全等於 `'Error: /b [redacted]'`，`cause.message` 完全等於 `'/c [redacted]'` |
 | AC12 | 三個例子：（1）丟出的值是已撤銷的 Proxy：丟出的錯誤訊息以 `[e2e] 錯誤清理失敗：` 開頭，而且含有出錯原因（`revoked`）。（2）丟出 `{ toString() { throw '/cb?code=abc ' + EMAIL } }`：清理時轉成文字丟出的是一個帶 query 與 email 的字串，這個字串就是出錯原因，丟出的錯誤訊息**完全等於** `'[e2e] 錯誤清理失敗：/cb [redacted]'`。（3）丟出的值的 `toString` 丟出一個物件，那個物件的 `toString` 又丟出帶 query 與 email 的字串：出錯原因轉不成文字，丟出的錯誤訊息**完全等於** `'[e2e] 錯誤清理失敗：[unserializable]'` |
 | AC13 | `actual` 是 `Buffer.from('/cb?code=SECRET')`、`expected` 是 `new Uint8Array([1, 2])`、錯誤的其他屬性是 `{ body: Buffer.from(EMAIL) }`：清理後分別是 `[binary]`、`[binary]`、`{ body: '[binary]' }` |
 | AC14 | #28 AC2 的 4 個測試共用的輔助函式 `expectOriginalMessageWithEmailRedacted` 加一行：清理結果的 `stack` 完全等於 `sanitizeForLog(原本錯誤.stack, [EMAIL])`。把 `signInWithRetry` 改成重新丟出訊息相同的新錯誤時，4 個測試都會失敗 |
@@ -150,6 +150,7 @@ GitHub Actions 會把用 `${{ secrets.X }}` 帶入的值在 log 裡遮成 `***`�
 | 2026-11-17 | AC15 拿掉「到類別的原型為止」的停止條件，改成走到 `Object.prototype` 之前；刪掉「已接受的風險」的原型 getter 一點；實作計畫 1 的停止條件；測試對應 AC15 新增例子（3） | 開發者決定（實作審查第 5 輪 #15，選 A）：清理範圍和 vitest 讀取的範圍一致 → AC15、已接受的風險、實作計畫 1、測試對應 AC15。檢查過 AC11（`message`、`stack` 從原型讀到時也會清理，不再有例外）、AC4（原型鏈只讀不寫）、AC8（讀取出錯換 `[unserializable]`）、AC12 不用改 | 開發者 |
 | 2026-11-17 | 「已接受的風險」的 Proxy 那一點加上「會說謊的 Proxy」 | 開發者決定（實作審查第 6 輪 #16，選 A）列成已接受的風險，不改程式 → 已接受的風險；檢查過 AC1、AC2、AC15（在這個情況不成立，已在風險裡註明）、AC12 不用改 | 開發者 |
 | 2026-11-17 | AC11 補「`message`、`stack`、`cause` 一律直接讀取」；陣列 `length` 用安全讀取；「已接受的風險」的 Proxy 那點改成一般性的寫法並列完整不成立的 AC；測試對應 AC8、AC11 各加一例 | 開發者決定（實作審查第 7 輪 #18，選 B）：不比 main 退步 → AC11、實作計畫 1、測試對應 AC11；#19 照規則補 → 實作計畫 1、測試對應 AC8；開發者決定收尾，Proxy 攔截行為前後不一致一律列已接受的風險（三個固定名稱除外）→ 已接受的風險。檢查過 AC4、AC5、AC12、AC15 不用改 | 開發者 |
+| 2026-11-19 | 測試對應 AC11 的 Proxy 例子補上「被包住的物件以 `Error.prototype` 為原型」 | 開發者確認修正測試資料（feature-implementer 回報：被包住的是一般物件時，丟出的值不是 `Error`，預期字串做不出來）→ 測試對應 AC11；行為不變，其他 AC 不用改 | 開發者 |
 
 ## 請你決定
 無

@@ -3,7 +3,7 @@
 - 狀態：已核准
 - 等級：高風險（改的是「token、email 不出現在公開的 CI log」這項保證）
 - issue：[#50](https://github.com/Chen-Yihua/auto-scheduling-system/issues/50)、[#129](https://github.com/Chen-Yihua/auto-scheduling-system/issues/129)
-- PR：#NN
+- PR：#142
 
 ## 簡短說明
 e2e 測試失敗時，vitest 會把 diff、錯誤的其他屬性、hook 錯誤、沒被接住的錯誤和測試的 `console` 輸出印進公開的 CI log，目前只有 `message`、`stack`、`cause` 經過清理。這份規格在 `vitest.e2e.config.ts` 加一個 reporter（vitest 裡負責把測試結果印出來的模組），在其他 reporter 印出之前，先清理要印的內容。

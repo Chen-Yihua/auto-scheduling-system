@@ -10,7 +10,7 @@
 
 - 發現：5 項（規格內容互相矛盾或沒有依據 2、沒有錯，但可以更好 3；一般操作就會遇到的錯 1、影響小的問題 2、不影響功能，只供參考 2）
 - 開發者決策：2 項
-- 尚未處理：2 項（開 issue）
+- 尚未處理：1 項（開 issue）
 
 ## 各輪摘要
 
@@ -26,7 +26,7 @@
 | 1 | 1 | 「只建立表上的暫存檔」和要寫成檔案的 PR 描述、advisory 更新衝突 | 規格內容互相矛盾或沒有依據 | 一般操作就會遇到的錯 | 是 | 否 | 暫存檔表漏了工具輸入檔 | 暫存檔表加「PR 描述」`<功能>-pr-body.md`；`CLAUDE.md:28`、advisory 的 PATCH 與 POST 用暫存檔表的檔名；新增 AC27 | 開發者 | `fcfb8eb` |
 | 2 | 1 | 漏洞的定義要連跳兩個檔案 | 規格內容互相矛盾或沒有依據 | 影響小的問題 | 是 | 否 | 引用層數 | 需求 17 改成直接連到 `docs/reviews/README.md`「涉及安全／架構」 | 開發者 | `fcfb8eb` |
 | 3 | 1 | 寫法：`docs/reviews/README.md:10` 還寫「主 session 的草稿資料夾」 | 沒有錯，但可以更好 | 不影響功能，只供參考 | 否 | 否 | — | 刪掉「主 session 的」 | 規則 | `fcfb8eb` |
-| 4 | 2 | advisory 指令的 `--input` 沒有寫 `.drafts/` | 沒有錯，但可以更好 | 影響小的問題 | 否 | 否 | — | 開 issue | 規則 | [#151](https://github.com/Chen-Yihua/auto-scheduling-system/issues/151) |
+| 4 | 2 | advisory 指令的 `--input` 沒有寫 `.drafts/` | 沒有錯，但可以更好 | 影響小的問題 | 否 | 否 | — | 開 issue（#151）；之後開發者決定在這個 PR 修，不另外審查 | 開發者 | [#151](https://github.com/Chen-Yihua/auto-scheduling-system/issues/151)、`56a7aff` |
 | 5 | 2 | 開 PR 時的描述檔沒有指定位置 | 沒有錯，但可以更好 | 不影響功能，只供參考 | 否 | 否 | — | 開 issue | 規則 | [#152](https://github.com/Chen-Yihua/auto-scheduling-system/issues/152) |
 
 ## 問題說明
@@ -49,10 +49,10 @@
 |---|---|---|---|---|
 | 1 | 要先寫成檔案再交給 `gh` 的內容放哪裡 | 這個 PR 補進暫存檔表／另開 issue | 這個 PR 補：暫存檔表加「PR 描述」、advisory 用 `<功能>-advisory.json`、新增 AC27 | 維持「只建立表上的暫存檔」，不另開例外 |
 | 2 | 漏洞的定義連兩層 | 這個 PR 改需求 17／另開 issue | 這個 PR 改 | 讓引用直接連到原文（AC16） |
+| 4 | advisory 指令少了 `.drafts/`（#151） | 這個 PR 修／照 issue 之後修 | 這個 PR 修，不另外審查 | 改動只有兩個路徑 |
 
 ## 尚未處理
 
 | # | 原因 | 後續（issue 編號或「無」） |
 |---|---|---|
-| 4 | 不阻擋，照規則開 issue | #151 |
 | 5 | 不阻擋，照規則開 issue | #152 |

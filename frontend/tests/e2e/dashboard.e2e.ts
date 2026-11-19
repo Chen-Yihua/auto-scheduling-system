@@ -50,7 +50,7 @@ function assertClerkKeysLookRight(publishableKey?: string, secretKey?: string) {
 }
 
 // 除錯用；只印 cookie 名稱和網址路徑，避免 token 出現在公開的 CI log
-// 欄位名稱不能含 session、cookie 這類敏感名稱：清理用的 reporter 會把整個值遮掉（sanitizingReporter.ts）
+// 欄位名稱不能含 session、cookie 這類敏感名稱：清理用的 reporter 會把那一行冒號之後的內容遮掉（sanitizingReporter.ts）
 async function printPostSignInDiagnostics(page: Page, redirects: string[], diagnostics: SignInDiagnostics) {
   type ClerkInBrowser = { loaded?: boolean; user?: unknown; session?: unknown }
   const clerkState = await page

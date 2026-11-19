@@ -1,4 +1,4 @@
-import type { FormError, FormSubmitEvent } from '@nuxt/ui'
+import type { FormError, FormSubmitEvent } from '@nuxt/ui';
 import { DateFormatter, getLocalTimeZone, fromDate, toZoned, type DateValue } from '@internationalized/date'
 import { ref, computed, reactive, shallowRef } from 'vue'
 import { createSharedComposable } from '@vueuse/core'

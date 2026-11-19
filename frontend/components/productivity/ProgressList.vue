@@ -1,5 +1,5 @@
 <script setup lang="ts">
-defineProps<{ items: { key: string; label: string; done: number; total: number }[] }>()
+defineProps<{ items: { key: string; label: string; done: number; total: number }[] }>();
 </script>
 
 <template>

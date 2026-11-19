@@ -11,7 +11,7 @@ UTC_NOON = datetime(2026, 10, 2, 12, 0, tzinfo=timezone.utc)
 
 @pytest.mark.parametrize("value", [None, ""])
 def test_missing_values_become_none(value):
-    """AC9：缺值（None、Jira 舊資料的空字串）回 None，不是丟例外。"""
+    """AC2：缺值（None、空字串）回 None，不是丟例外。"""
     assert to_utc_datetime(value) is None
 
 
@@ -23,7 +23,7 @@ def test_missing_values_become_none(value):
     "2026-10-02T20:00:00+08:00",
 ])
 def test_iso_strings_with_offset_become_utc(value):
-    """AC9：Z、+00:00、Jira 沒有冒號的 +0800 字串，都轉成同一個 UTC 時間點，而且時區是 UTC。"""
+    """AC3：Z、+00:00、Jira 沒有冒號的 +0800 字串，都轉成同一個 UTC 時間點，而且時區是 UTC。"""
     result = to_utc_datetime(value)
 
     assert result == UTC_NOON
@@ -31,13 +31,13 @@ def test_iso_strings_with_offset_become_utc(value):
 
 
 def test_naive_values_are_treated_as_utc():
-    """AC9：不帶時區的 datetime 或字串視為 UTC，補上時區，時間值不變。"""
+    """AC3：不帶時區的 datetime 或字串視為 UTC，補上時區，時間值不變。"""
     assert to_utc_datetime(datetime(2026, 10, 2, 12, 0)) == UTC_NOON
     assert to_utc_datetime("2026-10-02T12:00:00") == UTC_NOON
 
 
 def test_aware_datetime_in_other_timezone_is_converted_to_utc():
-    """AC9：其他時區的 datetime 轉成 UTC，時間點不變。"""
+    """AC3：其他時區的 datetime 轉成 UTC，時間點不變。"""
     taipei = datetime(2026, 10, 2, 20, 0, tzinfo=timezone(timedelta(hours=8)))
 
     result = to_utc_datetime(taipei)

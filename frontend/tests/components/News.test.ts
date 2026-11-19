@@ -1,28 +1,28 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { mount } from '@vue/test-utils'
-import { ref, defineComponent, h, Suspense } from 'vue'
-import flushPromises from 'flush-promises'
-import News from '@/components/dashboard/News.vue'
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { mount } from '@vue/test-utils';
+import { ref, defineComponent, h, Suspense } from 'vue';
+import flushPromises from 'flush-promises';
+import News from '@/components/dashboard/News.vue';
 
-type Story = { title: string; url: string; publishedAt: string }
+type Story = { title: string; url: string; publishedAt: string };
 
 /* 把 useLazyAsyncData 直接放進 globalThis；回傳值由每個測試自己設定，
    傳進來的抓資料函式也記下來，才能單獨測「怎麼抓、怎麼轉格式」 */
-const dataRef = ref<Story[] | null>(null)
-const statusRef = ref('success')
-const errorRef = ref<unknown>(null)
-let capturedHandler: (() => Promise<Story[]>) | null = null
+const dataRef = ref<Story[] | null>(null);
+const statusRef = ref('success');
+const errorRef = ref<unknown>(null);
+let capturedHandler: (() => Promise<Story[]>) | null = null;
 vi.stubGlobal('useLazyAsyncData', (_key: string, handler: () => Promise<Story[]>) => {
-  capturedHandler = handler
-  return { data: dataRef, status: statusRef, error: errorRef }
-})
+  capturedHandler = handler;
+  return { data: dataRef, status: statusRef, error: errorRef };
+});
 
 const fourStories: Story[] = [
   { title: 'Story A', url: 'https://a.com', publishedAt: '2025-05-16 12:00' },
   { title: 'Story B', url: 'https://b.com', publishedAt: '2025-05-16 13:00' },
   { title: 'Story C', url: 'https://c.com', publishedAt: '2025-05-16 14:00' },
   { title: 'Story D', url: 'https://d.com', publishedAt: '2025-05-16 15:00' },
-]
+];
 
 /* stub 外部 UI（保留 slot 的照舊） */
 const SlotStub = defineComponent({

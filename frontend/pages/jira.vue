@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { useUser } from '@clerk/vue'
-import { usePlatformItems } from '~/composables/usePlatformItems'
-import AppHeader from '~/components/header/AppHeader.vue'
-import JiraIssuesList from '~/components/platforms/JiraIssuesList.vue'
-import LoginRequiredCard from '~/components/LoginRequiredCard.vue'
+import { useUser } from '@clerk/vue';
+import { usePlatformItems } from '~/composables/usePlatformItems';
+import AppHeader from '~/components/header/AppHeader.vue';
+import JiraIssuesList from '~/components/platforms/JiraIssuesList.vue';
+import LoginRequiredCard from '~/components/LoginRequiredCard.vue';
 
-const { isSignedIn } = useUser()
+const { isSignedIn } = useUser();
 const { items, account, fetchItems, syncNow, syncing, isStale, syncedAt, authError, notLinked, needsReauth, unavailable, loading } = usePlatformItems('jira')
 
 watch(isSignedIn, (signedIn) => {

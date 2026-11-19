@@ -1,5 +1,5 @@
-import { useAuth } from '@clerk/vue'
-import { watch } from 'vue'
+import { useAuth } from '@clerk/vue';
+import { watch } from 'vue';
 import { describeError, getFriendlyErrorTitle, isAuthError, isNotLinkedError, logApiError } from '@/utils/errorMessages'
 import type { GitHubIssue } from '@/types/github'
 import type { JiraIssue } from '@/types/jira'

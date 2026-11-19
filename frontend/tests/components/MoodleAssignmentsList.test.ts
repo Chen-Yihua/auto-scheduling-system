@@ -1,13 +1,14 @@
-import { describe, it, expect, vi } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { describe, it, expect, vi } from 'vitest';
+import { mount } from '@vue/test-utils';
 
-import { h, defineComponent } from 'vue'
+import { h, defineComponent } from 'vue';
 
-import MoodleAssignmentsList from '~/components/platforms/MoodleAssignmentsList.vue'
-import type { MoodleAssignment } from '~/types/moodle'
+import MoodleAssignmentsList from '~/components/platforms/MoodleAssignmentsList.vue';
+import StaleDataBanner from '~/components/platforms/StaleDataBanner.vue';
+import type { MoodleAssignment } from '~/types/moodle';
 
-const openSpy = vi.fn()
-vi.stubGlobal('open', openSpy)
+const openSpy = vi.fn();
+vi.stubGlobal('open', openSpy);
 
 // UCard 預設的 stub 不渲染 slot，改用會渲染 slot 的假元件
 const UCardStub = defineComponent({
@@ -33,7 +34,7 @@ const uiStubs = {
   UAlert: true,
   NuxtLink: { template: '<a><slot /></a>' },
 }
-const render = (props: { assignments?: MoodleAssignment[]; loading?: boolean; notLinked?: boolean; needsReauth?: boolean; unavailable?: boolean; limit?: number } = {}) =>
+const render = (props: { assignments?: MoodleAssignment[]; loading?: boolean; notLinked?: boolean; needsReauth?: boolean; unavailable?: boolean; limit?: number; authError?: boolean; syncedAt?: string | null } = {}) =>
   mount(MoodleAssignmentsList, {
     props: { assignments: [], loading: false, ...props },
     global: { stubs: uiStubs },
@@ -50,7 +51,7 @@ describe('MoodleAssignmentsList.vue', () => {
   it('Loading 顯示 icon', () => {
     const wrapper = render({ loading: true })
     expect(wrapper.find('u-icon-stub').exists()).toBe(true)
-  })
+  });
 
   it('有作業時渲染卡片並可點擊開啟', async () => {
     const wrapper = render({
@@ -98,5 +99,21 @@ describe('MoodleAssignmentsList.vue', () => {
     const wrapper = render({ needsReauth: true })
     expect(wrapper.text()).toContain('重新連結')
     expect(wrapper.text()).not.toContain('尚未綁定')
+  })
+
+  it('AC5：授權失效提示收到 Moodle 清單是否有項目的資料狀態', () => {
+    const withItem = mount(MoodleAssignmentsList, {
+      props: {
+        assignments: [{ course_name: '課程 A', title: '作業', due_date: '2025-07-01', url: 'https://moodle/hw1' }],
+        loading: false,
+        authError: true,
+        syncedAt: null,
+      },
+      global: { stubs: uiStubs },
+    })
+    const empty = render({ assignments: [], authError: true, syncedAt: null })
+
+    expect(withItem.findComponent(StaleDataBanner).props('hasItems')).toBe(true)
+    expect(empty.findComponent(StaleDataBanner).props('hasItems')).toBe(false)
   })
 })

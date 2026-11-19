@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import { useRouter } from 'vue-router'
-import { useSchedule } from '~/composables/useSchedule'
-import { useGoogleCalendar } from '~/composables/useGoogleCalendar'
-import { priorityLabel } from '~/utils/labels'
+import { ref } from 'vue';
+import { useRouter } from 'vue-router';
+import { useSchedule } from '~/composables/useSchedule';
+import { useGoogleCalendar } from '~/composables/useGoogleCalendar';
+import { priorityLabel } from '~/utils/labels';
 
 const { loading, scheduled, unscheduled, notLinked, hasFetched, confirming, confirmSchedule } = useSchedule()
 const { fetchGoogleCalendars } = useGoogleCalendar()

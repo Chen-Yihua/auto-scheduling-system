@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { $fetch as ofetch } from 'ofetch'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { $fetch as ofetch } from 'ofetch';
 
 import { backendRetryFetchOptions, decideRetry, isBackendRequest, type RetryInput } from '~/utils/fetchRetry'
 
@@ -25,7 +25,7 @@ describe('decideRetry：需求 7 的重送規則（AC9）', () => {
   it('第 2 次重送前等 1 秒；送滿 3 次（第 1 次加 2 次重送）後不再重送', () => {
     expect(decideRetry(input({ status: 503, attempt: 2 }))).toEqual({ retry: true, delayMs: 1000 })
     expect(decideRetry(input({ status: 503, attempt: 3 }))).toEqual({ retry: false })
-  })
+  });
 
   it.each([
     ['400 INVALID_REQUEST', { status: 400, errorCode: 'INVALID_REQUEST' }],

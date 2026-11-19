@@ -1,23 +1,23 @@
-import { describe, it, expect } from 'vitest'
-import { mount } from '@vue/test-utils'
-import { h, defineComponent } from 'vue'
+import { describe, it, expect } from 'vitest';
+import { mount } from '@vue/test-utils';
+import { h, defineComponent } from 'vue';
 
-import LoginRequiredCard from '~/components/LoginRequiredCard.vue'
+import LoginRequiredCard from '~/components/LoginRequiredCard.vue';
 
 const stubs = {
   UCard: defineComponent({
     setup(_props, { slots }) {
-      return () => h('div', { class: 'ucard' }, [slots.header?.(), slots.default?.()])
+      return () => h('div', { class: 'ucard' }, [slots.header?.(), slots.default?.()]);
     },
   }),
   // 假元件把 name 印成屬性，才看得出用了哪個圖示
   UIcon: defineComponent({
     props: { name: { type: String, default: '' } },
     setup(props) {
-      return () => h('i', { 'data-icon': props.name })
+      return () => h('i', { 'data-icon': props.name });
     },
   }),
-}
+};
 
 describe('LoginRequiredCard.vue', () => {
   it('顯示跟真實卡片一樣的標題與圖示，內容區放提示文字', () => {

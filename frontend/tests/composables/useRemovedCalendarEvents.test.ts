@@ -1,24 +1,24 @@
 // 規格：docs/specs/issue-42-removed-calendar-events.md
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-import { useRemovedCalendarEvents } from '~/composables/useRemovedCalendarEvents'
-import type { RemovedCalendarEvent } from '~/types/schedule'
+import { useRemovedCalendarEvents } from '~/composables/useRemovedCalendarEvents';
+import type { RemovedCalendarEvent } from '~/types/schedule';
 
 vi.mock('@clerk/vue', () => ({
   useAuth: () => ({
     getToken: { value: vi.fn().mockResolvedValue('jwt-token') },
   }),
-}))
+}));
 
 vi.stubGlobal('useRuntimeConfig', () => ({
   public: { apiBaseUrl: 'http://api' },
-}))
+}));
 
-let fetchSpy = vi.fn()
-vi.stubGlobal('$fetch', (...args: unknown[]) => fetchSpy(...args))
+let fetchSpy = vi.fn();
+vi.stubGlobal('$fetch', (...args: unknown[]) => fetchSpy(...args));
 
-const reauthError = { response: { status: 409 }, data: { error_code: 'REAUTH_REQUIRED' } }
-const upstreamError = { response: { status: 502 }, data: { error_code: 'UPSTREAM_ERROR' } }
+const reauthError = { response: { status: 409 }, data: { error_code: 'REAUTH_REQUIRED' } };
+const upstreamError = { response: { status: 502 }, data: { error_code: 'UPSTREAM_ERROR' } };
 
 function removed(overrides: Partial<RemovedCalendarEvent> = {}): RemovedCalendarEvent {
   return {

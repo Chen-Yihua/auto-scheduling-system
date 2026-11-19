@@ -17,4 +17,4 @@ export interface DailyChallengeResponse {
   }
 
 // GET /api/leetcode 的回傳內容
-export type DailyChallenge = DailyChallengeResponse['data']['activeDailyCodingChallengeQuestion']
+export type DailyChallenge = DailyChallengeResponse['data']['activeDailyCodingChallengeQuestion'];

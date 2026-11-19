@@ -1,33 +1,33 @@
 <script setup lang="ts">
-import type { DailyChallenge } from '~/types/leetcode'
-import { leetcodeDifficultyLabel } from '~/utils/labels'
+import type { DailyChallenge } from '~/types/leetcode';
+import { leetcodeDifficultyLabel } from '~/utils/labels';
 
 const data = ref<DailyChallenge | null>(null);
 const error = ref<{ message: string } | null>(null);
-const toast = useToast()
-const isCollapsed = ref(true)
+const toast = useToast();
+const isCollapsed = ref(true);
 
 async function fetchData() {
   try {
-    error.value = null
+    error.value = null;
     
-    data.value = await $fetch<DailyChallenge>('/api/leetcode')
+    data.value = await $fetch<DailyChallenge>('/api/leetcode');
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : '發生未知錯誤'
-    error.value = { message: msg }
+    const msg = e instanceof Error ? e.message : '發生未知錯誤';
+    error.value = { message: msg };
     toast.add({
       title: 'API 呼叫失敗',
       description: msg,
       icon: 'i-lucide-alert-circle',
       color: 'error',
-    })
+    });
   }
 }
 
 // 只在 client side 執行，避免 SSR 序列化錯誤
 onMounted(() => {
-  fetchData()
-})
+  fetchData();
+});
 
 const fullLink = computed(() =>
   data.value?.link

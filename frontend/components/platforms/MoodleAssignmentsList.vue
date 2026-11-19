@@ -1,34 +1,34 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import type { MoodleAssignment } from '~/types/moodle'
-import StaleDataBanner from './StaleDataBanner.vue'
-import SyncStatus from './SyncStatus.vue'
+import { computed } from 'vue';
+import type { MoodleAssignment } from '~/types/moodle';
+import StaleDataBanner from './StaleDataBanner.vue';
+import SyncStatus from './SyncStatus.vue';
 const props = defineProps<{
-  assignments: MoodleAssignment[]
-  loading: boolean
-  isStale?: boolean
-  syncedAt?: string | null
-  authError?: boolean
-  notLinked?: boolean
+  assignments: MoodleAssignment[];
+  loading: boolean;
+  isStale?: boolean;
+  syncedAt?: string | null;
+  authError?: boolean;
+  notLinked?: boolean;
   // 已存的憑證無法讀取，要重新連結
-  needsReauth?: boolean
+  needsReauth?: boolean;
   // 帳號檢查失敗而且沒有已知的結果
-  unavailable?: boolean
+  unavailable?: boolean;
   // 不傳則顯示全部
-  limit?: number
+  limit?: number;
   // 有傳才顯示「立即同步」按鈕
-  onSync?: () => void | Promise<void>
-  syncing?: boolean
-}>()
+  onSync?: () => void | Promise<void>;
+  syncing?: boolean;
+}>();
 
 const displayedAssignments = computed(() =>
   props.limit ? props.assignments.slice(0, props.limit) : props.assignments
-)
-const hasMoreAssignments = computed(() => !!props.limit && props.assignments.length > props.limit)
+);
+const hasMoreAssignments = computed(() => !!props.limit && props.assignments.length > props.limit);
 
 const openAssignment = (url: string) => {
-  window.open(url, '_blank')
-}
+  window.open(url, '_blank');
+};
 </script>
 
 
@@ -43,7 +43,13 @@ const openAssignment = (url: string) => {
 
     <SyncStatus :synced-at="syncedAt ?? null" :on-sync="onSync" :syncing="syncing ?? false" />
 
-    <StaleDataBanner :stale="isStale ?? false" :synced-at="syncedAt ?? null" :auth-error="authError ?? false" platform-label="Moodle" />
+    <StaleDataBanner
+      :stale="isStale ?? false"
+      :synced-at="syncedAt ?? null"
+      :has-items="assignments.length > 0"
+      :auth-error="authError ?? false"
+      platform-label="Moodle"
+    />
 
     <div
       v-if="unavailable"
@@ -101,4 +107,3 @@ const openAssignment = (url: string) => {
     </template>
   </UCard>
 </template>
-

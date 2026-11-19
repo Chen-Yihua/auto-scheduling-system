@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref } from 'vue';
 
 const { data: stories, error, status } = await useLazyAsyncData('hackerNews', async () => {
   const ids = await $fetch<number[]>('https://hacker-news.firebaseio.com/v0/topstories.json')

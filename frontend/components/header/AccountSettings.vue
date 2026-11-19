@@ -23,8 +23,8 @@ const copyKey = (platform: string, key: string, isMasked?: boolean) => {
       title: '此金鑰已隱藏，無法複製',
       description: '請重新輸入以更新金鑰',
       color: 'warning',
-    })
-    return
+    });
+    return;
   }
   navigator.clipboard.writeText(key).then(() => {
     copiedKey.value = platform

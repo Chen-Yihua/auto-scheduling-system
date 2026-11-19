@@ -1,40 +1,40 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import type { JiraIssue } from '~/types/jira'
-import StaleDataBanner from './StaleDataBanner.vue'
-import SyncStatus from './SyncStatus.vue'
+import { computed } from 'vue';
+import type { JiraIssue } from '~/types/jira';
+import StaleDataBanner from './StaleDataBanner.vue';
+import SyncStatus from './SyncStatus.vue';
 
 const props = defineProps<{
-  issues: JiraIssue[]
-  loading: boolean
+  issues: JiraIssue[];
+  loading: boolean;
   domain?: string // 可選，從 props 傳入 Jira 網域
-  isStale?: boolean
-  syncedAt?: string | null
-  authError?: boolean
-  notLinked?: boolean
+  isStale?: boolean;
+  syncedAt?: string | null;
+  authError?: boolean;
+  notLinked?: boolean;
   // 已存的憑證無法讀取，要重新連結
-  needsReauth?: boolean
+  needsReauth?: boolean;
   // 帳號檢查失敗而且沒有已知的結果
-  unavailable?: boolean
+  unavailable?: boolean;
   // 不傳則顯示全部
-  limit?: number
+  limit?: number;
   // 有傳才顯示「立即同步」按鈕
-  onSync?: () => void | Promise<void>
-  syncing?: boolean
-}>()
+  onSync?: () => void | Promise<void>;
+  syncing?: boolean;
+}>();
 
 const displayedIssues = computed(() =>
   props.limit ? props.issues.slice(0, props.limit) : props.issues
-)
-const hasMoreIssues = computed(() => !!props.limit && props.issues.length > props.limit)
+);
+const hasMoreIssues = computed(() => !!props.limit && props.issues.length > props.limit);
 
 const openJiraIssue = (key: string) => {
   // 沒有 domain 時不能用寫死的網域，否則會連到別人的 Jira
-  if (!props.domain) return
+  if (!props.domain) return;
   // domain 可能帶 https://
-  const domain = props.domain.replace(/^https?:\/\//, '')
-  window.open(`https://${domain}/browse/${key}`, '_blank')
-}
+  const domain = props.domain.replace(/^https?:\/\//, '');
+  window.open(`https://${domain}/browse/${key}`, '_blank');
+};
 </script>
 
 <template>
@@ -51,6 +51,7 @@ const openJiraIssue = (key: string) => {
     <StaleDataBanner
       :stale="isStale ?? false"
       :synced-at="syncedAt ?? null"
+      :has-items="issues.length > 0"
       :auth-error="authError ?? false"
       platform-label="Jira"
     />

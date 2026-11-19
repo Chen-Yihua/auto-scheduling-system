@@ -254,7 +254,7 @@
     - `feature:36` 改成「5. **漏洞**：照 CLAUDE.md「漏洞」。」
     - `feature:67` 的「照 `implement-and-review`「漏洞的處理」」改成「照 CLAUDE.md「漏洞」」。
     - `issue:41` 的「（可被利用的漏洞照 `implement-and-review`「漏洞的處理」，不開 issue）」改成「（可被利用的漏洞照 CLAUDE.md「漏洞」，不開 issue）」。
-    - `implement-and-review:105` 改成「漏洞的定義與細節不能出現的地方見 CLAUDE.md「漏洞」。這裡只寫主 session 怎麼處理，不定義漏洞的修復與發布流程。」
+    - `implement-and-review:105` 改成「漏洞的定義見 `docs/reviews/README.md`「涉及安全／架構」；細節不能出現的地方見 CLAUDE.md「漏洞」。這裡只寫主 session 怎麼處理，不定義漏洞的修復與發布流程。」
     - `implement-and-review:107` 改成「1. 暫停目前的開發流程，不再交給 `feature-implementer` 任何修正。」`:108` 刪掉，後面的步驟重新編號（第 3 步變第 2 步，第 4 步變第 3 步）。
     - `feature-implementer:20` 改成「發現可被利用的漏洞時（不用等指示），照 CLAUDE.md「漏洞」。之後照開發者決定的方式處理。」
     - `docs/issues.md:42` 改成「- 可被利用的漏洞不開 issue，照 CLAUDE.md「漏洞」。」
@@ -316,6 +316,8 @@
     - `feature:33`（硬規則 2）改成「2. **核准前只寫草稿資料夾**（`.drafts/`），不改 repo 裡其他檔案、不開分支。這次開發的暫存檔都以 `<功能>-` 開頭，只建立 `references/resume.md` 暫存檔表上的暫存檔；種類與遺失時的恢復方式見同一張表。」
     - `write-spec:41` 的「以及第 1 次報告在 scratchpad 的路徑」改成「以及第 1 次報告與上一版規格（`<功能>-spec-v<N>.md`）在草稿資料夾的路徑」。
     - `write-spec:48` 的「每一輪的報告原文存在 scratchpad。」改成「每一輪的報告原文存成草稿資料夾的 `<功能>-spec-review-r<N>.md`。」`implement-and-review:130` 的「審查完把報告原文存在 scratchpad」改成「審查完把報告原文存成草稿資料夾的 `<功能>-impl-review-r<N>.md`」。
+    - `CLAUDE.md:28` 的「`-F body=@<檔案>`」改成「`-F body=@.drafts/<功能>-pr-body.md`」（`feature-implementer` 更新 PR 描述時也用這個檔）。
+    - `implement-and-review` 的「漏洞的處理」查重複那一步的「`gh api -X PATCH repos/{owner}/{repo}/security-advisories/<GHSA> --input <檔案>`」改成「先把要更新的內容寫進草稿資料夾的 `<功能>-advisory.json`，再 `gh api -X PATCH repos/{owner}/{repo}/security-advisories/<GHSA> --input <功能>-advisory.json`」。
     - `implement-and-review` 的「漏洞的處理」建立 advisory 那一步：「把下面的 JSON 寫進暫存檔（放 scratchpad，不放 repo）」改成「把下面的 JSON 寫進草稿資料夾的 `<功能>-advisory.json`」。
 38. `feature`「清理暫存」最後加上：「確認完，刪掉草稿資料夾裡這次的暫存檔：只刪 `references/resume.md` 暫存檔表列出的檔名，不用「`<功能>-` 開頭」比對，避免刪到名稱開頭相同的其他功能。回報後還要修改時，照 `references/resume.md` 從 PR 分支複製回來。」
 39. `feature`「取消」最後加上：「術語處理完，照「清理暫存」的方式刪掉這次的暫存檔。」
@@ -325,6 +327,7 @@
     - `:17` 的「舊 scratchpad 不存在，或缺了部分檔案時」改成「草稿資料夾裡這次的暫存檔不見了，或缺了部分時」。
     - 暫存檔表加一列：「| advisory 的內容 | `<功能>-advisory.json` | 「漏洞的處理」建立 advisory | 以 GitHub 上的 advisory 為準（用 GHSA 編號讀回），不重建 |」。
     - 暫存檔表加一列：「| 上一版規格 | `<功能>-spec-v<N>.md` | 第 2 次規格審查送審前，把第 1 次審查時的規格存成這個檔 | 只用來比對改了什麼，不恢復；遺失時第 2 次審查只附修改內容與原因 |」。
+    - 暫存檔表加一列：「| PR 描述 | `<功能>-pr-body.md` | 回報、更新 PR 描述 | 以 GitHub 上的 PR 描述為準（`gh api … --jq .body` 讀回），不重建 |」。
     - 暫存檔表「審查報告原文」那一列的檔名從「各輪報告」改成「`<功能>-spec-review-r<N>.md`、`<功能>-impl-review-r<N>.md`（N 是第幾輪）」。
     - 表前的說明「這張表是暫存檔唯一的清單。」後面加：「每一列都寫出確切的檔名；清理、取消、開始前的檢查都用這些檔名比對。」
 41. ADR 0014 照 `issue-148-adr-drafts-folder.md` 存成 `docs/decisions/0014-drafts-folder.md`；`docs/decisions/README.md` 的清單加一列「| [0014](0014-drafts-folder.md) | 核准前的草稿放在 repo 內被 git 排除的 `.drafts/` | 已採用 |」。
@@ -378,6 +381,7 @@
 | AC23 | PR 描述有 `Closes #147` 與 `Closes #148` |
 | AC24 | `resume.md` 暫存檔表每一列都寫出確切檔名（包括審查報告原文、上一版規格與 advisory 的 JSON）；`feature` 硬規則 2 寫明只建立表上的暫存檔；`feature`「清理暫存」「取消」只刪這些檔名 |
 | AC25 | `feature`「流程」寫明：開始前草稿資料夾已有這次的暫存檔時，先問開發者接續或刪掉重來 |
+| AC27 | 流程裡要先寫成檔案再交給 `gh` 的內容（PR 描述、advisory 的建立與更新），在 `resume.md` 暫存檔表上都有確切檔名 |
 | AC26 | 合併前開發者跑 `/doctor prompt-audit`，結果裡沒有範圍內的檔案互相矛盾、或引用不存在的檔案的發現；有的話，主 session 逐項處理 |
 
 ## 不適用的情境
@@ -431,6 +435,7 @@
 | AC23 | 跑 AC23 的指令 | 兩行 |
 | AC24 | 讀 `resume.md` 暫存檔表、`feature` 硬規則 2 與「清理暫存」「取消」 | 每一列的檔名欄沒有「各輪報告」這種沒有檔名的寫法，有「上一版規格」那一列；硬規則 2 和需求 37 相同；清理、取消照需求 38、39 |
 | AC25 | 讀 `feature`「流程」 | 有需求 43 那一段 |
+| AC27 | 跑 AC27 的指令；讀 `resume.md` 暫存檔表 | 每個 `body=@`、`--input` 後面的檔名都是暫存檔表上的檔名（`<功能>-pr-body.md`、`<功能>-advisory.json`） |
 | AC26 | 開發者在 Claude Code 跑 `/doctor prompt-audit`，把結果貼給主 session | 沒有範圍內檔案的矛盾或失效引用；有的話主 session 照 `implement-and-review`「規格問題的處理」處理 |
 
 ```bash
@@ -488,6 +493,8 @@ diff <ADR 草稿的路徑> docs/decisions/0014-drafts-folder.md
 git diff origin/main...HEAD -- docs/decisions/0008-*.md docs/decisions/0009-*.md docs/decisions/0010-*.md
 # AC22（<名稱> 換成要找的節名稱）
 grep -n -e '^#.*<名稱>' -e '\*\*<名稱>\*\*' <檔案>
+# AC27
+grep -n -e 'body=@' -e '--input' $F
 # AC23
 gh api repos/{owner}/{repo}/pulls/<PR> --jq .body | grep -n 'Closes #14[78]'
 ```
@@ -496,6 +503,8 @@ gh api repos/{owner}/{repo}/pulls/<PR> --jq .body | grep -n 'Closes #14[78]'
 
 | 日期 | 修改 | 原因 | 確認者 |
 |---|---|---|---|
+| 2026-11-20 | 需求 40 的暫存檔表加「PR 描述」`<功能>-pr-body.md`；需求 37 寫明 `CLAUDE.md:28` 的 PR 描述檔與更新 advisory 也用暫存檔表的檔名；新增 AC27 | 開發者決定要先寫成檔案再交給 `gh` 的內容都放進暫存檔表 → 需求 37、40、AC27（實作審查 #1）；檢查過 AC24、AC19 不用改，Q38「只建立表上的暫存檔」不變 | 開發者 |
+| 2026-11-20 | 需求 17 的 `implement-and-review:105` 改成直接連到 `docs/reviews/README.md`「涉及安全／架構」 | 開發者決定漏洞的定義直接連到原文 → 需求 17、AC16（實作審查 #2）；檢查過需求 16、AC13 不用改 | 開發者 |
 
 ## 請你決定
 

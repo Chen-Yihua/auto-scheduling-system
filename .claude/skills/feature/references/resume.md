@@ -29,6 +29,7 @@
 | 審查報告原文 | `<功能>-spec-review-r<N>.md`、`<功能>-impl-review-r<N>.md`（N 是第幾輪） | 該次審查 | 已整理進審查紀錄的部分以紀錄為準；沒有整理的請開發者選擇重跑該次審查或不補 |
 | 上一版規格 | `<功能>-spec-v<N>.md` | 第 2 次規格審查送審前，把第 1 次審查時的規格存成這個檔 | 只用來比對改了什麼，不恢復；遺失時第 2 次審查只附修改內容與原因 |
 | advisory 的內容 | `<功能>-advisory.json` | 「漏洞的處理」建立 advisory | 以 GitHub 上的 advisory 為準（用 GHSA 編號讀回），不重建 |
+| PR 描述 | `<功能>-pr-body.md` | 回報、更新 PR 描述 | 以 GitHub 上的 PR 描述為準（`gh api … --jq .body` 讀回），不重建 |
 
 重跑審查的發現：核准前照 `write-spec`「處理發現」，核准後照 `implement-and-review`「規格問題的處理」與「發現處理表」；重跑同一次不另計次數。
 

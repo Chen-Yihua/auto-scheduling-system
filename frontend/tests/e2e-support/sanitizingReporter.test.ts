@@ -107,6 +107,22 @@ describe('sanitizeReportText：文字規則', () => {
   })
 })
 
+describe('sanitizeReportText：長字串', () => {
+  const BASE64_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+
+  function elapsedMs(input: string) {
+    const start = performance.now()
+    text(input)
+    return performance.now() - start
+  }
+
+  it('#50 AC22：10 萬個 A 與 10 萬字元的 base64 字串，各在 500 毫秒內清理完', () => {
+    const base64 = Array.from({ length: 100_000 }, (_, i) => BASE64_CHARS[i % BASE64_CHARS.length]).join('')
+    expect(elapsedMs('A'.repeat(100_000))).toBeLessThan(500)
+    expect(elapsedMs(base64)).toBeLessThan(500)
+  }, 120_000)
+})
+
 describe('sanitizeReportValue：結構規則', () => {
   it('#50 AC12：欄位名稱是敏感名稱時，值整個換成 [redacted]', () => {
     expect(

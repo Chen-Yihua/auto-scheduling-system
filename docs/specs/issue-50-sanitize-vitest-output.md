@@ -2,7 +2,7 @@
 
 - 狀態：已核准
 - 等級：高風險（改的是「token、email 不出現在公開的 CI log」這項保證）
-- issue：[#50](https://github.com/Chen-Yihua/auto-scheduling-system/issues/50)、[#129](https://github.com/Chen-Yihua/auto-scheduling-system/issues/129)、[#143](https://github.com/Chen-Yihua/auto-scheduling-system/issues/143)
+- issue：[#50](https://github.com/Chen-Yihua/auto-scheduling-system/issues/50)、[#129](https://github.com/Chen-Yihua/auto-scheduling-system/issues/129)
 - PR：#142
 
 ## 簡短說明
@@ -65,7 +65,7 @@ e2e 測試失敗時，vitest 會把 diff、錯誤的其他屬性、hook 錯誤�
 - Nuxt server 自己的輸出不處理。
 - vitest 在測試開始前自己印的錯誤（例如設定檔載入失敗）不處理：不經過 reporter，那時也還沒有執行時產生的值。
 - `cause` 不是 `Error` 時的顯示不改（#51）。
-- #46 的 `withSanitizedErrors`、`sanitizeError`、`createDiagnosticLogger`、`sanitizeForLog` 的行為不變；只改 `sanitizeForLog` 裡 email regex 的寫法，讓長字串不會變慢（AC22），清理結果不變。
+- #46 的 `withSanitizedErrors`、`sanitizeError`、`createDiagnosticLogger`、`sanitizeForLog` 保留不動。
 - unit 測試的設定（`vitest.config.ts`）不加清理用的 reporter：unit 測試不接觸真的帳號與 token。
 - 不改正式程式與 `.github/workflows/`。
 
@@ -100,7 +100,6 @@ e2e 測試失敗時，vitest 會把 diff、錯誤的其他屬性、hook 錯誤�
 | AC19 | 文字規則 7：`dvb_`（Clerk dev browser token 的開頭）前面不是英數字或 `_`、後面接英數字時，`dvb_` 和後面的英數字換成 `[redacted]`。`"expected 'dvb_2abcXYZ' to be 'x'"` 完全等於 `"expected '[redacted]' to be 'x'"` | 不變條件（安全） |
 | AC20 | 登入失敗時印出的登入後診斷，經過清理後仍看得到 session 有沒有建立、有哪些 cookie 名稱：`'{\n  "clerkState": {\n    "hasClerkSid": true\n  },\n  "browserStorageNames": [\n    "__clerk_db_jwt",\n    "__session"\n  ]\n}'` 經過 `sanitizeReportText` 後不變 | 使用者行為（開發者看 CI log） |
 | AC21 | 文字規則 8（拿掉 ANSI 色碼之後、其他規則之前）：字串裡有一行符合 `@@ -<數字>,<數字> +<數字>,<數字> @@`（diff 只印出一部分的標頭）時，整個字串換成 `[diff omitted]`。`'- Expected\n+ Received\n\n@@ -18,8 +18,16 @@\n+     84,\n+     79,\n    ],'` 完全等於 `'[diff omitted]'`；`'  Uint8Array [\n+   1,\n  ]'` 不受這條規則影響（照 AC10 處理） | 不變條件（安全） |
-| AC22 | 很長、沒有空白的字串，清理時間和長度大致成正比：`sanitizeReportText` 處理 10 萬個 `A`，以及 10 萬字元的 base64 字串（`A`～`Z`、`a`～`z`、`0`～`9`、`+`、`/` 組成），各在 500 毫秒內完成 | 不變條件 |
 
 ## 不適用的情境
 | 情境 | 原因 |
@@ -155,12 +154,7 @@ e2e 測試失敗時，vitest 會把 diff、錯誤的其他屬性、hook 錯誤�
      - 兩次執行都設定 `diff: { expand: true }`，和 `vitest.e2e.config.ts` 相同。
      - 另外用 `['default', 'github-actions']` 跑一次（沒有清理用的 reporter）。
 6. `frontend/README.md`「測試」的 E2E 項目加一句：印進 CI log 的錯誤與 `console` 輸出由 `tests/e2e/support/sanitizingReporter.ts` 清理，改 `reporters` 時要保留它排第一個。
-7. PR 描述加上 `Closes #50`、`Closes #129`、`Closes #143`。
-8. 長字串的效能（AC22）：
-   - 原因：規則 3 的 regex（`sanitizingReporter.ts` 的 `NAME_WITH_SEPARATOR`）和 `sanitizeForLog` 的 email regex（`frontend/tests/e2e/support/signInWithRetry.ts:88`）會從一串字的每個位置開始比對、再往回試，時間隨長度平方成長（3 萬字元時分別約 1.1 秒、0.8 秒）。
-   - 兩個 regex 開頭都加上 lookbehind（「前一個字元不是同一類字元」才開始比對）：規則 3 加 `(?<![A-Za-z0-9_.-])`，email 加 `(?<![\w.+-])`。不設長度上限。
-   - 清理結果不變：能從一串字中間開始比對成功的，從那串字的開頭開始也一定成功，regex 本來就取最左邊的結果。#46 的 `signInWithRetry.test.ts` 與 AC6～AC21 的測試都不用改、全部要通過。
-   - 找網址的部分（`sanitizeUrlsInPart`）不用改：前一個字元是英數字時就跳過，10 萬字元的 base64 實測只要幾毫秒。
+7. PR 描述加上 `Closes #50`、`Closes #129`。
 
 ### 考慮過、沒選的做法
 - **diff 不完整印出，改加「開頭行不在畫面上」的文字規則**：規則變多，一般的數字陣列也會被遮（開發者選擇設定 `expand: true`；`expand` 管不到的兩種錯誤，開發者選擇整段不印）。
@@ -179,7 +173,6 @@ e2e 測試失敗時，vitest 會把 diff、錯誤的其他屬性、hook 錯誤�
 |---|---|
 | AC1、AC18 | `sanitizingReporter.test.ts`：讀 `vitest.e2e.config.ts` 匯出的設定，`test.diff.expand` 是 `true`；`GITHUB_ACTIONS` 是 `'true'` 時 `reporters` 的第一個是 `SanitizingReporter` 的實例，接著是 `'default'`、`'github-actions'`；不是 `'true'` 時只有前兩個。用 `vi.stubEnv` 與 `vi.resetModules` 重新載入設定檔；每次 `vi.resetModules` 後，設定檔和 `sanitizingReporter.ts` 都重新動態 import，再用 `instanceof` 比對，否則兩次載入的類別不同 |
 | AC2～AC5 | 整合測試：有清理用的 reporter 的輸出裡，每個執行時才組出來的機密（email、secret key、密碼、網址 query 的值、JWT、`Bearer` 後面的 token、cookie 的值，包括改動只在長陣列尾端的範例裡的 `dvb_` 值與 `Buffer` 尾端的位元組，以及沒被接住的長陣列比對錯誤裡的值）出現 0 次。位元組用 diff 印出的形式檢查（例如 `TOKENXYZ` 的每個位元組各成一行的那幾行）。沒有清理用的 reporter 的輸出裡，每個機密至少出現 1 次，證明範例真的會外洩、測試抓得到。AC5 只檢查 `default` 的輸出：`github-actions` 不印 `console` 內容 |
-| AC22 | `sanitizingReporter.test.ts`：`'A'.repeat(100_000)` 與 10 萬字元的 base64 字串各呼叫一次 `sanitizeReportText`，用 `performance.now()` 量，各小於 500 毫秒。改程式前約 20 秒以上，一定失敗 |
 | AC6～AC11、AC19～AC21 | `sanitizingReporter.test.ts`：每條 AC 的例子，`sanitizeReportText` 的結果用 `toBe` 比對 AC 寫的完整字串 |
 | AC12～AC14 | `sanitizingReporter.test.ts`：每條 AC 的例子，`sanitizeReportValue` 的結果用 `toEqual` 比對 AC 寫的完整物件 |
 | AC15 | `sanitizingReporter.test.ts`：`const a = { note: '/cb?code=abc' }; a.self = a`，清理會結束，結果的 `note` 是 `'/cb'`，`self` 指向結果本身；`const u8 = { '0': 1, constructor: 'Function<Uint8Array>' }; const v = { a: u8, b: { c: u8 } }` 清理後等於 `{ a: '[binary]', b: { c: '[binary]' } }` |
@@ -194,7 +187,6 @@ e2e 測試失敗時，vitest 會把 diff、錯誤的其他屬性、hook 錯誤�
 |---|---|---|---|
 | 2026-11-19 | 需求 8 的敏感名稱加 `refresh`；AC8、AC13 各補 `__refresh_AbCd` 的例子；「已接受的風險」加 `refresh` 會多遮的情況 | 開發者決定（實作審查第 1 輪 #1，選 A）：Clerk 的 `__refresh` cookie 存 refresh token，名稱不含既有的敏感名稱 → 需求 8、AC8、AC13、已接受的風險。檢查過 AC7（例子不含 refresh）、AC12（例子不變）、AC20（`browserStorageNames` 的元素後面沒有 `:`、`=`，不受影響）不用改 | 開發者 |
 | 2026-11-19 | 「已接受的風險」加「二進位類型找不到對應的 `]` 時遮到字串結尾」 | 開發者確認（實作審查第 1 輪 #3）→ 已接受的風險；程式已是這個行為，AC10、AC11 不用改 | 開發者 |
-| 2026-11-19 | 新增 AC22；「不做」改寫 `sanitizeForLog` 那一項；新增實作計畫 8；實作計畫 7 加 `Closes #143`；測試對應 AC22 | 開發者決定（實作審查第 1 輪 #2）在這個 PR 修長字串變慢：規則 3 與 email regex 加 lookbehind、不設長度上限 → AC22、不做、實作計畫 7、8、測試對應。檢查過 AC6～AC21 與 #46 規格 AC3～AC7 的清理結果不變（只改比對起點，結果相同），不用改 | 開發者 |
 
 ## 請你決定
 無

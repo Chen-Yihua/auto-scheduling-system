@@ -84,7 +84,7 @@ export function sanitizeForLog(text: string, secrets: string[]): string {
     result = result.split(secret).join('[redacted]').split(encodeURIComponent(secret)).join('[redacted]')
   }
   return result
-    .replace(/(?<![\w.+-])[\w.+-]+(@|%40)[\w-]+(\.[\w-]+)+/g, '[email]')
+    .replace(/[\w.+-]+(@|%40)[\w-]+(\.[\w-]+)+/g, '[email]')
     .replace(/eyJ[\w-]+\.[\w-]+\.[\w-]*/g, '[token]')
 }
 

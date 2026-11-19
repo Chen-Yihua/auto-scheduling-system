@@ -33,8 +33,7 @@ const REDACTED = '[redacted]'
 const BINARY = '[binary]'
 
 const PARTIAL_DIFF_HEADER = /@@ -\d+,\d+ \+\d+,\d+ @@/
-// 開頭的 lookbehind 不能拿掉：沒有它時，長串英數字會從每個位置重新比對，時間隨長度平方成長
-const NAME_WITH_SEPARATOR = /(?<![A-Za-z0-9_.-])["'`]?([A-Za-z0-9_.-]+)["'`]?\s*[:=]\s*/g
+const NAME_WITH_SEPARATOR = /["'`]?([A-Za-z0-9_.-]+)["'`]?\s*[:=]\s*/g
 const NAME_FIELD = /(?<![A-Za-z0-9_.-])["'`]?name["'`]?\s*[:=]\s*["'`]?([^"'`\s,}]*)/g
 const VALUE_FIELD = /(?<![A-Za-z0-9_.-])["'`]?value["'`]?\s*[:=]\s*/g
 const BEARER = /(Bearer )\S+/g

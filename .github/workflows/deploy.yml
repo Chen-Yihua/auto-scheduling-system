@@ -53,6 +53,8 @@ jobs:
   frontend-e2e-test:
     # 釘 24.04：ubuntu-latest 已換成 26.04，Playwright 1.52 不支援，裝不了瀏覽器
     runs-on: ubuntu-24.04
+    # 不設上限時卡住要等 GitHub 預設的 6 小時才會停；正常整個 job 約 10 分鐘
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: frontend
@@ -78,7 +80,9 @@ jobs:
       # 執行時去找的路徑對不起來，導致 "Executable doesn't exist"。
       # chromium-headless-shell 也要明確裝，@nuxt/test-utils 在 headless
       # 模式下預設會找這個變體，不會因為裝了 chromium 就自動連它一起裝。
+      # 正常 6～9 分鐘；卡住時不會自己失敗，曾卡過 2 小時以上
       - run: npx playwright install --with-deps chromium chromium-headless-shell
+        timeout-minutes: 20
       - run: npm run test:e2e
 
   deploy-backend:

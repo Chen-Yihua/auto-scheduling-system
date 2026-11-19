@@ -126,8 +126,8 @@ description: 整理交付清單交給 feature-implementer 實作與開 PR、交�
 
 1. 暫停目前的開發流程，不再交給 `feature-implementer` 任何修正。
 2. 可以提出建立 private security advisory 的方案（附上要填的內容），開發者確認後才建立：
-   1. 先查重複：`gh api --paginate repos/{owner}/{repo}/security-advisories --jq '.[] | {ghsa_id, summary, state}'`。已有相同問題時沿用它的 GHSA 編號，需要補充時先把要更新的內容寫進草稿資料夾的 `<功能>-advisory.json`，再 `gh api -X PATCH repos/{owner}/{repo}/security-advisories/<GHSA> --input <功能>-advisory.json` 更新 description，不另建。
-   2. 建立草稿 advisory（只有 repo 管理者看得到）：把下面的 JSON 寫進草稿資料夾的 `<功能>-advisory.json`，再 `gh api -X POST repos/{owner}/{repo}/security-advisories --input <功能>-advisory.json`。
+   1. 先查重複：`gh api --paginate repos/{owner}/{repo}/security-advisories --jq '.[] | {ghsa_id, summary, state}'`。已有相同問題時沿用它的 GHSA 編號，需要補充時先把要更新的內容寫進草稿資料夾的 `<功能>-advisory.json`，再 `gh api -X PATCH repos/{owner}/{repo}/security-advisories/<GHSA> --input .drafts/<功能>-advisory.json` 更新 description，不另建。
+   2. 建立草稿 advisory（只有 repo 管理者看得到）：把下面的 JSON 寫進草稿資料夾的 `<功能>-advisory.json`，再 `gh api -X POST repos/{owner}/{repo}/security-advisories --input .drafts/<功能>-advisory.json`。
       ```json
       {
         "summary": "<一句話>",

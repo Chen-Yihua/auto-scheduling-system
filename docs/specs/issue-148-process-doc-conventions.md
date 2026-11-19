@@ -317,7 +317,7 @@
     - `write-spec:41` 的「以及第 1 次報告在 scratchpad 的路徑」改成「以及第 1 次報告與上一版規格（`<功能>-spec-v<N>.md`）在草稿資料夾的路徑」。
     - `write-spec:48` 的「每一輪的報告原文存在 scratchpad。」改成「每一輪的報告原文存成草稿資料夾的 `<功能>-spec-review-r<N>.md`。」`implement-and-review:130` 的「審查完把報告原文存在 scratchpad」改成「審查完把報告原文存成草稿資料夾的 `<功能>-impl-review-r<N>.md`」。
     - `CLAUDE.md:28` 的「`-F body=@<檔案>`」改成「`-F body=@.drafts/<功能>-pr-body.md`」（`feature-implementer` 更新 PR 描述時也用這個檔）。
-    - `implement-and-review` 的「漏洞的處理」查重複那一步的「`gh api -X PATCH repos/{owner}/{repo}/security-advisories/<GHSA> --input <檔案>`」改成「先把要更新的內容寫進草稿資料夾的 `<功能>-advisory.json`，再 `gh api -X PATCH repos/{owner}/{repo}/security-advisories/<GHSA> --input <功能>-advisory.json`」。
+    - `implement-and-review` 的「漏洞的處理」查重複那一步的「`gh api -X PATCH repos/{owner}/{repo}/security-advisories/<GHSA> --input <檔案>`」改成「先把要更新的內容寫進草稿資料夾的 `<功能>-advisory.json`，再 `gh api -X PATCH repos/{owner}/{repo}/security-advisories/<GHSA> --input .drafts/<功能>-advisory.json`」；建立 advisory 那一步的 `--input` 也寫 `.drafts/<功能>-advisory.json`。
     - `implement-and-review` 的「漏洞的處理」建立 advisory 那一步：「把下面的 JSON 寫進暫存檔（放 scratchpad，不放 repo）」改成「把下面的 JSON 寫進草稿資料夾的 `<功能>-advisory.json`」。
 38. `feature`「清理暫存」最後加上：「確認完，刪掉草稿資料夾裡這次的暫存檔：只刪 `references/resume.md` 暫存檔表列出的檔名，不用「`<功能>-` 開頭」比對，避免刪到名稱開頭相同的其他功能。回報後還要修改時，照 `references/resume.md` 從 PR 分支複製回來。」
 39. `feature`「取消」最後加上：「術語處理完，照「清理暫存」的方式刪掉這次的暫存檔。」
@@ -435,7 +435,7 @@
 | AC23 | 跑 AC23 的指令 | 兩行 |
 | AC24 | 讀 `resume.md` 暫存檔表、`feature` 硬規則 2 與「清理暫存」「取消」 | 每一列的檔名欄沒有「各輪報告」這種沒有檔名的寫法，有「上一版規格」那一列；硬規則 2 和需求 37 相同；清理、取消照需求 38、39 |
 | AC25 | 讀 `feature`「流程」 | 有需求 43 那一段 |
-| AC27 | 跑 AC27 的指令；讀 `resume.md` 暫存檔表 | 每個 `body=@`、`--input` 後面的檔名都是暫存檔表上的檔名（`<功能>-pr-body.md`、`<功能>-advisory.json`） |
+| AC27 | 跑 AC27 的指令；讀 `resume.md` 暫存檔表 | 每個 `body=@`、`--input` 後面都是 `.drafts/` 開頭的路徑，檔名是暫存檔表上的檔名（`<功能>-pr-body.md`、`<功能>-advisory.json`） |
 | AC26 | 開發者在 Claude Code 跑 `/doctor prompt-audit`，把結果貼給主 session | 沒有範圍內檔案的矛盾或失效引用；有的話主 session 照 `implement-and-review`「規格問題的處理」處理 |
 
 ```bash
@@ -504,6 +504,7 @@ gh api repos/{owner}/{repo}/pulls/<PR> --jq .body | grep -n 'Closes #14[78]'
 | 日期 | 修改 | 原因 | 確認者 |
 |---|---|---|---|
 | 2026-11-20 | 需求 40 的暫存檔表加「PR 描述」`<功能>-pr-body.md`；需求 37 寫明 `CLAUDE.md:28` 的 PR 描述檔與更新 advisory 也用暫存檔表的檔名；新增 AC27 | 開發者決定要先寫成檔案再交給 `gh` 的內容都放進暫存檔表 → 需求 37、40、AC27（實作審查 #1）；檢查過 AC24、AC19 不用改，Q38「只建立表上的暫存檔」不變 | 開發者 |
+| 2026-11-20 | 需求 37：advisory 的 PATCH 與 POST 的 `--input` 改寫 `.drafts/<功能>-advisory.json`；AC27 的預期結果要求 `.drafts/` 開頭的路徑 | 開發者決定 #151 在這個 PR 修、不另外審查 → 需求 37、AC27；檢查過 AC24、AC12 不用改 | 開發者 |
 | 2026-11-20 | 需求 17 的 `implement-and-review:105` 改成直接連到 `docs/reviews/README.md`「涉及安全／架構」 | 開發者決定漏洞的定義直接連到原文 → 需求 17、AC16（實作審查 #2）；檢查過需求 16、AC13 不用改 | 開發者 |
 
 ## 請你決定

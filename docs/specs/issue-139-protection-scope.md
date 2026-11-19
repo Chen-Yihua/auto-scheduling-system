@@ -3,7 +3,7 @@
 - 狀態：已核准
 - 等級：一般（改 `clarify-requirements`、`docs/specs/README.md`、`docs/reviews/README.md`、兩個 reviewer 定義裡的流程規則；不改程式碼，不涉及資料一致性、認證授權、憑證保護，也不是重大架構決策）
 - issue：#139
-- PR：#NN
+- PR：#141
 
 ## 簡短說明
 

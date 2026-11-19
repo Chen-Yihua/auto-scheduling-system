@@ -23,9 +23,9 @@ cd frontend && npm run lint && npm run typecheck && npm run test
 `main` 有 ruleset 保護：只能透過 PR 合併，而且 `backend-test`、`frontend-test`、`frontend-e2e-test` 都要通過。
 
 1. 從 `main` 開分支再改程式。
-2. 跑完上面「完成的定義」的檢查才 commit。
+2. 跑完上面「完成的定義」的檢查才 commit。commit 時只用 `git add <路徑>` 加入這次要 commit 的檔案，不用 `git add -A`、`git add .`。
 3. push 後用 `gh pr create` 開 PR，再用 `gh pr checks --watch` 等 CI。
-   - 更新 PR 描述用 `gh api -X PATCH repos/{owner}/{repo}/pulls/<號碼> -F body=@<檔案>`；改 issue 標籤用 `gh api repos/{owner}/{repo}/issues/<號碼>/labels`。不用 `gh pr edit` / `gh issue edit`，`gh pr view` / `gh issue view` 一定要加 `--json`：本機的 gh 2.45 會查 GitHub 已停用的 classic Projects 欄位而失敗。
+   - 更新 PR 描述用 `gh api -X PATCH repos/{owner}/{repo}/pulls/<號碼> -F body=@.drafts/<功能>-pr-body.md`；改 issue 標籤用 `gh api repos/{owner}/{repo}/issues/<號碼>/labels`。不用 `gh pr edit` / `gh issue edit`，`gh pr view` / `gh issue view` 一定要加 `--json`：本機的 gh 2.45 會查 GitHub 已停用的 classic Projects 欄位而失敗。
 4. CI 失敗時用 `gh run view --log-failed` 讀錯誤，修正後 push 到同一個分支。
 5. 合併由開發者決定，不要自己 `gh pr merge`。
 6. PR 合併後確認來源分支已刪除；若 GitHub 沒有自動刪除，就手動刪除該分支。
@@ -43,6 +43,16 @@ cd frontend && npm run lint && npm run typecheck && npm run test
 | 開發新功能（`/feature`） | [docs/specs/README.md](docs/specs/README.md)（規格格式） |
 | 了解整體架構、做架構層級的決定 | [docs/architecture.md](docs/architecture.md)、[docs/decisions/](docs/decisions/) |
 | 整理、刪除或標記取代 `docs/` 的文件 | [docs/README.md](docs/README.md)「生命週期」（規格、審查紀錄、ADR 只標記取代，不刪除） |
+
+## 漏洞
+
+這個 repo 是公開的。「漏洞」與「安全」怎麼區分，見 `docs/reviews/README.md`「涉及安全／架構」。
+
+主 session 或 agent 在任何階段發現漏洞時：
+
+1. 停止這一項。agent 不修正、不 push，在回報裡標明「漏洞」交給主 session；主 session 照 `.claude/skills/implement-and-review/SKILL.md`「漏洞的處理」。
+2. 開發者決定處理方式前，漏洞的位置與利用方式只寫在給主 session 或開發者的回報裡，不能出現在 issue、PR 描述、commit 訊息、程式註解、規格檔、測試名稱與 docstring、`docs/reviews/`。
+3. 不把修正推送到公開的 repo，包括這個 PR 的分支。
 
 ## 跨前後端的連動
 

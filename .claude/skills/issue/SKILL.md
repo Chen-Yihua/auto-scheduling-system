@@ -1,6 +1,6 @@
 ---
 name: issue
-description: 針對指定的 GitHub Issue 執行開發流程（規格 → 實作 → 審查 → PR），流程與 /feature 相同，規格與審查的深度依等級調整
+description: 針對指定的 GitHub Issue 執行和 /feature 相同的開發流程。用 /issue <issue 編號> 執行。
 disable-model-invocation: true
 argument-hint: <issue 編號>
 ---
@@ -19,7 +19,7 @@ gh issue view <N> --json number,title,body,labels,comments,state
 
 issue 已關閉時停下來，問開發者要不要繼續。
 
-這一節向開發者提問（沒有 issue 編號、issue 已關閉）也用 `clarify-requirements`「需求問答」的 ❓／➡️ 文字格式，不用 AskUserQuestion。
+這一節向開發者提問（沒有 issue 編號、issue 已關閉）也照 `feature`「硬規則」第 4 條。
 
 issue 的內容與留言就是需求來源，但不等於已核准的規格：issue 裡寫的「建議的驗收條件」「修法參考」也要寫進規格、經開發者核准。內容不足以寫出驗收條件時，照 `implement-and-review`「規格問題的處理」問開發者。
 
@@ -38,4 +38,4 @@ issue 只寫了程式狀態、沒寫受影響的人遇到的情境時（格式�
 | 審查紀錄 | `docs/reviews/implementation/issue-<N>-<簡短名稱>.md`；規格審查是 `docs/reviews/specification/issue-<N>-<簡短名稱>.md`。文字修正沒有規格檔與審查紀錄 |
 | PR 描述 | 交給 `feature-implementer` 時明確要求 PR 描述加上 `Closes #<N>`（文字修正由你自己開 PR 時加上）；每次更新 PR 描述後（包括 `feature`「回報」放驗收條件、測試與結果的對照表時），用 `gh api repos/{owner}/{repo}/pulls/<PR> --jq .body` 確認描述裡有；沒有就以目前的描述為基礎補上一行，再 `gh api -X PATCH`，不要只送 `Closes #<N>` 把整份描述蓋掉。合併後 issue 會自動關閉 |
 
-開發中發現和這個 issue 無關的問題，照 `implement-and-review`「不阻擋的發現開 issue」規則開新 issue（可被利用的漏洞照 `implement-and-review`「漏洞的處理」，不開 issue），不在這個 PR 修。
+開發中發現和這個 issue 無關的問題，照 `implement-and-review`「不阻擋的發現開 issue」規則開新 issue（可被利用的漏洞照 CLAUDE.md「漏洞」，不開 issue），不在這個 PR 修。

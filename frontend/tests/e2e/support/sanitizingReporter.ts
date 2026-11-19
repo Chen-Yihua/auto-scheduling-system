@@ -11,7 +11,7 @@ import type { UserConsoleLog } from 'vitest'
 import { stripVTControlCharacters } from 'node:util'
 import { sanitizeForLog } from './signInWithRetry'
 
-const SENSITIVE_NAMES = ['authorization', 'cookie', 'password', 'token', 'secret', 'apikey', 'api_key', 'jwt', 'session']
+const SENSITIVE_NAMES = ['authorization', 'cookie', 'password', 'token', 'secret', 'apikey', 'api_key', 'jwt', 'session', 'refresh']
 const BINARY_TYPES = [
   'Buffer',
   'ArrayBuffer',

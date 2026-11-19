@@ -50,7 +50,7 @@ e2e 測試失敗時，vitest 會把 diff、錯誤的其他屬性、hook 錯誤�
 5. 清理用的 reporter 在其他 reporter 印出之前，清理測試用 `console` 印的內容。
 6. 字串照「文字規則」清理（見 AC6～AC11、AC19、AC21）。
 7. 物件與陣列逐層處理：欄位名稱敏感、`{ name, value }`、二進位資料照「結構規則」清理（見 AC12～AC14），其餘的字串照文字規則清理。
-8. 敏感名稱是 `authorization`、`cookie`、`password`、`token`、`secret`、`apikey`、`api_key`、`jwt`、`session`：名稱不分大小寫，含有其中任一個字就算。
+8. 敏感名稱是 `authorization`、`cookie`、`password`、`token`、`secret`、`apikey`、`api_key`、`jwt`、`session`、`refresh`：名稱不分大小寫，含有其中任一個字就算。
 9. 清理清單（要換成 `[redacted]` 的固定值）是環境變數 `E2E_CLERK_TEST_EMAIL`、`NUXT_CLERK_SECRET_KEY`、`E2E_CLERK_TEST_PASSWORD` 的值；沒有設定或是空字串的不放進清單。
 10. `dashboard.e2e.ts` 的 `secrets` 和清理用的 reporter 用同一個函式取得清理清單。
 11. 加一個整合測試：真的執行一次 vitest，確認清理用的 reporter 在 vitest 現在的版本仍然有效，vitest 升級時這個測試會抓到失效。
@@ -86,12 +86,12 @@ e2e 測試失敗時，vitest 會把 diff、錯誤的其他屬性、hook 錯誤�
 | AC5 | 測試用 `console` 印的內容，`default` 印出時已經過清理 | 不變條件（安全） |
 | AC6 | 文字規則 1、2：先拿掉 ANSI 色碼，再套用 `sanitizeForLog`。`'\x1b[32m+   "url": "/cb?code=abc",\x1b[39m'` 清理後完全等於 `'+   "url": "/cb",'`；`'+   "who": "fixture-user@example.com",'` 清理後完全等於 `'+   "who": "[redacted]",'` | 不變條件（安全） |
 | AC7 | 文字規則 3：名稱（英數字、`_`、`.`、`-` 組成，前後可以有引號）是敏感名稱，後面接著 `:` 或 `=`（中間可以有空白）時，分隔符號與後面的空白保留，之後到行尾換成 `[redacted]`。`'+     "authorization": "Bearer opaqueTOKEN9",'` 完全等於 `'+     "authorization": [redacted]'`；`'x?token=1'` 完全等於 `'x?token=[redacted]'`；`'apiKey=abc; theme=dark'` 完全等於 `'apiKey=[redacted]'`；`'+     "theme": "dark",'` 不變 | 不變條件（安全） |
-| AC8 | 文字規則 4：`name` 的值含有敏感名稱時，之後、遇到 `}` 之前出現的 `value`，照 AC7 處理（`name`、`value` 在同一行或不同行都一樣）。`'+     "name": "__clerk_db_jwt",\n+     "path": "/",\n+     "value": "dvb_X",\n+   },'` 完全等於 `'+     "name": "__clerk_db_jwt",\n+     "path": "/",\n+     "value": [redacted]\n+   },'`；`"expected [ { name: '__clerk_db_jwt', value: 'dvb_X' } ] to deeply equal []"` 完全等於 `"expected [ { name: '__clerk_db_jwt', value: [redacted]"`；`name` 是 `theme` 時 `value` 不變 | 不變條件（安全） |
+| AC8 | 文字規則 4：`name` 的值含有敏感名稱時，之後、遇到 `}` 之前出現的 `value`，照 AC7 處理（`name`、`value` 在同一行或不同行都一樣）。`'+     "name": "__clerk_db_jwt",\n+     "path": "/",\n+     "value": "dvb_X",\n+   },'` 完全等於 `'+     "name": "__clerk_db_jwt",\n+     "path": "/",\n+     "value": [redacted]\n+   },'`；`"expected [ { name: '__clerk_db_jwt', value: 'dvb_X' } ] to deeply equal []"` 完全等於 `"expected [ { name: '__clerk_db_jwt', value: [redacted]"`；`'+     "name": "__refresh_AbCd",\n+     "path": "/",\n+     "value": "opaqueREFRESH99",\n+   },'` 完全等於 `'+     "name": "__refresh_AbCd",\n+     "path": "/",\n+     "value": [redacted]\n+   },'`；`name` 是 `theme` 時 `value` 不變 | 不變條件（安全） |
 | AC9 | 文字規則 5：`Bearer ` 後面接的非空白字串換成 `[redacted]`。`'request failed with Bearer abc.def-ghi'` 完全等於 `'request failed with Bearer [redacted]'` | 不變條件（安全） |
 | AC10 | 文字規則 6（訊息的形式）：二進位類型（`Buffer`、`ArrayBuffer`、`SharedArrayBuffer`、`DataView`、`Int8Array`、`Uint8Array`、`Uint8ClampedArray`、`Int16Array`、`Uint16Array`、`Int32Array`、`Uint32Array`、`Float32Array`、`Float64Array`、`BigInt64Array`、`BigUint64Array`，以下稱「AC10 的二進位類型」）的名稱，接著 `[`（中間可以有空白）到對應的 `]`，整段換成 `[binary]`，可以跨行。`'expected Buffer[ 47, 99, 98, …(-86) ] to deeply equal Buffer[ 120 ]'` 完全等於 `'expected [binary] to deeply equal [binary]'`；`'  Uint8Array [\n-   1,\n+   47,\n  ]'` 完全等於 `'  [binary]'`；`'  Float32Array [\n+   1.5,\n  ]'` 完全等於 `'  [binary]'` | 不變條件（安全） |
 | AC11 | 文字規則 6（`Buffer` 的 diff 形式）：`"data": [` 之後到對應的 `]` 之間，每一行去掉 diff 的 `+`、`-` 與空白後只有整數和逗號時，從 `[` 到 `]` 換成 `[binary]`。`'    "data": [\n-     120,\n+     47,\n    ],'` 完全等於 `'    "data": [binary],'`；`'    "data": [\n      "a",\n    ],'` 不變 | 不變條件（安全） |
 | AC12 | 結構規則 1：物件的欄位名稱是敏感名稱時，值整個換成 `'[redacted]'`，不論值的型別。`{ headers: { Authorization: 'Bearer abc' }, token: 123, note: '/cb?code=abc fixture-user@example.com' }` 清理後等於 `{ headers: { Authorization: '[redacted]' }, token: '[redacted]', note: '/cb [redacted]' }`；`{ cookies: [{ name: 'theme', value: 'dark' }] }` 清理後等於 `{ cookies: '[redacted]' }` | 不變條件（安全） |
-| AC13 | 結構規則 2：物件的 `name` 是字串而且含有敏感名稱時，同一個物件的 `value` 整個換成 `'[redacted]'`。`{ items: [{ name: '__clerk_db_jwt', value: 'dvb_X' }, { name: 'theme', value: 'dark' }] }` 清理後等於 `{ items: [{ name: '__clerk_db_jwt', value: '[redacted]' }, { name: 'theme', value: 'dark' }] }` | 不變條件（安全） |
+| AC13 | 結構規則 2：物件的 `name` 是字串而且含有敏感名稱時，同一個物件的 `value` 整個換成 `'[redacted]'`。`{ items: [{ name: '__clerk_db_jwt', value: 'dvb_X' }, { name: 'theme', value: 'dark' }] }` 清理後等於 `{ items: [{ name: '__clerk_db_jwt', value: '[redacted]' }, { name: 'theme', value: 'dark' }] }`；`{ items: [{ name: '__refresh_AbCd', value: 'opaque' }] }` 清理後等於 `{ items: [{ name: '__refresh_AbCd', value: '[redacted]' }] }` | 不變條件（安全） |
 | AC14 | 結構規則 3：二進位資料整個換成 `'[binary]'`。判斷方式：`type` 是 `'Buffer'` 而且 `data` 是陣列的物件，或 `constructor` 是 `'Function<名稱>'`、名稱是 AC10 的二進位類型的物件。`{ body: { type: 'Buffer', data: [104, 105] }, u8: { '0': 1, '1': 2, constructor: 'Function<Uint8Array>', length: 2 } }` 清理後等於 `{ body: '[binary]', u8: '[binary]' }` | 不變條件（安全） |
 | AC15 | 要清理的資料有循環參照（例如物件的欄位指回自己）時，清理會結束，不丟出錯誤，參照關係保留；同一份二進位資料被多個欄位參照時，每個欄位都換成 `'[binary]'` | 不變條件（安全） |
 | AC16 | 清理清單取自 `E2E_CLERK_TEST_EMAIL`、`NUXT_CLERK_SECRET_KEY`、`E2E_CLERK_TEST_PASSWORD`：三個都有值時，清單是這三個值；只設定 `E2E_CLERK_TEST_EMAIL`、其他沒設定或是空字串時，清單只有 email | 不變條件（安全） |
@@ -116,6 +116,8 @@ e2e 測試失敗時，vitest 會把 diff、錯誤的其他屬性、hook 錯誤�
   - vitest 訊息裡的 `// Object.is equality` 會被清成 `[url] Object.is equality`。
   - AC8 同一行的例子，`value` 之後的整行內容（包括 `to deeply equal []`）會被遮。
   - 名稱叫 `cookies` 這類含敏感名稱的欄位，整個值都會被遮，看不到裡面的內容（AC12）。
+  - 名稱含 `refresh` 的一般欄位（例如 `refreshCount`）也會被遮：Clerk 的 refresh token 存在 `__refresh` cookie，名稱只有這個字可以判斷。
+  - 二進位類型的名稱接著 `[`、卻找不到對應的 `]` 時（例如內容被截斷，或訊息文字剛好含有 `Buffer[`），從那裡到字串結尾都換成 `[binary]`。
 - 前面接著英數字或 `_` 的 `dvb_`（例如 `xdvb_abc`）不會被 AC19 遮。
 - `github-actions` reporter 只在 stack 裡找得到測試檔那一行時才印 `::error` 附註（`frontend/node_modules/vitest/dist/chunks/index.De2FqGmR.js:1594-1600`）。那一行被規則 3 或清理清單遮掉時，附註會整個不見。現在的 e2e 路徑 `frontend/tests/e2e/dashboard.e2e.ts` 不含敏感名稱。
 - diff 一律完整印出（AC18），大物件比對失敗時 log 會變長。
@@ -183,6 +185,8 @@ e2e 測試失敗時，vitest 會把 diff、錯誤的其他屬性、hook 錯誤�
 ## 修改紀錄
 | 日期 | 修改 | 原因 | 確認者 |
 |---|---|---|---|
+| 2026-11-19 | 需求 8 的敏感名稱加 `refresh`；AC8、AC13 各補 `__refresh_AbCd` 的例子；「已接受的風險」加 `refresh` 會多遮的情況 | 開發者決定（實作審查第 1 輪 #1，選 A）：Clerk 的 `__refresh` cookie 存 refresh token，名稱不含既有的敏感名稱 → 需求 8、AC8、AC13、已接受的風險。檢查過 AC7（例子不含 refresh）、AC12（例子不變）、AC20（`browserStorageNames` 的元素後面沒有 `:`、`=`，不受影響）不用改 | 開發者 |
+| 2026-11-19 | 「已接受的風險」加「二進位類型找不到對應的 `]` 時遮到字串結尾」 | 開發者確認（實作審查第 1 輪 #3）→ 已接受的風險；程式已是這個行為，AC10、AC11 不用改 | 開發者 |
 
 ## 請你決定
 無

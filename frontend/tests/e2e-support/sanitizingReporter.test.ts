@@ -65,6 +65,9 @@ describe('sanitizeReportText：文字規則', () => {
     expect(text("expected [ { name: '__clerk_db_jwt', value: 'dvb_X' } ] to deeply equal []")).toBe(
       "expected [ { name: '__clerk_db_jwt', value: [redacted]",
     )
+    expect(text('+     "name": "__refresh_AbCd",\n+     "path": "/",\n+     "value": "opaqueREFRESH99",\n+   },')).toBe(
+      '+     "name": "__refresh_AbCd",\n+     "path": "/",\n+     "value": [redacted]\n+   },',
+    )
     expect(text('+     "name": "theme",\n+     "value": "dark",\n+   },')).toBe(
       '+     "name": "theme",\n+     "value": "dark",\n+   },',
     )
@@ -116,6 +119,9 @@ describe('sanitizeReportValue：結構規則', () => {
     expect(
       value({ items: [{ name: '__clerk_db_jwt', value: 'dvb_X' }, { name: 'theme', value: 'dark' }] }),
     ).toEqual({ items: [{ name: '__clerk_db_jwt', value: '[redacted]' }, { name: 'theme', value: 'dark' }] })
+    expect(value({ items: [{ name: '__refresh_AbCd', value: 'opaque' }] })).toEqual({
+      items: [{ name: '__refresh_AbCd', value: '[redacted]' }],
+    })
   })
 
   it('#50 AC14：序列化後的二進位資料整個換成 [binary]', () => {

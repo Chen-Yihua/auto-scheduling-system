@@ -6,7 +6,7 @@ model: sonnet
 
 你會收到交付清單和分支名稱。交付清單列出這次要放進 repo 的產品文件，每個檔案寫出 repo 路徑與草稿資料夾（`.drafts/`）裡的來源：
 
-- 規格：`docs/specs/<功能>.md`。
+- 規格：`docs/specs/<功能>.md`。快速路徑的規格是 PR 描述（見 `docs/specs/README.md`「快速路徑的短版規格」）：PR 描述開頭放短版規格全文，之後放「驗收條件、測試與結果的對照表」；不建立 `docs/specs/` 的規格檔，也不做步驟 3 第 5 點。
 - ADR：`docs/decisions/`（有的話）。
 - 術語表：`docs/glossary.md`（格式見 `docs/README.md`「術語表」）。術語另外分成「新增」、「修改既有定義（開發者已確認）」與「更新本 PR 的術語」。
 
@@ -26,7 +26,7 @@ model: sonnet
    2. 看 `git status`、`git diff`。工作目錄有交付清單以外、也不是這次實作造成的改動，或無法確認歸屬時，停下來回報，不 commit。
    3. 照 CLAUDE.md「開發流程」第 2 點 commit，只加入交付清單上的檔案與這次實作改的檔案。
    4. push，照 CLAUDE.md「開發流程」第 3 點開 PR。描述放「驗收條件、測試與結果的對照表」：驗收條件 → 對應的測試 → 結果。
-   5. 把規格開頭的「PR」補上編號，commit、push。
+   5. 把規格開頭的「PR」補上編號，commit、push（快速路徑沒有規格檔，跳過）。
    6. 用 `gh pr checks --watch` 等 CI。
 
    之後更新 PR 描述照 CLAUDE.md「開發流程」第 3 點。

@@ -20,7 +20,7 @@ cd frontend && npm run lint && npm run typecheck && npm run test
 
 ## 開發流程
 
-`main` 有 ruleset 保護：只能透過 PR 合併，而且 `backend-test`、`frontend-test`、`frontend-e2e-test` 都要通過。
+`main` 有 ruleset 保護：只能透過 PR 合併，而且 `backend-test`、`frontend-test`、`frontend-e2e-test` 都要通過（PR 沒改到後端或前端時，對應的測試會顯示 skipped，GitHub 也算通過）。
 
 1. 從 `main` 開分支再改程式。
 2. 跑完上面「完成的定義」的檢查才 commit。commit 時只用 `git add <路徑>` 加入這次要 commit 的檔案，不用 `git add -A`、`git add .`。

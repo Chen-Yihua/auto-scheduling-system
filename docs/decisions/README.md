@@ -46,3 +46,4 @@
 | [0013](0013-scheduled-sync-trigger.md) | 外部平台定時同步由 GitHub Actions 觸發 | 已採用 |
 | [0014](0014-drafts-folder.md) | 核准前的草稿放在 repo 內被 git 排除的 `.drafts/` | 已採用 |
 | [0015](0015-review-results-in-pr-comments.md) | 審查結果改留在 PR 留言 | 已採用 |
+| [0016](0016-path-filtered-ci.md) | CI 依改到的檔案決定要跑的測試與部署 | 已採用 |

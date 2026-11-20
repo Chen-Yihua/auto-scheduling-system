@@ -17,7 +17,7 @@
 
 - **身分驗證**：前後端都使用 [Clerk](https://clerk.com/)。前端不會經手使用者密碼；後端以 Clerk 公開的金鑰（JWKS）驗證每個請求附帶的 JWT。
 - **資料庫**：MongoDB 負責持久化資料。Redis 為選用，用於限流計數與短期快取；未設定 `REDIS_URL` 時，改用應用程式本身的記憶體（重啟後會清空）。
-- **CI/CD**：使用 GitHub Actions（`.github/workflows/deploy.yml`）。前端與後端各自執行測試，測試通過後才會執行對應的部署。
+- **CI/CD**：使用 GitHub Actions（`.github/workflows/deploy.yml`）。依 PR 或 push 改到的檔案決定要跑哪些測試：改到 `backend/` 跑後端測試，改到 `frontend/` 跑前端測試，改到 `deploy.yml` 全部都跑，只改其他檔案時測試直接跳過。測試通過後才會執行對應的部署。
 
 各端的安裝與設定方式，請見 [`backend/README.md`](backend/README.md) 與 [`frontend/README.md`](frontend/README.md)。
 

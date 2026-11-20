@@ -7,7 +7,31 @@ on:
     branches: [main]
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        id: filter
+        with:
+          filters: |
+            backend:
+              - 'backend/**'
+              - '.github/workflows/deploy.yml'
+            frontend:
+              - 'frontend/**'
+              - '.github/workflows/deploy.yml'
+
   backend-test:
+    needs: changes
+    # 不用預設的 success()：changes 失敗時測試會被跳過，跳過又算通過，等於沒跑測試就能合併
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.backend == 'true') }}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -26,6 +50,9 @@ jobs:
       - run: pytest --cov=. --cov-report=term-missing
 
   frontend-test:
+    needs: changes
+    # 不用預設的 success()：changes 失敗時測試會被跳過，跳過又算通過，等於沒跑測試就能合併
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.frontend == 'true') }}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -51,6 +78,9 @@ jobs:
   # fork 出去的 PR 拿不到 repo 的 secrets，這種情況下那個測試會自動 skip，
   # 不影響這個 job 本身通過。
   frontend-e2e-test:
+    needs: changes
+    # 不用預設的 success()：changes 失敗時測試會被跳過，跳過又算通過，等於沒跑測試就能合併
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.frontend == 'true') }}
     # 釘 24.04：ubuntu-latest 已換成 26.04，Playwright 1.52 不支援，裝不了瀏覽器
     runs-on: ubuntu-24.04
     # 不設上限時卡住要等 GitHub 預設的 6 小時才會停；正常整個 job 約 10 分鐘
@@ -86,8 +116,9 @@ jobs:
       - run: npm run test:e2e
 
   deploy-backend:
-    needs: backend-test
-    # if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: [changes, backend-test]
+    # 開啟後端部署時：刪掉 if: false，取消下面這行的註解
+    # if: github.ref == 'refs/heads/main' && github.event_name == 'push' && needs.changes.outputs.backend == 'true'
     if: false
     runs-on: ubuntu-latest
     # id-token：向 GCP 用 Workload Identity Federation 換短期憑證，不在 repo 存 service account 金鑰
@@ -121,8 +152,8 @@ jobs:
             --quiet
 
   deploy-frontend:
-    needs: [frontend-test, frontend-e2e-test]
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: [changes, frontend-test, frontend-e2e-test]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push' && needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:

@@ -77,13 +77,14 @@ cd frontend && npm run lint && npm run typecheck && npm run test
 
 ## 寫作規則
 
-寫文件時照下面 5 條：
+寫文件時照下面 6 條：
 
 1. 用白話。一條需求或一個步驟只寫一件事，用一句話。
 2. 不自創詞。必須用的專有名詞，第一次出現時在括號裡寫白話意思；已經列在 `docs/glossary.md` 或 `docs/README.md`「流程用語」的詞不用。
 3. 開發者沒有決定過的規則，不寫進文件；不確定的列成「請你決定」。
 4. 讀者看不懂的地方是文件的問題，由寫的人改，不是讀者去學那個詞。
 5. 幾個條件有先後順序時，寫成編號清單，照順序判斷。每一條寫明符合後停止，還是繼續看下一條；每一條的做法都相同時，在清單前寫一次就好。不寫成「原則＋例外＋例外的例外」。
+6. 改 skill、agent 時，照 Anthropic〈[Skill authoring best practices](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices)〉：只寫 Claude 不知道的事，只有容易出錯、出錯難挽回的操作寫固定步驟；照 `anthropics/skills` 的〈[skill-creator](https://github.com/anthropics/skills/blob/main/skills/skill-creator/SKILL.md)〉：說明重要指示背後的原因。這個 repo 不另外建立改 skill 時的情境驗證（Anthropic 建議的「Build evaluations first」）：改完的 skill、agent 直接在之後的實際開發中使用，發現規則遺漏、誤判或流程退化時，依具體案例修正。
 
 流程用語的意思見 `docs/README.md`「術語表」。
 

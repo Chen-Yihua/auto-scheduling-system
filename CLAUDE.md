@@ -46,7 +46,7 @@ cd frontend && npm run lint && npm run typecheck && npm run test
 
 ## 漏洞
 
-這個 repo 是公開的。「漏洞」與「安全」怎麼區分，見 `docs/reviews/README.md`「涉及安全／架構」。
+這個 repo 是公開的。「漏洞」與一般安全改善怎麼區分，見 `docs/reviews/README.md`「漏洞」。
 
 主 session 或 agent 在任何階段發現漏洞時：
 

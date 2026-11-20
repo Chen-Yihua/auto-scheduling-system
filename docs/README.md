@@ -96,7 +96,7 @@ GitHub 上不公開的漏洞報告。
 
 審查問題的類型與嚴重程度以前用英文名稱。讀舊的規格、審查紀錄、ADR 與實驗紀錄時，用這張表對照：
 
-| 舊名稱 | 新名稱 |
+| 英文舊名稱 | 中文名稱（ADR 0017 以前） |
 |---|---|
 | Factual Error | 規格對現有系統的描述和程式不符 |
 | Specification Defect | 規格內容互相矛盾或沒有依據 |
@@ -109,4 +109,4 @@ GitHub 上不公開的漏洞報告。
 | Minor | 影響小的問題 |
 | Info | 不影響功能，只供參考 |
 
-前 6 列是問題類型，後 4 列是嚴重程度，定義見 [reviews/README.md](reviews/README.md)「分類」。
+這些類型與嚴重程度已由 [ADR 0017](decisions/0017-review-findings-conventional-labels.md) 改成標籤加阻擋，讀舊紀錄時用這張表對照。

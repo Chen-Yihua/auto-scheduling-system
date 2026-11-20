@@ -1,6 +1,6 @@
 # 需求問答先確認要防哪些情況與在哪一步處理，規格寫明不處理的情況審查不列成發現
 
-- 狀態：已核准
+- 狀態：部分被 [issue-155-review-labels.md](issue-155-review-labels.md) 取代（AC5、AC7、AC8）
 - 等級：一般（改 `clarify-requirements`、`docs/specs/README.md`、`docs/reviews/README.md`、兩個 reviewer 定義裡的流程規則；不改程式碼，不涉及資料一致性、認證授權、憑證保護，也不是重大架構決策）
 - issue：#139
 - PR：#141

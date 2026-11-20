@@ -37,10 +37,10 @@ issue 只寫了程式狀態、沒寫受影響的人遇到的情境時（格式�
 | 分支 | `issue-<N>-<簡短名稱>` |
 | PR 描述 | 要有 `Closes #<N>`，做法見表格下方 |
 
-PR 描述要有 `Closes #<N>`，合併後 issue 才會自動關閉。`gh api -X PATCH` 會用送出的內容取代整份描述，所以照下面順序做，才不會把已有的描述蓋掉：
+PR 描述要有 `Closes #<N>`，合併後 issue 才會自動關閉。照下面順序做：交辦時先要求，更新後才確認得到，缺了才補：
 
 1. 交給 `feature-implementer` 時明確要求 PR 描述加上 `Closes #<N>`（文字修正由你自己開 PR 時加上）。
 2. 每次更新 PR 描述後（包括 `feature`「回報」放驗收條件、測試與結果的對照表時），用 `gh api repos/{owner}/{repo}/pulls/<PR> --jq .body` 確認描述裡有。
-3. 沒有時，以目前的描述為基礎補上一行，再 `gh api -X PATCH`，不要只送 `Closes #<N>`。
+3. 沒有時，以目前的描述為基礎補上一行，再 `gh api -X PATCH`，不要只送 `Closes #<N>`：`gh api -X PATCH` 會用送出的內容取代整份描述。
 
 開發中發現和這個 issue 無關的問題，照 `implement-and-review`「發現處理表」第 8 步判斷要不要開 issue，要開的才照「開 issue 追蹤」開新 issue（可被利用的漏洞照 CLAUDE.md「漏洞」，不開 issue），不在這個 PR 修；不開的原因寫在給開發者的回報。

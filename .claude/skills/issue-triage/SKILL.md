@@ -33,7 +33,7 @@ gh issue view <N> --json number,title,body,labels,comments,state
 
 開發者可以修改建議的優先度。沒有確認前，不建立標籤、不改任何 issue。
 
-確認後照下面的步驟做。改標籤用 `gh api`，照 CLAUDE.md「開發流程」第 3 點：
+確認後照下面的順序做：標籤要先存在才加得上；先移除舊的，每個 issue 才會剛好一個 `priority:*`；最後檢查才抓得到部分失敗。改標籤用 `gh api`，照 CLAUDE.md「開發流程」第 3 點：
 
 1. 缺少的標籤先建立：`gh label create "priority:high" --color B60205`（medium `FBCA04`、low `0E8A16`）。
 2. issue 已有別的 `priority:*` 標籤時，先移除：`gh api -X DELETE repos/{owner}/{repo}/issues/<N>/labels/<舊標籤>`（標籤名稱裡的 `:` 要 URL encode 成 `%3A`）。

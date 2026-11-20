@@ -35,6 +35,12 @@ issue 只寫了程式狀態、沒寫受影響的人遇到的情境時（格式�
 | 等級與規格格式 | 等級照 `/feature`「判斷等級」，依 issue 要改的範圍判斷；`bug`、`enhancement` 標籤不決定等級。規格照 `docs/specs/README.md`「格式」與「各等級的規格」；issue 有 `bug` 標籤時，另外照「修 bug 時」。草稿與核准方式照 `/feature` 「硬規則」與 `write-spec`；快速路徑的短版規格照 `docs/specs/README.md`「快速路徑的短版規格」 |
 | 需求問答 | 照 `clarify-requirements`「需求問答」。issue 裡的現象與程式狀態可以當作查到的事實，但仍要讀程式碼確認；「建議的驗收條件」「修法參考」在問答裡當成題目、附上建議答案問開發者，不直接寫進「已確認」。快速路徑不另外問：「建議的驗收條件」「修法參考」寫進短版規格，由 `/feature`「快速路徑」的一次核准確認 |
 | 分支 | `issue-<N>-<簡短名稱>` |
-| PR 描述 | 交給 `feature-implementer` 時明確要求 PR 描述加上 `Closes #<N>`（文字修正由你自己開 PR 時加上）；每次更新 PR 描述後（包括 `feature`「回報」放驗收條件、測試與結果的對照表時），用 `gh api repos/{owner}/{repo}/pulls/<PR> --jq .body` 確認描述裡有；沒有就以目前的描述為基礎補上一行，再 `gh api -X PATCH`，不要只送 `Closes #<N>` 把整份描述蓋掉。合併後 issue 會自動關閉 |
+| PR 描述 | 要有 `Closes #<N>`，做法見表格下方 |
+
+PR 描述要有 `Closes #<N>`，合併後 issue 才會自動關閉。`gh api -X PATCH` 會用送出的內容取代整份描述，所以照下面順序做，才不會把已有的描述蓋掉：
+
+1. 交給 `feature-implementer` 時明確要求 PR 描述加上 `Closes #<N>`（文字修正由你自己開 PR 時加上）。
+2. 每次更新 PR 描述後（包括 `feature`「回報」放驗收條件、測試與結果的對照表時），用 `gh api repos/{owner}/{repo}/pulls/<PR> --jq .body` 確認描述裡有。
+3. 沒有時，以目前的描述為基礎補上一行，再 `gh api -X PATCH`，不要只送 `Closes #<N>`。
 
 開發中發現和這個 issue 無關的問題，照 `implement-and-review`「發現處理表」第 8 步判斷要不要開 issue，要開的才照「開 issue 追蹤」開新 issue（可被利用的漏洞照 CLAUDE.md「漏洞」，不開 issue），不在這個 PR 修；不開的原因寫在給開發者的回報。

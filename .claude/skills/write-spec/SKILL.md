@@ -5,7 +5,7 @@ description: 寫規格草稿（和重大架構決策的 ADR 草稿）、交給 s
 
 # 寫規格
 
-> 文字修正不寫規格，見 `feature`「文字修正的流程」。
+> 文字修正不寫規格，見 `feature`「文字修正的流程」。快速路徑的短版規格格式見 `docs/specs/README.md`「快速路徑的短版規格」，不做規格審查（`feature`「快速路徑」）。
 
 規格草稿照 `docs/specs/README.md` 的格式寫，放在草稿資料夾（`.drafts/`）的 `<功能>-spec.md`。修 bug 的規格照同一份文件的「修 bug 時」寫。ADR 草稿和規格一起核准，核准後照 `implement-and-review`「交付清單」交給 `feature-implementer` 存進 `docs/decisions/`。
 
@@ -25,7 +25,7 @@ description: 寫規格草稿（和重大架構決策的 ADR 草稿）、交給 s
 
 ## 規格審查
 
-文字修正以外的等級，草稿寫好、交給開發者核准前，把草稿 `<功能>-spec.md` 的路徑、等級、`<功能>-grill.md` 的路徑，以及 ADR 草稿、`<功能>-glossary.md` 的路徑（有的話）交給 `specification-reviewer`。
+文字修正與快速路徑以外，草稿寫好、交給開發者核准前，把草稿 `<功能>-spec.md` 的路徑、等級、`<功能>-grill.md` 的路徑，以及 ADR 草稿、`<功能>-glossary.md` 的路徑（有的話）交給 `specification-reviewer`。
 
 ### 處理發現
 

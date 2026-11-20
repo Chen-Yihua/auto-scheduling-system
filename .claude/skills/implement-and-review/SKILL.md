@@ -38,7 +38,7 @@ description: 整理交付清單交給 feature-implementer 實作與開 PR、交�
 
 ```
 交付清單：
-- `docs/specs/<功能>.md` ← <草稿資料夾>/<功能>-spec.md
+- `docs/specs/<功能>.md` ← <草稿資料夾>/<功能>-spec.md（快速路徑改寫成「PR 描述 ← <草稿資料夾>/<功能>-spec.md（快速路徑）」）
 - `docs/decisions/NNNN-<名稱>.md` ← <草稿資料夾>/<功能>-adr-<名稱>.md（沒有寫「無」）
 - `docs/glossary.md` ← <草稿資料夾>/<功能>-glossary.md（沒有寫「無」）
   - 新增：<名稱>、<名稱>（沒有寫「無」）
@@ -86,6 +86,8 @@ description: 整理交付清單交給 feature-implementer 實作與開 PR、交�
 
 交給 `acceptance-reviewer` 前先 `git fetch origin main`，確認規格審查的留言已照上面「審查留言」貼出，附上規格檔路徑、等級、分支名稱、PR 編號、規格審查每一輪留言的連結與 PR 描述全文（`gh api repos/{owner}/{repo}/pulls/<PR> --jq .body`）；第 2 輪以後再附上前幾輪實作審查留言的連結。
 
+快速路徑：不附規格檔路徑，等級寫「一般（快速路徑）」，改附「快速路徑，沒有規格審查」，跳過確認規格審查的留言已貼出。
+
 規格審查的留言檔遺失、還沒貼出，開發者決定不補時（見 `feature/references/resume.md`），改附上「沒有規格審查留言」與原因，跳過確認規格審查的留言已貼出；`acceptance-reviewer` 照它的定義補做「完整格式的規格卻沒有規格審查留言」的情境檢查。
 
 ## 發現處理表
@@ -112,7 +114,7 @@ description: 整理交付清單交給 feature-implementer 實作與開 PR、交�
 
    開發者的決定照 `clarify-requirements`「新的決定一律回到決策樹」處理。
 3. 這個 PR 補：先做下面「核准後修改規格」的影響檢查，把確認後的驗收條件寫進草稿資料夾的規格，照「交付清單」交給 `feature-implementer` 更新規格、實作並補測試。
-4. 另開 issue：用 `gh issue create` 記下缺漏與建議的驗收條件，在規格的「修改紀錄」（照「交付清單」交給 `feature-implementer`）與 PR 描述附上連結，這項就解除阻擋。
+4. 另開 issue：用 `gh issue create` 記下缺漏與建議的驗收條件，在規格的「修改紀錄」（照「交付清單」交給 `feature-implementer`）與 PR 描述附上連結，這項就解除阻擋。快速路徑沒有「修改紀錄」，連結附在 PR 描述與那一輪審查留言的「處理」。
 
 **停下來問開發者時，一起整理不阻擋的發現**：這一輪因為「發現處理表」第 1～4 步暫停（第 2 步只算阻擋的 `question`），或照「重新審查與連續 3 輪都還有阻擋」停下來時，同一則訊息分成「需要你決定」與「不阻擋的發現」兩區；後者寫主 session 對每一項的決定（改、不改、開 issue），開發者可以改。沒有暫停時，照「發現處理表」第 7、8 步。
 

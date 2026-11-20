@@ -1,13 +1,13 @@
 # 審查結果
 
-兩種審查共用這份文件的分類、報告格式與「處理」的寫法。每一輪審查的結果貼成一則公開的 PR 留言（[ADR 0015](../decisions/0015-review-results-in-pr-comments.md)），貼法見 `implement-and-review`「審查留言」。`<功能>` 和 `docs/specs/` 裡的規格檔同名：
+兩種審查共用這份文件的分類、報告格式與「處理」的寫法。每一輪審查的結果貼成一則公開的 PR 留言（[ADR 0015](../decisions/0015-review-results-in-pr-comments.md)），貼法見 `implement-and-review`「審查留言」。`<功能>` 和 `docs/specs/` 裡的規格檔同名；快速路徑沒有規格檔，`<功能>` 和分支名稱相同（`/issue` 是 `issue-<N>-<簡短名稱>`）：
 
 | 審查 | agent | 時機 |
 |---|---|---|
 | 規格審查 | `specification-reviewer` | 規格核准前；留言在 PR 開好後貼出 |
 | 實作審查 | `acceptance-reviewer` | 實作完成後 |
 
-- 等級是「文字修正」的變更不審查，沒有審查留言。規格審查的次數上限見 `/feature`「判斷等級」的表；第 2 次審查的範圍見 `write-spec`「審查次數與審查後的修改」。
+- 等級是「文字修正」的變更不審查，沒有審查留言。快速路徑不做規格審查，沒有規格審查留言。規格審查的次數上限見 `/feature`「判斷等級」的表；第 2 次審查的範圍見 `write-spec`「審查次數與審查後的修改」。
 - 審查 agent 只能讀、不能寫檔，所以由主 session 把報告貼成留言。標題開頭是「漏洞：」的內容是例外：repo 是公開的，貼出前照 `implement-and-review`「審查紀錄與重新審查」改寫成一般性的描述（或開發者確認建立後的 advisory 編號）。
 - `specification/`、`implementation/` 底下是 ADR 0015 以前的紀錄檔，`*-round<N>.md` 是更早的逐輪紀錄。GitHub issue、規格與實驗紀錄引用了這些路徑，所以保留原樣，不搬移也不改寫；生命週期見 [docs/README.md](../README.md)「生命週期」。
 

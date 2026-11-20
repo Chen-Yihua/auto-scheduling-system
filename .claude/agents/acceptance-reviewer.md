@@ -43,7 +43,7 @@ tools: Read, Grep, Glob, Bash
 
 高風險等級另外填 `docs/reviews/README.md`「安全與一致性檢查」表。
 
-第 2 輪以後，照主 session 在指示裡寫的範圍審查；看到範圍外的新問題仍然回報。第 2 輪以後會附上前幾輪實作審查留言的連結（ADR 0015 以前的 PR 是 `docs/reviews/implementation/<功能>.md`），裡面有前幾輪的發現與處理。
+第 2 輪以後，照主 session 在指示裡寫的範圍審查；看到範圍外的新問題仍然回報。指示會附上前幾輪實作審查留言的連結（ADR 0015 以前的 PR 是 `docs/reviews/implementation/<功能>.md`），裡面有前幾輪的發現與處理。
 
 改動實際的影響比規格的等級高時，標 `issue`，寫出應該是哪個等級與理由；阻擋照 `docs/reviews/README.md`「阻擋」判斷。
 

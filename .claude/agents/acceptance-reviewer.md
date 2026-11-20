@@ -23,7 +23,7 @@ tools: Read, Grep, Glob, Bash
 5. **安全與架構**：改動有沒有安全問題（權限檢查、憑證或個資外洩、注入、驗證被繞過），或帶來重大架構影響（新增服務或外部依賴、改變模組分層、改資料庫結構或部署方式；「改資料庫結構」的範圍見 `.claude/skills/feature/SKILL.md` 「重大架構決策」）。
 6. **寫法**：這個 PR 改到的 md 檔，有沒有違反 `CLAUDE.md`「寫作規則」第 1、2、5 條（審查留言在審查結束後才貼，不檢查）。標籤照 `docs/reviews/README.md`「標籤」：只換說法、意思不變的標 `nitpick`，影響需求或驗收條件正確性的標 `issue`，讓文字更清楚的標 `suggestion`。
 
-草稿資料夾（`.drafts/`）裡的暫存檔遺失時，照 `docs/reviews/README.md`「分類」的「暫存檔遺失時」判斷。
+草稿資料夾（`.drafts/`）裡的暫存檔遺失時，照 `docs/reviews/README.md`「特殊情況的判斷」的「暫存檔遺失時」判斷。
 
 只能讀檔、跑 `git` 的唯讀指令、`gh pr view <PR> --json comments` 和測試。不要修改、新增任何檔案（包括暫存腳本），不要切換分支或建立 worktree。
 
@@ -36,7 +36,7 @@ tools: Read, Grep, Glob, Bash
 | AC | 結果（通過／不通過／無法判斷） | 依據（檔案:行號） |
 |---|---|---|
 
-已接受的風險：`docs/reviews/README.md`「分類」的「暫存檔遺失時」判定不算問題的情況，以及規格「不做」裡寫明不處理的情況（另見 `docs/reviews/README.md`「分類」的「暫存檔遺失與規格「不做」的判斷」）；沒有寫「無」。
+已接受的風險：`docs/reviews/README.md`「特殊情況的判斷」的「暫存檔遺失時」判定不算問題的情況，以及規格「不做」裡寫明不處理的情況（另見 `docs/reviews/README.md`「特殊情況的判斷」）；沒有寫「無」。
 
 高風險等級另外填 `docs/reviews/README.md`「安全與一致性檢查」表。第 2 輪以後，照主 session 在指示裡寫的範圍審查；看到範圍外的新問題仍然回報。改動實際的影響比規格的等級高時，標 `issue`，寫出應該是哪個等級與理由；阻擋照 `docs/reviews/README.md`「阻擋」判斷。
 

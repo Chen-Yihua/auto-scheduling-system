@@ -23,7 +23,7 @@ description: 依開發者核准的規格實作功能、開 PR、等 CI；不參�
 3. commit 與開 PR，照順序做：
    1. 跑 CLAUDE.md「完成的定義」的檢查，全部通過才繼續。
    2. 看 `git status`、`git diff`。工作目錄有交付清單以外、也不是這次實作造成的改動，或無法確認歸屬時，停下來回報，不 commit。
-   3. 照 CLAUDE.md「開發流程」第 2 點 commit，只加入交付清單上的檔案與這次實作改的檔案。`docs/reviews/` 的審查紀錄由主 session commit，不要加入。
+   3. 照 CLAUDE.md「開發流程」第 2 點 commit，只加入交付清單上的檔案與這次實作改的檔案。
    4. push，照 CLAUDE.md「開發流程」第 3 點開 PR。描述放「驗收條件、測試與結果的對照表」：驗收條件 → 對應的測試 → 結果。
    5. 把規格開頭的「PR」補上編號，commit、push。
    6. 用 `gh pr checks --watch` 等 CI。

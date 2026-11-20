@@ -51,7 +51,7 @@ cd frontend && npm run lint && npm run typecheck && npm run test
 主 session 或 agent 在任何階段發現漏洞時：
 
 1. 停止這一項。agent 不修正、不 push，在回報裡標明「漏洞」交給主 session；主 session 照 `.claude/skills/implement-and-review/SKILL.md`「漏洞的處理」。
-2. 開發者決定處理方式前，漏洞的位置與利用方式只寫在給主 session 或開發者的回報裡，不能出現在 issue、PR 描述、commit 訊息、程式註解、規格檔、測試名稱與 docstring、`docs/reviews/`。
+2. 開發者決定處理方式前，漏洞的位置與利用方式只寫在給主 session 或開發者的回報裡，不能出現在 issue、PR 描述、commit 訊息、程式註解、規格檔、測試名稱與 docstring、PR 留言。
 3. 不把修正推送到公開的 repo，包括這個 PR 的分支。
 
 ## 跨前後端的連動

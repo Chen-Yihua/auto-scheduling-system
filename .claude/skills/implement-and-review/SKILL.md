@@ -14,10 +14,10 @@ description: 整理交付清單交給 feature-implementer 實作與開 PR、交�
 照順序做，每一步的細節見括號裡的節：
 
 1. 整理交付清單，交給 `feature-implementer` 實作、開 PR（「交付清單」「交辦實作與處理回報」）。
-2. PR 建立後，commit 規格審查紀錄（「審查紀錄的 commit」）。
+2. PR 建立後，貼規格審查每一輪的留言（「審查留言」）。
 3. 交給 `acceptance-reviewer` 審查（「交給 acceptance-reviewer 審查」）。
 4. 依每項發現處理（「發現處理表」）。
-5. 更新實作審查紀錄並 commit（「每一輪都更新紀錄檔」）。
+5. 處理完這一輪的發現後，貼這一輪的留言（「審查留言」）。
 6. 還有阻擋的項目就回到第 3 步（「輪數依根本原因計算」）。
 7. 沒有阻擋後，照 `feature`「回報」回報。
 
@@ -28,7 +28,6 @@ description: 整理交付清單交給 feature-implementer 實作與開 PR、交�
 | 種類 | 檔案 | 誰寫內容 | 誰 commit、push |
 |---|---|---|---|
 | 產品文件 | 規格（`docs/specs/`）、ADR（`docs/decisions/`）、術語表（`docs/glossary.md`） | 主 session（核准前在草稿資料夾（`.drafts/`）） | `feature-implementer`，照交付清單 |
-| 審查紀錄 | 規格審查紀錄（`docs/reviews/specification/`）、實作審查紀錄（`docs/reviews/implementation/`） | 主 session | 主 session，commit 後 push 到同一個 PR 分支（見下面「審查紀錄的 commit」） |
 | 程式碼與測試 | 其他 | `feature-implementer` | `feature-implementer` |
 
 文字修正沒有 `feature-implementer`，照 `feature`「文字修正的流程」自己 commit。
@@ -66,22 +65,28 @@ description: 整理交付清單交給 feature-implementer 實作與開 PR、交�
   4. 再交辦。
 - 它回報的「發現但沒處理的問題」，照下面「不阻擋的發現開 issue」處理；是「漏洞」的照「漏洞的處理」。
 
-## 審查紀錄的 commit
+## 審查留言
 
-只限目前 feature 的 PR 分支與這次的 `docs/reviews/` 紀錄檔（規格審查、實作審查）。
+規格審查與實作審查的每一輪，各貼一則公開的 PR 留言。照順序做：
 
-1. commit 前確認目前分支是這次的 PR 分支，並看 `git status`。
-2. 照 CLAUDE.md「開發流程」第 2 點，只加入這次的紀錄檔，不帶其他未提交的修改。
-3. commit 後 push 到同一個 PR 分支，再 `gh pr checks <PR> --watch` 等 CI。
-4. 分支或檔案的歸屬無法確認時停止，用「需求問答」的格式問開發者。
+1. 報告原文存成草稿資料夾的 `<功能>-spec-review-r<N>.md`（規格審查）或 `<功能>-impl-review-r<N>.md`（實作審查）。
+2. 處理完這一輪的每項發現：決定處理方式，開好要開的 issue（「不阻擋的發現開 issue」）。
+3. 把報告原文複製成留言檔 `<功能>-spec-review-r<N>-comment.md` 或 `<功能>-impl-review-r<N>-comment.md`，只改留言檔，報告原文不動：
+   1. 第一行寫 `## <功能>：規格審查第 N 輪` 或 `## <功能>：實作審查第 N 輪（commit <sha>）`（`<sha>` 是這一輪審查的 commit）。
+   2. 「技術證據」一節包在收合區塊（點了才展開的區塊）裡：前面加 `<details><summary>技術證據</summary>`，後面加 `</details>`。
+   3. 標成「漏洞」的內容照「審查紀錄與重新審查」改寫。
+   4. 最後加一節「處理」，每項發現照 `docs/reviews/README.md`「處理」寫。
+4. 用 `gh pr comment <PR> --body-file <留言檔>` 貼出。它成功時印出的網址就是留言連結，回報時附上（`feature`「回報」）。
+5. 留言貼出後不修改。交回實作的修正 commit，寫在下一輪留言的「處理」（寫法見第 3 步第 4 點）。
+6. 最後一輪之後還有修正或開發者決定時（例如「寫法：」的修正、開發者要求在這個 PR 處理的不阻擋發現），另外貼一則補充留言：第一行寫 `## <功能>：實作審查補充`，寫這些 commit 與決定。
 
-時機：規格審查紀錄在 `feature-implementer` 回報 PR 已建立之後、交給 `acceptance-reviewer` 之前 commit（從 `<功能>-spec-review.md` 存成 `docs/reviews/specification/<功能>.md`，「PR」補上編號）；實作審查紀錄見下面「每一輪都更新紀錄檔」。
+時機：規格審查的留言在 `feature-implementer` 回報 PR 已建立之後、交給 `acceptance-reviewer` 之前，依輪次貼出；實作審查的留言在處理完那一輪的發現後貼出，再請 `feature-implementer` 修正。
 
 ## 交給 acceptance-reviewer 審查
 
-交給 `acceptance-reviewer` 前先 `git fetch origin main`，確認規格審查紀錄已照上面「審查紀錄的 commit」commit、push，附上規格檔路徑、等級、分支名稱、規格審查紀錄的路徑（`docs/reviews/specification/<功能>.md`）與 PR 描述全文（`gh api repos/{owner}/{repo}/pulls/<PR> --jq .body`）；第 2 輪以後再附上實作審查紀錄的路徑（`docs/reviews/implementation/<功能>.md`）。
+交給 `acceptance-reviewer` 前先 `git fetch origin main`，確認規格審查的留言已照上面「審查留言」貼出，附上規格檔路徑、等級、分支名稱、PR 編號、規格審查每一輪留言的連結與 PR 描述全文（`gh api repos/{owner}/{repo}/pulls/<PR> --jq .body`）；第 2 輪以後再附上前幾輪實作審查留言的連結。
 
-規格審查紀錄草稿遺失、開發者決定不補時（見 `feature/references/resume.md`），改附上「沒有規格審查紀錄」與原因，跳過確認規格審查紀錄已 commit、push；`acceptance-reviewer` 照它的定義補做「完整格式的規格卻沒有規格審查紀錄」的情境檢查。
+規格審查的留言檔遺失、還沒貼出，開發者決定不補時（見 `feature/references/resume.md`），改附上「沒有規格審查留言」與原因，跳過確認規格審查的留言已貼出；`acceptance-reviewer` 照它的定義補做「完整格式的規格卻沒有規格審查留言」的情境檢查。
 
 ## 發現處理表
 
@@ -116,9 +121,9 @@ description: 整理交付清單交給 feature-implementer 實作與開 PR、交�
 
 1. 先查重複：`gh issue list --state all --search "<關鍵字>"`。已有相同問題時，在既有 issue 留言補充（`gh issue comment`），不另開。
 2. 一項發現一個 issue；同一個檔案、同一個原因的多項發現合併成一個。
-3. 內容照 `docs/issues.md`：先寫受影響的人遇到的情境，再寫技術背景、依據（`檔案:行號`）、審查的建議，最後附來源 PR 的連結與審查紀錄的檔案路徑（`docs/reviews/implementation/<名稱>.md`；不要用分支上的檔案連結，分支刪除後會失效）。
+3. 內容照 `docs/issues.md`：先寫受影響的人遇到的情境，再寫技術背景、依據（`檔案:行號`）、審查的建議，最後附來源 PR 的連結，「來源」寫 `PR #NN 第 N 輪規格審查／實作審查 #M`（格式見 `docs/issues.md`）。
 4. 標籤：程式行為不正確（包括原本就有的問題）用 `bug`，其餘（測試補強、可讀性、文件）用 `enhancement`。不加優先度，交給 `/issue-triage`。
-5. 在審查紀錄「發現與處理」的「結果」欄寫上 issue 連結。
+5. 在這一輪留言檔「處理」的「結果」寫上 issue 連結。
 
 ## 漏洞的處理
 
@@ -141,18 +146,14 @@ description: 整理交付清單交給 feature-implementer 實作與開 PR、交�
 
 ## 審查紀錄與重新審查
 
-- 寫進紀錄檔前檢查**整份報告**（「摘要」「問題說明」「技術證據」的每一張表），所有提到「漏洞」位置或利用方式的地方，都改寫成一般性的描述（或開發者確認建立後的 advisory 編號）。草稿資料夾裡的報告原文不 commit。
-- 重新審查時，reviewer 只看得到改寫過的紀錄：主 session 把原始內容直接寫進給 reviewer 的指示，不存檔。
-
-### 每一輪都更新紀錄檔
-
-審查完把報告原文存成草稿資料夾的 `<功能>-impl-review-r<N>.md`，再照 `docs/reviews/README.md`「紀錄檔格式」更新 `docs/reviews/implementation/<功能>.md`（「漏洞」的內容照上面改寫）；每一項處理完，在「發現與處理」寫下處理方式、決定者、根本原因與 commit / issue / advisory 編號。每一輪整理完就照「審查紀錄的 commit」commit 並 push 到 PR 分支，最後一輪沒有修正時也一樣；請 `feature-implementer` 修正前必須已經 commit、push，否則它會把紀錄檔當成歸屬不明的改動。
+- 貼留言前，在留言檔檢查**整份報告**（「摘要」「問題說明」「技術證據」的每一張表），所有提到「漏洞」位置或利用方式的地方，都改寫成一般性的描述（或開發者確認建立後的 advisory 編號）。報告原文不動，也不 commit。
+- 重新審查時，reviewer 只看得到改寫過的留言：主 session 把原始內容直接寫進給 reviewer 的指示，不存檔。
 
 ### 輪數依根本原因計算
 
 修正後重新審查，直到沒有阻擋的項目為止：
 
-1. 每一項阻擋的發現，在紀錄檔的「根本原因」欄標上一個簡短的名稱。
+1. 每一項阻擋的發現，在這一輪留言「處理」的「根本原因」標上一個簡短的名稱。
 2. 之後的發現出自同一個根本原因時，沿用同一個名稱並累計輪數；改了不同的驗收條件或規格版本也不重新計算。
 3. 同一個根本原因連續 3 輪都還有阻擋時，停止自動修改，整理具體原因問開發者。不得自行重置輪數。
 4. 第 2 輪以後的審查範圍照 `feature`「判斷等級」表的「實作審查」欄，寫進給 `acceptance-reviewer` 的指示。

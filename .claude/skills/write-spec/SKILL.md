@@ -48,7 +48,7 @@ description: 寫規格草稿（和重大架構決策的 ADR 草稿）、交給 s
 
 ### 審查紀錄
 
-每一輪的報告原文存成草稿資料夾的 `<功能>-spec-review-r<N>.md`。照 `docs/reviews/README.md`「紀錄檔格式」把各輪的結果整理在草稿資料夾的 `<功能>-spec-review.md`，寫上每一項的處理方式與決定者；`feature-implementer` 回報 PR 已建立後，照 `implement-and-review`「審查紀錄的 commit」存成 `docs/reviews/specification/<功能>.md` 並 commit。
+每一輪的報告原文存成草稿資料夾的 `<功能>-spec-review-r<N>.md`；處理完這一輪的發現，寫成留言檔 `<功能>-spec-review-r<N>-comment.md`（寫法見 `implement-and-review`「審查留言」）。規格審查在 PR 開之前做，留言在 PR 開好後（`feature-implementer` 回報 PR 已建立）、交給 `acceptance-reviewer` 前，照 `implement-and-review`「審查留言」依輪次貼出。
 
 ### 交給開發者核准
 

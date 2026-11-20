@@ -3,6 +3,7 @@
     "allow": [
       "Bash(gh pr checks *)",
       "Bash(gh pr view *)",
+      "Bash(gh pr comment *)",
       "Bash(gh run view *)",
       "Bash(gh run list *)",
       "Bash(git push *)",
@@ -17,6 +18,7 @@
       "Read(**/.env)",
       "Read(**/.env.local)",
       "Bash(gh pr merge *)",
+      "Bash(gh pr comment *--edit-last*)",
       "Bash(gh api *merge*)",
       "Bash(gh api *Merge*)"
     ]

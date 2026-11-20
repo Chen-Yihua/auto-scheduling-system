@@ -1,6 +1,6 @@
 # 0009. 修改紀錄寫決定與落點、引進術語表、產品文件照交付清單由 implementer commit
 
-- 狀態：已採用（C、Q 編號規則已被 [0012](0012-simplify-process-levels.md) 取代；不引用 scratchpad 的原則沿用；接續時把暫存檔複製到新的 scratchpad 已被 [0014](0014-drafts-folder.md) 取代）
+- 狀態：已採用（C、Q 編號規則已被 [0012](0012-simplify-process-levels.md) 取代；不引用 scratchpad 的原則沿用；接續時把暫存檔複製到新的 scratchpad 已被 [0014](0014-drafts-folder.md) 取代；審查紀錄由主 session commit 的分工已被 [0015](0015-review-results-in-pr-comments.md) 取代，改成 PR 留言）
 - 日期：2026-11-09
 
 ## 背景

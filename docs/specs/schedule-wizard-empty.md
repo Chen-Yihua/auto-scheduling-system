@@ -57,6 +57,7 @@
 5. 說明寫明已逾期的任務可以在首頁的今日卡片重新排程。
 6. 說明附「回首頁」按鈕。
 7. 使用者沒有任何任務（不算主任務）時，說明只寫「目前沒有任務」，不列數字。
+7a. 進入精靈時任務清單載入失敗，不顯示第 2–7 條的說明，改顯示「暫時無法載入任務」與「回首頁」按鈕。
 8. 精靈不另外提醒已排程、已逾期的任務。
 
 **資料**
@@ -132,6 +133,7 @@
 - 從任務頁或首頁任務列表編輯已排程的任務時，不重新排程。
 - 精靈不顯示已排程、已逾期的任務的提醒。
 - 不新增排程相關 API 的限流（#122 處理）。
+- 首頁一直開著時，今日卡片不會隨時間自動更新「現在」：任務的時段結束或跨過午夜後，要重新整理頁面，或任務清單重新抓取後，卡片才會更新。
 
 ## 假設
 
@@ -149,6 +151,7 @@
 | AC3 | 使用者有 5 個已排進日曆、2 個已完成的任務時，說明寫出「5」個已排進 Google 日曆、「2」個已完成 |
 | AC4 | 精靈的說明寫明已逾期的任務可以在首頁的今日卡片重新排程 |
 | AC5 | 使用者沒有任何非主任務的任務時，說明只顯示「目前沒有任務」 |
+| AC5a | 進入精靈時任務清單載入失敗，不顯示 AC2–AC5 的說明，改顯示「暫時無法載入任務」與「回首頁」按鈕 |
 | AC6 | 精靈有可排程的任務時，照常顯示三欄 |
 | AC7 | 確認排程成功的任務，資料庫的 `scheduled_start`、`scheduled_end` 是寫入 Google 的開始、結束時間 |
 | AC8 | 確認排程寫入 Google 失敗的任務，`calendar_event_id`、`scheduled_start`、`scheduled_end` 都不變 |
@@ -275,11 +278,12 @@
 | AC3 | `schedule.test.ts`：5 個有 `calendar_event_id`、2 個 `Done` | 說明含「5」與「2」 | 是 |
 | AC4 | `schedule.test.ts`：同 AC2 | 說明含「今日卡片」 | 是 |
 | AC5 | `schedule.test.ts`：任務清單只有主任務或是空的 | 只顯示「目前沒有任務」 | 是 |
+| AC5a | `schedule.test.ts`：`fetchSchedulableTasks` 後 `loadFailed` 是 `true` | 顯示「暫時無法載入任務」與「回首頁」按鈕，沒有「目前沒有任務」 | 是 |
 | AC6 | `schedule.test.ts` 既有的「step 1：三欄渲染各自的任務」 | 照常通過 | 否（既有行為） |
 | AC7 | `backend/tests/unit/test_google_calendar_service.py`：寫入成功 | 任務的 `scheduled_start`、`scheduled_end` 等於該筆的 start、end | 是 |
 | AC8 | `test_google_calendar_service.py`：寫入失敗 | 三個欄位都不變 | 否（既有行為加斷言） |
 | AC9 | `backend/tests/unit/test_schedulable_items.py`：對外部平台呼叫 `set_calendar_event_id_for_composite` | 兩個欄位已寫入 | 是 |
-| AC10 | `backend/tests/integration/test_schedule_api.py`：`POST /schedule/removed-events/resolve` 重新排程 | 三個欄位都是 `null` | 是 |
+| AC10 | `backend/tests/unit/test_schedule_router.py`：「處理已刪除的事件」重新排程 | 三個欄位都是 `null` | 是 |
 | AC11 | `test_schedule_api.py`：`GET /schedule/tasks` | 每筆都有兩個欄位，沒存的是 `null` | 是 |
 | AC12 | `backend/tests/unit/test_platform_sync.py`：`upsert_items` 前已有兩個欄位 | 同步後兩個欄位不變 | 否（保護既有行為） |
 | AC13 | `frontend/tests/components/Dashboard.test.ts` | 左欄第一個元件是今日卡片，在任務列表前面 | 是 |
@@ -292,14 +296,14 @@
 | AC25 | `TodayTasks.test.ts`：按手動任務「修改」 | 用原始 id 對應的 `all_tasks` 手動任務呼叫 `startEditTask`，帶今日卡片的標記 | 是 |
 | AC26 | `TodayTasks.test.ts`：按外部任務「修改」 | 打開只有截止日期與時長的表單 | 是 |
 | AC27 | `frontend/tests/components/TaskForm.test.ts`：有標記、有／沒有 `calendar_event_id` | 有編號時顯示說明，沒有時不顯示 | 是 |
-| AC28 | `TaskForm.actions.test.ts`：有標記、有編號，`PUT` 成功，斷言 `PUT` 的網址是原始 id（沒有 `manual:` 前綴）；另外 `backend/tests/integration/test_schedule_scenario.py`：確認排程 → 重新排程 → `GET /schedule/tasks` | 前端：`PUT` 後呼叫重新排程；後端：三個欄位都是 `null`，任務符合精靈的篩選 | 是 |
+| AC28 | `frontend/tests/composables/useTaskForm.test.ts`：有標記、有編號，`PUT` 成功，斷言 `PUT` 的網址是原始 id（沒有 `manual:` 前綴）；另外 `backend/tests/integration/test_schedule_scenario.py`：確認排程 → 重新排程 → `GET /schedule/tasks` | 前端：`PUT` 後呼叫重新排程；後端：三個欄位都是 `null`，任務符合精靈的篩選 | 是 |
 | AC29 | `TodayTasks.test.ts`：外部任務表單儲存成功 | 先呼叫 `PATCH /schedule/tasks/fields`，再呼叫重新排程 | 是 |
-| AC30 | `TaskForm.actions.test.ts`：`PUT` 成功、重新排程回授權失效 | 只有一個通知，含「已儲存，但需要重新連接 Google Calendar 才能重新排程」與重新連接按鈕；沒有 `reauthToast`、「儲存成功」或「已儲存，但重新排程失敗」 | 是 |
-| AC31 | `TaskForm.actions.test.ts`：`PUT` 失敗 | 不呼叫重新排程 | 是 |
-| AC32 | `TaskForm.actions.test.ts`：`PUT` 成功、重新排程回 500；另一個案例回 200 但這個任務在失敗清單 | 兩個案例都只有一個通知，含「已儲存，但重新排程失敗」與原因 | 是 |
-| AC32a | `TaskForm.actions.test.ts`：`PUT` 與重新排程都成功 | 只有「儲存成功」一個通知 | 是 |
+| AC30 | `useTaskForm.test.ts`：`PUT` 成功、重新排程回授權失效 | 只有一個通知，含「已儲存，但需要重新連接 Google Calendar 才能重新排程」與重新連接按鈕；沒有 `reauthToast`、「儲存成功」或「已儲存，但重新排程失敗」 | 是 |
+| AC31 | `useTaskForm.test.ts`：`PUT` 失敗 | 不呼叫重新排程 | 是 |
+| AC32 | `useTaskForm.test.ts`：`PUT` 成功、重新排程回 500；另一個案例回 200 但這個任務在失敗清單 | 兩個案例都只有一個通知，含「已儲存，但重新排程失敗」與原因 | 是 |
+| AC32a | `useTaskForm.test.ts`：`PUT` 與重新排程都成功 | 只有「儲存成功」一個通知 | 是 |
 | AC32b | `TodayTasks.test.ts`：外部任務小表單 `PATCH` 成功、重新排程回 500 | 只有一個通知，含「已儲存，但重新排程失敗」與錯誤訊息 | 是 |
-| AC33 | `TaskForm.actions.test.ts`：沒有標記 | 不呼叫重新排程 | 否（既有行為） |
+| AC33 | `useTaskForm.test.ts`：沒有標記 | 不呼叫重新排程 | 否（既有行為） |
 | AC34 | `TodayTasks.test.ts`：按「刪除」後確認、取消 | 確認時呼叫既有的刪除；取消時不呼叫 | 是 |
 | AC35 | `TodayTasks.test.ts` | 有已逾期、已排程任務時有按鈕，沒有時沒有 | 是 |
 | AC36 | `TodayTasks.test.ts`：2 個已逾期已排程、1 個今天未逾期已排程 | 確認訊息含「2」；只送出那 2 個 id | 是 |
@@ -329,6 +333,9 @@
 
 | 日期 | 修改 | 原因 | 確認者 |
 |---|---|---|---|
+| 2026-11-21 | 新增需求 7a、AC5a 與測試對應 | 開發者決定精靈在任務清單載入失敗時改顯示「暫時無法載入任務」→ 需求 7a、AC5a；檢查過 AC2–AC5 不用改（載入成功時的行為不變） | 開發者 |
+| 2026-11-21 | 「不做」新增：今日卡片不隨時間自動更新 | 開發者決定維持只在清單變動或重新整理時更新 →「不做」；檢查過 AC14–AC22、AC35 不用改（判斷規則不變，只是判斷的時間點） | 開發者 |
+| 2026-11-21 | 測試對應的位置：AC10 改為 `backend/tests/unit/test_schedule_router.py`；AC28、AC30–AC33 的前端測試改為 `frontend/tests/composables/useTaskForm.test.ts` | 實作時發現 `TaskForm.actions.test.ts` 把 `useTaskForm` 整個 mock 掉，驗證不到 `PUT` 與通知；驗收條件本身不變 → 測試對應；檢查過其他 AC 的測試位置不用改 | 開發者 |
 
 ## 請你決定
 

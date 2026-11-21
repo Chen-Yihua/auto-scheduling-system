@@ -103,6 +103,12 @@ describe('TodayTasks.vue', () => {
     expect(rows[1]!.find('[data-testid="today-date"]').classes().join(' ')).not.toContain('text-red')
   })
 
+  it('掛載時自己抓一次任務清單，不依賴同一頁的其他元件', () => {
+    render()
+
+    expect(fetchSchedulableTasksSpy).toHaveBeenCalledTimes(1)
+  })
+
   it('AC23：載入完成、沒有任何要列的任務時，顯示「今天沒有排程的任務，也沒有已逾期的任務」', () => {
     const wrapper = render()
 

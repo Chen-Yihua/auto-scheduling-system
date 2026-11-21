@@ -1057,6 +1057,7 @@ async def test_reschedule_event_already_gone_on_google_still_clears_event_id():
         patches.setattr(calendar_service, "delete_calendar_event", mock_delete)
 
         result = await _reschedule("manual:t")
+        assert await _event_id("t") is None
     finally:
         patches.undo()
         await db.manual_tasks.delete_many({"user_id": REMOVED_USER["sub"]})

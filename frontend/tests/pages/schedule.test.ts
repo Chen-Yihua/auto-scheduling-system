@@ -20,9 +20,10 @@ vi.mock('vue-router', () => ({
 }))
 
 const schedulableTasksRef = vueRef<SchedulableTask[]>([])
+const loadFailedRef = vueRef(false)
 const fetchSchedulableTasksSpy = vi.fn()
 vi.mock('~/composables/useSchedulableTasks', () => ({
-  useSchedulableTasks: () => ({ tasks: schedulableTasksRef, fetchSchedulableTasks: fetchSchedulableTasksSpy }),
+  useSchedulableTasks: () => ({ tasks: schedulableTasksRef, loadFailed: loadFailedRef, fetchSchedulableTasks: fetchSchedulableTasksSpy }),
 }));
 
 const fetchGoogleCalendarsSpy = vi.fn()
@@ -152,6 +153,7 @@ describe('pages/schedule.vue', () => {
     pushSpy.mockClear()
     toastSpy.add.mockClear()
     // mockReset：其他測試設的 mockImplementation 會在掛載時改掉 schedulableTasksRef
+    loadFailedRef.value = false
     fetchSchedulableTasksSpy.mockReset()
     fetchScheduleSuggestionSpy.mockClear()
     initWizardSpy.mockClear()
@@ -270,6 +272,22 @@ describe('pages/schedule.vue', () => {
       expect(text).not.toMatch(/\d/)
       expect(text).not.toContain('今日卡片')
     })
+  })
+
+  it('AC5a：進入精靈時任務清單載入失敗 → 顯示「暫時無法載入任務」與「回首頁」，不顯示 AC2–AC5 的說明', async () => {
+    schedulableTasksRef.value = []
+    fetchSchedulableTasksSpy.mockImplementation(() => { loadFailedRef.value = true })
+
+    const wrapper = await render()
+
+    const text = wrapper.get('[data-testid="wizard-empty"]').text()
+    expect(text).toContain('暫時無法載入任務')
+    expect(text).not.toContain('目前沒有任務')
+    expect(text).not.toContain('今日卡片')
+    const home = wrapper.findAll('button').find((b) => b.text() === '回首頁')
+    expect(home).toBeDefined()
+    await home!.trigger('click')
+    expect(pushSpy).toHaveBeenCalledWith('/')
   })
 
   it('AC6：有可排程的任務時照常顯示三欄', async () => {

@@ -3,6 +3,7 @@ import { ref, reactive, computed, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { useUser } from '@clerk/vue';
 import { useSchedulableTasks } from '~/composables/useSchedulableTasks';
+import { toDatetimeLocal } from '~/utils/datetimeLocal';
 import { useSchedule } from '~/composables/useSchedule';
 import { useScheduleWizard, PRIORITIES, type PriorityKey } from '~/composables/useScheduleWizard';
 import { useGoogleCalendar } from '~/composables/useGoogleCalendar';
@@ -18,7 +19,7 @@ import type { BlockedRecurringRule, BlockedException, RemovedCalendarEvent } fro
 const router = useRouter()
 const toast = useToast()
 const { isSignedIn } = useUser()
-const { tasks: schedulableTasks, fetchSchedulableTasks } = useSchedulableTasks()
+const { tasks: schedulableTasks, loadFailed, fetchSchedulableTasks } = useSchedulableTasks()
 const { fetchScheduleSuggestion } = useSchedule()
 const {
   step, columns, saving, hasTasks, preferences, sanitizedPreferences,
@@ -222,15 +223,6 @@ function cancel() {
   router.push('/')
 }
 
-// datetime-local 用不含時區的本地時間，due_date 是 ISO 字串，需要互相轉換
-function toDatetimeLocalValue(dueDate: string | undefined | null): string {
-  if (!dueDate) return ''
-  const d = new Date(dueDate)
-  if (Number.isNaN(d.getTime())) return ''
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
-}
-
 function onDueDateInput(task: SchedulableTask, event: Event) {
   const value = (event.target as HTMLInputElement).value
   if (!value) {
@@ -375,7 +367,10 @@ function onExceptionEndInput(exception: BlockedException, event: Event) {
 
         <!-- Step 1 沒有可排程的任務：說明原因 -->
         <div v-else-if="step === 1 && !hasTasks" data-testid="wizard-empty" class="text-center space-y-3 py-8">
-          <template v-if="emptyState.total === 0">
+          <template v-if="loadFailed">
+            <p class="text-sm text-gray-700 dark:text-gray-300">暫時無法載入任務</p>
+          </template>
+          <template v-else-if="emptyState.total === 0">
             <p class="text-sm text-gray-700 dark:text-gray-300">目前沒有任務</p>
           </template>
           <template v-else>
@@ -532,14 +527,14 @@ function onExceptionEndInput(exception: BlockedException, event: Event) {
                 <input
                   type="datetime-local"
                   class="border border-default rounded-md px-2 py-1 text-xs bg-transparent"
-                  :value="toDatetimeLocalValue(exception.start)"
+                  :value="toDatetimeLocal(exception.start)"
                   @change="onExceptionStartInput(exception, $event)"
                 >
                 <span class="text-xs text-gray-400">～</span>
                 <input
                   type="datetime-local"
                   class="border border-default rounded-md px-2 py-1 text-xs bg-transparent"
-                  :value="toDatetimeLocalValue(exception.end)"
+                  :value="toDatetimeLocal(exception.end)"
                   @change="onExceptionEndInput(exception, $event)"
                 >
                 <UButton size="xs" variant="ghost" color="error" @click="removeBlockedException(index)">移除</UButton>
@@ -566,7 +561,7 @@ function onExceptionEndInput(exception: BlockedException, event: Event) {
                 <input
                   type="datetime-local"
                   class="border border-default rounded-md px-2 py-1 text-sm bg-transparent"
-                  :value="toDatetimeLocalValue(task.due_date)"
+                  :value="toDatetimeLocal(task.due_date)"
                   @change="onDueDateInput(task, $event)"
                 >
               </label>

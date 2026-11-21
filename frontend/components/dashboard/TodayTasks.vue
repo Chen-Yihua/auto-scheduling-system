@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useSchedulableTasks } from '~/composables/useSchedulableTasks'
 import { useTaskForm } from '~/composables/useTaskForm'
 import { useGoogleCalendarAuth } from '~/composables/useGoogleCalendarAuth'
+import { toDatetimeLocal } from '~/utils/datetimeLocal'
 import { buildTodayView, type TodayLabel, type TodayRow } from '~/utils/todayTasks'
 import { afterSaveRescheduleToast, batchRescheduleToast } from '~/utils/rescheduleToasts'
 import type { SchedulableTask } from '~/types/schedulableTask'
@@ -11,6 +12,8 @@ const toast = useToast()
 const { tasks, loading, loadFailed, fetchSchedulableTasks, rescheduleTasks, saveTaskFields } = useSchedulableTasks()
 const { all_tasks, startEditTask, onDeleteTask } = useTaskForm()
 const { reauthToast } = useGoogleCalendarAuth()
+
+onMounted(() => { void fetchSchedulableTasks() })
 
 const view = computed(() => buildTodayView(tasks.value, new Date()))
 const hasRows = computed(() => view.value.overdue.length > 0 || view.value.today.length > 0)
@@ -38,18 +41,10 @@ function dateText(task: SchedulableTask): string {
 
 const stageText = (task: SchedulableTask) => task.parent_id ? `${task.parent_title ?? ''} · 階段 ${task.stage}/${task.stage_count}` : ''
 
-// ---------- 修改 ----------
 const externalTask = ref<SchedulableTask | null>(null)
 const externalDue = ref('')
 const externalDuration = ref<string | number>('')
 const externalSaving = ref(false)
-
-// datetime-local 用不含時區的當地時間
-function toDatetimeLocal(iso: string | null | undefined): string {
-  if (!iso) return ''
-  const d = new Date(iso)
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${clock(d)}`
-}
 
 function rawManualTask(task: SchedulableTask) {
   // 去掉 "manual:" 前綴才是原始 id
@@ -101,7 +96,6 @@ async function onDelete(task: SchedulableTask) {
   await fetchSchedulableTasks()
 }
 
-// ---------- 批次重新排程 ----------
 const rescheduling = ref(false)
 
 async function batchReschedule() {

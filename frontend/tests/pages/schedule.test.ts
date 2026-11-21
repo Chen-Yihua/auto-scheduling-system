@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mount, enableAutoUnmount } from '@vue/test-utils';
 import { ref as vueRef, reactive as vueReactive, computed as vueComputed, h, defineComponent } from 'vue'
 
-import SchedulePage from '~/pages/schedule/wizard.vue'
+import SchedulePage from '~/pages/schedule.vue'
 import type { SchedulableTask } from '~/types/schedulableTask'
 import type { RemovedCalendarEvent } from '~/types/schedule'
 
@@ -14,10 +14,6 @@ vi.mock('@clerk/vue', () => ({
 const toastSpy = { add: vi.fn() }
 vi.stubGlobal('useToast', () => toastSpy)
 
-const pushSpy = vi.fn()
-vi.mock('vue-router', () => ({
-  useRouter: () => ({ push: pushSpy }),
-}))
 
 const schedulableTasksRef = vueRef<SchedulableTask[]>([])
 const loadFailedRef = vueRef(false)
@@ -53,7 +49,7 @@ vi.mock('~/composables/useSchedule', () => ({
   useSchedule: () => ({ fetchScheduleSuggestion: fetchScheduleSuggestionSpy }),
 }))
 
-const stepRef = vueRef<1 | 2>(1)
+const stepRef = vueRef<1 | 2 | 3>(1)
 const savingRef = vueRef(false)
 const columnsRef = vueReactive<Record<'Low' | 'Medium' | 'High', SchedulableTask[]>>({ Low: [], Medium: [], High: [] })
 const preferencesRef = vueRef({
@@ -63,6 +59,7 @@ const preferencesRef = vueRef({
   daily_max_minutes: null as number | null,
 })
 const initWizardSpy = vi.fn()
+const addNewTasksSpy = vi.fn()
 const moveTaskSpy = vi.fn()
 const confirmOrderSpy = vi.fn()
 const backToStep1Spy = vi.fn()
@@ -84,6 +81,7 @@ vi.mock('~/composables/useScheduleWizard', () => ({
     sanitizedPreferences: vueComputed(() => preferencesRef.value),
     hasTasks: vueComputed(() => (['Low', 'Medium', 'High'] as const).some((p) => columnsRef[p].length > 0)),
     initWizard: initWizardSpy,
+    addNewTasks: addNewTasksSpy,
     moveTask: moveTaskSpy,
     confirmOrder: confirmOrderSpy,
     backToStep1: backToStep1Spy,
@@ -97,6 +95,12 @@ vi.mock('~/composables/useScheduleWizard', () => ({
   }),
 }))
 
+// 第 3 步的排程建議：只留「重新產生」通知精靈
+const ScheduleSuggestionStub = defineComponent({
+  name: 'ScheduleSuggestion',
+  emits: ['regenerate'],
+  setup: (_p, { emit }) => () => h('button', { 'data-testid': 'suggestion', onClick: () => emit('regenerate') }, '重新產生'),
+})
 const AppHeaderStub = defineComponent({ name: 'AppHeader', setup: () => () => h('div') })
 const LoginRequiredCardStub = defineComponent({
   name: 'LoginRequiredCard',
@@ -112,6 +116,7 @@ const UButtonStub = defineComponent({
 
 const uiStubs = {
   AppHeader: AppHeaderStub,
+  ScheduleSuggestion: ScheduleSuggestionStub,
   LoginRequiredCard: LoginRequiredCardStub,
   UIcon: true,
   UBadge: { template: '<span><slot /></span>' },
@@ -150,7 +155,8 @@ describe('pages/schedule.vue', () => {
     columnsRef.High = []
     preferencesRef.value = { blocked_recurring: [], blocked_exceptions: [], buffer_minutes: 0, daily_max_minutes: null }
     schedulableTasksRef.value = []
-    pushSpy.mockClear()
+    addNewTasksSpy.mockClear()
+    fetchScheduleSuggestionSpy.mockReset()
     toastSpy.add.mockClear()
     // mockReset：其他測試設的 mockImplementation 會在掛載時改掉 schedulableTasksRef
     loadFailedRef.value = false
@@ -178,7 +184,7 @@ describe('pages/schedule.vue', () => {
     window.confirm = confirmSpy
   })
 
-  it('未登入時顯示登入提示，不會抓任務', async () => {
+  it('AC40：未登入時顯示「排程精靈」登入提示，不會抓任務', async () => {
     isSignedInRef.value = false
     const wrapper = await render()
 
@@ -234,7 +240,7 @@ describe('pages/schedule.vue', () => {
   })
 
   describe('第 1 步沒有可排程的任務', () => {
-    it('AC2、AC4：不顯示三欄，改顯示說明（寫明已逾期的任務可以在今日卡片重新排程）與「回首頁」按鈕；按下導向首頁', async () => {
+    it('AC2、AC4、schedule-index AC36：不顯示三欄，改顯示說明（寫明已逾期的任務可以在今日卡片重新排程），沒有「回首頁」按鈕', async () => {
       schedulableTasksRef.value = [fakeTask({ id: 'a', calendar_event_id: 'e' })]
 
       const wrapper = await render()
@@ -242,10 +248,7 @@ describe('pages/schedule.vue', () => {
       expect(wrapper.text()).not.toContain('拖任務到這裡')
       expect(wrapper.text()).toContain('今日卡片')
       expect(wrapper.text()).toContain('重新排程')
-      const home = wrapper.findAll('button').find((b) => b.text() === '回首頁')
-      expect(home).toBeDefined()
-      await home!.trigger('click')
-      expect(pushSpy).toHaveBeenCalledWith('/')
+      expect(wrapper.findAll('button').find((b) => b.text() === '回首頁')).toBeUndefined()
     })
 
     it('AC3：5 個已排進日曆、2 個已完成的任務 → 說明寫出「5」個已排進 Google 日曆、「2」個已完成', async () => {
@@ -274,7 +277,7 @@ describe('pages/schedule.vue', () => {
     })
   })
 
-  it('AC5a：進入精靈時任務清單載入失敗 → 顯示「暫時無法載入任務」與「回首頁」，不顯示 AC2–AC5 的說明', async () => {
+  it('AC5a、AC36：進入精靈時任務清單載入失敗 → 顯示「暫時無法載入任務」，沒有「回首頁」按鈕，不顯示 AC2–AC5 的說明', async () => {
     schedulableTasksRef.value = []
     fetchSchedulableTasksSpy.mockImplementation(() => { loadFailedRef.value = true })
 
@@ -284,10 +287,7 @@ describe('pages/schedule.vue', () => {
     expect(text).toContain('暫時無法載入任務')
     expect(text).not.toContain('目前沒有任務')
     expect(text).not.toContain('今日卡片')
-    const home = wrapper.findAll('button').find((b) => b.text() === '回首頁')
-    expect(home).toBeDefined()
-    await home!.trigger('click')
-    expect(pushSpy).toHaveBeenCalledWith('/')
+    expect(wrapper.findAll('button').find((b) => b.text() === '回首頁')).toBeUndefined()
   })
 
   it('AC6：有可排程的任務時照常顯示三欄', async () => {
@@ -311,15 +311,14 @@ describe('pages/schedule.vue', () => {
     expect(moveTaskSpy).toHaveBeenCalledWith('Low', 0, 'High', 0)
   })
 
-  it('step 1：按「下一步」呼叫 confirmOrder；按「取消」導向首頁', async () => {
+  it('step 1：按「下一步」呼叫 confirmOrder；AC35：沒有「取消」按鈕', async () => {
     columnsRef.Low = [fakeTask({ id: 'low1' })]
     const wrapper = await render()
 
     await wrapper.findAll('button').find((b) => b.text() === '下一步')!.trigger('click')
     expect(confirmOrderSpy).toHaveBeenCalledTimes(1)
 
-    await wrapper.findAll('button').find((b) => b.text() === '取消')!.trigger('click')
-    expect(pushSpy).toHaveBeenCalledWith('/schedule')
+    expect(wrapper.findAll('button').find((b) => b.text() === '取消')).toBeUndefined()
   });
 
   it('step 2：顯示可編輯欄位，改動會呼叫 updateDueDate／updateDuration', async () => {
@@ -339,7 +338,7 @@ describe('pages/schedule.vue', () => {
     expect(updateDueDateSpy).toHaveBeenCalledWith('a', new Date('2026-10-05T10:00').toISOString())
   })
 
-  it('step 2：按「上一步」呼叫 backToStep1；按「確認並產生排程建議」完成後抓排程建議並導回首頁', async () => {
+  it('step 2、AC31：按「上一步」呼叫 backToStep1；按「確認並產生排程建議」完成後抓排程建議，同一頁進到第 3 步', async () => {
     stepRef.value = 2
     columnsRef.Medium = [fakeTask({ id: 'a' })]
     finishSpy.mockImplementation(async (onDone: () => Promise<void>) => {
@@ -353,7 +352,70 @@ describe('pages/schedule.vue', () => {
     await wrapper.findAll('button').find((b) => b.text() === '確認並產生排程建議')!.trigger('click')
     expect(finishSpy).toHaveBeenCalledTimes(1)
     expect(fetchScheduleSuggestionSpy).toHaveBeenCalledWith(preferencesRef.value)
-    expect(pushSpy).toHaveBeenCalledWith('/schedule')
+    expect(stepRef.value).toBe(3)
+  })
+
+  it('AC30：已登入、已連接、沒有已刪除的事件時，直接顯示第 1 步的三欄，沒有排程建議的內容', async () => {
+    columnsRef.Low = [fakeTask({ id: 'low1', title: '低優先任務' })]
+
+    const wrapper = await render()
+
+    expect(wrapper.text()).toContain('低優先任務')
+    expect(wrapper.find('[data-testid="suggestion"]').exists()).toBe(false)
+  })
+
+  it('AC31、AC32：第 3 步顯示排程建議的內容（確認排程由它負責），沒有三欄', async () => {
+    stepRef.value = 3
+    columnsRef.Medium = [fakeTask({ id: 'a', title: '任務 A' })]
+
+    const wrapper = await render()
+
+    expect(wrapper.find('[data-testid="suggestion"]').exists()).toBe(true)
+    expect(wrapper.text()).not.toContain('任務 A')
+  })
+
+  it('AC33：第 3 步按「重新產生」，重新讀任務並回到第 1 步（initWizard）', async () => {
+    stepRef.value = 3
+    const tasks = [fakeTask({ id: 'a' })]
+    fetchSchedulableTasksSpy.mockImplementation(() => { schedulableTasksRef.value = tasks })
+    const wrapper = await render()
+    initWizardSpy.mockClear()
+    fetchSchedulableTasksSpy.mockClear()
+
+    await wrapper.get('[data-testid="suggestion"]').trigger('click')
+    await flushMicrotasks()
+
+    expect(fetchSchedulableTasksSpy).toHaveBeenCalledTimes(1)
+    expect(initWizardSpy).toHaveBeenCalledWith(tasks)
+  })
+
+  it('AC37：共用狀態裡已有上次沒確認的建議，打開排程頁時從頭開始（initWizard 把精靈放回第 1 步），不顯示建議', async () => {
+    // 真正回到第 1 步由 initWizard 負責（useScheduleWizard.test.ts）；這裡確認每次打開都呼叫它，而且不看 useSchedule 的狀態
+    columnsRef.Low = [fakeTask({ id: 'low1', title: '低優先任務' })]
+
+    const wrapper = await render()
+
+    expect(initWizardSpy).toHaveBeenCalledTimes(1)
+    expect(wrapper.find('[data-testid="suggestion"]').exists()).toBe(false)
+  })
+
+  it('AC38、AC39：任務列表多出新任務時，只有第 1 步會呼叫 addNewTasks；第 2、3 步不處理', async () => {
+    columnsRef.Low = [fakeTask({ id: 'low1' })]
+    await render()
+    addNewTasksSpy.mockClear()
+    const withNew = [fakeTask({ id: 'new', priority: 'High' })]
+
+    schedulableTasksRef.value = withNew
+    await flushMicrotasks()
+    expect(addNewTasksSpy).toHaveBeenCalledWith(withNew)
+
+    addNewTasksSpy.mockClear()
+    for (const step of [2, 3] as const) {
+      stepRef.value = step
+      schedulableTasksRef.value = [fakeTask({ id: `new-${step}` })]
+      await flushMicrotasks()
+    }
+    expect(addNewTasksSpy).not.toHaveBeenCalled()
   })
 
   describe('step 2：排程偏好設定', () => {
@@ -810,3 +872,29 @@ describe('pages/schedule.vue：issue-42 處理已刪除的事件', () => {
 function flushMicrotasks() {
   return new Promise((resolve) => setTimeout(resolve, 0))
 }
+
+describe('pages/schedule.vue：處理已刪除的事件按「取消」', () => {
+  it('AC34：不呼叫處理已刪除事件的 API，重新讀任務、進到第 1 步', async () => {
+    isSignedInRef.value = true
+    stepRef.value = 1
+    columnsRef.Medium = [fakeTask({ id: 'wizard-task' })]
+    fetchGoogleCalendarsSpy.mockResolvedValue('connected')
+    removedItemsRef.value = [removedItem({ title: '被刪掉的任務' })]
+    fetchRemovedEventsSpy.mockResolvedValue('ok')
+    resolveRemovedEventsSpy.mockReset()
+    fetchSchedulableTasksSpy.mockReset()
+    initWizardSpy.mockClear()
+
+    const wrapper = await render()
+    expect(wrapper.text()).toContain('被刪掉的任務')
+    initWizardSpy.mockClear()
+
+    await buttonByText(wrapper, '取消')!.trigger('click')
+    await flushMicrotasks()
+
+    expect(resolveRemovedEventsSpy).not.toHaveBeenCalled()
+    expect(initWizardSpy).toHaveBeenCalledTimes(1)
+    expect(wrapper.text()).not.toContain('被刪掉的任務')
+    expect(wrapper.text()).toContain(STEP1_HINT)
+  })
+})

@@ -29,7 +29,7 @@ function useScheduleWizardImpl() {
   const { getToken } = useAuth();
   const BASE_URL = config.public.apiBaseUrl;
 
-  const step = ref<1 | 2>(1);
+  const step = ref<1 | 2 | 3>(1);
   const saving = ref(false);
   // 依 priority 分三欄，拖到別欄即改變 priority
   const columns = reactive<Record<PriorityKey, SchedulableTask[]>>({ Low: [], Medium: [], High: [] })
@@ -79,6 +79,16 @@ function useScheduleWizardImpl() {
     }
     step.value = 1
     preferences.value = defaultSchedulePreferences()
+  }
+
+  // 第 1 步時新出現的任務：條件同 initWizard，不在三欄裡的才加，放在它優先級那一欄的最後面
+  function addNewTasks(currentTasks: SchedulableTask[]) {
+    const known = new Set(allTasks().map((t) => t.id))
+    for (const t of currentTasks) {
+      if (known.has(t.id) || t.is_parent || t.status === 'Done' || t.calendar_event_id) continue
+      const priority = t.priority ?? 'Medium'
+      columns[priority].push({ ...t, priority })
+    }
   }
 
   function moveTask(fromColumn: PriorityKey, fromIndex: number, toColumn: PriorityKey, toIndex: number) {
@@ -172,6 +182,7 @@ function useScheduleWizardImpl() {
     preferences,
     sanitizedPreferences,
     initWizard,
+    addNewTasks,
     moveTask,
     confirmOrder,
     backToStep1,

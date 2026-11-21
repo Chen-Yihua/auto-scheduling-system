@@ -141,7 +141,6 @@ describe('header/AppHeader.vue', () => {
     ['/', '首頁'],
     ['/tasks', '任務管理'],
     ['/schedule', '排程'],
-    ['/schedule/wizard', '排程'],
     ['/productivity', '分析'],
   ])('AC2：在 %s 時只有「%s」有 aria-current="page"', (path, label) => {
     routePath.value = path

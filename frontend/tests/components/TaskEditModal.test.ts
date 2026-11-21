@@ -114,7 +114,7 @@ describe('TaskEditModal.vue', () => {
     onCancel();
   });
 
-  it('AC27：從今日卡片打開有 calendar_event_id 的任務，表單上方顯示會移除時段的說明；沒有編號、或從別處打開時不顯示', async () => {
+  it('schedule-wizard-empty AC27：從今日卡片打開有 calendar_event_id 的任務，表單上方顯示會移除時段的說明；沒有編號、或從別處打開時不顯示', async () => {
     const wrapper = shallowMount(TaskEditModal, { global: { stubs: uiStubs } });
     await flushPromises();
     const { startEditTask } = useTaskForm();

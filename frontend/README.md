@@ -79,7 +79,7 @@ npm run coverage    # 單元測試 + 覆蓋率報表
 ├── components/                 # 依功能分組；跨頁面共用的直接放這層（LoginRequiredCard：未登入時的提示卡片）
 │   ├── header/                 # 頂部列（AppHeader）：首頁、任務管理、排程、分析 4 個連結，歡迎訊息、深淺色切換、新增任務按鈕、帳號設定（AccountSettings）
 │   ├── dashboard/              # 首頁專用：版面配置（Dashboard）、今日卡片、Google 行事曆、Hacker News、LeetCode 每日一題
-│   ├── tasks/                  # 任務列表與立即同步（TaskForm）、新增/編輯/刪除視窗（TaskEditModal，掛在 AppHeader）、排程建議（ScheduleSuggestion）
+│   ├── tasks/                  # 任務列表與立即同步（TaskForm）、新增/編輯/刪除視窗（TaskEditModal，掛在 AppHeader）、排程建議（ScheduleSuggestion，排程精靈的第 3 步）
 │   └── platforms/              # GithubIssuesList / JiraIssuesList / MoodleAssignmentsList，以及共用的 StaleDataBanner（「這是舊資料」提示）
 ├── composables/                 # 每個資料來源的「前端 CRUD 層」，封裝抓資料/錯誤處理
 │   ├── usePlatformItems.ts     # GitHub/Jira/Moodle 共用（對應後端 platforms/）
@@ -93,8 +93,7 @@ npm run coverage    # 單元測試 + 覆蓋率報表
 ├── types/                      # 跟後端 schema 對齊的 TypeScript type（手動維護，非自動生成）
 ├── pages/
 │   ├── index.vue                # 首頁（Header + 主畫面）；/oauth/callback 也用這個頁面，處理 Google 授權導回
-│   ├── schedule/                # index.vue 排程建議、wizard.vue 排程精靈
-│   └── tasks / productivity / github / jira / moodle.vue  # 各功能的完整頁面
+│   └── tasks / schedule / productivity / github / jira / moodle.vue  # 各功能的完整頁面；schedule.vue 是 3 步的排程精靈
 ├── server/
 │   ├── api/leetcode.get.ts     # Nuxt server route：取得 LeetCode 每日一題
 │   └── tsconfig.json           # Nuxt server 模組的 TypeScript 設定

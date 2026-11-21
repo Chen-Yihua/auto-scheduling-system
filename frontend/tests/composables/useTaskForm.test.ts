@@ -19,6 +19,15 @@ vi.stubGlobal('$fetch',          fetchSpy)
 // useGoogleCalendarAuth 用到 Nuxt 的 useState
 vi.stubGlobal('useState',        (_key: string, init: () => unknown) => ref(init()))
 
+// useTaskForm 在儲存後呼叫 rescheduleTasks；它的行為由 useSchedulableTasks.test.ts 負責
+const rescheduleTasksSpy = vi.fn()
+vi.mock('~/composables/useSchedulableTasks', () => ({
+  useSchedulableTasks: () => ({ rescheduleTasks: rescheduleTasksSpy }),
+}))
+vi.mock('@/composables/useSchedulableTasks', () => ({
+  useSchedulableTasks: () => ({ rescheduleTasks: rescheduleTasksSpy }),
+}))
+
 // ======== 共用工具 ========
 function fakeTask(id = 't1'): Task {
   return {
@@ -798,6 +807,106 @@ describe('useTaskForm', () => {
 
     const body = fetchSpy.mock.calls[0]![1].body
     expect(Object.keys(body).sort()).toEqual(['description', 'due_date', 'title'])
+  })
+
+  // ---------- 從今日卡片編輯已排程的任務 ----------
+  const scheduledTask = (id = 'sched1') => ({ ...fakeTask(id), calendar_event_id: 'ev-1' })
+  const reauthToastSpy = () => toastSpy.add.mock.calls.map((c) => c[0] as { title: string; actions?: unknown[] })
+
+  it('AC28：從今日卡片儲存已排程的任務，PUT 的網址是原始 id，成功後以組合 id 呼叫重新排程，只跳「儲存成功」', async () => {
+    const ctx = useTaskForm()
+    rescheduleTasksSpy.mockReset().mockResolvedValue({ kind: 'success', failed: [] })
+    ctx.startEditTask(scheduledTask(), { fromToday: true })
+
+    await submitAndFlushTimers(() => ctx.onEdit(submitEvent(ctx.state)))
+
+    expect(fetchSpy.mock.calls[0]![0]).toBe('http://localhost:8000/manual-tasks/sched1')
+    expect(rescheduleTasksSpy).toHaveBeenCalledWith(['manual:sched1'])
+    expect(reauthToastSpy().map((t) => t.title)).toEqual(['儲存成功'])
+    expect(ctx.willReschedule.value).toBe(false)
+  })
+
+  it('AC27：willReschedule 只在從今日卡片打開、而且任務有 calendar_event_id 時是 true；關閉表單後清掉', () => {
+    const ctx = useTaskForm()
+
+    ctx.startEditTask(scheduledTask(), { fromToday: true })
+    expect(ctx.willReschedule.value).toBe(true)
+    ctx.startEditTask(fakeTask('plain'), { fromToday: true })
+    expect(ctx.willReschedule.value).toBe(false)
+    ctx.startEditTask(scheduledTask())
+    expect(ctx.willReschedule.value).toBe(false)
+    ctx.startEditTask(scheduledTask(), { fromToday: true })
+    ctx.onCancel()
+    ctx.startEditTask(scheduledTask())
+    expect(ctx.willReschedule.value).toBe(false)
+  })
+
+  it('AC30：儲存成功、重新排程因授權失效失敗 → 只有一個通知，寫「已儲存，但需要重新連接…」並附重新連接按鈕', async () => {
+    const ctx = useTaskForm()
+    rescheduleTasksSpy.mockReset().mockResolvedValue({ kind: 'reauth', failed: [] })
+    ctx.startEditTask(scheduledTask(), { fromToday: true })
+
+    await submitAndFlushTimers(() => ctx.onEdit(submitEvent(ctx.state)))
+
+    const toasts = reauthToastSpy()
+    expect(toasts).toHaveLength(1)
+    expect(toasts[0]!.title).toBe('已儲存，但需要重新連接 Google Calendar 才能重新排程')
+    expect(toasts[0]!.actions).toHaveLength(1)
+  })
+
+  it('AC31：儲存（PUT）失敗 → 不呼叫重新排程', async () => {
+    const ctx = useTaskForm()
+    rescheduleTasksSpy.mockReset()
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    fetchSpy.mockRejectedValueOnce(new Error('boom'))
+    ctx.startEditTask(scheduledTask(), { fromToday: true })
+
+    await submitAndFlushTimers(() => ctx.onEdit(submitEvent(ctx.state)))
+
+    expect(rescheduleTasksSpy).not.toHaveBeenCalled()
+    vi.mocked(console.error).mockRestore()
+  })
+
+  it.each([
+    ['API 回錯誤', { kind: 'error', message: 'Google 暫時無法處理請求', failed: [] }, 'Google 暫時無法處理請求'],
+    ['這個任務在失敗清單', { kind: 'success', failed: [{ task_id: 'manual:sched1', reason: '編號已變更', error_code: null }] }, '編號已變更'],
+  ])('AC32：儲存成功、重新排程失敗（%s）→ 只有一個通知，寫「已儲存，但重新排程失敗」與原因', async (_name, outcome, reason) => {
+    const ctx = useTaskForm()
+    rescheduleTasksSpy.mockReset().mockResolvedValue(outcome)
+    ctx.startEditTask(scheduledTask(), { fromToday: true })
+
+    await submitAndFlushTimers(() => ctx.onEdit(submitEvent(ctx.state)))
+
+    const toasts = toastSpy.add.mock.calls.map((c) => c[0] as { title: string; description?: string })
+    expect(toasts).toHaveLength(1)
+    expect(toasts[0]!.title).toBe('已儲存，但重新排程失敗')
+    expect(toasts[0]!.description).toBe(reason)
+  })
+
+  it('AC33：從任務頁或首頁任務列表（沒有今日卡片標記）儲存已排程的任務，不重新排程', async () => {
+    const ctx = useTaskForm()
+    rescheduleTasksSpy.mockReset()
+    ctx.startEditTask(scheduledTask())
+
+    await submitAndFlushTimers(() => ctx.onEdit(submitEvent(ctx.state)))
+
+    expect(rescheduleTasksSpy).not.toHaveBeenCalled()
+    expect(reauthToastSpy().map((t) => t.title)).toEqual(['儲存成功'])
+  })
+
+  it('AC34：從列表刪除任務時先確認；取消不送出 DELETE，確認後送出', async () => {
+    const ctx = useTaskForm()
+    const confirmSpy = confirmWith(false)
+    const task = fakeTask('del1')
+
+    await ctx.onDeleteTask(task)
+    expect(confirmSpy).toHaveBeenCalledWith('你確定要刪除這個任務嗎？')
+    expect(fetchSpy).not.toHaveBeenCalled()
+
+    confirmWith(true)
+    await ctx.onDeleteTask(task)
+    expect(fetchSpy.mock.calls[0]![0]).toBe('http://localhost:8000/manual-tasks/del1')
+    expect(fetchSpy.mock.calls[0]![1]).toMatchObject({ method: 'DELETE' })
   })
 
   // ---------- 刪除任務（#30）----------

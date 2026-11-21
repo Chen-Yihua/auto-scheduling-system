@@ -682,3 +682,47 @@ async def test_issue42_removed_events_endpoints_require_login(method, path):
         res = await ac.request(method, path, json={"reschedule": [], "delete": []} if method == "POST" else None)
 
     assert res.status_code in (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN)
+
+
+# ---------- 排程時段與重新排程 ----------
+
+@pytest.mark.asyncio
+async def test_list_schedulable_tasks_includes_scheduled_times(monkeypatch, logged_in_user):
+    """AC11：GET /schedule/tasks 每筆都有 scheduled_start、scheduled_end；沒存的是 null。"""
+    async def mock_get_items(user_id):
+        base = {"source": "manual", "title": "t", "status": "To Do"}
+        return [
+            {**base, "id": "manual:a", "scheduled_start": "2026-11-20T09:00:00Z", "scheduled_end": "2026-11-20T10:00:00Z"},
+            {**base, "id": "manual:b"},
+        ]
+
+    monkeypatch.setattr(schedule_router, "get_all_schedulable_items", mock_get_items)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        body = (await ac.get("/schedule/tasks")).json()
+
+    assert body[0]["scheduled_start"].startswith("2026-11-20T09:00:00")
+    assert body[0]["scheduled_end"].startswith("2026-11-20T10:00:00")
+    assert body[1]["scheduled_start"] is None and body[1]["scheduled_end"] is None
+
+
+@pytest.mark.asyncio
+async def test_reschedule_tasks_returns_succeeded_and_failed(logged_in_user):
+    """POST /schedule/tasks/reschedule → 200，回傳 succeeded 與 failed；task_ids 是空的 → 422。"""
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        res = await ac.post("/schedule/tasks/reschedule", json={"task_ids": ["bad-id"]})
+        empty = await ac.post("/schedule/tasks/reschedule", json={"task_ids": []})
+
+    assert res.status_code == status.HTTP_200_OK
+    assert res.json()["succeeded"] == []
+    assert res.json()["failed"][0]["task_id"] == "bad-id"
+    assert empty.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+
+@pytest.mark.asyncio
+async def test_reschedule_tasks_requires_login():
+    """AC48：沒登入呼叫 POST /schedule/tasks/reschedule → 401。"""
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        res = await ac.post("/schedule/tasks/reschedule", json={"task_ids": ["manual:x"]})
+
+    assert res.status_code == status.HTTP_401_UNAUTHORIZED

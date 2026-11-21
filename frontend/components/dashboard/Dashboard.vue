@@ -8,6 +8,7 @@ import LoginRequiredCard from '~/components/LoginRequiredCard.vue';
 import Leetcode from '~/components/dashboard/Leetcode.vue';
 import JiraIssuesList from '~/components/platforms/JiraIssuesList.vue';
 import News from '~/components/dashboard/News.vue';
+import TodayTasks from '~/components/dashboard/TodayTasks.vue';
 import TaskForm from '~/components/tasks/TaskForm.vue';
 import ScheduleSuggestion from '~/components/tasks/ScheduleSuggestion.vue';
 import GoogleCalendarEmbed from '~/components/dashboard/GoogleCalendarEmbed.vue';
@@ -76,6 +77,7 @@ watch(googleConnectedCount, () => {
     >
       <div class="space-y-6">
         <template v-if="isSignedIn">
+          <TodayTasks />
           <TaskForm :limit="5" />
           <ScheduleSuggestion />
           <MoodleAssignmentsList :assignments="moodle.items" :loading="moodle.loading" :is-stale="moodle.isStale" :synced-at="moodle.syncedAt" :auth-error="moodle.authError" :not-linked="moodle.notLinked" :needs-reauth="moodle.needsReauth" :unavailable="moodle.unavailable" :limit="5" />

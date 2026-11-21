@@ -64,7 +64,7 @@
 
 | 方法 | 路徑 | 登入 | Request | Response | 說明 |
 |---|---|---|---|---|---|
-| GET | `/schedule/tasks` | ✅ | — | `list[SchedulableTaskOut]` | 手動任務和外部平台項目的統一清單 |
+| GET | `/schedule/tasks` | ✅ | — | `list[SchedulableTaskOut]` | 手動任務和外部平台項目的統一清單；每筆帶 `scheduled_start`、`scheduled_end`（確認排程時存下的事件時段，使用者在 Google 上拖動事件不會更新；沒存過是 `null`） |
 | PUT | `/schedule/reorder` | ✅ | `ScheduleReorderInput` | `list[SchedulableTaskOut]` | 拖拉排序的結果；任何一項不合法時整批回 400、什麼都不寫入：id 不存在或不屬於自己、組合 id 格式錯誤或來源前綴不認得、主任務、讓後面階段的優先序高於前面階段 |
 | PATCH | `/schedule/tasks/fields` | ✅ | `ScheduleTaskFieldsUpdate` | — | 截止日期、所需時長；子任務違反階段之間的截止日限制回 400；任務不存在或不屬於自己（包括外部來源）回 404；組合 id 格式錯誤或來源前綴不認得回 400；沒帶任何欄位時同樣檢查 id，合法才回 200、不寫入 |
 | PATCH | `/schedule/tasks/done` | ✅ | `ScheduleTaskDoneUpdate` | — | 標記完成或取消完成；主任務回 400；任務不存在或不屬於自己（包括外部來源）回 404；組合 id 格式錯誤或來源前綴不認得回 400 |
@@ -72,6 +72,7 @@
 | POST | `/schedule/confirm` | ✅ | — | `ScheduleConfirmResult` | 把快照寫入 Google Calendar；快照過期回 409 `SUGGESTION_EXPIRED`；`failed` 每一筆帶 `error_code`（寫入 Google 失敗的原因，寫入前檢查不通過時是 `null`） |
 | GET | `/schedule/removed-events` | ✅ | — | `list[RemovedCalendarEventOut]` | 已排入、還沒完成、不是主任務的項目裡，Google 日曆上的事件已被刪除的（Google 回 404、410 或狀態 `cancelled`）；階段任務帶 `later_stages`（勾選重新排程時會一起移除的後面階段）。依序向 Google 查詢，任何一個失敗整個請求就失敗：沒有連接、Google 回 401 或權限不足回 409 `REAUTH_REQUIRED`；Google 限流 503 `UPSTREAM_RATE_LIMITED`、逾時 504 `UPSTREAM_TIMEOUT`、沒有主要行事曆 409 `NO_PRIMARY_CALENDAR`、Google 回 400 時 500 `INTERNAL_ERROR`、其他 Google 問題 502 `UPSTREAM_ERROR` |
 | POST | `/schedule/removed-events/resolve` | ✅ | `ResolveRemovedEventsInput`（`reschedule`、`delete` 兩份組合 id 清單） | `ResolveRemovedEventsResult` | 先刪除 `delete` 的手動任務（規則同刪除任務），再清掉 `reschedule` 項目的 Google 日曆事件編號讓它回到待排；勾選的階段後面已排入、還沒完成、不在這次請求裡的階段，事件從 Google 刪除、編號一起清掉。處理每一項前再向 Google 確認事件仍然不存在，事件還在或已經沒有編號時不處理、算成功。單一項目的問題列在 `failed`（帶 `reason`、`error_code`；編號已被換掉時 `error_code` 是 `null`），繼續處理下一項：組合 id 格式錯誤、不存在或不屬於自己、要刪除外部項目、階段正在被別的請求改動。Google 的錯誤停止處理、照 `/schedule/removed-events` 的狀態碼回應，已處理成功的不復原 |
+| POST | `/schedule/tasks/reschedule` | ✅ | `RescheduleTasksInput`（`task_ids`，組合 id，至少 1 筆，重複的只處理一次） | `RescheduleTasksResult` | 把已排進 Google 日曆的任務放回待排：先刪除 Google 事件（已不存在的 404、410 當作成功），再清掉 `calendar_event_id`、`scheduled_start`、`scheduled_end`；階段任務後面已排入、還沒完成、不在這次請求裡的階段一併處理。沒有 `calendar_event_id` 的任務不呼叫 Google，算成功。單一任務的問題列在 `failed`（帶 `reason`、`error_code`；編號已被換掉時 `error_code` 是 `null`），繼續處理下一個：組合 id 格式錯誤、不存在或不屬於自己、主任務、已完成。Google 的錯誤（包括授權失效 409 `REAUTH_REQUIRED`）停止處理、狀態碼同 `/schedule/removed-events`，已處理成功的不復原；`task_ids` 是空的回 422 |
 
 ## 工作效率統計
 

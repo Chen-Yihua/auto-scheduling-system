@@ -456,8 +456,8 @@ async def test_create_calendar_events_success_writes_calendar_event_id(monkeypat
 
     saved = {}
 
-    async def mock_set_calendar_event_id_for_composite(user_id, task_id, calendar_event_id):
-        saved[task_id] = (user_id, calendar_event_id)
+    async def mock_set_calendar_event_id_for_composite(user_id, task_id, calendar_event_id, start, end):
+        saved[task_id] = (user_id, calendar_event_id, start, end)
 
     monkeypatch.setattr(calendar_service, "create_calendar_event", mock_create_event)
     monkeypatch.setattr(calendar_service, "set_calendar_event_id_for_composite", mock_set_calendar_event_id_for_composite)
@@ -469,7 +469,11 @@ async def test_create_calendar_events_success_writes_calendar_event_id(monkeypat
         "confirmed": [{"task_id": "t1", "title": "寫報告", "calendar_event_id": "event-寫報告"}],
         "failed": [],
     }
-    assert saved["t1"] == ("uid123", "event-寫報告")
+    # AC7：事件時間和事件編號一起寫回
+    assert saved["t1"] == (
+        "uid123", "event-寫報告",
+        datetime(2026, 9, 10, 9, 0, tzinfo=timezone.utc), datetime(2026, 9, 10, 10, 0, tzinfo=timezone.utc),
+    )
     # start/end 要轉成 Google API 要的 ISO 字串（帶 Z），不是原本的 datetime 物件
     assert captured_calls[0][3] == "2026-09-10T09:00:00Z"
     assert captured_calls[0][4] == "2026-09-10T10:00:00Z"
@@ -487,7 +491,7 @@ async def test_create_calendar_events_partial_failure_keeps_successful_ones(monk
             raise httpx.HTTPStatusError("error", request=request, response=response)
         return {"id": "event-ok"}
 
-    async def mock_set_calendar_event_id_for_composite(user_id, task_id, calendar_event_id):
+    async def mock_set_calendar_event_id_for_composite(user_id, task_id, calendar_event_id, start, end):
         pass
 
     monkeypatch.setattr(calendar_service, "create_calendar_event", mock_create_event)
@@ -520,6 +524,25 @@ async def test_create_calendar_events_network_error_marks_task_as_failed(monkeyp
 
     assert result["confirmed"] == []
     assert result["failed"][0]["task_id"] == "t1"
+
+
+@pytest.mark.asyncio
+async def test_create_calendar_events_failure_writes_nothing_to_task(monkeypatch):
+    """寫入 Google 失敗 → 不動任務的 calendar_event_id、scheduled_start、scheduled_end（AC8）。"""
+    _mock_token_and_primary_calendar(monkeypatch)
+
+    async def mock_create_event(*args):
+        raise httpx.ConnectError("Google 掛了")
+
+    async def fail_if_called(*args):
+        raise AssertionError("寫入失敗時不該寫回任務")
+
+    monkeypatch.setattr(calendar_service, "create_calendar_event", mock_create_event)
+    monkeypatch.setattr(calendar_service, "set_calendar_event_id_for_composite", fail_if_called)
+
+    result = await calendar_service.create_calendar_events_for_scheduled_tasks("uid123", [_scheduled_task("t1")])
+
+    assert [f["task_id"] for f in result["failed"]] == ["t1"]
 
 
 # ========== 刪除任務時一起刪除行事曆事件 ==========

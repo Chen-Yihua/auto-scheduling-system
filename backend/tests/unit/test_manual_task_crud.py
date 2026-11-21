@@ -1,4 +1,5 @@
 """crud/manual_task.py 的邊界情境：查無資料、沒有變更、刪不到等。"""
+from datetime import datetime, timezone
 import pytest
 from core.errors import InvalidRequestError, NotFoundError
 
@@ -82,6 +83,8 @@ async def test_get_manual_tasks_by_user_id_returns_empty_list_when_no_tasks(monk
 
 # ---------- set_calendar_event_id ----------
 
+_T = datetime(2026, 9, 10, 9, 0, tzinfo=timezone.utc)
+
 @pytest.mark.asyncio
 async def test_set_calendar_event_id_writes_id_and_does_not_touch_other_tasks():
     """確認排程成功後把 calendar_event_id 寫回去，且只會動到指定的那筆任務。"""
@@ -91,7 +94,7 @@ async def test_set_calendar_event_id_writes_id_and_does_not_touch_other_tasks():
         {"_id": "confirm-t2", "user_id": "alice", "title": "任務二"},
     ])
     try:
-        await manual_task_crud.set_calendar_event_id("confirm-t1", "alice", "event-abc")
+        await manual_task_crud.set_calendar_event_id("confirm-t1", "alice", "event-abc", _T, _T)
 
         task1 = await collection.find_one({"_id": "confirm-t1"})
         task2 = await collection.find_one({"_id": "confirm-t2"})
@@ -99,6 +102,46 @@ async def test_set_calendar_event_id_writes_id_and_does_not_touch_other_tasks():
         assert task2.get("calendar_event_id") is None
     finally:
         await collection.delete_many({"_id": {"$in": ["confirm-t1", "confirm-t2"]}})
+
+
+@pytest.mark.asyncio
+async def test_set_calendar_event_id_writes_scheduled_times_in_same_update():
+    """排程成功寫回事件編號時，同一次更新也存開始、結束時間（AC7：今日卡片用它判斷今天與已逾期）。"""
+    collection = manual_task_crud.db.manual_tasks
+    await collection.insert_one({"_id": "confirm-times", "user_id": "alice", "title": "任務"})
+    start = datetime(2026, 9, 10, 9, 0, tzinfo=timezone.utc)
+    end = datetime(2026, 9, 10, 10, 0, tzinfo=timezone.utc)
+    try:
+        await manual_task_crud.set_calendar_event_id("confirm-times", "alice", "event-abc", start, end)
+
+        task = await collection.find_one({"_id": "confirm-times"})
+        assert task["calendar_event_id"] == "event-abc"
+        assert task["scheduled_start"].replace(tzinfo=timezone.utc) == start
+        assert task["scheduled_end"].replace(tzinfo=timezone.utc) == end
+    finally:
+        await collection.delete_many({"_id": "confirm-times"})
+
+
+@pytest.mark.asyncio
+async def test_clear_calendar_event_id_clears_scheduled_times_in_same_update():
+    """清掉事件編號時，開始、結束時間同一次更新清成 None（AC10、AC38）；編號已被換掉時三個欄位都不動（AC42）。"""
+    collection = manual_task_crud.db.manual_tasks
+    start = datetime(2026, 9, 10, 9, 0, tzinfo=timezone.utc)
+    await collection.insert_one({
+        "_id": "clear-times", "user_id": "alice", "title": "任務",
+        "calendar_event_id": "ev-1", "scheduled_start": start, "scheduled_end": start,
+    })
+    try:
+        assert await manual_task_crud.clear_calendar_event_id("clear-times", "alice", "ev-other") is False
+        kept = await collection.find_one({"_id": "clear-times"})
+        assert kept["calendar_event_id"] == "ev-1" and kept["scheduled_start"] is not None
+
+        assert await manual_task_crud.clear_calendar_event_id("clear-times", "alice", "ev-1") is True
+        cleared = await collection.find_one({"_id": "clear-times"})
+        assert cleared["calendar_event_id"] is None
+        assert cleared["scheduled_start"] is None and cleared["scheduled_end"] is None
+    finally:
+        await collection.delete_many({"_id": "clear-times"})
 
 
 # ---------- write_manual_task_order ----------

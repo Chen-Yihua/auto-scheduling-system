@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { mount } from '@vue/test-utils';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { mount, enableAutoUnmount } from '@vue/test-utils';
 import { ref as vueRef, reactive as vueReactive, computed as vueComputed, h, defineComponent } from 'vue'
 
 import SchedulePage from '~/pages/schedule.vue'
@@ -20,9 +20,10 @@ vi.mock('vue-router', () => ({
 }))
 
 const schedulableTasksRef = vueRef<SchedulableTask[]>([])
+const loadFailedRef = vueRef(false)
 const fetchSchedulableTasksSpy = vi.fn()
 vi.mock('~/composables/useSchedulableTasks', () => ({
-  useSchedulableTasks: () => ({ tasks: schedulableTasksRef, fetchSchedulableTasks: fetchSchedulableTasksSpy }),
+  useSchedulableTasks: () => ({ tasks: schedulableTasksRef, loadFailed: loadFailedRef, fetchSchedulableTasks: fetchSchedulableTasksSpy }),
 }));
 
 const fetchGoogleCalendarsSpy = vi.fn()
@@ -136,6 +137,9 @@ async function render() {
   return wrapper
 }
 
+// 沒卸載的頁面會繼續 watch 共用的 isSignedIn，下一個測試改它時又初始化一次
+enableAutoUnmount(afterEach)
+
 describe('pages/schedule.vue', () => {
   beforeEach(() => {
     isSignedInRef.value = true
@@ -149,6 +153,7 @@ describe('pages/schedule.vue', () => {
     pushSpy.mockClear()
     toastSpy.add.mockClear()
     // mockReset：其他測試設的 mockImplementation 會在掛載時改掉 schedulableTasksRef
+    loadFailedRef.value = false
     fetchSchedulableTasksSpy.mockReset()
     fetchScheduleSuggestionSpy.mockClear()
     initWizardSpy.mockClear()
@@ -209,10 +214,89 @@ describe('pages/schedule.vue', () => {
     expect(wrapper.html()).toContain('mdi:github')
   })
 
-  it('step 1：沒有任何任務時「下一步」按鈕 disabled', async () => {
-    const wrapper = await render();
-    const nextButton = wrapper.findAll('button').find((b) => b.text() === '下一步')
-    expect(nextButton?.attributes('disabled')).toBeDefined()
+  it('AC1：重新整理時 Clerk 還沒載入完（isSignedIn 是 undefined），等它變成 true 才抓任務並初始化精靈，只做一次', async () => {
+    isSignedInRef.value = undefined
+    const tasks = [fakeTask()]
+    fetchSchedulableTasksSpy.mockImplementation(() => { schedulableTasksRef.value = tasks })
+
+    const wrapper = await render()
+    expect(fetchSchedulableTasksSpy).not.toHaveBeenCalled()
+    expect(wrapper.findAll('[data-testid="wizard-empty"]')).toHaveLength(0)
+
+    isSignedInRef.value = true
+    await flushMicrotasks()
+    isSignedInRef.value = false
+    isSignedInRef.value = true
+    await flushMicrotasks()
+
+    expect(fetchSchedulableTasksSpy).toHaveBeenCalledTimes(1)
+    expect(initWizardSpy).toHaveBeenCalledWith(tasks)
+  })
+
+  describe('第 1 步沒有可排程的任務', () => {
+    it('AC2、AC4：不顯示三欄，改顯示說明（寫明已逾期的任務可以在今日卡片重新排程）與「回首頁」按鈕；按下導向首頁', async () => {
+      schedulableTasksRef.value = [fakeTask({ id: 'a', calendar_event_id: 'e' })]
+
+      const wrapper = await render()
+
+      expect(wrapper.text()).not.toContain('拖任務到這裡')
+      expect(wrapper.text()).toContain('今日卡片')
+      expect(wrapper.text()).toContain('重新排程')
+      const home = wrapper.findAll('button').find((b) => b.text() === '回首頁')
+      expect(home).toBeDefined()
+      await home!.trigger('click')
+      expect(pushSpy).toHaveBeenCalledWith('/')
+    })
+
+    it('AC3：5 個已排進日曆、2 個已完成的任務 → 說明寫出「5」個已排進 Google 日曆、「2」個已完成', async () => {
+      schedulableTasksRef.value = [
+        ...Array.from({ length: 5 }, (_, i) => fakeTask({ id: `s${i}`, calendar_event_id: `e${i}` })),
+        ...Array.from({ length: 2 }, (_, i) => fakeTask({ id: `d${i}`, status: 'Done' })),
+        // 主任務不算
+        fakeTask({ id: 'parent', is_parent: true, calendar_event_id: 'ep' }),
+      ]
+      fetchSchedulableTasksSpy.mockImplementation(() => {})
+
+      const text = (await render()).get('[data-testid="wizard-empty"]').text()
+
+      expect(text).toContain('已排進 Google 日曆的任務：5 個')
+      expect(text).toContain('已完成的任務：2 個')
+    })
+
+    it('AC5：沒有任何非主任務的任務 → 只顯示「目前沒有任務」，不列數字', async () => {
+      schedulableTasksRef.value = [fakeTask({ id: 'parent', is_parent: true })]
+
+      const text = (await render()).get('[data-testid="wizard-empty"]').text()
+
+      expect(text).toContain('目前沒有任務')
+      expect(text).not.toMatch(/\d/)
+      expect(text).not.toContain('今日卡片')
+    })
+  })
+
+  it('AC5a：進入精靈時任務清單載入失敗 → 顯示「暫時無法載入任務」與「回首頁」，不顯示 AC2–AC5 的說明', async () => {
+    schedulableTasksRef.value = []
+    fetchSchedulableTasksSpy.mockImplementation(() => { loadFailedRef.value = true })
+
+    const wrapper = await render()
+
+    const text = wrapper.get('[data-testid="wizard-empty"]').text()
+    expect(text).toContain('暫時無法載入任務')
+    expect(text).not.toContain('目前沒有任務')
+    expect(text).not.toContain('今日卡片')
+    const home = wrapper.findAll('button').find((b) => b.text() === '回首頁')
+    expect(home).toBeDefined()
+    await home!.trigger('click')
+    expect(pushSpy).toHaveBeenCalledWith('/')
+  })
+
+  it('AC6：有可排程的任務時照常顯示三欄', async () => {
+    columnsRef.Low = [fakeTask({ id: 'low1', title: '低優先任務' })]
+
+    const wrapper = await render()
+
+    expect(wrapper.findAll('[data-testid="wizard-empty"]')).toHaveLength(0)
+    expect(wrapper.text()).toContain('低優先任務')
   })
 
   it('step 1：拖曳一列到另一欄 → 呼叫 moveTask(fromColumn, fromIndex, toColumn, toIndex)', async () => {
@@ -458,7 +542,8 @@ describe('pages/schedule.vue：issue-42 處理已刪除的事件', () => {
     isSignedInRef.value = true
     stepRef.value = 1
     columnsRef.Low = []
-    columnsRef.Medium = []
+    // 精靈有可排程的任務才顯示拖拉排序；沒有任務時顯示說明
+    columnsRef.Medium = [fakeTask({ id: 'wizard-task' })]
     columnsRef.High = []
     schedulableTasksRef.value = []
     toastSpy.add.mockClear()

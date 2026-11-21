@@ -1,5 +1,5 @@
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional
 from datetime import datetime
 from schemas.manual_task import PriorityEnum
@@ -57,6 +57,9 @@ class SchedulableTaskOut(BaseModel):
     due_date: Optional[datetime] = None
     sort_order: Optional[int] = None
     calendar_event_id: Optional[str] = None
+    # 確認排程時存下的事件時段；使用者在 Google 上拖動事件不會更新
+    scheduled_start: Optional[datetime] = None
+    scheduled_end: Optional[datetime] = None
     url: Optional[str] = None
     # 階段任務：parent_id 是主任務的組合 id；stage_count 是主任務的子任務總數
     is_parent: bool = False
@@ -93,6 +96,15 @@ class ResolveRemovedEventsFailure(BaseModel):
 class ResolveRemovedEventsResult(BaseModel):
     succeeded: list[str]
     failed: list[ResolveRemovedEventsFailure]
+
+
+class RescheduleTasksInput(BaseModel):
+    """要放回排程清單的任務，組合 id。"""
+    task_ids: list[str] = Field(min_length=1)
+
+
+class RescheduleTasksResult(ResolveRemovedEventsResult):
+    """succeeded、failed 的意義同 ResolveRemovedEventsResult。"""
 
 
 class ScheduleReorderItem(BaseModel):

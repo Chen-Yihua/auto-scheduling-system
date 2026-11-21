@@ -24,6 +24,11 @@ vi.mock('@clerk/vue', () => ({
   useAuth: () => ({ getToken: { value: tokenSpy } }),
 }));
 
+// useSchedulableTasks 用 useGoogleCalendar 重新載入日曆，這個檔案不測日曆
+vi.mock('@/composables/useGoogleCalendar', () => ({
+  useGoogleCalendar: () => ({ triggerCalendarReload: vi.fn() }),
+}));
+
 // ---------- 3. UI 元件 Stub ----------
 // 要轉傳原生事件，否則 @click.stop 會對 undefined 呼叫 stopPropagation
 const StubButton = defineComponent({
@@ -319,4 +324,45 @@ describe('TaskForm.vue (render)', () => {
     expect(wrapper.text()).not.toContain('任務1')
     expect(wrapper.text()).toContain('查看全部（3）')
   });
+})
+
+
+describe('TaskForm.vue 從今日卡片編輯已排程的任務', () => {
+  // 預設的 stub 不渲染 UModal 的 content slot，這裡要看到表單內容
+  const contentStubs = {
+    ...uiStubs,
+    UModal: defineComponent({
+      name: 'UModal',
+      setup: (_, { slots }) => () => h('div', slots.content?.()),
+    }),
+    UForm: defineComponent({ name: 'UForm', setup: (_, { slots }) => () => h('form', slots.default?.()) }),
+  }
+  const task = (eventId: string | null) => ({
+    id: 't0', user_id: 'u1', title: '任務', description: '', priority: 'Low' as const, status: 'To Do',
+    due_date: null, calendar_event_id: eventId,
+  })
+
+  beforeEach(() => {
+    fetchSpy = vi.fn()
+    mockFetchByUrl({ '/manual-tasks/me': [], '/schedule/tasks': [] })
+  })
+
+  it('AC27：從今日卡片打開有 calendar_event_id 的任務，表單上方顯示會移除時段的說明；沒有編號、或從別處打開時不顯示', async () => {
+    const wrapper = shallowMount(TaskForm, { global: { stubs: contentStubs } })
+    await flushPromises()
+    const { startEditTask } = useTaskForm()
+
+    startEditTask(task('ev-1'), { fromToday: true })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="reschedule-note"]').text()).toContain('儲存後會從 Google 日曆移除這個任務的時段')
+    expect(wrapper.find('[data-testid="reschedule-note"]').text()).toContain('任務回到排程清單')
+
+    startEditTask(task(null), { fromToday: true })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="reschedule-note"]').exists()).toBe(false)
+
+    startEditTask(task('ev-1'))
+    await flushPromises()
+    expect(wrapper.find('[data-testid="reschedule-note"]').exists()).toBe(false)
+  })
 })

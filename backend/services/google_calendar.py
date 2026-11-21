@@ -153,7 +153,7 @@ def _write_failure(e: httpx.HTTPStatusError | httpx.RequestError) -> tuple[str, 
 
 async def create_calendar_events_for_scheduled_tasks(clerk_id: str, scheduled: list[dict]) -> dict:
     """
-    把排程建議逐筆寫入 primary calendar，成功的任務記下 calendar_event_id。
+    把排程建議逐筆寫入 primary calendar，成功的任務記下 calendar_event_id 與時段。
     每筆獨立成功或失敗，回傳成功和失敗兩份清單，不因單筆失敗讓整批失敗。
     """
     if not scheduled:
@@ -184,7 +184,7 @@ async def create_calendar_events_for_scheduled_tasks(clerk_id: str, scheduled: l
             failed.append({"task_id": task["task_id"], "title": task["title"], "reason": reason, "error_code": error_code})
             continue
 
-        await set_calendar_event_id_for_composite(clerk_id, task["task_id"], event["id"])
+        await set_calendar_event_id_for_composite(clerk_id, task["task_id"], event["id"], task["start"], task["end"])
         confirmed.append({
             "task_id": task["task_id"],
             "title": task["title"],

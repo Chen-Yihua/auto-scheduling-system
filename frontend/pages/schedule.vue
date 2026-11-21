@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue';
+import { ref, reactive, computed, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { useUser } from '@clerk/vue';
 import { useSchedulableTasks } from '~/composables/useSchedulableTasks';
+import { toDatetimeLocal } from '~/utils/datetimeLocal';
 import { useSchedule } from '~/composables/useSchedule';
 import { useScheduleWizard, PRIORITIES, type PriorityKey } from '~/composables/useScheduleWizard';
 import { useGoogleCalendar } from '~/composables/useGoogleCalendar';
@@ -18,7 +19,7 @@ import type { BlockedRecurringRule, BlockedException, RemovedCalendarEvent } fro
 const router = useRouter()
 const toast = useToast()
 const { isSignedIn } = useUser()
-const { tasks: schedulableTasks, fetchSchedulableTasks } = useSchedulableTasks()
+const { tasks: schedulableTasks, loadFailed, fetchSchedulableTasks } = useSchedulableTasks()
 const { fetchScheduleSuggestion } = useSchedule()
 const {
   step, columns, saving, hasTasks, preferences, sanitizedPreferences,
@@ -42,8 +43,7 @@ const resolving = ref(false)
 // 依 id 記住使用者取消的勾選：重新查詢後還在的項目沿用，新出現的預設勾選
 const uncheckedIds = reactive(new Set<string>())
 
-onMounted(async () => {
-  if (!isSignedIn.value) return
+async function initPage() {
   const connection = await fetchGoogleCalendars()
   if (connection === 'not_linked' || connection === 'reauth') {
     pageState.value = 'missing'
@@ -58,6 +58,24 @@ onMounted(async () => {
     inRemovedStep.value = true
   }
   pageState.value = 'ready'
+}
+
+// 重新整理時 Clerk 還沒載入完，isSignedIn 是 undefined；等它變成 true 才初始化，而且只做一次
+let started = false
+watch(isSignedIn, (signedIn) => {
+  if (!signedIn || started) return
+  started = true
+  void initPage()
+}, { immediate: true })
+
+// 精靈第 1 步沒有可排程的任務時，說明原因：只算不是主任務的任務
+const emptyState = computed(() => {
+  const own = schedulableTasks.value.filter((t) => !t.is_parent)
+  return {
+    total: own.length,
+    scheduled: own.filter((t) => t.status !== 'Done' && !!t.calendar_event_id).length,
+    done: own.filter((t) => t.status === 'Done').length,
+  }
 })
 
 // 外部平台的項目不能刪除，一律重新排程
@@ -205,15 +223,6 @@ function cancel() {
   router.push('/')
 }
 
-// datetime-local 用不含時區的本地時間，due_date 是 ISO 字串，需要互相轉換
-function toDatetimeLocalValue(dueDate: string | undefined | null): string {
-  if (!dueDate) return ''
-  const d = new Date(dueDate)
-  if (Number.isNaN(d.getTime())) return ''
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
-}
-
 function onDueDateInput(task: SchedulableTask, event: Event) {
   const value = (event.target as HTMLInputElement).value
   if (!value) {
@@ -353,6 +362,27 @@ function onExceptionEndInput(exception: BlockedException, event: Event) {
             <UButton :loading="resolving" :disabled="resolving" @click="handleResolveRemoved">
               下一步
             </UButton>
+          </div>
+        </div>
+
+        <!-- Step 1 沒有可排程的任務：說明原因 -->
+        <div v-else-if="step === 1 && !hasTasks" data-testid="wizard-empty" class="text-center space-y-3 py-8">
+          <template v-if="loadFailed">
+            <p class="text-sm text-gray-700 dark:text-gray-300">暫時無法載入任務</p>
+          </template>
+          <template v-else-if="emptyState.total === 0">
+            <p class="text-sm text-gray-700 dark:text-gray-300">目前沒有任務</p>
+          </template>
+          <template v-else>
+            <p class="text-sm text-gray-700 dark:text-gray-300">目前沒有可以排程的任務。</p>
+            <ul class="text-sm text-gray-500 dark:text-gray-400 space-y-1">
+              <li>已排進 Google 日曆的任務：{{ emptyState.scheduled }} 個</li>
+              <li>已完成的任務：{{ emptyState.done }} 個</li>
+            </ul>
+            <p class="text-sm text-gray-500 dark:text-gray-400">已逾期的任務可以在首頁的今日卡片重新排程。</p>
+          </template>
+          <div class="pt-2">
+            <UButton @click="cancel">回首頁</UButton>
           </div>
         </div>
 
@@ -497,14 +527,14 @@ function onExceptionEndInput(exception: BlockedException, event: Event) {
                 <input
                   type="datetime-local"
                   class="border border-default rounded-md px-2 py-1 text-xs bg-transparent"
-                  :value="toDatetimeLocalValue(exception.start)"
+                  :value="toDatetimeLocal(exception.start)"
                   @change="onExceptionStartInput(exception, $event)"
                 >
                 <span class="text-xs text-gray-400">～</span>
                 <input
                   type="datetime-local"
                   class="border border-default rounded-md px-2 py-1 text-xs bg-transparent"
-                  :value="toDatetimeLocalValue(exception.end)"
+                  :value="toDatetimeLocal(exception.end)"
                   @change="onExceptionEndInput(exception, $event)"
                 >
                 <UButton size="xs" variant="ghost" color="error" @click="removeBlockedException(index)">移除</UButton>
@@ -531,7 +561,7 @@ function onExceptionEndInput(exception: BlockedException, event: Event) {
                 <input
                   type="datetime-local"
                   class="border border-default rounded-md px-2 py-1 text-sm bg-transparent"
-                  :value="toDatetimeLocalValue(task.due_date)"
+                  :value="toDatetimeLocal(task.due_date)"
                   @change="onDueDateInput(task, $event)"
                 >
               </label>

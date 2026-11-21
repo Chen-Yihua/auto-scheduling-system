@@ -345,12 +345,14 @@ async def test_issue42_ac32_ac33_marking_done_does_not_write_back_stale_fields(m
 
 # ---------- set_calendar_event_id_for_composite ----------
 
+_T = datetime(2026, 9, 10, 9, 0, tzinfo=timezone.utc)
+
 @pytest.mark.asyncio
 async def test_set_calendar_event_id_for_composite_manual_task():
     try:
         await db.manual_tasks.insert_one({"_id": "t1", "user_id": "sched-user", "title": "任務"})
 
-        await schedulable_items.set_calendar_event_id_for_composite("sched-user", "manual:t1", "event-1")
+        await schedulable_items.set_calendar_event_id_for_composite("sched-user", "manual:t1", "event-1", _T, _T)
 
         updated = await db.manual_tasks.find_one({"_id": "t1"})
         assert updated["calendar_event_id"] == "event-1"
@@ -363,10 +365,51 @@ async def test_set_calendar_event_id_for_composite_external_item():
     try:
         await db.moodle_assignments.insert_one({"id": "https://m/1", "user_id": "sched-user", "title": "作業", "url": "https://m/1"})
 
-        await schedulable_items.set_calendar_event_id_for_composite("sched-user", "moodle:https://m/1", "event-2")
+        await schedulable_items.set_calendar_event_id_for_composite("sched-user", "moodle:https://m/1", "event-2", _T, _T)
 
         updated = await db.moodle_assignments.find_one({"id": "https://m/1"})
         assert updated["calendar_event_id"] == "event-2"
+    finally:
+        await _cleanup()
+
+
+@pytest.mark.asyncio
+async def test_set_calendar_event_id_for_composite_writes_scheduled_times():
+    """確認排程時，手動任務和外部平台項目都和事件編號一起存開始、結束時間（AC7、AC9）。"""
+    start = datetime(2026, 9, 10, 9, 0, tzinfo=timezone.utc)
+    end = datetime(2026, 9, 10, 10, 0, tzinfo=timezone.utc)
+    try:
+        await db.manual_tasks.insert_one({"_id": "t1", "user_id": "sched-user", "title": "任務"})
+        await db.moodle_assignments.insert_one({"id": "https://m/1", "user_id": "sched-user", "title": "作業", "url": "https://m/1"})
+
+        await schedulable_items.set_calendar_event_id_for_composite("sched-user", "manual:t1", "event-1", start, end)
+        await schedulable_items.set_calendar_event_id_for_composite("sched-user", "moodle:https://m/1", "event-2", start, end)
+
+        items = {i["id"]: i for i in await schedulable_items.get_all_schedulable_items("sched-user")}
+        for item_id in ("manual:t1", "moodle:https://m/1"):
+            assert items[item_id]["scheduled_start"].replace(tzinfo=timezone.utc) == start
+            assert items[item_id]["scheduled_end"].replace(tzinfo=timezone.utc) == end
+    finally:
+        await _cleanup()
+
+
+@pytest.mark.asyncio
+async def test_clear_calendar_event_id_for_composite_external_clears_scheduled_times():
+    """外部平台項目清掉事件編號時，開始、結束時間同一次清成 None；沒存過的項目讀出來是 None（AC10、AC11）。"""
+    start = datetime(2026, 9, 10, 9, 0, tzinfo=timezone.utc)
+    try:
+        await db.moodle_assignments.insert_one({
+            "id": "https://m/1", "user_id": "sched-user", "title": "作業", "url": "https://m/1",
+            "calendar_event_id": "ev", "scheduled_start": start, "scheduled_end": start,
+        })
+        await db.github_issues.insert_one({"id": 5, "user_id": "sched-user", "title": "issue"})
+
+        assert await schedulable_items.clear_calendar_event_id_for_composite("sched-user", "moodle:https://m/1", "ev") is True
+
+        items = {i["id"]: i for i in await schedulable_items.get_all_schedulable_items("sched-user")}
+        assert items["moodle:https://m/1"]["scheduled_start"] is None
+        assert items["moodle:https://m/1"]["scheduled_end"] is None
+        assert items["github:5"]["scheduled_start"] is None and items["github:5"]["scheduled_end"] is None
     finally:
         await _cleanup()
 

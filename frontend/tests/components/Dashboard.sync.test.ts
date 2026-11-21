@@ -49,6 +49,7 @@ vi.stubGlobal('$fetch', Object.assign(vi.fn(), { raw: (...args: unknown[]) => fe
 const ok = (data: unknown[]) => ({ _data: data, headers: new Headers({ 'X-Synced-At': '2026-11-14T05:00:00Z' }) })
 
 const uiStubs = {
+  TodayTasks: true,
   TaskForm: true,
   ScheduleSuggestion: true,
   Leetcode: true,

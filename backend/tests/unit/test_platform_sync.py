@@ -71,6 +71,18 @@ async def test_upsert_items_writes_user_id_and_synced_at():
 
 
 @pytest.mark.asyncio
+async def test_upsert_items_keeps_scheduled_times():
+    """同步只寫平台回傳的欄位，已存的 scheduled_start、scheduled_end 不會被蓋掉（AC12）。"""
+    start = datetime(2026, 11, 20, 9, 0, tzinfo=timezone.utc)
+    collection = FakeCollection([{"id": 1, "user_id": "u1", "title": "old", "scheduled_start": start, "scheduled_end": start}])
+
+    await upsert_items(collection, "u1", "id", [{"id": 1, "title": "new"}], NOW)
+
+    assert collection._docs[0]["title"] == "new"
+    assert collection._docs[0]["scheduled_start"] == start and collection._docs[0]["scheduled_end"] == start
+
+
+@pytest.mark.asyncio
 async def test_upsert_items_removes_duplicate_ids():
     """抓回來的資料裡同一個 id 出現兩次（例如翻頁時資料變動）→ 只保留一筆，用最後一次的內容。"""
     collection = FakeCollection()

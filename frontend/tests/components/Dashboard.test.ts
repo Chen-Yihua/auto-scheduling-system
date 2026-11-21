@@ -64,6 +64,7 @@ vi.stubGlobal('useGoogleCalendar', () => ({
 
 // ---------- 子元件全部 shallow stub，只測這個頁面本身的邏輯 ----------
 const uiStubs = {
+  TodayTasks: true,
   TaskForm: true,
   ScheduleSuggestion: true,
   Leetcode: true,
@@ -133,7 +134,7 @@ describe('dashboard/Dashboard.vue', () => {
     Object.values(fetchItemsSpies).forEach(spy => expect(spy).not.toHaveBeenCalled())
     expect(fetchGoogleCalendarsSpy).not.toHaveBeenCalled()
     // TaskForm、Moodle 掛載時會自己去抓資料，訪客不該讓它們掛載
-    for (const name of ['TaskForm', 'ScheduleSuggestion', 'MoodleAssignmentsList', 'GithubIssuesList', 'JiraIssuesList', 'GoogleCalendarEmbed']) {
+    for (const name of ['TodayTasks', 'TaskForm', 'ScheduleSuggestion', 'MoodleAssignmentsList', 'GithubIssuesList', 'JiraIssuesList', 'GoogleCalendarEmbed']) {
       expect(wrapper.findComponent({ name }).exists(), name).toBe(false)
     }
   })
@@ -152,7 +153,19 @@ describe('dashboard/Dashboard.vue', () => {
     expect(wrapper.findComponent({ name: 'Leetcode' }).exists()).toBe(true)
   })
 
-  it('登入前後三欄版面一樣：每一欄的卡片數量相同，News／Leetcode 都在右欄', async () => {
+  it('AC13：今日卡片位於左欄最上方，在任務列表卡片上面', async () => {
+    isSignedInRef.value = true
+    const wrapper = mount(Dashboard, { global: { stubs: uiStubs } })
+    activeWrapper = wrapper
+    await wrapper.vm.$nextTick()
+
+    const leftColumn = wrapper.findAll('.grid > div')[0]!
+    const names = Array.from(leftColumn.element.children).map((el) => el.tagName.toLowerCase())
+    expect(names[0]).toBe('today-tasks-stub')
+    expect(names[1]).toBe('task-form-stub')
+  })
+
+  it('登入前後三欄版面一樣：除了登入後多一張今日卡片，每一欄的卡片數量相同，News／Leetcode 都在右欄', async () => {
     isSignedInRef.value = false
     const guest = mount(Dashboard, { global: { stubs: uiStubs } })
     await guest.vm.$nextTick()
@@ -165,7 +178,8 @@ describe('dashboard/Dashboard.vue', () => {
     await signedIn.vm.$nextTick()
 
     expect(guestSizes).toEqual([5, 1, 2])
-    expect(columnSizes(signedIn)).toEqual(guestSizes)
+    // 未登入時不顯示今日卡片（它沒有對應的登入提示卡片）
+    expect(columnSizes(signedIn)).toEqual([guestSizes[0]! + 1, guestSizes[1], guestSizes[2]])
     const rightColumn = signedIn.findAll('.grid > div')[2]!
     expect(rightColumn.findComponent({ name: 'News' }).exists()).toBe(true)
     expect(rightColumn.findComponent({ name: 'Leetcode' }).exists()).toBe(true)

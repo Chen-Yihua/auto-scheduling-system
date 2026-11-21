@@ -594,7 +594,7 @@ async def test_ac26_confirm_skips_later_stage_when_previous_stage_write_fails(mo
         written.append(summary)
         return {"id": f"ev-{summary}"}
 
-    async def mock_set_event_id(user_id, task_id, event_id):
+    async def mock_set_event_id(user_id, task_id, event_id, start, end):
         pass
 
     monkeypatch.setattr(schedule_router, "get_all_schedulable_items", mock_get_tasks)
@@ -938,3 +938,220 @@ async def test_issue42_ac19_other_users_missing_and_malformed_ids_fail_without_r
     assert result["succeeded"] == ["manual:mine"]
     assert await _event_id("others") == "ev-others"
     assert await _event_id("mine") is None
+
+
+# ---------- 重新排程（POST /schedule/tasks/reschedule）----------
+
+from schemas.schedule import RescheduleTasksInput
+
+SCHEDULED_AT = datetime(2026, 11, 20, 9, 0, tzinfo=timezone.utc)
+
+
+async def _scheduled(task_id, event_id, **extra):
+    await _manual(task_id, event_id, scheduled_start=SCHEDULED_AT, scheduled_end=SCHEDULED_AT, **extra)
+
+
+async def _reschedule(*task_ids):
+    return await schedule_router.reschedule_tasks(RescheduleTasksInput(task_ids=list(task_ids)), clerk_user=REMOVED_USER)
+
+
+@pytest.mark.asyncio
+async def test_resolve_removed_events_reschedule_clears_scheduled_times(removed_google):
+    """AC10：「處理已刪除的事件」把任務重新排程後，事件編號和開始、結束時間都是 None。"""
+    await _scheduled("t", "ev-t")
+    removed_google["gone"] = {"ev-t"}
+
+    await _resolve(reschedule=["manual:t"])
+
+    doc = await db.manual_tasks.find_one({"_id": "t"})
+    assert doc["calendar_event_id"] is None and doc["scheduled_start"] is None and doc["scheduled_end"] is None
+
+
+@pytest.mark.asyncio
+async def test_reschedule_deletes_event_and_clears_event_id_and_times(removed_google):
+    """AC38：已排程的任務 → 刪除 Google 事件，事件編號和開始、結束時間都清成 None。"""
+    await _scheduled("t", "ev-t")
+
+    result = await _reschedule("manual:t")
+
+    assert result == {"succeeded": ["manual:t"], "failed": []}
+    assert removed_google["deleted"] == ["ev-t"]
+    doc = await db.manual_tasks.find_one({"_id": "t"})
+    assert doc["calendar_event_id"] is None and doc["scheduled_start"] is None and doc["scheduled_end"] is None
+
+
+@pytest.mark.asyncio
+async def test_reschedule_external_item_clears_event_id_and_times(removed_google):
+    """AC38：外部平台任務同樣刪除事件並清掉三個欄位。"""
+    await db.github_issues.insert_one({
+        "id": 4301, "user_id": REMOVED_USER["sub"], "title": "外部", "status": "open",
+        "calendar_event_id": "ev-gh", "scheduled_start": SCHEDULED_AT, "scheduled_end": SCHEDULED_AT,
+    })
+
+    result = await _reschedule("github:4301")
+
+    assert result["failed"] == []
+    assert removed_google["deleted"] == ["ev-gh"]
+    doc = await db.github_issues.find_one({"user_id": REMOVED_USER["sub"], "id": 4301})
+    assert doc["calendar_event_id"] is None and doc["scheduled_start"] is None
+
+
+@pytest.mark.asyncio
+async def test_reschedule_stage_removes_later_scheduled_stages_and_leaves_unrelated_tasks(removed_google):
+    """AC36a、AC36c、AC39：重新排程階段 1 → 後面已排程、沒完成的階段事件也刪、編號也清；不相關的任務不變。"""
+    await _staged("p", [("ev-1", "To Do"), ("ev-2", "To Do"), ("ev-3", "To Do")])
+    await _scheduled("other", "ev-other")
+
+    result = await _reschedule("manual:p-1")
+
+    assert result["failed"] == []
+    assert sorted(removed_google["deleted"]) == ["ev-1", "ev-2", "ev-3"]
+    assert [await _event_id(t) for t in ("p-1", "p-2", "p-3")] == [None, None, None]
+    assert await _event_id("other") == "ev-other"
+
+
+@pytest.mark.asyncio
+async def test_reschedule_stage_leaves_earlier_and_done_stages(removed_google):
+    """AC40：重新排程階段 2 → 前面的階段、已完成的後面階段不變。"""
+    await _staged("p", [("ev-1", "To Do"), ("ev-2", "To Do"), ("ev-3", "Done")])
+
+    result = await _reschedule("manual:p-2")
+
+    assert result["failed"] == []
+    assert [await _event_id(t) for t in ("p-1", "p-2", "p-3")] == ["ev-1", None, "ev-3"]
+    assert removed_google["deleted"] == ["ev-2"]
+
+
+@pytest.mark.asyncio
+async def test_reschedule_stage_in_same_request_is_not_removed_twice(removed_google):
+    """AC39：後面的階段也在這次請求裡 → 由它自己處理，不重複刪除。"""
+    await _staged("p", [("ev-1", "To Do"), ("ev-2", "To Do")])
+
+    result = await _reschedule("manual:p-1", "manual:p-2")
+
+    assert result["failed"] == []
+    assert sorted(removed_google["deleted"]) == ["ev-1", "ev-2"]
+
+
+@pytest.mark.asyncio
+async def test_reschedule_event_already_gone_on_google_still_clears_event_id():
+    """AC41：Google 刪除回 404 → 當作成功，編號照樣清掉（走真正的 delete_calendar_events）。"""
+    import httpx
+    import services.google_calendar as calendar_service
+    await _scheduled("t", "ev-t")
+    request = httpx.Request("DELETE", "https://example.com")
+
+    async def mock_connected(user_id):
+        return True
+
+    async def mock_token(user_id):
+        return "token", "primary"
+
+    async def mock_delete(access_token, calendar_id, event_id):
+        raise httpx.HTTPStatusError("gone", request=request, response=httpx.Response(404, request=request))
+
+    patches = pytest.MonkeyPatch()
+    try:
+        patches.setattr(calendar_service, "is_google_calendar_connected", mock_connected)
+        patches.setattr(calendar_service, "_get_access_token_and_primary_calendar_id", mock_token)
+        patches.setattr(calendar_service, "delete_calendar_event", mock_delete)
+
+        result = await _reschedule("manual:t")
+    finally:
+        patches.undo()
+        await db.manual_tasks.delete_many({"user_id": REMOVED_USER["sub"]})
+
+    assert result == {"succeeded": ["manual:t"], "failed": []}
+
+
+@pytest.mark.asyncio
+async def test_reschedule_event_id_replaced_meanwhile_fails_and_keeps_new_value(removed_google):
+    """AC42：處理期間編號被換成別的值 → 這一項失敗，新的值不被清掉。"""
+    await _scheduled("t", "ev-t")
+
+    async def rescheduled_in_other_tab(event_ids):
+        await db.manual_tasks.update_one({"_id": "t"}, {"$set": {"calendar_event_id": "ev-t-new"}})
+
+    removed_google["on_delete"] = rescheduled_in_other_tab
+
+    result = await _reschedule("manual:t")
+
+    assert _failed_ids(result) == ["manual:t"]
+    assert await _event_id("t") == "ev-t-new"
+
+
+@pytest.mark.asyncio
+async def test_reschedule_other_users_and_missing_ids_fail_with_same_reason_and_others_continue(removed_google):
+    """AC43：別人的、不存在的任務 id → 這一項失敗、原因相同；別人的任務不變，自己的照常處理。"""
+    await _scheduled("others", "ev-others", user_id=OTHER_USER)
+    await _scheduled("mine", "ev-mine")
+
+    result = await _reschedule("manual:others", "manual:missing", "manual:mine")
+
+    reasons = {f["task_id"]: f["reason"] for f in result["failed"]}
+    assert set(reasons) == {"manual:others", "manual:missing"}
+    assert reasons["manual:others"] == reasons["manual:missing"]
+    assert result["succeeded"] == ["manual:mine"]
+    assert await _event_id("others") == "ev-others"
+    assert removed_google["deleted"] == ["ev-mine"]
+
+
+@pytest.mark.asyncio
+async def test_reschedule_parent_and_done_tasks_fail_and_change_nothing(removed_google):
+    """AC44：主任務、已完成的任務 → 列為失敗，不呼叫 Google，資料不變。"""
+    await _staged("p", [("ev-1", "To Do")])
+    await _scheduled("done", "ev-done", status="Done")
+
+    result = await _reschedule("manual:p", "manual:done")
+
+    assert _failed_ids(result) == ["manual:p", "manual:done"]
+    assert removed_google["deleted"] == []
+    assert await _event_id("done") == "ev-done"
+    assert await _event_id("p-1") == "ev-1"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("error", [
+    ExternalServiceError("Google 暫時無法處理請求", error_code="UPSTREAM_ERROR"),
+    ReauthRequiredError("請重新連接"),
+], ids=["google-5xx", "reauth"])
+async def test_reschedule_google_error_stops_request_and_keeps_later_tasks(removed_google, error):
+    """AC45、AC46：呼叫 Google 失敗（包括授權失效）→ 丟出錯誤；前面成功的不復原，後面還沒處理的編號與事件不變。"""
+    await _scheduled("a", "ev-a")
+    await _scheduled("b", "ev-b")
+    await _scheduled("c", "ev-c")
+
+    async def fail_on_b(event_ids):
+        if "ev-b" in event_ids:
+            raise error
+
+    removed_google["on_delete"] = fail_on_b
+
+    with pytest.raises(AppError) as exc_info:
+        await _reschedule("manual:a", "manual:b", "manual:c")
+
+    assert exc_info.value.error_code == error.error_code
+    assert [await _event_id(t) for t in ("a", "b", "c")] == [None, "ev-b", "ev-c"]
+    assert removed_google["deleted"] == ["ev-a"]
+
+
+@pytest.mark.asyncio
+async def test_reschedule_task_without_event_id_succeeds_without_calling_google(removed_google):
+    """AC47：沒有事件編號的任務 → 不呼叫 Google，算成功。"""
+    await _manual("t", None)
+
+    result = await _reschedule("manual:t")
+
+    assert result == {"succeeded": ["manual:t"], "failed": []}
+    assert removed_google["deleted"] == []
+
+
+@pytest.mark.asyncio
+async def test_reschedule_duplicate_ids_are_processed_once(removed_google):
+    """AC49：同一個任務在一個請求裡出現兩次 → 只刪一次事件，結果列一次成功。"""
+    await _scheduled("t", "ev-t")
+
+    result = await _reschedule("manual:t", "manual:t")
+
+    assert result == {"succeeded": ["manual:t"], "failed": []}
+    assert removed_google["deleted"] == ["ev-t"]

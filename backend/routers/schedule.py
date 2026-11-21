@@ -21,6 +21,7 @@ from crud.schedulable_items import (
     clear_calendar_event_id_for_composite,
     get_all_schedulable_items,
     get_external_calendar_event_id,
+    get_external_item,
     make_composite_id,
     parse_composite_id,
     reorder_schedulable_items,
@@ -38,6 +39,8 @@ from schemas.schedule import (
     RemovedCalendarEventOut,
     ResolveRemovedEventsInput,
     ResolveRemovedEventsResult,
+    RescheduleTasksInput,
+    RescheduleTasksResult,
 )
 
 logger = logging.getLogger(__name__)
@@ -262,6 +265,25 @@ async def _delete_removed_item(user_id: str, composite_id: str) -> dict | None:
     return None
 
 
+async def _release_later_stages(user_id: str, composite_id: str, task: dict | None, requested_ids: set[str]) -> dict | None:
+    """
+    階段任務：刪掉後面已排入、還沒完成、不在這次請求裡的階段在 Google 上的事件，再逐一清掉它們的編號。
+    清除時編號已被換掉，回傳 composite_id 這一項的失敗。Google 的錯誤不在這裡接住，讓整個請求停止。
+    """
+    if not task or not task.get("parent_id") or not task.get("stage"):
+        return None
+    stages = [
+        {**s, "id": make_composite_id(SOURCE_MANUAL, s["id"])}
+        for s in await get_subtasks(task["parent_id"], user_id)
+    ]
+    later = _later_scheduled_stages(stages, task["stage"], requested_ids)
+    await delete_calendar_events(user_id, [s["calendar_event_id"] for s in later])
+    for stage in later:
+        if not await clear_calendar_event_id_for_composite(user_id, stage["id"], stage["calendar_event_id"]):
+            return _failure(composite_id, EVENT_ID_CHANGED_DETAIL, None)
+    return None
+
+
 async def _reschedule_removed_item(user_id: str, composite_id: str, requested_ids: set[str]) -> dict | None:
     """
     勾選的項目：事件確實已被刪除時清掉編號，讓它回到待排。回傳這一項的失敗；成功或不需要處理回 None。
@@ -284,17 +306,8 @@ async def _reschedule_removed_item(user_id: str, composite_id: str, requested_id
     if not event_id or not await _event_still_removed(user_id, event_id):
         return None
 
-    later = []
-    if task and task.get("parent_id") and task.get("stage"):
-        stages = [
-            {**s, "id": make_composite_id(SOURCE_MANUAL, s["id"])}
-            for s in await get_subtasks(task["parent_id"], user_id)
-        ]
-        later = _later_scheduled_stages(stages, task["stage"], requested_ids)
-    await delete_calendar_events(user_id, [s["calendar_event_id"] for s in later])
-    for stage in later:
-        if not await clear_calendar_event_id_for_composite(user_id, stage["id"], stage["calendar_event_id"]):
-            return _failure(composite_id, EVENT_ID_CHANGED_DETAIL, None)
+    if failure := await _release_later_stages(user_id, composite_id, task, requested_ids):
+        return failure
     if not await clear_calendar_event_id_for_composite(user_id, composite_id, event_id):
         return _failure(composite_id, EVENT_ID_CHANGED_DETAIL, None)
     return None
@@ -332,4 +345,71 @@ async def resolve_removed_events(
             succeeded.append(composite_id)
 
     logger.debug("Resolve removed events for user_id=%s: %d succeeded, %d failed", user_id, len(succeeded), len(failed))
+    return {"succeeded": succeeded, "failed": failed}
+
+
+NOT_RESCHEDULABLE_PARENT = "主任務沒有排程時段，不能重新排程"
+NOT_RESCHEDULABLE_DONE = "已完成的任務不能重新排程"
+
+
+async def _reschedule_item(user_id: str, composite_id: str, requested_ids: set[str]) -> dict | None:
+    """
+    把一個任務放回待排：刪除它在 Google 上的事件，再清掉編號與時段。回傳這一項的失敗；成功回 None。
+
+    和 _reschedule_removed_item 的差別：不先確認事件是否已被刪除，直接刪（事件已不存在時 delete_calendar_events 當作成功）。
+    先刪事件再清編號：Google 刪除失敗時任務還有編號，可以再按一次；反過來會在 Google 上留下沒人追蹤的事件。
+    沒有編號的任務不呼叫 Google。Google 的錯誤不在這裡接住，讓整個請求停止。
+    """
+    source, raw_id = parse_composite_id(composite_id)
+    task = None
+    try:
+        if source == SOURCE_MANUAL:
+            task = await get_manual_task_by_id(raw_id, user_id)
+            item = task
+        else:
+            item = await get_external_item(user_id, composite_id)
+    except (InvalidRequestError, NotFoundError) as e:
+        return _failure(composite_id, e.detail, e.error_code)
+
+    if item.get("is_parent"):
+        return _failure(composite_id, NOT_RESCHEDULABLE_PARENT, "INVALID_REQUEST")
+    if item.get("status") == "Done":
+        return _failure(composite_id, NOT_RESCHEDULABLE_DONE, "INVALID_REQUEST")
+    event_id = item.get("calendar_event_id")
+    if not event_id:
+        return None
+
+    if failure := await _release_later_stages(user_id, composite_id, task, requested_ids):
+        return failure
+    await delete_calendar_events(user_id, [event_id])
+    if not await clear_calendar_event_id_for_composite(user_id, composite_id, event_id):
+        return _failure(composite_id, EVENT_ID_CHANGED_DETAIL, None)
+    return None
+
+
+@router.post("/tasks/reschedule", response_model=RescheduleTasksResult)
+async def reschedule_tasks(
+    body: RescheduleTasksInput,
+    clerk_user: dict = Depends(get_current_clerk_user),
+):
+    """
+    把已排進 Google 日曆的任務放回待排。重複的 id 只處理一次。
+
+    單一任務的問題（id 格式錯、不存在或不屬於自己、主任務、已完成、編號已被換掉）列在 failed，繼續處理下一個。
+    Google 的錯誤（包括授權失效）直接丟出，還沒處理的任務都不處理；已處理成功的不復原。不用資料庫交易（ADR 0004）。
+    """
+    user_id = clerk_user["sub"]
+    task_ids = list(dict.fromkeys(body.task_ids))
+    requested_ids = set(task_ids)
+    succeeded: list[str] = []
+    failed: list[dict] = []
+
+    for composite_id in task_ids:
+        failure = await _reschedule_item(user_id, composite_id, requested_ids)
+        if failure:
+            failed.append(failure)
+        else:
+            succeeded.append(composite_id)
+
+    logger.debug("Reschedule tasks for user_id=%s: %d succeeded, %d failed", user_id, len(succeeded), len(failed))
     return {"succeeded": succeeded, "failed": failed}

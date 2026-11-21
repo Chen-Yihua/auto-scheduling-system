@@ -13,6 +13,9 @@ export interface SchedulableTask {
   due_date?: string | null;
   sort_order?: number | null;
   calendar_event_id?: string | null;
+  // 確認排程時存下的事件時段；使用者在 Google 上拖動事件不會更新
+  scheduled_start?: string | null;
+  scheduled_end?: string | null;
   url?: string | null;
   // 階段任務：parent_id 是主任務的組合 id；stage_count 是主任務的子任務總數
   is_parent?: boolean;

@@ -204,3 +204,31 @@ async def test_issue42_ac30_deleted_previous_stage_renumbers_later_stages_and_sc
             assert to_utc_datetime(scheduled[f"manual:{third}"]["start"]) >= to_utc_datetime(scheduled[f"manual:{second}"]["end"])
     finally:
         await _cleanup()
+
+
+@pytest.mark.asyncio
+async def test_schedule_wizard_empty_ac28_scheduled_task_rescheduled_returns_to_wizard_filter(fake_google):
+    """AC28：確認排程後的任務經 POST /schedule/tasks/reschedule → 事件已刪、三個欄位都是 null，符合排程精靈的篩選（不是主任務、沒完成、沒有事件編號）。"""
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+            task_id = await _seed(ac)
+            composite_id = f"manual:{task_id}"
+            scheduled_at = datetime(2030, 1, 1, 9, 0, tzinfo=timezone.utc)
+            await db.manual_tasks.update_one({"_id": task_id}, {"$set": {
+                "calendar_event_id": "ev-1", "scheduled_start": scheduled_at, "scheduled_end": scheduled_at,
+            }})
+
+            before = {item["id"]: item for item in (await ac.get("/schedule/tasks")).json()}
+            assert before[composite_id]["scheduled_start"] is not None
+
+            res = await ac.post("/schedule/tasks/reschedule", json={"task_ids": [composite_id]})
+            assert res.status_code == status.HTTP_200_OK, res.text
+            assert res.json() == {"succeeded": [composite_id], "failed": []}
+
+            item = {i["id"]: i for i in (await ac.get("/schedule/tasks")).json()}[composite_id]
+            assert fake_google["deleted"] == ["ev-1"]
+            assert item["calendar_event_id"] is None
+            assert item["scheduled_start"] is None and item["scheduled_end"] is None
+            assert not item["is_parent"] and item["status"] != "Done"
+    finally:
+        await _cleanup()

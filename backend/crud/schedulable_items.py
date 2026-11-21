@@ -90,6 +90,8 @@ def _normalize_external(source: str, doc: dict) -> dict:
         "due_date": doc.get("scheduling_due_date"),
         "sort_order": doc.get("sort_order"),
         "calendar_event_id": doc.get("calendar_event_id"),
+        "scheduled_start": doc.get("scheduled_start"),
+        "scheduled_end": doc.get("scheduled_end"),
         "url": doc.get("url"),
         "completed_at": completed_at,
     }
@@ -198,16 +200,20 @@ async def set_done(user_id: str, composite_id: str, done: bool):
     await _update_external(source, raw_id, user_id, {"done": done, "completed_at": completed_at})
 
 
-async def get_external_calendar_event_id(user_id: str, composite_id: str) -> str | None:
-    """外部項目目前的 Google 日曆事件編號。來源不認得是 400；不存在或不屬於自己是 404，訊息同手動任務。"""
+async def get_external_item(user_id: str, composite_id: str) -> dict:
+    """外部項目目前的內容（格式同 get_all_schedulable_items）。來源不認得是 400；不存在或不屬於自己是 404，訊息同手動任務。"""
     source, raw_id = parse_composite_id(composite_id)
-    doc = await _find_own_external(source, raw_id, user_id)
-    return doc.get("calendar_event_id")
+    return _normalize_external(source, await _find_own_external(source, raw_id, user_id))
+
+
+async def get_external_calendar_event_id(user_id: str, composite_id: str) -> str | None:
+    """外部項目目前的 Google 日曆事件編號。錯誤同 get_external_item。"""
+    return (await get_external_item(user_id, composite_id))["calendar_event_id"]
 
 
 async def clear_calendar_event_id_for_composite(user_id: str, composite_id: str, calendar_event_id: str) -> bool:
     """
-    項目的 Google 日曆事件編號還是 calendar_event_id 時清成 None，條件寫在同一次寫入的 filter 裡。
+    項目的 Google 日曆事件編號還是 calendar_event_id 時，把編號和排程時段一起清成 None，條件寫在同一次寫入的 filter 裡。
     編號已被換掉、項目不存在或不屬於自己時什麼都不改，回傳 False。
     """
     source, raw_id = parse_composite_id(composite_id)
@@ -216,16 +222,20 @@ async def clear_calendar_event_id_for_composite(user_id: str, composite_id: str,
     platform = _external_platform(source)
     result = await platform.collection.update_one(
         {"id": _external_id(platform, raw_id), "user_id": user_id, "calendar_event_id": calendar_event_id},
-        {"$set": {"calendar_event_id": None}},
+        {"$set": {"calendar_event_id": None, "scheduled_start": None, "scheduled_end": None}},
     )
     return result.matched_count == 1
 
 
-async def set_calendar_event_id_for_composite(user_id: str, composite_id: str, calendar_event_id: str):
-    """把確認排程後的 Google Calendar 事件 id 寫回對應的項目。"""
+async def set_calendar_event_id_for_composite(
+    user_id: str, composite_id: str, calendar_event_id: str, scheduled_start: datetime, scheduled_end: datetime,
+):
+    """把確認排程後的 Google Calendar 事件 id 與時段寫回對應的項目。"""
     source, raw_id = parse_composite_id(composite_id)
     if source == SOURCE_MANUAL:
-        await set_calendar_event_id(raw_id, user_id, calendar_event_id)
+        await set_calendar_event_id(raw_id, user_id, calendar_event_id, scheduled_start, scheduled_end)
         return
 
-    await _update_external(source, raw_id, user_id, {"calendar_event_id": calendar_event_id})
+    await _update_external(source, raw_id, user_id, {
+        "calendar_event_id": calendar_event_id, "scheduled_start": scheduled_start, "scheduled_end": scheduled_end,
+    })

@@ -6,6 +6,8 @@ import type { Task, TaskWithSubtasks } from '~/types/manualTask'
 import { getErrorDetail, getFriendlyErrorTitle, isAuthError, logApiError } from '@/utils/errorMessages'
 import { useGoogleCalendarAuth } from '@/composables/useGoogleCalendarAuth'
 import { priorityLabel } from '@/utils/labels'
+import { afterSaveRescheduleToast } from '@/utils/rescheduleToasts'
+import { useSchedulableTasks } from '@/composables/useSchedulableTasks'
 
 // 和後端 MAX_SUBTASKS 一致
 const MAX_SUBTASKS = 10
@@ -32,6 +34,7 @@ function useTaskFormImpl() {
     const currentUserId = computed(() => user.value?.id ?? '')
     const toast = useToast()
     const { reauthToast } = useGoogleCalendarAuth()
+    const { rescheduleTasks } = useSchedulableTasks()
 
     const config = useRuntimeConfig()
     const BASE_URL = config.public.apiBaseUrl
@@ -64,6 +67,9 @@ function useTaskFormImpl() {
     const all_tasks = ref<Task[]>([])
     const editing_task = ref<Task | null>(null)
     const isEditMode = computed(() => editing_task.value !== null)
+    // 這次編輯是從首頁今日卡片打開的：儲存後要把已排程的任務重新排程。表單關閉或從別處打開時清掉
+    const editFromToday = ref(false)
+    const willReschedule = computed(() => editFromToday.value && !!editing_task.value?.calendar_event_id)
 
     // 擋重複送出，避免連點建出重複任務
     const submitting = ref(false)
@@ -100,6 +106,7 @@ function useTaskFormImpl() {
         state.subtasks = []
         modelValue.value = today
         editing_task.value = null
+        editFromToday.value = false
         cancelAddSubtask()
     }
 
@@ -267,9 +274,10 @@ function useTaskFormImpl() {
     }
  
 
-    function startEditTask(task: Task | null) {
+    function startEditTask(task: Task | null, options?: { fromToday?: boolean }) {
         if (task) {
             editing_task.value = task
+            editFromToday.value = !!options?.fromToday
             state.user_id = task.user_id
             state.title = task.title
             state.description = task.description
@@ -371,7 +379,13 @@ function useTaskFormImpl() {
                 body: payload,
                 headers: { Authorization: `Bearer ${token}` }
             })
-            toast.add({ title: '儲存成功', color: 'success', icon: 'i-lucide-check' })
+            if (willReschedule.value) {
+                // 儲存成功才重新排程：表單驗證失敗時 Google 日曆上的事件不會先被刪掉。只跳這一個通知
+                const taskId = `manual:${editing_task.value?.id}`
+                toast.add(afterSaveRescheduleToast(taskId, await rescheduleTasks([taskId]), reauthToast))
+            } else {
+                toast.add({ title: '儲存成功', color: 'success', icon: 'i-lucide-check' })
+            }
             await delay(300)
             await fetchTasks()
             resetAndClose()
@@ -493,10 +507,24 @@ function useTaskFormImpl() {
     async function onDelete() {
         const task = editing_task.value
         if (!task?.id) return
-        let confirmMessage = '你確定要刪除這個任務嗎？'
-        if (task.is_parent) confirmMessage = parentDeleteConfirmMessage(editingSubtasks.value)
-        else if (task.parent_id) confirmMessage = subtaskDeleteConfirmMessage(task)
-        await deleteTask(task, confirmMessage, true)
+        await deleteTask(task, deleteConfirmMessage(task), true)
+    }
+
+    function deleteConfirmMessage(task: Task): string {
+        if (task.is_parent) {
+            const subtasks = all_tasks.value.filter((t) => t.parent_id === task.id).sort((a, b) => (a.stage ?? 0) - (b.stage ?? 0))
+            return parentDeleteConfirmMessage(subtasks)
+        }
+        if (task.parent_id) return subtaskDeleteConfirmMessage(task)
+        return '你確定要刪除這個任務嗎？'
+    }
+
+    /**
+     * 從列表（例如今日卡片）刪除任務，流程同編輯視窗的刪除：先確認，再連同 Google 日曆事件一起刪除。
+     * 編輯視窗開著、而且編輯的任務被刪掉時才會關閉。
+     */
+    async function onDeleteTask(task: Task) {
+        await deleteTask(task, deleteConfirmMessage(task), false)
     }
 
 
@@ -524,8 +552,10 @@ function useTaskFormImpl() {
         onSubmit,
         onEdit,
         onDelete,
+        onDeleteTask,
         onCancel,
         resetForm,
+        willReschedule,
         maxSubtasks: MAX_SUBTASKS,
         addSubtaskRow,
         removeSubtaskRow,

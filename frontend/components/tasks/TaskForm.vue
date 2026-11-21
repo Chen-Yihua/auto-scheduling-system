@@ -43,6 +43,7 @@ const {
   onAddSubtask,
   onDeleteSubtask,
   deleting,
+  willReschedule,
 } = useTaskForm();
 
 // 主任務的優先序、時長、給 AI 的提醒由子任務決定，表單上不顯示
@@ -185,6 +186,11 @@ onMounted(async () => {
             <h2 class="text-2xl font-bold text-gray-800">
               {{ isEditMode ? '編輯任務' : '新增任務' }}
             </h2>
+
+            <div v-if="willReschedule" data-testid="reschedule-note" class="flex items-start gap-2 rounded-lg bg-amber-50 text-amber-800 text-sm px-4 py-3">
+              <UIcon name="i-lucide-calendar-x" class="w-4 h-4 flex-shrink-0 mt-0.5" />
+              <p>儲存後會從 Google 日曆移除這個任務的時段（後面已排程的階段也會一起移除），任務回到排程清單。</p>
+            </div>
 
             <div class="flex items-start gap-2 rounded-lg bg-blue-50 text-blue-800 text-sm px-4 py-3">
               <UIcon name="i-lucide-sparkles" class="w-4 h-4 flex-shrink-0 mt-0.5" />

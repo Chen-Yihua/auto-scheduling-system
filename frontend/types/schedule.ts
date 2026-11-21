@@ -96,3 +96,9 @@ export function defaultSchedulePreferences(): SchedulePreferences {
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
   };
 }
+
+// 對應後端 RescheduleTasksResult
+export interface RescheduleTasksResult {
+  succeeded: string[];
+  failed: ResolveRemovedEventsFailure[];
+}

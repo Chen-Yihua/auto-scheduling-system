@@ -449,24 +449,34 @@ async def validate_task_change(task: dict, changes: dict) -> None:
     validate_stage_chain(parent.get("due_date"), stages)
 
 
-async def set_calendar_event_id(task_id: str, user_id: str, calendar_event_id: str):
+async def set_calendar_event_id(
+    task_id: str, user_id: str, calendar_event_id: str, scheduled_start: datetime, scheduled_end: datetime,
+):
     """
-    確認排程建立行事曆事件後呼叫。calendar_event_id 不開放透過一般更新 API 寫入，
+    確認排程建立行事曆事件後呼叫，事件編號與時段在同一次更新寫入。calendar_event_id 不開放透過一般更新 API 寫入，
     否則 client 可以假裝任務已排入行事曆。
     """
     await db.manual_tasks.update_one(
         {"_id": task_id, "user_id": user_id},
-        {"$set": {"calendar_event_id": calendar_event_id, "updated": datetime.now(timezone.utc)}},
+        {"$set": {
+            "calendar_event_id": calendar_event_id,
+            "scheduled_start": scheduled_start,
+            "scheduled_end": scheduled_end,
+            "updated": datetime.now(timezone.utc),
+        }},
     )
 
 async def clear_calendar_event_id(task_id: str, user_id: str, calendar_event_id: str) -> bool:
     """
-    任務的 Google 日曆事件編號還是 calendar_event_id 時清成 None；條件寫在同一次寫入的 filter 裡。
+    任務的 Google 日曆事件編號還是 calendar_event_id 時，把編號和排程時段一起清成 None；條件寫在同一次寫入的 filter 裡。
     編號已被換掉、任務不存在或不屬於 user_id 時什麼都不改，回傳 False。
     """
     result = await db.manual_tasks.update_one(
         {"_id": task_id, "user_id": user_id, "calendar_event_id": calendar_event_id},
-        {"$set": {"calendar_event_id": None, "updated": datetime.now(timezone.utc)}},
+        {"$set": {
+            "calendar_event_id": None, "scheduled_start": None, "scheduled_end": None,
+            "updated": datetime.now(timezone.utc),
+        }},
     )
     return result.matched_count == 1
 

@@ -11,7 +11,7 @@ describe('畫面顯示用的中文對照', () => {
     expect(priorityLabel('High')).toBe('高');
     expect(priorityLabel('Medium')).toBe('中');
     expect(priorityLabel('Low')).toBe('低');
-    expect(taskStatusLabel('To Do')).toBe('待辦');
+    expect(taskStatusLabel('To Do')).toBe('未開始');
     expect(taskStatusLabel('In Progress')).toBe('進行中');
     expect(taskStatusLabel('Done')).toBe('已完成');
     expect(githubStateLabel('open')).toBe('開啟中');

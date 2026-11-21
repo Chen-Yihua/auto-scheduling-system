@@ -74,9 +74,9 @@ async function printPostSignInDiagnostics(page: Page, redirects: string[], diagn
 }
 
 describe('Dashboard（真實瀏覽器 E2E）', () => {
-  it('訪客未登入時，版面跟登入後一樣，需要登入的區塊只顯示提示、新增任務按鈕不能按', withSanitizedErrors(secrets, async () => {
+  it('訪客未登入時，版面跟登入後一樣，今日卡片與行事曆的位置只顯示提示、新增任務按鈕不能按', withSanitizedErrors(secrets, async () => {
     const page = await createPage('/')
-    await page.waitForSelector('text=登入後即可查看與新增你的任務')
+    await page.waitForSelector('text=登入後即可查看今天的任務')
 
     const bodyText = await page.textContent('body')
     expect(bodyText).toContain('登入後即可查看 Google 行事曆')

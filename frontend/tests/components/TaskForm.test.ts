@@ -1,23 +1,46 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { shallowMount, flushPromises } from '@vue/test-utils';
-import { ref, defineComponent, h } from 'vue';
+// 任務管理頁的任務列表：6 欄、標籤、按鈕與同步提示；composable 的呼叫方式見 TaskForm.actions.test.ts
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { shallowMount, flushPromises, enableAutoUnmount } from '@vue/test-utils';
+import { ref, computed, watch, defineComponent, h } from 'vue';
 import type { Component } from 'vue';
+import type { SchedulableTask } from '~/types/schedulableTask';
 
-// ---------- 2. 被測元件 ----------
 import TaskForm from '~/components/tasks/TaskForm.vue';
 import { useTaskForm } from '~/composables/useTaskForm';
 
-// ---------- 1. Nuxt/全域依賴 Stub ----------
+enableAutoUnmount(afterEach);
+
+// ---------- Nuxt/全域依賴 Stub ----------
 const tokenSpy = vi.fn().mockResolvedValue('dummy-token');
 const toastSpy = { add: vi.fn() };
 let fetchSpy = vi.fn();
 
+// usePlatformItems 沒有 import 這些，靠 Nuxt 自動匯入
+vi.stubGlobal('ref', ref)
+vi.stubGlobal('computed', computed)
+vi.stubGlobal('watch', watch)
 vi.stubGlobal('useAuth',         () => ({ getToken: { value: tokenSpy } }))
 vi.stubGlobal('useUser',         () => ({ user: ref({ id: 'u1' }) }))
 vi.stubGlobal('useToast',        () => toastSpy)
 vi.stubGlobal('useRuntimeConfig',() => ({ public: { apiBaseUrl: 'http://localhost:8000' } }))
 vi.stubGlobal('$fetch',          (...args: unknown[]) => fetchSpy(...args))
 vi.stubGlobal('useState',        (_key: string, init: () => unknown) => ref(init()))
+
+// 帳號資料（GET /users/me/linked-accounts/）：每個測試自己決定回應
+type LinkedKey = { platform: string; value: string; needsReauth?: boolean }
+const linkedKeys = ref<LinkedKey[]>([])
+let fetchKeysImpl: () => Promise<void> = async () => {}
+vi.stubGlobal('useLinkedAccount', () => ({ keys: linkedKeys, fetchKeys: () => fetchKeysImpl() }))
+const allLinked = (): LinkedKey[] => [
+  { platform: 'github', value: 'KEY****' },
+  { platform: 'jira', value: 'KEY****' },
+  { platform: 'moodle', value: 'PW****' },
+]
+const noneLinked = (): LinkedKey[] => [
+  { platform: 'github', value: '' },
+  { platform: 'jira', value: '' },
+  { platform: 'moodle', value: '' },
+]
 
 // useSchedulableTasks 明確 import useAuth，stubGlobal 攔不到，要 mock 整個模組
 vi.mock('@clerk/vue', () => ({
@@ -29,7 +52,7 @@ vi.mock('@/composables/useGoogleCalendar', () => ({
   useGoogleCalendar: () => ({ triggerCalendarReload: vi.fn() }),
 }));
 
-// ---------- 3. UI 元件 Stub ----------
+// ---------- UI 元件 Stub ----------
 // 要轉傳原生事件，否則 @click.stop 會對 undefined 呼叫 stopPropagation
 const StubButton = defineComponent({
   name: 'UButton',
@@ -40,65 +63,37 @@ const StubButton = defineComponent({
   },
 })
 
-// 帶 slot 的 UCard（讓任務標題渲染出來）
 const StubCard = defineComponent({
   name: 'UCard',
   setup(_, { slots }) {
-    return () => 
-        h('div', { class: 'u-card-stub' }, [
-            slots.header && slots.header(),
-            slots.default && slots.default(),
-            slots.footer && slots.footer(),
-        ])
-  },
-})
-
-// 反映 open prop 的 UModal
-const StubModal = defineComponent({
-  name: 'UModal',
-  props: { open: { type: Boolean, default: false } },
-  setup(props, { slots }) {
     return () =>
-      h(
-        'div',
-        { class: 'u-modal-stub', 'data-open': props.open ? 'true' : 'false' },
-        slots.default ? slots.default() : '',
-      )
+      h('div', { class: 'u-card-stub' }, [
+        slots.header && slots.header(),
+        slots.default && slots.default(),
+        slots.footer && slots.footer(),
+      ])
   },
 })
 
-// 其他元件直接 true stub
+// 標籤的文字要看得到
+const StubBadge = defineComponent({
+  name: 'UBadge',
+  setup: (_, { slots, attrs }) => () => h('span', attrs, slots.default?.()),
+})
+
 const uiStubs: Record<string, boolean | Component> = {
   UButton: StubButton,
   UCard: StubCard,
-  UModal: StubModal,
-  UForm: true,
-  UInput: true,
-  UTextarea: true,
-  UFormField: true,
-  USelect: true,
-  UPopover: true,
-  UCalendar: true,
+  UBadge: StubBadge,
   USkeleton: true,
-  UBadge: true,
   UIcon: true,
-  NuxtLink: { template: '<a><slot /></a>' },
 }
 
-// ---------- 4. 假任務工具 ----------
-// /manual-tasks/me 的完整資料，只給編輯表單用；列表用 fakeSchedulableTasks
-const fakeTasks = (n = 1) =>
-  Array.from({ length: n }, (_, i) => ({
-    id: `t${i}`,
-    user_id: 'u1',
-    title: `任務${i}`,
-    description: '測試內容',
-    priority: 'Low',
-    status: 'To Do',
-    due_date: new Date().toISOString(),
-  }))
+// ---------- 假任務工具 ----------
+// 固定「現在」：2026-11-21 10:00（Asia/Taipei，vitest.config.ts）；只假造 Date，不影響 promise 與 timer
+const NOW = new Date('2026-11-21T10:00:00+08:00')
 
-const fakeSchedulableTasks = (n = 1) =>
+const fakeSchedulableTasks = (n = 1): SchedulableTask[] =>
   Array.from({ length: n }, (_, i) => ({
     id: `manual:t${i}`,
     source: 'manual',
@@ -107,11 +102,15 @@ const fakeSchedulableTasks = (n = 1) =>
     status: 'To Do',
     priority: 'Low',
     duration: null,
-    due_date: new Date().toISOString(),
+    due_date: '2026-11-25T12:00:00+08:00',
     sort_order: null,
     calendar_event_id: null,
+    scheduled_start: null,
+    scheduled_end: null,
     url: null,
   }))
+
+const task = (overrides: Partial<SchedulableTask>): SchedulableTask => ({ ...fakeSchedulableTasks(1)[0]!, ...overrides })
 
 // 依 URL 回傳對應的假資料，不依賴呼叫順序
 function mockFetchByUrl(responses: Record<string, unknown>) {
@@ -121,123 +120,165 @@ function mockFetchByUrl(responses: Record<string, unknown>) {
   })
 }
 
-// ---------- 5. 測試 ----------
-describe('TaskForm.vue (render)', () => {
+async function render(tasks: SchedulableTask[]) {
+  mockFetchByUrl({ '/schedule/tasks': tasks })
+  const wrapper = shallowMount(TaskForm, { global: { stubs: uiStubs } })
+  await flushPromises()
+  return wrapper
+}
+
+type Wrapper = Awaited<ReturnType<typeof render>>
+const rows = (wrapper: Wrapper) => wrapper.findAll('.task-row')
+const cell = (row: ReturnType<Wrapper['find']>, name: string) => row.find(`[data-testid="${name}"]`).text()
+const rowOf = (wrapper: Wrapper, title: string) => rows(wrapper).find((r) => r.text().includes(title))!
+
+describe('TaskForm.vue（任務管理頁的任務列表）', () => {
   beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(NOW)
     fetchSpy = vi.fn()
     toastSpy.add.mockClear()
     tokenSpy.mockClear()
+    linkedKeys.value = allLinked()
+    fetchKeysImpl = async () => {}
   })
 
-  it('沒有任務時顯示提示文字，抓取完成後不該一直卡在 Skeleton', async () => {
-    mockFetchByUrl({ '/manual-tasks/me': [], '/schedule/tasks': [] })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
 
-    const wrapper = shallowMount(TaskForm, { global: { stubs: uiStubs } })
-    await flushPromises()
+  // ---------- 6 欄 ----------
+
+  it('AC21：沒有任務時顯示說明，抓取完成後不該一直卡在 Skeleton', async () => {
+    const wrapper = await render([])
 
     expect(wrapper.findAll('u-skeleton-stub').length).toBe(0)
-    expect(wrapper.text()).toContain('目前沒有任務')
+    expect(wrapper.text()).toContain('目前沒有任務，點擊標題列的新增任務按鈕新增一個吧')
   })
 
-  it('有任務時顯示卡片並含正確標題', async () => {
-    const tasks = fakeSchedulableTasks(2)
-    mockFetchByUrl({ '/manual-tasks/me': [], '/schedule/tasks': tasks })
+  it('AC9：一筆手動任務，那一列有名稱、截止日、優先級、完成狀態、排程狀態、排程時間；不顯示描述', async () => {
+    const wrapper = await render([task({ priority: 'High', description: '這段描述不該出現在列表上' })])
 
-    const wrapper = shallowMount(TaskForm, { global: { stubs: uiStubs } })
-    await flushPromises()
-
-    // Slot 已渲染：文字應包含每個任務標題
-    tasks.forEach(t => expect(wrapper.text()).toContain(t.title))
-    // Skeleton 不存在
-    expect(wrapper.find('u-skeleton-stub').exists()).toBe(false)
-  })
-
-  it('任務列表只顯示緊湊資訊：不顯示描述，沒有截止日期時顯示「無期限」', async () => {
-    const task = {
-      id: 'manual:t0', source: 'manual', title: '任務0', description: '這段描述不該出現在列表上',
-      status: 'To Do', priority: 'Low', duration: null, due_date: null,
-      sort_order: null, calendar_event_id: null, url: null,
-    }
-    mockFetchByUrl({ '/manual-tasks/me': [], '/schedule/tasks': [task] })
-
-    const wrapper = shallowMount(TaskForm, { global: { stubs: uiStubs } })
-    await flushPromises()
-
+    const row = rows(wrapper)[0]!
+    expect(row.text()).toContain('任務0')
+    expect(cell(row, 'task-due')).toBe('11/25 12:00')
+    expect(cell(row, 'task-priority')).toBe('高')
+    expect(cell(row, 'task-status')).toBe('未開始')
+    expect(cell(row, 'task-schedule-status')).toBe('未排程')
+    expect(cell(row, 'task-schedule-time')).toBe('—')
     expect(wrapper.text()).not.toContain('這段描述不該出現在列表上')
-    expect(wrapper.text()).toContain('無期限')
   })
 
-  it('新增任務按鈕移到 Header，跟 TaskForm 共用同一份 showEditModal 狀態', async () => {
-    // 按鈕在 AppHeader，這裡直接設定共用的 showEditModal 來模擬
-    mockFetchByUrl({ '/manual-tasks/me': [], '/schedule/tasks': [] })
+  it('AC10：沒有優先級的任務與主任務，優先級欄顯示「—」；沒有截止日的任務截止日欄顯示「無期限」', async () => {
+    const wrapper = await render([
+      task({ id: 'manual:p1', title: '主任務', priority: null, is_parent: true }),
+      task({ id: 'manual:t1', title: '沒設定的任務', priority: null, due_date: null }),
+    ])
 
-    const wrapper = shallowMount(TaskForm, { global: { stubs: uiStubs } })
-    await flushPromises()
-
-    // 初始 data-open 為 false
-    expect(wrapper.find('.u-modal-stub').attributes('data-open')).toBe('false')
-
-    const { showEditModal } = useTaskForm()
-    showEditModal.value = true
-    await flushPromises()
-
-    // data-open 變 true 代表 showEditModal 已被設為 true
-    expect(wrapper.find('.u-modal-stub').attributes('data-open')).toBe('true')
+    expect(cell(rowOf(wrapper, '主任務'), 'task-priority')).toBe('—')
+    expect(cell(rowOf(wrapper, '沒設定的任務'), 'task-priority')).toBe('—')
+    expect(cell(rowOf(wrapper, '沒設定的任務'), 'task-due')).toBe('無期限')
   })
 
-  it('帶 limit 且任務數超過限制時，只顯示前 limit 筆，並顯示「查看全部」連結', async () => {
-    const tasks = fakeSchedulableTasks(3)
-    mockFetchByUrl({ '/manual-tasks/me': [], '/schedule/tasks': tasks })
+  it('AC11：status 為 To Do、In Progress、Done 依序顯示「未開始」「進行中」「已完成」', async () => {
+    const wrapper = await render([
+      task({ id: 'manual:a', title: 'A', status: 'To Do' }),
+      task({ id: 'manual:b', title: 'B', status: 'In Progress' }),
+      task({ id: 'manual:c', title: 'C', status: 'Done' }),
+    ])
 
-    const wrapper = shallowMount(TaskForm, { props: { limit: 2 }, global: { stubs: uiStubs } })
-    await flushPromises()
-
-    expect(wrapper.text()).toContain('任務0')
-    expect(wrapper.text()).toContain('任務1')
-    expect(wrapper.text()).not.toContain('任務2')
-    expect(wrapper.text()).toContain('查看全部（3）')
+    expect(rows(wrapper).map((r) => cell(r, 'task-status'))).toEqual(['未開始', '進行中', '已完成'])
   })
 
-  it('沒帶 limit 時顯示全部任務，不顯示「查看全部」連結', async () => {
-    const tasks = fakeSchedulableTasks(3)
-    mockFetchByUrl({ '/manual-tasks/me': [], '/schedule/tasks': tasks })
+  it('AC12：有 calendar_event_id 顯示「已排程」，沒有顯示「未排程」', async () => {
+    const wrapper = await render([
+      task({ id: 'manual:a', title: 'A', calendar_event_id: 'ev-1' }),
+      task({ id: 'manual:b', title: 'B', calendar_event_id: null }),
+    ])
 
-    const wrapper = shallowMount(TaskForm, { global: { stubs: uiStubs } })
-    await flushPromises()
-
-    tasks.forEach(t => expect(wrapper.text()).toContain(t.title))
-    expect(wrapper.text()).not.toContain('查看全部')
+    expect(rows(wrapper).map((r) => cell(r, 'task-schedule-status'))).toEqual(['已排程', '未排程'])
   })
 
-  it('外部平台項目（例如 GitHub）沒有編輯按鈕，點擊卡片會開啟原始連結', async () => {
-    const githubTask = {
-      id: 'github:42', source: 'github', title: 'GitHub Issue', description: null,
-      status: 'To Do', priority: null, duration: null, due_date: null,
-      sort_order: null, calendar_event_id: null, url: 'https://github.com/x/y/issues/42',
-    }
-    mockFetchByUrl({ '/manual-tasks/me': [], '/schedule/tasks': [githubTask] })
+  it('AC13：有時段顯示開始與結束時間；已排程但沒有時段（舊資料）與未排程都顯示「—」', async () => {
+    const wrapper = await render([
+      task({ id: 'manual:a', title: 'A', calendar_event_id: 'ev-1', scheduled_start: '2026-11-23T14:00:00+08:00', scheduled_end: '2026-11-23T15:30:00+08:00' }),
+      task({ id: 'manual:b', title: 'B', calendar_event_id: 'ev-2' }),
+      task({ id: 'manual:c', title: 'C' }),
+    ])
+
+    const times = rows(wrapper).map((r) => cell(r, 'task-schedule-time'))
+    expect(times[0]).toContain('14:00')
+    expect(times[0]).toContain('15:30')
+    expect(times.slice(1)).toEqual(['—', '—'])
+  })
+
+  it('AC14：主任務的排程狀態與排程時間都顯示「—」', async () => {
+    const wrapper = await render([
+      task({ id: 'manual:p1', title: '主任務', is_parent: true, calendar_event_id: 'ev-1', scheduled_start: '2026-11-23T14:00:00+08:00', scheduled_end: '2026-11-23T15:00:00+08:00' }),
+    ])
+
+    const row = rows(wrapper)[0]!
+    expect(cell(row, 'task-schedule-status')).toBe('—')
+    expect(cell(row, 'task-schedule-time')).toBe('—')
+  })
+
+  // ---------- 已逾期 ----------
+
+  it('AC15：沒完成、截止日是昨天的任務與主任務，名稱旁都有「已逾期」', async () => {
+    const wrapper = await render([
+      task({ id: 'manual:a', title: 'A', due_date: '2026-11-20T12:00:00+08:00' }),
+      task({ id: 'manual:p1', title: '主任務', is_parent: true, due_date: '2026-11-20T12:00:00+08:00' }),
+    ])
+
+    expect(rows(wrapper).map((r) => r.find('[data-testid="task-overdue"]').exists())).toEqual([true, true])
+    expect(rowOf(wrapper, 'A').find('[data-testid="task-overdue"]').text()).toBe('已逾期')
+  })
+
+  it('AC16：沒完成、時段結束時間是一小時前、截止日是明天的任務，名稱旁有「已逾期」', async () => {
+    const wrapper = await render([
+      task({ due_date: '2026-11-22T12:00:00+08:00', calendar_event_id: 'ev-1', scheduled_start: '2026-11-21T08:00:00+08:00', scheduled_end: '2026-11-21T09:00:00+08:00' }),
+    ])
+
+    expect(rows(wrapper)[0]!.find('[data-testid="task-overdue"]').exists()).toBe(true)
+  })
+
+  it('AC17：已完成的任務即使截止日已過，不顯示「已逾期」', async () => {
+    const wrapper = await render([task({ status: 'Done', due_date: '2026-11-20T12:00:00+08:00' })])
+
+    expect(rows(wrapper)[0]!.find('[data-testid="task-overdue"]').exists()).toBe(false)
+  })
+
+  // ---------- 來源標籤 ----------
+
+  it('AC18：外部任務依序有「GitHub」「Jira」「Moodle」標籤，手動任務沒有來源標籤', async () => {
+    const wrapper = await render([
+      task({ id: 'manual:a', title: '手動' }),
+      task({ id: 'github:1', title: 'GH', source: 'github' }),
+      task({ id: 'jira:1', title: 'JR', source: 'jira' }),
+      task({ id: 'moodle:1', title: 'MD', source: 'moodle' }),
+    ])
+
+    const sources = rows(wrapper).map((r) => r.find('[data-testid="task-source"]'))
+    expect(sources.map((s) => (s.exists() ? s.text() : null))).toEqual([null, 'GitHub', 'Jira', 'Moodle'])
+  })
+
+  // ---------- 操作 ----------
+
+  it('AC19：外部平台項目沒有編輯按鈕，點擊那一列會開啟原始連結', async () => {
+    const githubTask = task({ id: 'github:42', source: 'github', title: 'GitHub Issue', priority: null, due_date: null, url: 'https://github.com/x/y/issues/42' })
     const openSpy = vi.fn()
     vi.stubGlobal('open', openSpy)
 
-    const wrapper = shallowMount(TaskForm, { global: { stubs: uiStubs } })
-    await flushPromises()
+    const wrapper = await render([githubTask])
 
     expect(wrapper.text()).toContain('GitHub Issue')
     expect(wrapper.text()).not.toContain('編輯')
-
-    // 每筆任務現在是緊湊的一行（.task-row），不是獨立的 UCard
-    const taskRow = wrapper.find('.task-row')
-    await taskRow.trigger('click')
-
+    await rows(wrapper)[0]!.trigger('click')
     expect(openSpy).toHaveBeenCalledWith('https://github.com/x/y/issues/42', '_blank')
   })
 
-  it('按下「標記完成」會呼叫 PATCH /schedule/tasks/done', async () => {
-    const task = fakeSchedulableTasks(1)[0]
-    mockFetchByUrl({ '/manual-tasks/me': [], '/schedule/tasks': [task] })
-
-    const wrapper = shallowMount(TaskForm, { global: { stubs: uiStubs } })
-    await flushPromises()
+  it('AC19：按下「標記完成」會呼叫 PATCH /schedule/tasks/done', async () => {
+    const wrapper = await render(fakeSchedulableTasks(1))
 
     const doneButton = wrapper.findAll('button').find((b) => b.text().includes('標記完成'))
     await doneButton!.trigger('click')
@@ -249,62 +290,65 @@ describe('TaskForm.vue (render)', () => {
     )
   })
 
-  it('手動任務按「編輯」會用組合 id 去掉 "manual:" 前綴，找到 /manual-tasks/me 裡完整的任務資料並打開 Modal', async () => {
-    // 編輯表單的完整欄位來自 /manual-tasks/me
-    const fullTasks = fakeTasks(1)
-    const schedulableTasks = fakeSchedulableTasks(1)
-    mockFetchByUrl({ '/manual-tasks/me': fullTasks, '/schedule/tasks': schedulableTasks })
-
-    const wrapper = shallowMount(TaskForm, { global: { stubs: uiStubs } })
-    await flushPromises()
+  it('AC19：手動任務按「編輯」會去掉 "manual:" 前綴，用 all_tasks 裡完整的任務資料打開編輯視窗', async () => {
+    const wrapper = await render(fakeSchedulableTasks(1))
+    const { all_tasks, showEditModal, state, isEditMode, onCancel } = useTaskForm()
+    // 編輯視窗在標題列，all_tasks 由它讀取；這裡直接放入完整資料
+    all_tasks.value = [{ id: 't0', user_id: 'u1', title: '任務0', description: '測試內容', priority: 'Low', status: 'To Do', due_date: null }]
 
     const editButton = wrapper.findAll('button').find((b) => b.text().includes('編輯'))
     await editButton!.trigger('click')
     await flushPromises()
 
-    expect(wrapper.find('.u-modal-stub').attributes('data-open')).toBe('true')
+    expect(showEditModal.value).toBe(true)
+    expect(isEditMode.value).toBe(true)
+    expect(state.title).toBe('任務0')
+    onCancel()
   })
 
   // ---------- 階段任務 ----------
 
   const stagedTasks = () => [
-    {
-      ...fakeSchedulableTasks(1)[0], id: 'manual:p1', title: '期末報告', priority: null,
-      status: 'In Progress', is_parent: true,
-    },
-    ...[1, 2, 3].map((stage) => ({
-      ...fakeSchedulableTasks(1)[0], id: `manual:s${stage}`, title: `階段任務${stage}`,
-      status: stage === 1 ? 'Done' : 'To Do', parent_id: 'manual:p1', parent_title: '期末報告',
-      stage, stage_count: 3,
+    task({ id: 'manual:p1', title: '期末報告', priority: null, status: 'In Progress', is_parent: true }),
+    ...[1, 2, 3].map((stage) => task({
+      id: `manual:s${stage}`, title: `階段任務${stage}`, status: stage === 1 ? 'Done' : 'To Do',
+      parent_id: 'manual:p1', parent_title: '期末報告', stage, stage_count: 3,
+      calendar_event_id: stage === 2 ? 'ev-2' : null,
+      scheduled_start: stage === 2 ? '2026-11-23T14:00:00+08:00' : null,
+      scheduled_end: stage === 2 ? '2026-11-23T15:00:00+08:00' : null,
     })),
   ]
 
-  it('AC35：主任務佔一列並顯示進度，子任務預設收合；展開後子任務標上「階段 k/N」', async () => {
-    mockFetchByUrl({ '/manual-tasks/me': [], '/schedule/tasks': stagedTasks() })
-
-    const wrapper = shallowMount(TaskForm, { global: { stubs: uiStubs } })
-    await flushPromises()
+  it('AC20：主任務佔一列並顯示「進度 k/N」，子任務預設收合', async () => {
+    const wrapper = await render(stagedTasks())
 
     expect(wrapper.text()).toContain('期末報告')
-    expect(wrapper.text()).toContain('1/3')
+    expect(wrapper.text()).toContain('進度 1/3')
     expect(wrapper.text()).not.toContain('階段任務1')
-
-    const expandButton = wrapper.findAll('button').find((b) => b.text().includes('展開'))
-    await expandButton!.trigger('click')
-
-    expect(wrapper.text()).toContain('階段任務2')
-    expect(wrapper.text()).toContain('階段 2/3')
   })
 
-  it('AC17：主任務的完成按鈕不能按，按了也不會送出請求', async () => {
-    mockFetchByUrl({ '/manual-tasks/me': [], '/schedule/tasks': stagedTasks() })
+  it('AC20、AC22：展開後 3 個階段出現在主任務下面，標上「階段 k/N」，各有 6 個欄位', async () => {
+    const wrapper = await render(stagedTasks())
 
-    const wrapper = shallowMount(TaskForm, { global: { stubs: uiStubs } })
-    await flushPromises()
+    const expandButton = wrapper.findAll('button').find((b) => b.text().includes('展開階段'))
+    await expandButton!.trigger('click')
+
+    expect(rows(wrapper).map((r) => r.find('.flex-1').text())).toEqual(['期末報告', '階段任務1', '階段任務2', '階段任務3'])
+    expect(wrapper.text()).toContain('階段 2/3')
+    const stage2 = rowOf(wrapper, '階段任務2')
+    expect(cell(stage2, 'task-due')).toBe('11/25 12:00')
+    expect(cell(stage2, 'task-priority')).toBe('低')
+    expect(cell(stage2, 'task-status')).toBe('未開始')
+    expect(cell(stage2, 'task-schedule-status')).toBe('已排程')
+    expect(cell(stage2, 'task-schedule-time')).toContain('14:00')
+    expect(wrapper.findAll('button').some((b) => b.text().includes('收合階段'))).toBe(true)
+  })
+
+  it('AC19：主任務的完成按鈕不能按，按了也不會送出請求', async () => {
+    const wrapper = await render(stagedTasks())
     fetchSpy.mockClear()
 
-    const parentRow = wrapper.findAll('.task-row').find((row) => row.text().includes('期末報告'))
-    const doneButton = parentRow!.findAll('button').find((b) => b.text().includes('完成'))
+    const doneButton = rowOf(wrapper, '期末報告').findAll('button').find((b) => b.text().includes('完成'))
     expect(doneButton!.attributes('disabled')).toBeDefined()
     await doneButton!.trigger('click')
     await flushPromises()
@@ -312,57 +356,55 @@ describe('TaskForm.vue (render)', () => {
     expect(fetchSpy).not.toHaveBeenCalledWith('http://localhost:8000/schedule/tasks/done', expect.anything())
   })
 
-  it('假設 14：帶 limit 時主任務算一筆，收合的子任務不另外計算', async () => {
-    const tasks = [...stagedTasks(), ...fakeSchedulableTasks(2)]
-    mockFetchByUrl({ '/manual-tasks/me': [], '/schedule/tasks': tasks })
+  // ---------- 同步按鈕與未連結提示 ----------
 
-    const wrapper = shallowMount(TaskForm, { props: { limit: 2 }, global: { stubs: uiStubs } })
-    await flushPromises()
+  const syncButton = (wrapper: Wrapper) => wrapper.find('[data-testid="tasks-sync-now"]')
+  const notLinkedHint = (wrapper: Wrapper) => wrapper.find('[data-testid="tasks-not-linked"]')
 
-    expect(wrapper.text()).toContain('期末報告')
-    expect(wrapper.text()).toContain('任務0')
-    expect(wrapper.text()).not.toContain('任務1')
-    expect(wrapper.text()).toContain('查看全部（3）')
-  });
-})
+  it('AC25：帳號資料還在讀取時，沒有同步按鈕，也沒有未連結提示', async () => {
+    fetchKeysImpl = () => new Promise(() => {})
 
+    const wrapper = await render(fakeSchedulableTasks(1))
 
-describe('TaskForm.vue 從今日卡片編輯已排程的任務', () => {
-  // 預設的 stub 不渲染 UModal 的 content slot，這裡要看到表單內容
-  const contentStubs = {
-    ...uiStubs,
-    UModal: defineComponent({
-      name: 'UModal',
-      setup: (_, { slots }) => () => h('div', slots.content?.()),
-    }),
-    UForm: defineComponent({ name: 'UForm', setup: (_, { slots }) => () => h('form', slots.default?.()) }),
-  }
-  const task = (eventId: string | null) => ({
-    id: 't0', user_id: 'u1', title: '任務', description: '', priority: 'Low' as const, status: 'To Do',
-    due_date: null, calendar_event_id: eventId,
+    expect(syncButton(wrapper).exists()).toBe(false)
+    expect(notLinkedHint(wrapper).exists()).toBe(false)
   })
 
-  beforeEach(() => {
-    fetchSpy = vi.fn()
-    mockFetchByUrl({ '/manual-tasks/me': [], '/schedule/tasks': [] })
+  it('AC26：帳號資料讀取失敗時，有同步按鈕，沒有未連結提示', async () => {
+    fetchKeysImpl = async () => { throw new Error('讀取失敗') }
+
+    const wrapper = await render(fakeSchedulableTasks(1))
+
+    expect(syncButton(wrapper).exists()).toBe(true)
+    expect(notLinkedHint(wrapper).exists()).toBe(false)
   })
 
-  it('AC27：從今日卡片打開有 calendar_event_id 的任務，表單上方顯示會移除時段的說明；沒有編號、或從別處打開時不顯示', async () => {
-    const wrapper = shallowMount(TaskForm, { global: { stubs: contentStubs } })
-    await flushPromises()
-    const { startEditTask } = useTaskForm()
+  it('AC27：三個平台都沒有金鑰時，沒有同步按鈕；最上方有未連結提示，手動任務列在它下面', async () => {
+    linkedKeys.value = noneLinked()
 
-    startEditTask(task('ev-1'), { fromToday: true })
-    await flushPromises()
-    expect(wrapper.find('[data-testid="reschedule-note"]').text()).toContain('儲存後會從 Google 日曆移除這個任務的時段')
-    expect(wrapper.find('[data-testid="reschedule-note"]').text()).toContain('任務回到排程清單')
+    const wrapper = await render(fakeSchedulableTasks(1))
 
-    startEditTask(task(null), { fromToday: true })
-    await flushPromises()
-    expect(wrapper.find('[data-testid="reschedule-note"]').exists()).toBe(false)
+    expect(syncButton(wrapper).exists()).toBe(false)
+    expect(notLinkedHint(wrapper).text()).toBe('尚未連結外部平台，請前往 帳號設定 → 金鑰 新增')
+    const html = wrapper.html()
+    expect(html.indexOf('tasks-not-linked')).toBeLessThan(html.indexOf('任務0'))
+  })
 
-    startEditTask(task('ev-1'))
-    await flushPromises()
-    expect(wrapper.find('[data-testid="reschedule-note"]').exists()).toBe(false)
+  it('AC28：只有 GitHub 有金鑰時，有同步按鈕，沒有未連結提示', async () => {
+    linkedKeys.value = [{ platform: 'github', value: 'KEY****' }, { platform: 'jira', value: '' }, { platform: 'moodle', value: '' }]
+
+    const wrapper = await render(fakeSchedulableTasks(1))
+
+    expect(syncButton(wrapper).exists()).toBe(true)
+    expect(notLinkedHint(wrapper).exists()).toBe(false)
+  })
+
+  it('AC28：只有 Moodle 是「要重新連結」（沒有可用的值）時，有同步按鈕，沒有未連結提示', async () => {
+    linkedKeys.value = [{ platform: 'github', value: '' }, { platform: 'jira', value: '' }, { platform: 'moodle', value: '', needsReauth: true }]
+
+    const wrapper = await render(fakeSchedulableTasks(1))
+
+    expect(syncButton(wrapper).exists()).toBe(true)
+    expect(notLinkedHint(wrapper).exists()).toBe(false)
   })
 })

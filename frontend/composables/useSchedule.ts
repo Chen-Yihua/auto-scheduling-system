@@ -6,7 +6,7 @@ import { describeError, getFriendlyErrorTitle, isAuthError, isNotLinkedError, is
 import { useGoogleCalendar } from '@/composables/useGoogleCalendar'
 import { useGoogleCalendarAuth } from '@/composables/useGoogleCalendarAuth'
 
-// 共用狀態：從精靈頁導回首頁時 ScheduleSuggestion 會重新掛載，結果不能消失
+// 共用狀態：從精靈頁回到排程頁時 ScheduleSuggestion 會重新掛載，結果不能消失
 function useScheduleImpl() {
   const toast = useToast()
   const config = useRuntimeConfig()

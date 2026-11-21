@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mount, enableAutoUnmount } from '@vue/test-utils';
 import { ref as vueRef, reactive as vueReactive, computed as vueComputed, h, defineComponent } from 'vue'
 
-import SchedulePage from '~/pages/schedule.vue'
+import SchedulePage from '~/pages/schedule/wizard.vue'
 import type { SchedulableTask } from '~/types/schedulableTask'
 import type { RemovedCalendarEvent } from '~/types/schedule'
 
@@ -319,7 +319,7 @@ describe('pages/schedule.vue', () => {
     expect(confirmOrderSpy).toHaveBeenCalledTimes(1)
 
     await wrapper.findAll('button').find((b) => b.text() === '取消')!.trigger('click')
-    expect(pushSpy).toHaveBeenCalledWith('/')
+    expect(pushSpy).toHaveBeenCalledWith('/schedule')
   });
 
   it('step 2：顯示可編輯欄位，改動會呼叫 updateDueDate／updateDuration', async () => {
@@ -353,7 +353,7 @@ describe('pages/schedule.vue', () => {
     await wrapper.findAll('button').find((b) => b.text() === '確認並產生排程建議')!.trigger('click')
     expect(finishSpy).toHaveBeenCalledTimes(1)
     expect(fetchScheduleSuggestionSpy).toHaveBeenCalledWith(preferencesRef.value)
-    expect(pushSpy).toHaveBeenCalledWith('/')
+    expect(pushSpy).toHaveBeenCalledWith('/schedule')
   })
 
   describe('step 2：排程偏好設定', () => {

@@ -1,4 +1,4 @@
-// 首頁今日卡片的分區、排序與狀態標籤；「現在」由參數傳入，測試才能固定時間
+// 首頁今日卡片的分區、排序與狀態標籤，以及任務管理頁共用的已逾期判斷；「現在」由參數傳入，測試才能固定時間
 import type { SchedulableTask } from '~/types/schedulableTask'
 
 export type TodayLabel = '已逾期' | '已完成' | '進行中' | '未開始'
@@ -22,7 +22,7 @@ const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDat
 
 const isSameDay = (a: Date, b: Date) => startOfDay(a) === startOfDay(b)
 
-function isOverdue(task: SchedulableTask, now: Date): boolean {
+export function isOverdue(task: SchedulableTask, now: Date): boolean {
   if (task.status === 'Done') return false
   // 截止日那一天已經結束才算：今天 00:00 截止的任務今天還不算已逾期
   if (task.due_date && startOfDay(new Date(task.due_date)) < startOfDay(now)) return true

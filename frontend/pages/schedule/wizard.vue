@@ -215,11 +215,15 @@ async function handleConfirmOrder() {
 async function handleFinish() {
   await finish(async () => {
     await fetchScheduleSuggestion(sanitizedPreferences.value)
-    router.push('/')
+    router.push('/schedule')
   })
 }
 
 function cancel() {
+  router.push('/schedule')
+}
+
+function goHome() {
   router.push('/')
 }
 
@@ -382,7 +386,7 @@ function onExceptionEndInput(exception: BlockedException, event: Event) {
             <p class="text-sm text-gray-500 dark:text-gray-400">已逾期的任務可以在首頁的今日卡片重新排程。</p>
           </template>
           <div class="pt-2">
-            <UButton @click="cancel">回首頁</UButton>
+            <UButton @click="goHome">回首頁</UButton>
           </div>
         </div>
 

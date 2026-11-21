@@ -12,13 +12,13 @@ const router = useRouter()
 // 按按鈕時查到沒連接或授權已失效
 const connectionMissing = ref(false)
 
-// 產生建議前先進排程精靈，精靈完成後會產生建議並導回這裡。
+// 產生建議前先進排程精靈，精靈完成後會產生建議並回到排程頁，這張卡片會顯示結果。
 // 用這一次查詢的結果判斷；不知道有沒有連接時照常進入，由精靈自己處理
 async function startWizard() {
   const connection = await fetchGoogleCalendars()
   connectionMissing.value = connection === 'not_linked' || connection === 'reauth'
   if (connectionMissing.value) return
-  router.push('/schedule')
+  router.push('/schedule/wizard')
 }
 
 const getPriorityColor = (priority: string | undefined) => {

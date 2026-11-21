@@ -101,7 +101,7 @@ describe('ScheduleSuggestion.vue', () => {
     await wrapper.findComponent({ name: 'UButton' }).trigger('click')
     await flushPromises()
 
-    expect(pushSpy).toHaveBeenCalledWith('/schedule')
+    expect(pushSpy).toHaveBeenCalledWith('/schedule/wizard')
     // 精靈完成後才會產生建議，按下按鈕當下不會
     expect(fetchSpy).not.toHaveBeenCalled()
   })
@@ -203,7 +203,7 @@ describe('ScheduleSuggestion.vue', () => {
       await wrapper.findComponent({ name: 'UButton' }).trigger('click')
       await flushPromises()
 
-      expect(pushSpy).toHaveBeenCalledWith('/schedule')
+      expect(pushSpy).toHaveBeenCalledWith('/schedule/wizard')
     })
   })
 })

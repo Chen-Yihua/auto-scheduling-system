@@ -1,65 +1,22 @@
-// TaskForm.vue 怎麼呼叫 composable（composable 全部 mock）
+// TaskForm.vue 怎麼呼叫 composable（composable 全部 mock）；編輯視窗的接線見 TaskEditModal.actions.test.ts
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { shallowMount, flushPromises, enableAutoUnmount } from '@vue/test-utils'
-import { ref, computed, reactive, watch, defineComponent, h } from 'vue'
+import { ref, watch, defineComponent, h } from 'vue'
 import type { SchedulableTask } from '~/types/schedulableTask'
 
-// vi.mock 會被提升到 import 之前執行
 import TaskForm from '~/components/tasks/TaskForm.vue'
 
 vi.stubGlobal('watch', watch)
+vi.stubGlobal('useLinkedAccount', () => ({ keys: ref([]), fetchKeys: vi.fn().mockResolvedValue(undefined) }))
 enableAutoUnmount(afterEach)
 
 // ---------- useTaskForm mock ----------
 const userRef = ref<{ id: string } | null>({ id: 'u1' })
-const isEditModeRef = ref(false)
-const onSubmitSpy = vi.fn()
-const onEditSpy = vi.fn()
-const onDeleteSpy = vi.fn()
-const fetchTasksSpy = vi.fn()
 const startEditTaskSpy = vi.fn()
-const allTasksRef = ref([{ id: 't1', title: '完整任務' }])
-const isEditingParentRef = ref(false)
-const editingSubtasksRef = ref<{ id: string; title: string; stage: number }[]>([])
-const onDeleteSubtaskSpy = vi.fn()
-const startAddSubtaskSpy = vi.fn()
-const deletingRef = ref(false)
+const allTasksRef = ref([{ id: 't0', title: '完整任務' }])
 
 vi.mock('~/composables/useTaskForm', () => ({
-  useTaskForm: () => ({
-    user: userRef,
-    showEditModal: ref(true),
-    state: reactive({ title: '', description: '', priority: '', duration: '', inference_hint: '', subtasks: [] }),
-    modelValue: ref(null),
-    minDate: null,
-    displayDate: computed(() => '無期限'),
-    clearDueDate: vi.fn(),
-    priorityItems: ref([]),
-    validate: vi.fn(() => []),
-    submitting: ref(false),
-    all_tasks: allTasksRef,
-    isEditMode: isEditModeRef,
-    fetchTasks: fetchTasksSpy,
-    startEditTask: startEditTaskSpy,
-    onSubmit: onSubmitSpy,
-    onEdit: onEditSpy,
-    onDelete: onDeleteSpy,
-    onCancel: vi.fn(),
-    addSubtaskRow: vi.fn(),
-    removeSubtaskRow: vi.fn(),
-    maxSubtasks: 10,
-    isEditingParent: isEditingParentRef,
-    isEditingSubtask: ref(false),
-    editingSubtasks: editingSubtasksRef,
-    splitBlockedReason: ref(null),
-    subtaskDraft: reactive({ title: '', priority: '', duration: '', due_date: '', position: 1 }),
-    showSubtaskDraft: ref(false),
-    startAddSubtask: startAddSubtaskSpy,
-    cancelAddSubtask: vi.fn(),
-    onAddSubtask: vi.fn(),
-    onDeleteSubtask: onDeleteSubtaskSpy,
-    deleting: deletingRef,
-  }),
+  useTaskForm: () => ({ user: userRef, all_tasks: allTasksRef, startEditTask: startEditTaskSpy }),
 }))
 
 // ---------- useSchedulableTasks mock ----------
@@ -74,11 +31,11 @@ vi.mock('~/composables/useSchedulableTasks', () => ({
   }),
 }))
 
+vi.mock('~/composables/usePlatformItems', () => ({
+  usePlatformItems: () => ({ syncNow: vi.fn() }),
+}))
+
 // ---------- UI stubs ----------
-const SlotStub = (name: string) => defineComponent({
-  name,
-  setup: (_, { slots }) => () => h('div', [slots.header?.(), slots.default?.(), slots.content?.(), slots.footer?.()]),
-})
 const StubButton = defineComponent({
   name: 'UButton',
   emits: ['click'],
@@ -86,132 +43,40 @@ const StubButton = defineComponent({
 })
 const stubs = {
   UButton: StubButton,
-  UCard: SlotStub('UCard'),
-  UModal: SlotStub('UModal'),
-  UForm: SlotStub('UForm'),
-  UBadge: true,
-  UInput: true, UTextarea: true, UFormField: true, USelect: true,
-  UPopover: true, UCalendar: true, USkeleton: true, UIcon: true,
-  NuxtLink: { template: '<a><slot /></a>' },
+  UCard: defineComponent({ setup: (_, { slots }) => () => h('div', [slots.header?.(), slots.default?.()]) }),
+  UBadge: true, USkeleton: true, UIcon: true,
 }
-
-const render = () => shallowMount(TaskForm, { global: { stubs } })
 
 describe('TaskForm.vue 接線邏輯', () => {
   beforeEach(() => {
     userRef.value = { id: 'u1' }
-    isEditModeRef.value = false
-    isEditingParentRef.value = false
-    editingSubtasksRef.value = []
     tasksRef.value = []
-    deletingRef.value = false
-    for (const spy of [onSubmitSpy, onEditSpy, onDeleteSpy, fetchTasksSpy, startEditTaskSpy, fetchSchedulableTasksSpy, onDeleteSubtaskSpy, startAddSubtaskSpy]) {
-      spy.mockReset()
-    }
+    startEditTaskSpy.mockReset()
+    fetchSchedulableTasksSpy.mockReset()
   })
 
-  it('使用者還沒載入時先不抓資料，等使用者出現才抓', async () => {
+  it('使用者還沒載入時先不讀任務列表，等使用者出現才讀', async () => {
     userRef.value = null
-    render()
+    shallowMount(TaskForm, { global: { stubs } })
     await flushPromises()
 
-    expect(fetchTasksSpy).not.toHaveBeenCalled()
     expect(fetchSchedulableTasksSpy).not.toHaveBeenCalled()
 
     userRef.value = { id: 'u1' }
     await flushPromises()
 
-    expect(fetchTasksSpy).toHaveBeenCalledTimes(1)
     expect(fetchSchedulableTasksSpy).toHaveBeenCalledTimes(1)
   })
 
-  it('新增模式送出表單：呼叫 onSubmit，完成後重抓統一清單', async () => {
-    const wrapper = render()
-    await flushPromises()
-    fetchSchedulableTasksSpy.mockClear()
-    const event = { data: {} }
-
-    wrapper.findComponent({ name: 'UForm' }).vm.$emit('submit', event)
+  it('AC19：按手動任務的「編輯」：用去掉 "manual:" 前綴的 id 找到 all_tasks 裡的完整資料，呼叫 startEditTask', async () => {
+    tasksRef.value = [{
+      id: 'manual:t0', source: 'manual', title: '任務0', status: 'To Do', priority: 'Low', due_date: null, url: null,
+    }]
+    const wrapper = shallowMount(TaskForm, { global: { stubs } })
     await flushPromises()
 
-    expect(onSubmitSpy).toHaveBeenCalledWith(event)
-    expect(onEditSpy).not.toHaveBeenCalled()
-    expect(fetchSchedulableTasksSpy).toHaveBeenCalledTimes(1)
-  })
+    await wrapper.findAll('button').find((b) => b.text().includes('編輯'))!.trigger('click')
 
-  it('編輯模式送出表單：呼叫 onEdit，完成後重抓統一清單', async () => {
-    isEditModeRef.value = true
-    const wrapper = render()
-    await flushPromises()
-    fetchSchedulableTasksSpy.mockClear()
-
-    wrapper.findComponent({ name: 'UForm' }).vm.$emit('submit', { data: {} })
-    await flushPromises()
-
-    expect(onEditSpy).toHaveBeenCalledTimes(1)
-    expect(onSubmitSpy).not.toHaveBeenCalled()
-    expect(fetchSchedulableTasksSpy).toHaveBeenCalledTimes(1)
-  })
-
-  it('按「刪除」：呼叫 onDelete，完成後重抓統一清單', async () => {
-    isEditModeRef.value = true
-    const wrapper = render()
-    await flushPromises()
-    fetchSchedulableTasksSpy.mockClear()
-
-    const deleteButton = wrapper.findAll('button').find((b) => b.text().includes('刪除'))
-    await deleteButton!.trigger('click')
-    await flushPromises()
-
-    expect(onDeleteSpy).toHaveBeenCalledTimes(1)
-    expect(fetchSchedulableTasksSpy).toHaveBeenCalledTimes(1)
-  })
-
-
-  it('AC28 / AC29：編輯主任務時列出子任務，按子任務的「刪除」呼叫 onDeleteSubtask，完成後重抓統一清單', async () => {
-    isEditModeRef.value = true
-    isEditingParentRef.value = true
-    editingSubtasksRef.value = [{ id: 's1', title: '第一階段', stage: 1 }, { id: 's2', title: '第二階段', stage: 2 }]
-    const wrapper = render()
-    await flushPromises()
-    fetchSchedulableTasksSpy.mockClear()
-
-    expect(wrapper.text()).toContain('第一階段')
-    const row = wrapper.findAll('.subtask-edit-row').find((r) => r.text().includes('第二階段'))
-    await row!.findAll('button').find((b) => b.text().includes('刪除'))!.trigger('click')
-    await flushPromises()
-
-    expect(onDeleteSubtaskSpy).toHaveBeenCalledWith(editingSubtasksRef.value[1])
-    expect(fetchSchedulableTasksSpy).toHaveBeenCalledTimes(1)
-  })
-
-  it('#30 AC23：刪除送出中時，任務本身與每個階段的「刪除」都停用；送出完成後恢復', async () => {
-    isEditModeRef.value = true
-    isEditingParentRef.value = true
-    editingSubtasksRef.value = [{ id: 's1', title: '第一階段', stage: 1 }, { id: 's2', title: '第二階段', stage: 2 }]
-    const wrapper = render()
-    await flushPromises()
-    const deleteButtons = () => wrapper.findAll('button').filter((b) => b.text().includes('刪除'))
-
-    deletingRef.value = true
-    await flushPromises()
-    expect(deleteButtons().map((b) => b.attributes('disabled'))).toEqual(['', '', ''])
-
-    deletingRef.value = false
-    await flushPromises()
-    expect(deleteButtons().map((b) => b.attributes('disabled'))).toEqual([undefined, undefined, undefined])
-  })
-
-  it('AC10：編輯主任務時可以選在某個階段前面插入子任務', async () => {
-    isEditModeRef.value = true
-    isEditingParentRef.value = true
-    editingSubtasksRef.value = [{ id: 's1', title: '第一階段', stage: 1 }, { id: 's2', title: '第二階段', stage: 2 }]
-    const wrapper = render()
-    await flushPromises()
-
-    const row = wrapper.findAll('.subtask-edit-row').find((r) => r.text().includes('第二階段'))
-    await row!.findAll('button').find((b) => b.text().includes('插入'))!.trigger('click')
-
-    expect(startAddSubtaskSpy).toHaveBeenCalledWith(2)
+    expect(startEditTaskSpy).toHaveBeenCalledWith(allTasksRef.value[0])
   })
 })

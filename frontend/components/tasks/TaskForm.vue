@@ -7,7 +7,7 @@ import type { SchedulableTask } from '~/types/schedulableTask';
 import { priorityLabel, scheduleStatusLabel, sourceLabel, taskStatusLabel } from '~/utils/labels';
 import { isOverdue } from '~/utils/todayTasks';
 
-// 新增、編輯任務的視窗在 AppHeader 的 TaskEditModal；這裡只負責列表
+// 新增、編輯任務的視窗在同一頁的 TaskEditModal（tasks.vue 掛載）；這裡只負責列表
 const { user, all_tasks, startEditTask, showEditModal } = useTaskForm();
 
 // 列表顯示所有來源的項目，但只有手動任務能編輯；all_tasks 用來取得編輯表單需要的完整欄位

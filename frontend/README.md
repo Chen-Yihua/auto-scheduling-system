@@ -79,7 +79,7 @@ npm run coverage    # 單元測試 + 覆蓋率報表
 ├── components/                 # 依功能分組；跨頁面共用的直接放這層（LoginRequiredCard：未登入時的提示卡片）
 │   ├── header/                 # 頂部列（AppHeader）：首頁、任務管理、排程、分析 4 個連結，歡迎訊息、深淺色切換、帳號設定（AccountSettings）
 │   ├── dashboard/              # 首頁專用：版面配置（Dashboard）、今日卡片、Google 行事曆、Hacker News、LeetCode 每日一題
-│   ├── tasks/                  # 任務列表與立即同步（TaskForm）、新增/編輯/刪除視窗（TaskEditModal，掛在 AppHeader）、排程建議（ScheduleSuggestion，排程精靈的第 3 步）
+│   ├── tasks/                  # 任務列表與立即同步（TaskForm）、新增/編輯/刪除視窗（TaskEditModal，掛在首頁 Dashboard 與任務管理頁）、排程建議（ScheduleSuggestion，排程精靈的第 3 步）
 │   └── platforms/              # GithubIssuesList / JiraIssuesList / MoodleAssignmentsList，以及共用的 StaleDataBanner（「這是舊資料」提示）
 ├── composables/                 # 每個資料來源的「前端 CRUD 層」，封裝抓資料/錯誤處理
 │   ├── usePlatformItems.ts     # GitHub/Jira/Moodle 共用（對應後端 platforms/）

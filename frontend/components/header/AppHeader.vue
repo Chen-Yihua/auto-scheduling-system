@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import ColorModeButton from './ColorModeButton.vue';
 import AccountSettings from './AccountSettings.vue';
-import TaskEditModal from '~/components/tasks/TaskEditModal.vue';
 import { useUser } from '@clerk/vue';
 import { useUserSync } from '~/composables/useUserSync';
 
@@ -64,7 +63,5 @@ watch(user, (newUser) => {
       <AccountSettings />
     </SignedIn>
 
-    <!-- 今日卡片、任務管理頁的編輯與新增都用這個視窗，所以每個頁面的標題列都掛著 -->
-    <TaskEditModal />
   </header>
 </template>

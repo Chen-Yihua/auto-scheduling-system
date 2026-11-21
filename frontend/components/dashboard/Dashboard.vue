@@ -4,6 +4,7 @@ import { useGoogleCalendarAuth } from '@/composables/useGoogleCalendarAuth';
 import LoginRequiredCard from '~/components/LoginRequiredCard.vue';
 import Leetcode from '~/components/dashboard/Leetcode.vue';
 import News from '~/components/dashboard/News.vue';
+import TaskEditModal from '~/components/tasks/TaskEditModal.vue';
 import TodayTasks from '~/components/dashboard/TodayTasks.vue';
 import GoogleCalendarEmbed from '~/components/dashboard/GoogleCalendarEmbed.vue';
 
@@ -27,6 +28,8 @@ watch(googleConnectedCount, () => {
 
 <template>
   <div class="p-4">
+    <!-- 今日卡片的「修改」要用這個視窗；訪客不掛載，它掛載時會讀需要登入的資料 -->
+    <TaskEditModal v-if="isSignedIn" />
     <!-- Clerk 初始化完成前不顯示，避免已登入的人先看到「請先登入」 -->
     <div
       v-if="isSignedIn !== undefined"

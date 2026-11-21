@@ -46,6 +46,7 @@ vi.stubGlobal('useGoogleCalendar', () => ({
 const uiStubs = {
   TodayTasks: true,
   TaskForm: true,
+  TaskEditModal: true,
   ScheduleSuggestion: true,
   Leetcode: true,
   News: true,
@@ -112,7 +113,7 @@ describe('dashboard/Dashboard.vue', () => {
     expect(wrapper.text()).toContain('登入後即可查看 Google 行事曆')
     expect(wrapper.findComponent({ name: 'News' }).exists()).toBe(true)
     expect(wrapper.findComponent({ name: 'Leetcode' }).exists()).toBe(true)
-    for (const name of ['TodayTasks', 'GoogleCalendarEmbed', ...REMOVED_CARDS]) {
+    for (const name of ['TodayTasks', 'GoogleCalendarEmbed', 'TaskEditModal', ...REMOVED_CARDS]) {
       expect(wrapper.findComponent({ name }).exists(), name).toBe(false)
     }
   })
@@ -133,6 +134,16 @@ describe('dashboard/Dashboard.vue', () => {
     for (const name of REMOVED_CARDS) {
       expect(wrapper.findComponent({ name }).exists(), name).toBe(false)
     }
+  })
+
+  it('issue-178 AC8：已登入時掛載編輯視窗（今日卡片的「修改」要用），它不算一張卡片，不在三欄裡', async () => {
+    isSignedInRef.value = true
+    const wrapper = mount(Dashboard, { global: { stubs: uiStubs } })
+    activeWrapper = wrapper
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.findComponent({ name: 'TaskEditModal' }).exists()).toBe(true)
+    expect(wrapper.find('.grid').findComponent({ name: 'TaskEditModal' }).exists()).toBe(false)
   })
 
   it('issue-178 AC6：沒有「立即同步外部平台」按鈕', async () => {

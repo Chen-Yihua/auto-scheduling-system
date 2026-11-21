@@ -15,7 +15,7 @@ vi.mock('@clerk/vue', () => ({
   useUser: () => ({ user: userRef, isSignedIn: isSignedInRef }),
 }))
 
-// 跟 TaskEditModal 共用的 Modal 開關
+// 跟 TaskEditModal 共用的 Modal 開關（標題列不掛它，這裡只讓 useTaskForm 有值）
 const showEditModal = ref(false)
 vi.mock('~/composables/useTaskForm', () => ({
   useTaskForm: () => ({ showEditModal }),
@@ -36,11 +36,6 @@ const UButtonStub = defineComponent({
   },
 })
 
-// 假的 TaskEditModal：只反映共用的 showEditModal，證明標題列自己帶著這個視窗，不靠頁面放 TaskForm
-const TaskEditModalStub = defineComponent({
-  name: 'TaskEditModal',
-  setup: () => () => h('div', { 'data-testid': 'edit-modal', 'data-open': showEditModal.value ? 'true' : 'false' }),
-})
 
 // 路徑可由測試動態控制
 const routePath = ref('/')
@@ -53,7 +48,7 @@ const NuxtLinkStub = defineComponent({
 })
 
 const stubs = {
-  TaskEditModal: TaskEditModalStub,
+  TaskEditModal: true,
   NuxtLink: NuxtLinkStub,
   UIcon: true,
   UButton: UButtonStub,
@@ -88,7 +83,7 @@ describe('header/AppHeader.vue', () => {
     wrapper = null
   })
 
-  it.each(['/', '/tasks', '/schedule', '/productivity'])('issue-178 AC4：在 %s 的標題列沒有新增任務按鈕（訪客與已登入都一樣），但仍掛著編輯視窗，歡迎文字保留', (path) => {
+  it.each(['/', '/tasks', '/schedule', '/productivity'])('issue-178 AC4：在 %s 的標題列沒有新增任務按鈕（訪客與已登入都一樣），也沒有掛編輯視窗，歡迎文字保留', (path) => {
     routePath.value = path
     for (const signedIn of [false, true]) {
       isSignedInRef.value = signedIn
@@ -97,7 +92,7 @@ describe('header/AppHeader.vue', () => {
 
       expect(wrapper.find('[aria-label="新增任務"]').exists()).toBe(false)
       expect(wrapper.text()).not.toContain('新增任務')
-      expect(wrapper.find('[data-testid="edit-modal"]').exists()).toBe(true)
+      expect(wrapper.findComponent({ name: 'TaskEditModal' }).exists()).toBe(false)
       expect(wrapper.text()).toContain(signedIn ? '陳小明' : '訪客，請先登入')
       wrapper.unmount()
     }

@@ -94,7 +94,7 @@ describe('TaskEditModal.vue 接線邏輯', () => {
     }
   })
 
-  it('AC8：使用者還沒載入時先不讀 all_tasks，等使用者出現才讀', async () => {
+  it('issue-178 AC8：使用者還沒載入時先不讀 all_tasks，等使用者出現才讀', async () => {
     userRef.value = null
     render()
     await flushPromises()

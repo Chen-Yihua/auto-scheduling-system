@@ -29,7 +29,7 @@ describe('pages/tasks.vue', () => {
     isSignedInRef.value = false
   })
 
-  it('AC29：訪客顯示「任務列表」登入提示卡，沒有掛載 TaskForm、沒有呼叫需要登入的 API', () => {
+  it('issue-178 AC31：訪客顯示「任務列表」登入提示卡，沒有掛載 TaskForm、沒有呼叫需要登入的 API', () => {
     const wrapper = mount(TasksPage, { global: { stubs } })
 
     expect(wrapper.text()).toContain('任務列表')
@@ -38,7 +38,7 @@ describe('pages/tasks.vue', () => {
     expect(fetchSpy).not.toHaveBeenCalled()
   })
 
-  it('AC38：沒有「返回主頁」連結', () => {
+  it('issue-178 AC43：沒有「返回主頁」連結', () => {
     isSignedInRef.value = true
     const wrapper = mount(TasksPage, { global: { stubs } })
 

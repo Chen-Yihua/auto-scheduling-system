@@ -89,7 +89,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <!-- 放在 AppHeader：新增按鈕在標題列，每個有標題列的頁面都要能打開這個視窗 -->
+  <!-- 放在 AppHeader：今日卡片（首頁）與任務列表（任務管理頁）都要打開這個視窗 -->
   <template v-if="user">
       <UModal
         v-model:open="showEditModal"

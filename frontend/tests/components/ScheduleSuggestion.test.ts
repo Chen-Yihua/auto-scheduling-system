@@ -73,7 +73,7 @@ describe('ScheduleSuggestion.vue', () => {
     expect(fetchSpy).not.toHaveBeenCalled()
   })
 
-  it('AC33：按「重新產生」通知精靈回到第 1 步，卡片自己不呼叫產生建議', async () => {
+  it('issue-178 AC35：按「重新產生」通知精靈回到第 1 步，卡片自己不呼叫產生建議', async () => {
     const wrapper = render()
 
     await wrapper.findAll('button').find((b) => b.text() === '重新產生')!.trigger('click')

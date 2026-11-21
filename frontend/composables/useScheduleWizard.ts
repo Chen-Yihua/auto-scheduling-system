@@ -81,16 +81,6 @@ function useScheduleWizardImpl() {
     preferences.value = defaultSchedulePreferences()
   }
 
-  // 第 1 步時新出現的任務：條件同 initWizard，不在三欄裡的才加，放在它優先級那一欄的最後面
-  function addNewTasks(currentTasks: SchedulableTask[]) {
-    const known = new Set(allTasks().map((t) => t.id))
-    for (const t of currentTasks) {
-      if (known.has(t.id) || t.is_parent || t.status === 'Done' || t.calendar_event_id) continue
-      const priority = t.priority ?? 'Medium'
-      columns[priority].push({ ...t, priority })
-    }
-  }
-
   function moveTask(fromColumn: PriorityKey, fromIndex: number, toColumn: PriorityKey, toIndex: number) {
     const source = columns[fromColumn]
     if (fromIndex < 0 || fromIndex >= source.length) return
@@ -182,7 +172,6 @@ function useScheduleWizardImpl() {
     preferences,
     sanitizedPreferences,
     initWizard,
-    addNewTasks,
     moveTask,
     confirmOrder,
     backToStep1,

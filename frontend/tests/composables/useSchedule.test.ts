@@ -38,11 +38,10 @@ describe('useSchedule composable', () => {
     toastSpy.add.mockClear()
   })
 
-  // 要排第一個：狀態是共用的，其他測試執行後 hasFetched 就不再是初始值
-  it('初始狀態：還沒 fetch 過，loading／hasFetched 都是 false', () => {
+  // 要排第一個：狀態是共用的，其他測試執行後 loading 就可能不是初始值
+  it('初始狀態：還沒 fetch 過，loading 是 false', () => {
     const ctx = useSchedule()
     expect(ctx.loading.value).toBe(false)
-    expect(ctx.hasFetched.value).toBe(false)
   })
 
   it('呼叫 /schedule/suggest 取得排程建議，preferences 沒帶時用預設值（都不限制，時區用瀏覽器的）', async () => {
@@ -96,7 +95,6 @@ describe('useSchedule composable', () => {
     expect(ctx.scheduled.value).toEqual(scheduled)
     expect(ctx.unscheduled.value).toEqual(unscheduled)
     expect(ctx.loading.value).toBe(false)
-    expect(ctx.hasFetched.value).toBe(true)
   })
 
   it('尚未連接 Google Calendar（NOT_LINKED）→ notLinked 為 true，不跳錯誤 toast', async () => {

@@ -88,44 +88,23 @@ describe('header/AppHeader.vue', () => {
     wrapper = null
   })
 
-  it('訪客也看得到「新增任務」按鈕（位置跟登入後一樣），但不能按、按了也不會開 Modal', async () => {
-    wrapper = mount(AppHeader, { global: { stubs } })
+  it.each(['/', '/tasks', '/schedule', '/productivity'])('issue-178 AC4：在 %s 的標題列沒有新增任務按鈕（訪客與已登入都一樣），但仍掛著編輯視窗，歡迎文字保留', (path) => {
+    routePath.value = path
+    for (const signedIn of [false, true]) {
+      isSignedInRef.value = signedIn
+      userRef.value = signedIn ? { id: 'user_1', fullName: '陳小明', firstName: '小明', lastName: '陳' } : null
+      wrapper = mount(AppHeader, { global: { stubs } })
 
-    const button = wrapper.find('button[aria-label="新增任務"]')
-    expect(button.exists()).toBe(true)
-    expect(button.attributes('disabled')).toBeDefined()
-    expect(button.attributes('title')).toBe('登入後才能新增任務')
-
-    await button.trigger('click')
-    expect(showEditModal.value).toBe(false)
-    expect(wrapper.text()).toContain('訪客，請先登入')
+      expect(wrapper.find('[aria-label="新增任務"]').exists()).toBe(false)
+      expect(wrapper.text()).not.toContain('新增任務')
+      expect(wrapper.find('[data-testid="edit-modal"]').exists()).toBe(true)
+      expect(wrapper.text()).toContain(signedIn ? '陳小明' : '訪客，請先登入')
+      wrapper.unmount()
+    }
+    wrapper = null
   })
 
-  it('登入後「新增任務」按鈕可以按，按下去會打開 Modal', async () => {
-    isSignedInRef.value = true
-    userRef.value = { id: 'user_1', fullName: '陳小明', firstName: '小明', lastName: '陳' }
-    wrapper = mount(AppHeader, { global: { stubs } })
-
-    const button = wrapper.find('button[aria-label="新增任務"]')
-    expect(button.attributes('disabled')).toBeUndefined()
-    expect(button.attributes('title')).toBeUndefined()
-
-    await button.trigger('click')
-    expect(showEditModal.value).toBe(true)
-    expect(wrapper.text()).toContain('陳小明')
-  })
-
-  it('AC4：已登入時，標題列自己掛著新增任務的視窗，按按鈕就打開；不需要頁面上有 TaskForm', async () => {
-    isSignedInRef.value = true
-    userRef.value = { id: 'user_1', fullName: '陳小明', firstName: '小明', lastName: '陳' }
-    wrapper = mount(AppHeader, { global: { stubs } })
-
-    expect(wrapper.find('[data-testid="edit-modal"]').attributes('data-open')).toBe('false')
-    await wrapper.find('button[aria-label="新增任務"]').trigger('click')
-    expect(wrapper.find('[data-testid="edit-modal"]').attributes('data-open')).toBe('true')
-  })
-
-  it('AC1：有「首頁」「任務管理」「排程」「分析」4 個連結，依序連到 /、/tasks、/schedule、/productivity', () => {
+  it('issue-178 AC1：有「首頁」「任務管理」「排程」「分析」4 個連結，依序連到 /、/tasks、/schedule、/productivity', () => {
     wrapper = mount(AppHeader, { global: { stubs } })
 
     const links = wrapper.findAll('nav a').map((a) => [a.text(), a.attributes('href')])
@@ -142,7 +121,7 @@ describe('header/AppHeader.vue', () => {
     ['/tasks', '任務管理'],
     ['/schedule', '排程'],
     ['/productivity', '分析'],
-  ])('AC2：在 %s 時只有「%s」有 aria-current="page"', (path, label) => {
+  ])('issue-178 AC2：在 %s 時只有「%s」有 aria-current="page"', (path, label) => {
     routePath.value = path
     wrapper = mount(AppHeader, { global: { stubs } })
 
@@ -150,7 +129,7 @@ describe('header/AppHeader.vue', () => {
     expect(current.map((a) => a.text())).toEqual([label])
   })
 
-  it('AC3：不再有「工作效率」圖示按鈕', () => {
+  it('issue-178 AC3：不再有「工作效率」圖示按鈕', () => {
     wrapper = mount(AppHeader, { global: { stubs } })
 
     expect(wrapper.find('[aria-label="工作效率"]').exists()).toBe(false)

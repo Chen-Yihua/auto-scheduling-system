@@ -16,7 +16,7 @@ const startEditTaskSpy = vi.fn()
 const allTasksRef = ref([{ id: 't0', title: '完整任務' }])
 
 vi.mock('~/composables/useTaskForm', () => ({
-  useTaskForm: () => ({ user: userRef, all_tasks: allTasksRef, startEditTask: startEditTaskSpy }),
+  useTaskForm: () => ({ user: userRef, all_tasks: allTasksRef, startEditTask: startEditTaskSpy, showEditModal: ref(false) }),
 }))
 
 // ---------- useSchedulableTasks mock ----------
@@ -68,7 +68,7 @@ describe('TaskForm.vue 接線邏輯', () => {
     expect(fetchSchedulableTasksSpy).toHaveBeenCalledTimes(1)
   })
 
-  it('AC19：按手動任務的「編輯」：用去掉 "manual:" 前綴的 id 找到 all_tasks 裡的完整資料，呼叫 startEditTask', async () => {
+  it('issue-178 AC19：按手動任務的「編輯」：用去掉 "manual:" 前綴的 id 找到 all_tasks 裡的完整資料，呼叫 startEditTask', async () => {
     tasksRef.value = [{
       id: 'manual:t0', source: 'manual', title: '任務0', status: 'To Do', priority: 'Low', due_date: null, url: null,
     }]

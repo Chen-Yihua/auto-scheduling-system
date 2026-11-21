@@ -77,7 +77,7 @@ npm run coverage    # 單元測試 + 覆蓋率報表
 ├── app.vue                     # 全域 App 組件（只有 <UApp><NuxtPage /></UApp>；頁面版面在 pages/index.vue）
 ├── assets/css/tailwind.css     # 自定義 Tailwind CSS 設定
 ├── components/                 # 依功能分組；跨頁面共用的直接放這層（LoginRequiredCard：未登入時的提示卡片）
-│   ├── header/                 # 頂部列（AppHeader）：首頁、任務管理、排程、分析 4 個連結，歡迎訊息、深淺色切換、新增任務按鈕、帳號設定（AccountSettings）
+│   ├── header/                 # 頂部列（AppHeader）：首頁、任務管理、排程、分析 4 個連結，歡迎訊息、深淺色切換、帳號設定（AccountSettings）
 │   ├── dashboard/              # 首頁專用：版面配置（Dashboard）、今日卡片、Google 行事曆、Hacker News、LeetCode 每日一題
 │   ├── tasks/                  # 任務列表與立即同步（TaskForm）、新增/編輯/刪除視窗（TaskEditModal，掛在 AppHeader）、排程建議（ScheduleSuggestion，排程精靈的第 3 步）
 │   └── platforms/              # GithubIssuesList / JiraIssuesList / MoodleAssignmentsList，以及共用的 StaleDataBanner（「這是舊資料」提示）

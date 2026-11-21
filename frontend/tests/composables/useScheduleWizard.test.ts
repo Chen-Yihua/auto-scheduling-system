@@ -177,47 +177,13 @@ describe('useScheduleWizard composable', () => {
     expect(ctx.hasTasks.value).toBe(true)
   })
 
-  it('AC37：initWizard 把精靈放回第 1 步（上次停在第 3 步也一樣）', () => {
+  it('issue-178 AC39：initWizard 把精靈放回第 1 步（上次停在第 3 步也一樣）', () => {
     const ctx = useScheduleWizard()
     ctx.step.value = 3
 
     ctx.initWizard([fakeTask({ id: 'a' })])
 
     expect(ctx.step.value).toBe(1)
-  })
-
-  it('AC38：addNewTasks 把新任務加到它優先級那一欄的最後面，已有任務的順序不動；已在三欄的不重複加', () => {
-    const ctx = useScheduleWizard()
-    const existing = [
-      fakeTask({ id: 'h1', priority: 'High' }),
-      fakeTask({ id: 'h2', priority: 'High' }),
-      fakeTask({ id: 'l1', priority: 'Low' }),
-    ]
-    ctx.initWizard(existing)
-    ctx.moveTask('High', 1, 'High', 0)
-
-    ctx.addNewTasks([...existing, fakeTask({ id: 'new-h', priority: 'High' }), fakeTask({ id: 'new-l', priority: 'Low' })])
-
-    expect(ctx.columns.High.map((t) => t.id)).toEqual(['h2', 'h1', 'new-h'])
-    expect(ctx.columns.Low.map((t) => t.id)).toEqual(['l1', 'new-l'])
-    expect(ctx.columns.Medium).toEqual([])
-  })
-
-  it('AC38：addNewTasks 不加主任務、已完成、已有 calendar_event_id 的任務；沒有優先級的當成 Medium', () => {
-    const ctx = useScheduleWizard()
-    ctx.initWizard([])
-
-    ctx.addNewTasks([
-      fakeTask({ id: 'p', is_parent: true }),
-      fakeTask({ id: 'done', status: 'Done' }),
-      fakeTask({ id: 'scheduled', calendar_event_id: 'ev' }),
-      fakeTask({ id: 'plain', priority: null }),
-    ])
-
-    expect(ctx.columns.Medium.map((t) => t.id)).toEqual(['plain'])
-    expect(ctx.columns.Medium[0]!.priority).toBe('Medium')
-    expect(ctx.columns.Low).toEqual([])
-    expect(ctx.columns.High).toEqual([])
   })
 
   it('moveTask 同欄內搬動順序', () => {

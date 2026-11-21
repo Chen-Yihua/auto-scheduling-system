@@ -8,7 +8,7 @@ import { priorityLabel, scheduleStatusLabel, sourceLabel, taskStatusLabel } from
 import { isOverdue } from '~/utils/todayTasks';
 
 // 新增、編輯任務的視窗在 AppHeader 的 TaskEditModal；這裡只負責列表
-const { user, all_tasks, startEditTask } = useTaskForm();
+const { user, all_tasks, startEditTask, showEditModal } = useTaskForm();
 
 // 列表顯示所有來源的項目，但只有手動任務能編輯；all_tasks 用來取得編輯表單需要的完整欄位
 const { tasks: schedulableTasks, loading, fetchSchedulableTasks, toggleDone } = useSchedulableTasks()
@@ -153,18 +153,23 @@ onMounted(async () => {
           <UIcon name="i-lucide-list-todo" class="w-5 h-5" />
           <span class="text-lg font-semibold text-gray-900 dark:text-white">任務列表</span>
         </div>
-        <UButton
-          v-if="showSyncButton"
-          data-testid="tasks-sync-now"
-          size="sm"
-          variant="soft"
-          icon="i-lucide-refresh-cw"
-          :loading="syncingAll"
-          :disabled="syncingAll"
-          @click="syncAllPlatforms"
-        >
-          立即同步外部平台
-        </UButton>
+        <div class="flex items-center gap-2">
+          <UButton
+            v-if="showSyncButton"
+            data-testid="tasks-sync-now"
+            size="sm"
+            variant="soft"
+            icon="i-lucide-refresh-cw"
+            :loading="syncingAll"
+            :disabled="syncingAll"
+            @click="syncAllPlatforms"
+          >
+            立即同步外部平台
+          </UButton>
+          <UButton data-testid="tasks-add" icon="mdi-file-edit" size="sm" @click="() => { showEditModal = true }">
+            新增任務
+          </UButton>
+        </div>
       </div>
     </template>
 
@@ -183,7 +188,7 @@ onMounted(async () => {
       v-else-if="schedulableTasks.length === 0"
       class="text-center text-sm text-gray-500 dark:text-gray-400 py-6"
     >
-      目前沒有任務，點擊標題列的新增任務按鈕新增一個吧
+      目前沒有任務，點擊右上角的「新增任務」新增一個吧
     </div>
     <div v-else class="overflow-x-auto">
       <div class="min-w-[960px] space-y-2">

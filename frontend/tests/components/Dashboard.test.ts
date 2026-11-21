@@ -99,7 +99,7 @@ describe('dashboard/Dashboard.vue', () => {
     expect(activeWrapper.find('.grid').exists()).toBe(false)
   })
 
-  it('AC7：訪客只有今日卡片與行事曆兩張登入提示卡，News／Leetcode 照常顯示，不打需要授權的 API、不掛載需要登入的元件', async () => {
+  it('issue-178 AC7：訪客只有今日卡片與行事曆兩張登入提示卡，News／Leetcode 照常顯示，不打需要授權的 API、不掛載需要登入的元件', async () => {
     isSignedInRef.value = false
     const wrapper = mount(Dashboard, { global: { stubs: uiStubs } })
     activeWrapper = wrapper
@@ -117,7 +117,7 @@ describe('dashboard/Dashboard.vue', () => {
     }
   })
 
-  it('AC5：已登入時只有今日卡片、Google 行事曆、Hacker News、LeetCode 4 張卡片；三欄版面維持左欄今日、中欄行事曆、右欄 News 與 Leetcode', async () => {
+  it('issue-178 AC5：已登入時只有今日卡片、Google 行事曆、Hacker News、LeetCode 4 張卡片；三欄版面維持左欄今日、中欄行事曆、右欄 News 與 Leetcode', async () => {
     isSignedInRef.value = true
     const wrapper = mount(Dashboard, { global: { stubs: uiStubs } })
     activeWrapper = wrapper
@@ -135,7 +135,7 @@ describe('dashboard/Dashboard.vue', () => {
     }
   })
 
-  it('AC6：沒有「立即同步外部平台」按鈕', async () => {
+  it('issue-178 AC6：沒有「立即同步外部平台」按鈕', async () => {
     isSignedInRef.value = true
     const wrapper = mount(Dashboard, { global: { stubs: uiStubs } })
     activeWrapper = wrapper

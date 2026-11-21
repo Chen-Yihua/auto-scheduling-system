@@ -45,8 +45,10 @@ vi.mock('~/composables/useRemovedCalendarEvents', () => ({
 }))
 
 const fetchScheduleSuggestionSpy = vi.fn()
+// 共用狀態：上次產生、還沒確認的建議留在這裡
+const lastSuggestionRef = vueRef<{ task_id: string; title: string }[]>([])
 vi.mock('~/composables/useSchedule', () => ({
-  useSchedule: () => ({ fetchScheduleSuggestion: fetchScheduleSuggestionSpy }),
+  useSchedule: () => ({ fetchScheduleSuggestion: fetchScheduleSuggestionSpy, scheduled: lastSuggestionRef }),
 }))
 
 const stepRef = vueRef<1 | 2 | 3>(1)
@@ -59,7 +61,6 @@ const preferencesRef = vueRef({
   daily_max_minutes: null as number | null,
 })
 const initWizardSpy = vi.fn()
-const addNewTasksSpy = vi.fn()
 const moveTaskSpy = vi.fn()
 const confirmOrderSpy = vi.fn()
 const backToStep1Spy = vi.fn()
@@ -81,7 +82,6 @@ vi.mock('~/composables/useScheduleWizard', () => ({
     sanitizedPreferences: vueComputed(() => preferencesRef.value),
     hasTasks: vueComputed(() => (['Low', 'Medium', 'High'] as const).some((p) => columnsRef[p].length > 0)),
     initWizard: initWizardSpy,
-    addNewTasks: addNewTasksSpy,
     moveTask: moveTaskSpy,
     confirmOrder: confirmOrderSpy,
     backToStep1: backToStep1Spy,
@@ -155,8 +155,8 @@ describe('pages/schedule.vue', () => {
     columnsRef.High = []
     preferencesRef.value = { blocked_recurring: [], blocked_exceptions: [], buffer_minutes: 0, daily_max_minutes: null }
     schedulableTasksRef.value = []
-    addNewTasksSpy.mockClear()
     fetchScheduleSuggestionSpy.mockReset()
+    lastSuggestionRef.value = []
     toastSpy.add.mockClear()
     // mockReset：其他測試設的 mockImplementation 會在掛載時改掉 schedulableTasksRef
     loadFailedRef.value = false
@@ -184,7 +184,7 @@ describe('pages/schedule.vue', () => {
     window.confirm = confirmSpy
   })
 
-  it('AC40：未登入時顯示「排程精靈」登入提示，不會抓任務', async () => {
+  it('issue-178 AC40：未登入時顯示「排程精靈」登入提示，不會抓任務', async () => {
     isSignedInRef.value = false
     const wrapper = await render()
 
@@ -240,7 +240,7 @@ describe('pages/schedule.vue', () => {
   })
 
   describe('第 1 步沒有可排程的任務', () => {
-    it('AC2、AC4、schedule-index AC36：不顯示三欄，改顯示說明（寫明已逾期的任務可以在今日卡片重新排程），沒有「回首頁」按鈕', async () => {
+    it('schedule-wizard-empty AC2、AC4、issue-178 AC38：不顯示三欄，改顯示說明（寫明已逾期的任務可以在今日卡片重新排程），沒有「回首頁」按鈕', async () => {
       schedulableTasksRef.value = [fakeTask({ id: 'a', calendar_event_id: 'e' })]
 
       const wrapper = await render()
@@ -277,7 +277,7 @@ describe('pages/schedule.vue', () => {
     })
   })
 
-  it('AC5a、AC36：進入精靈時任務清單載入失敗 → 顯示「暫時無法載入任務」，沒有「回首頁」按鈕，不顯示 AC2–AC5 的說明', async () => {
+  it('schedule-wizard-empty AC5a、issue-178 AC38：進入精靈時任務清單載入失敗 → 顯示「暫時無法載入任務」，沒有「回首頁」按鈕，不顯示 AC2–AC5 的說明', async () => {
     schedulableTasksRef.value = []
     fetchSchedulableTasksSpy.mockImplementation(() => { loadFailedRef.value = true })
 
@@ -311,7 +311,7 @@ describe('pages/schedule.vue', () => {
     expect(moveTaskSpy).toHaveBeenCalledWith('Low', 0, 'High', 0)
   })
 
-  it('step 1：按「下一步」呼叫 confirmOrder；AC35：沒有「取消」按鈕', async () => {
+  it('step 1：按「下一步」呼叫 confirmOrder；issue-178 AC37：沒有「取消」按鈕', async () => {
     columnsRef.Low = [fakeTask({ id: 'low1' })]
     const wrapper = await render()
 
@@ -338,7 +338,7 @@ describe('pages/schedule.vue', () => {
     expect(updateDueDateSpy).toHaveBeenCalledWith('a', new Date('2026-10-05T10:00').toISOString())
   })
 
-  it('step 2、AC31：按「上一步」呼叫 backToStep1；按「確認並產生排程建議」完成後抓排程建議，同一頁進到第 3 步', async () => {
+  it('step 2、issue-178 AC33：按「上一步」呼叫 backToStep1；按「確認並產生排程建議」完成後抓排程建議，同一頁進到第 3 步', async () => {
     stepRef.value = 2
     columnsRef.Medium = [fakeTask({ id: 'a' })]
     finishSpy.mockImplementation(async (onDone: () => Promise<void>) => {
@@ -355,7 +355,7 @@ describe('pages/schedule.vue', () => {
     expect(stepRef.value).toBe(3)
   })
 
-  it('AC30：已登入、已連接、沒有已刪除的事件時，直接顯示第 1 步的三欄，沒有排程建議的內容', async () => {
+  it('issue-178 AC32：已登入、已連接、沒有已刪除的事件時，直接顯示第 1 步的三欄，沒有排程建議的內容', async () => {
     columnsRef.Low = [fakeTask({ id: 'low1', title: '低優先任務' })]
 
     const wrapper = await render()
@@ -364,7 +364,7 @@ describe('pages/schedule.vue', () => {
     expect(wrapper.find('[data-testid="suggestion"]').exists()).toBe(false)
   })
 
-  it('AC31、AC32：第 3 步顯示排程建議的內容（確認排程由它負責），沒有三欄', async () => {
+  it('issue-178 AC33、AC34：第 3 步顯示排程建議的內容（確認排程由它負責），沒有三欄', async () => {
     stepRef.value = 3
     columnsRef.Medium = [fakeTask({ id: 'a', title: '任務 A' })]
 
@@ -374,7 +374,7 @@ describe('pages/schedule.vue', () => {
     expect(wrapper.text()).not.toContain('任務 A')
   })
 
-  it('AC33：第 3 步按「重新產生」，重新讀任務並回到第 1 步（initWizard）', async () => {
+  it('issue-178 AC35：第 3 步按「重新產生」，重新讀任務並回到第 1 步（initWizard）', async () => {
     stepRef.value = 3
     const tasks = [fakeTask({ id: 'a' })]
     fetchSchedulableTasksSpy.mockImplementation(() => { schedulableTasksRef.value = tasks })
@@ -389,33 +389,19 @@ describe('pages/schedule.vue', () => {
     expect(initWizardSpy).toHaveBeenCalledWith(tasks)
   })
 
-  it('AC37：共用狀態裡已有上次沒確認的建議，打開排程頁時從頭開始（initWizard 把精靈放回第 1 步），不顯示建議', async () => {
-    // 真正回到第 1 步由 initWizard 負責（useScheduleWizard.test.ts）；這裡確認每次打開都呼叫它，而且不看 useSchedule 的狀態
+  it('issue-178 AC39：共用狀態裡有上次沒確認的建議、step 停在 3，打開排程頁時 initWizard 把它設回 1，畫面是第 1 步，沒有建議內容', async () => {
+    lastSuggestionRef.value = [{ task_id: 'old', title: '上次的建議' }]
+    stepRef.value = 3
+    initWizardSpy.mockImplementation(() => { stepRef.value = 1 })
     columnsRef.Low = [fakeTask({ id: 'low1', title: '低優先任務' })]
 
     const wrapper = await render()
 
     expect(initWizardSpy).toHaveBeenCalledTimes(1)
+    expect(stepRef.value).toBe(1)
+    expect(wrapper.text()).toContain('把任務拖到對應的優先權欄位')
     expect(wrapper.find('[data-testid="suggestion"]').exists()).toBe(false)
-  })
-
-  it('AC38、AC39：任務列表多出新任務時，只有第 1 步會呼叫 addNewTasks；第 2、3 步不處理', async () => {
-    columnsRef.Low = [fakeTask({ id: 'low1' })]
-    await render()
-    addNewTasksSpy.mockClear()
-    const withNew = [fakeTask({ id: 'new', priority: 'High' })]
-
-    schedulableTasksRef.value = withNew
-    await flushMicrotasks()
-    expect(addNewTasksSpy).toHaveBeenCalledWith(withNew)
-
-    addNewTasksSpy.mockClear()
-    for (const step of [2, 3] as const) {
-      stepRef.value = step
-      schedulableTasksRef.value = [fakeTask({ id: `new-${step}` })]
-      await flushMicrotasks()
-    }
-    expect(addNewTasksSpy).not.toHaveBeenCalled()
+    initWizardSpy.mockReset()
   })
 
   describe('step 2：排程偏好設定', () => {
@@ -874,7 +860,7 @@ function flushMicrotasks() {
 }
 
 describe('pages/schedule.vue：處理已刪除的事件按「取消」', () => {
-  it('AC34：不呼叫處理已刪除事件的 API，重新讀任務、進到第 1 步', async () => {
+  it('issue-178 AC36：不呼叫處理已刪除事件的 API，重新讀任務、進到第 1 步', async () => {
     isSignedInRef.value = true
     stepRef.value = 1
     columnsRef.Medium = [fakeTask({ id: 'wizard-task' })]

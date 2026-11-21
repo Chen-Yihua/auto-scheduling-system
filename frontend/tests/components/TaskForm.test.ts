@@ -149,14 +149,14 @@ describe('TaskForm.vue（任務管理頁的任務列表）', () => {
 
   // ---------- 6 欄 ----------
 
-  it('AC21：沒有任務時顯示說明，抓取完成後不該一直卡在 Skeleton', async () => {
+  it('issue-178 AC21：沒有任務時顯示說明，抓取完成後不該一直卡在 Skeleton', async () => {
     const wrapper = await render([])
 
     expect(wrapper.findAll('u-skeleton-stub').length).toBe(0)
-    expect(wrapper.text()).toContain('目前沒有任務，點擊標題列的新增任務按鈕新增一個吧')
+    expect(wrapper.text()).toContain('目前沒有任務，點擊右上角的「新增任務」新增一個吧')
   })
 
-  it('AC9：一筆手動任務，那一列有名稱、截止日、優先級、完成狀態、排程狀態、排程時間；不顯示描述', async () => {
+  it('issue-178 AC9：一筆手動任務，那一列有名稱、截止日、優先級、完成狀態、排程狀態、排程時間；不顯示描述', async () => {
     const wrapper = await render([task({ priority: 'High', description: '這段描述不該出現在列表上' })])
 
     const row = rows(wrapper)[0]!
@@ -169,7 +169,7 @@ describe('TaskForm.vue（任務管理頁的任務列表）', () => {
     expect(wrapper.text()).not.toContain('這段描述不該出現在列表上')
   })
 
-  it('AC10：沒有優先級的任務與主任務，優先級欄顯示「—」；沒有截止日的任務截止日欄顯示「無期限」', async () => {
+  it('issue-178 AC10：沒有優先級的任務與主任務，優先級欄顯示「—」；沒有截止日的任務截止日欄顯示「無期限」', async () => {
     const wrapper = await render([
       task({ id: 'manual:p1', title: '主任務', priority: null, is_parent: true }),
       task({ id: 'manual:t1', title: '沒設定的任務', priority: null, due_date: null }),
@@ -180,7 +180,7 @@ describe('TaskForm.vue（任務管理頁的任務列表）', () => {
     expect(cell(rowOf(wrapper, '沒設定的任務'), 'task-due')).toBe('無期限')
   })
 
-  it('AC11：status 為 To Do、In Progress、Done 依序顯示「未開始」「進行中」「已完成」', async () => {
+  it('issue-178 AC11：status 為 To Do、In Progress、Done 依序顯示「未開始」「進行中」「已完成」', async () => {
     const wrapper = await render([
       task({ id: 'manual:a', title: 'A', status: 'To Do' }),
       task({ id: 'manual:b', title: 'B', status: 'In Progress' }),
@@ -190,7 +190,7 @@ describe('TaskForm.vue（任務管理頁的任務列表）', () => {
     expect(rows(wrapper).map((r) => cell(r, 'task-status'))).toEqual(['未開始', '進行中', '已完成'])
   })
 
-  it('AC12：有 calendar_event_id 顯示「已排程」，沒有顯示「未排程」', async () => {
+  it('issue-178 AC12：有 calendar_event_id 顯示「已排程」，沒有顯示「未排程」', async () => {
     const wrapper = await render([
       task({ id: 'manual:a', title: 'A', calendar_event_id: 'ev-1' }),
       task({ id: 'manual:b', title: 'B', calendar_event_id: null }),
@@ -199,7 +199,7 @@ describe('TaskForm.vue（任務管理頁的任務列表）', () => {
     expect(rows(wrapper).map((r) => cell(r, 'task-schedule-status'))).toEqual(['已排程', '未排程'])
   })
 
-  it('AC13：有時段顯示開始與結束時間；已排程但沒有時段（舊資料）與未排程都顯示「—」', async () => {
+  it('issue-178 AC13：有時段顯示開始與結束時間；已排程但沒有時段（舊資料）與未排程都顯示「—」', async () => {
     const wrapper = await render([
       task({ id: 'manual:a', title: 'A', calendar_event_id: 'ev-1', scheduled_start: '2026-11-23T14:00:00+08:00', scheduled_end: '2026-11-23T15:30:00+08:00' }),
       task({ id: 'manual:b', title: 'B', calendar_event_id: 'ev-2' }),
@@ -212,7 +212,7 @@ describe('TaskForm.vue（任務管理頁的任務列表）', () => {
     expect(times.slice(1)).toEqual(['—', '—'])
   })
 
-  it('AC14：主任務的排程狀態與排程時間都顯示「—」', async () => {
+  it('issue-178 AC14：主任務的排程狀態與排程時間都顯示「—」', async () => {
     const wrapper = await render([
       task({ id: 'manual:p1', title: '主任務', is_parent: true, calendar_event_id: 'ev-1', scheduled_start: '2026-11-23T14:00:00+08:00', scheduled_end: '2026-11-23T15:00:00+08:00' }),
     ])
@@ -224,7 +224,7 @@ describe('TaskForm.vue（任務管理頁的任務列表）', () => {
 
   // ---------- 已逾期 ----------
 
-  it('AC15：沒完成、截止日是昨天的任務與主任務，名稱旁都有「已逾期」', async () => {
+  it('issue-178 AC15：沒完成、截止日是昨天的任務與主任務，名稱旁都有「已逾期」', async () => {
     const wrapper = await render([
       task({ id: 'manual:a', title: 'A', due_date: '2026-11-20T12:00:00+08:00' }),
       task({ id: 'manual:p1', title: '主任務', is_parent: true, due_date: '2026-11-20T12:00:00+08:00' }),
@@ -234,7 +234,7 @@ describe('TaskForm.vue（任務管理頁的任務列表）', () => {
     expect(rowOf(wrapper, 'A').find('[data-testid="task-overdue"]').text()).toBe('已逾期')
   })
 
-  it('AC16：沒完成、時段結束時間是一小時前、截止日是明天的任務，名稱旁有「已逾期」', async () => {
+  it('issue-178 AC16：沒完成、時段結束時間是一小時前、截止日是明天的任務，名稱旁有「已逾期」', async () => {
     const wrapper = await render([
       task({ due_date: '2026-11-22T12:00:00+08:00', calendar_event_id: 'ev-1', scheduled_start: '2026-11-21T08:00:00+08:00', scheduled_end: '2026-11-21T09:00:00+08:00' }),
     ])
@@ -242,7 +242,7 @@ describe('TaskForm.vue（任務管理頁的任務列表）', () => {
     expect(rows(wrapper)[0]!.find('[data-testid="task-overdue"]').exists()).toBe(true)
   })
 
-  it('AC17：已完成的任務即使截止日已過，不顯示「已逾期」', async () => {
+  it('issue-178 AC17：已完成的任務即使截止日已過，不顯示「已逾期」', async () => {
     const wrapper = await render([task({ status: 'Done', due_date: '2026-11-20T12:00:00+08:00' })])
 
     expect(rows(wrapper)[0]!.find('[data-testid="task-overdue"]').exists()).toBe(false)
@@ -250,7 +250,7 @@ describe('TaskForm.vue（任務管理頁的任務列表）', () => {
 
   // ---------- 來源標籤 ----------
 
-  it('AC18：外部任務依序有「GitHub」「Jira」「Moodle」標籤，手動任務沒有來源標籤', async () => {
+  it('issue-178 AC18：外部任務依序有「GitHub」「Jira」「Moodle」標籤，手動任務沒有來源標籤', async () => {
     const wrapper = await render([
       task({ id: 'manual:a', title: '手動' }),
       task({ id: 'github:1', title: 'GH', source: 'github' }),
@@ -264,7 +264,7 @@ describe('TaskForm.vue（任務管理頁的任務列表）', () => {
 
   // ---------- 操作 ----------
 
-  it('AC19：外部平台項目沒有編輯按鈕，點擊那一列會開啟原始連結', async () => {
+  it('issue-178 AC19：外部平台項目沒有編輯按鈕，點擊那一列會開啟原始連結', async () => {
     const githubTask = task({ id: 'github:42', source: 'github', title: 'GitHub Issue', priority: null, due_date: null, url: 'https://github.com/x/y/issues/42' })
     const openSpy = vi.fn()
     vi.stubGlobal('open', openSpy)
@@ -277,7 +277,7 @@ describe('TaskForm.vue（任務管理頁的任務列表）', () => {
     expect(openSpy).toHaveBeenCalledWith('https://github.com/x/y/issues/42', '_blank')
   })
 
-  it('AC19：按下「標記完成」會呼叫 PATCH /schedule/tasks/done', async () => {
+  it('issue-178 AC19：按下「標記完成」會呼叫 PATCH /schedule/tasks/done', async () => {
     const wrapper = await render(fakeSchedulableTasks(1))
 
     const doneButton = wrapper.findAll('button').find((b) => b.text().includes('標記完成'))
@@ -290,7 +290,7 @@ describe('TaskForm.vue（任務管理頁的任務列表）', () => {
     )
   })
 
-  it('AC19：手動任務按「編輯」會去掉 "manual:" 前綴，用 all_tasks 裡完整的任務資料打開編輯視窗', async () => {
+  it('issue-178 AC19：手動任務按「編輯」會去掉 "manual:" 前綴，用 all_tasks 裡完整的任務資料打開編輯視窗', async () => {
     const wrapper = await render(fakeSchedulableTasks(1))
     const { all_tasks, showEditModal, state, isEditMode, onCancel } = useTaskForm()
     // 編輯視窗在標題列，all_tasks 由它讀取；這裡直接放入完整資料
@@ -319,7 +319,7 @@ describe('TaskForm.vue（任務管理頁的任務列表）', () => {
     })),
   ]
 
-  it('AC20：主任務佔一列並顯示「進度 k/N」，子任務預設收合', async () => {
+  it('issue-178 AC20：主任務佔一列並顯示「進度 k/N」，子任務預設收合', async () => {
     const wrapper = await render(stagedTasks())
 
     expect(wrapper.text()).toContain('期末報告')
@@ -327,7 +327,7 @@ describe('TaskForm.vue（任務管理頁的任務列表）', () => {
     expect(wrapper.text()).not.toContain('階段任務1')
   })
 
-  it('AC20、AC22：展開後 3 個階段出現在主任務下面，標上「階段 k/N」，各有 6 個欄位', async () => {
+  it('issue-178 AC20、AC24：展開後 3 個階段出現在主任務下面，標上「階段 k/N」，各有 6 個欄位', async () => {
     const wrapper = await render(stagedTasks())
 
     const expandButton = wrapper.findAll('button').find((b) => b.text().includes('展開階段'))
@@ -344,7 +344,7 @@ describe('TaskForm.vue（任務管理頁的任務列表）', () => {
     expect(wrapper.findAll('button').some((b) => b.text().includes('收合階段'))).toBe(true)
   })
 
-  it('AC19：主任務的完成按鈕不能按，按了也不會送出請求', async () => {
+  it('issue-178 AC19：主任務的完成按鈕不能按，按了也不會送出請求', async () => {
     const wrapper = await render(stagedTasks())
     fetchSpy.mockClear()
 
@@ -356,12 +356,35 @@ describe('TaskForm.vue（任務管理頁的任務列表）', () => {
     expect(fetchSpy).not.toHaveBeenCalledWith('http://localhost:8000/schedule/tasks/done', expect.anything())
   })
 
+  it('issue-178 AC22：已登入時卡片右上角最右邊有「新增任務」按鈕（在同步按鈕右邊），按下後 showEditModal 變 true', async () => {
+    const wrapper = await render(fakeSchedulableTasks(1))
+    const { showEditModal } = useTaskForm()
+    showEditModal.value = false
+
+    const buttons = wrapper.findAll('[data-testid="tasks-sync-now"], [data-testid="tasks-add"]').map((b) => b.attributes('data-testid'))
+    expect(buttons).toEqual(['tasks-sync-now', 'tasks-add'])
+    await wrapper.get('[data-testid="tasks-add"]').trigger('click')
+
+    expect(wrapper.get('[data-testid="tasks-add"]').text()).toBe('新增任務')
+    expect(showEditModal.value).toBe(true)
+    showEditModal.value = false
+  })
+
+  it('issue-178 AC23：三個平台都沒有金鑰時，仍有「新增任務」按鈕，沒有同步按鈕', async () => {
+    linkedKeys.value = noneLinked()
+
+    const wrapper = await render(fakeSchedulableTasks(1))
+
+    expect(wrapper.find('[data-testid="tasks-add"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="tasks-sync-now"]').exists()).toBe(false)
+  })
+
   // ---------- 同步按鈕與未連結提示 ----------
 
   const syncButton = (wrapper: Wrapper) => wrapper.find('[data-testid="tasks-sync-now"]')
   const notLinkedHint = (wrapper: Wrapper) => wrapper.find('[data-testid="tasks-not-linked"]')
 
-  it('AC25：帳號資料還在讀取時，沒有同步按鈕，也沒有未連結提示', async () => {
+  it('issue-178 AC27：帳號資料還在讀取時，沒有同步按鈕，也沒有未連結提示', async () => {
     fetchKeysImpl = () => new Promise(() => {})
 
     const wrapper = await render(fakeSchedulableTasks(1))
@@ -370,7 +393,7 @@ describe('TaskForm.vue（任務管理頁的任務列表）', () => {
     expect(notLinkedHint(wrapper).exists()).toBe(false)
   })
 
-  it('AC26：帳號資料讀取失敗時，有同步按鈕，沒有未連結提示', async () => {
+  it('issue-178 AC28：帳號資料讀取失敗時，有同步按鈕，沒有未連結提示', async () => {
     fetchKeysImpl = async () => { throw new Error('讀取失敗') }
 
     const wrapper = await render(fakeSchedulableTasks(1))
@@ -379,7 +402,7 @@ describe('TaskForm.vue（任務管理頁的任務列表）', () => {
     expect(notLinkedHint(wrapper).exists()).toBe(false)
   })
 
-  it('AC27：三個平台都沒有金鑰時，沒有同步按鈕；最上方有未連結提示，手動任務列在它下面', async () => {
+  it('issue-178 AC29：三個平台都沒有金鑰時，沒有同步按鈕；最上方有未連結提示，手動任務列在它下面', async () => {
     linkedKeys.value = noneLinked()
 
     const wrapper = await render(fakeSchedulableTasks(1))
@@ -390,7 +413,7 @@ describe('TaskForm.vue（任務管理頁的任務列表）', () => {
     expect(html.indexOf('tasks-not-linked')).toBeLessThan(html.indexOf('任務0'))
   })
 
-  it('AC28：只有 GitHub 有金鑰時，有同步按鈕，沒有未連結提示', async () => {
+  it('issue-178 AC30：只有 GitHub 有金鑰時，有同步按鈕，沒有未連結提示', async () => {
     linkedKeys.value = [{ platform: 'github', value: 'KEY****' }, { platform: 'jira', value: '' }, { platform: 'moodle', value: '' }]
 
     const wrapper = await render(fakeSchedulableTasks(1))
@@ -399,7 +422,7 @@ describe('TaskForm.vue（任務管理頁的任務列表）', () => {
     expect(notLinkedHint(wrapper).exists()).toBe(false)
   })
 
-  it('AC28：只有 Moodle 是「要重新連結」（沒有可用的值）時，有同步按鈕，沒有未連結提示', async () => {
+  it('issue-178 AC30：只有 Moodle 是「要重新連結」（沒有可用的值）時，有同步按鈕，沒有未連結提示', async () => {
     linkedKeys.value = [{ platform: 'github', value: '' }, { platform: 'jira', value: '' }, { platform: 'moodle', value: '', needsReauth: true }]
 
     const wrapper = await render(fakeSchedulableTasks(1))

@@ -22,7 +22,7 @@ const { tasks: schedulableTasks, loadFailed, fetchSchedulableTasks } = useSchedu
 const { fetchScheduleSuggestion } = useSchedule()
 const {
   step, columns, saving, hasTasks, preferences, sanitizedPreferences,
-  initWizard, addNewTasks, moveTask, confirmOrder, backToStep1, updateDueDate, updateDuration, finish,
+  initWizard, moveTask, confirmOrder, backToStep1, updateDueDate, updateDuration, finish,
   addBlockedRecurringRule, removeBlockedRecurringRule, addBlockedException, removeBlockedException,
 } = useScheduleWizard()
 
@@ -66,11 +66,6 @@ watch(isSignedIn, (signedIn) => {
   started = true
   void initPage()
 }, { immediate: true })
-
-// 第 1 步時使用者從標題列新增的任務：加到它優先級那一欄的最後面，已拖好的順序不動；第 2、3 步不處理
-watch(schedulableTasks, (list) => {
-  if (pageState.value === 'ready' && step.value === 1) addNewTasks(list)
-})
 
 // 精靈第 1 步沒有可排程的任務時，說明原因：只算不是主任務的任務
 const emptyState = computed(() => {

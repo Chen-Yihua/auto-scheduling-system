@@ -33,7 +33,7 @@ const ok = (data: unknown[]) => ({ _data: data, headers: new Headers({ 'X-Synced
 
 vi.mock('~/composables/useTaskForm', async () => {
   const { ref } = await import('vue');
-  return { useTaskForm: () => ({ user: ref({ id: 'u1' }), all_tasks: ref([]), startEditTask: vi.fn() }) };
+  return { useTaskForm: () => ({ user: ref({ id: 'u1' }), all_tasks: ref([]), startEditTask: vi.fn(), showEditModal: ref(false) }) };
 });
 
 const fetchSchedulableTasksSpy = vi.fn();
@@ -77,7 +77,7 @@ describe('tasks/TaskForm.vue 立即同步', () => {
     ];
   });
 
-  it('AC23、AC24：三個平台各呼叫自己的 POST；Jira 失敗時 GitHub、Moodle 仍完成，只跳一個 Jira 的錯誤訊息；結束後重新讀取任務列表', async () => {
+  it('issue-178 AC25、AC26：三個平台各呼叫自己的 POST；Jira 失敗時 GitHub、Moodle 仍完成，只跳一個 Jira 的錯誤訊息；結束後重新讀取任務列表', async () => {
     const wrapper = shallowMount(TaskForm, { global: { stubs: uiStubs } });
     await flushPromises();
     fetchSchedulableTasksSpy.mockClear();
@@ -101,7 +101,7 @@ describe('tasks/TaskForm.vue 立即同步', () => {
     expect(fetchSchedulableTasksSpy).toHaveBeenCalledTimes(1);
   });
 
-  it('AC24：三個平台都同步失敗時，一樣重新讀取任務列表', async () => {
+  it('issue-178 AC26：三個平台都同步失敗時，一樣重新讀取任務列表', async () => {
     const wrapper = shallowMount(TaskForm, { global: { stubs: uiStubs } });
     await flushPromises();
     fetchSchedulableTasksSpy.mockClear();

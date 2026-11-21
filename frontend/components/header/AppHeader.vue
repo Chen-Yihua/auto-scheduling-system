@@ -3,14 +3,10 @@ import ColorModeButton from './ColorModeButton.vue';
 import AccountSettings from './AccountSettings.vue';
 import TaskEditModal from '~/components/tasks/TaskEditModal.vue';
 import { useUser } from '@clerk/vue';
-import { useTaskForm } from '~/composables/useTaskForm';
 import { useUserSync } from '~/composables/useUserSync';
 
-const { user, isSignedIn } = useUser();
+const { user } = useUser();
 const { ensureUserRecord } = useUserSync();
-// 和 TaskEditModal 共用狀態，按「新增任務」才能打開它
-const { showEditModal } = useTaskForm();
-
 const navItems = [
   { label: '首頁', to: '/' },
   { label: '任務管理', to: '/tasks' },
@@ -51,17 +47,6 @@ watch(user, (newUser) => {
     </p>
     <ColorModeButton />
 
-    <!-- 訪客也顯示但停用，讓版面一致 -->
-    <UButton
-      icon="mdi-file-edit"
-      aria-label="新增任務"
-      :title="isSignedIn ? undefined : '登入後才能新增任務'"
-      color="neutral"
-      size="md"
-      :disabled="!isSignedIn"
-      @click="() => { showEditModal = true }"
-    />
-
     <SignedOut>
       <SignInButton
         mode="modal"
@@ -79,6 +64,7 @@ watch(user, (newUser) => {
       <AccountSettings />
     </SignedIn>
 
+    <!-- 今日卡片、任務管理頁的編輯與新增都用這個視窗，所以每個頁面的標題列都掛著 -->
     <TaskEditModal />
   </header>
 </template>

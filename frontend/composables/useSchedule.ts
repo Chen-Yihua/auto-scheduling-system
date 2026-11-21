@@ -22,7 +22,6 @@ function useScheduleImpl() {
   const unscheduled = ref<UnscheduledTask[]>([])
   // 還沒連接 Google Calendar 是正常狀態，顯示提示而不是錯誤
   const notLinked = ref(false)
-  const hasFetched = ref(false)
   const confirming = ref(false)
 
   // preferences 不存資料庫，記下來供確認後或過期時重新產生使用
@@ -66,7 +65,6 @@ function useScheduleImpl() {
       })
     } finally {
       loading.value = false
-      hasFetched.value = true
     }
   }
 
@@ -140,7 +138,6 @@ function useScheduleImpl() {
     scheduled,
     unscheduled,
     notLinked,
-    hasFetched,
     confirming,
     lastPreferences,
     fetchScheduleSuggestion,

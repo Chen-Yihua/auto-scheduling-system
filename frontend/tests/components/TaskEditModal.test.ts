@@ -87,7 +87,7 @@ describe('TaskEditModal.vue', () => {
     vi.useRealTimers();
   });
 
-  it('跟標題列的新增任務按鈕共用同一份 showEditModal：設成 true 視窗就打開', async () => {
+  it('跟任務列表的新增任務按鈕共用同一份 showEditModal：設成 true 視窗就打開', async () => {
     const wrapper = shallowMount(TaskEditModal, { global: { stubs: uiStubs } });
     await flushPromises();
     expect(wrapper.find('.u-modal-stub').attributes('data-open')).toBe('false');
@@ -100,7 +100,7 @@ describe('TaskEditModal.vue', () => {
     showEditModal.value = false;
   });
 
-  it('AC19：startEditTask 帶入完整的任務資料後，視窗打開並進入編輯模式', async () => {
+  it('issue-178 AC19：startEditTask 帶入完整的任務資料後，視窗打開並進入編輯模式', async () => {
     const wrapper = shallowMount(TaskEditModal, { global: { stubs: uiStubs } });
     await flushPromises();
     const { startEditTask, state, isEditMode, onCancel } = useTaskForm();
@@ -133,7 +133,7 @@ describe('TaskEditModal.vue', () => {
     expect(wrapper.find('[data-testid="reschedule-note"]').exists()).toBe(false);
   });
 
-  it('AC8：視窗掛載後讀取 all_tasks，今日卡片按手動任務的「修改」，視窗打開並帶入那筆任務的資料', async () => {
+  it('issue-178 AC8：視窗掛載後讀取 all_tasks，今日卡片按手動任務的「修改」，視窗打開並帶入那筆任務的資料', async () => {
     // 固定「現在」，今日卡片才一定列出今天 14:00 的任務；只假造 Date，不影響 promise
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-11-21T10:00:00+08:00'));

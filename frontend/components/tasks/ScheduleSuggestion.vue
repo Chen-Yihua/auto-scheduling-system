@@ -1,25 +1,11 @@
 <script setup lang="ts">
-import { ref } from 'vue';
-import { useRouter } from 'vue-router';
 import { useSchedule } from '~/composables/useSchedule';
-import { useGoogleCalendar } from '~/composables/useGoogleCalendar';
 import { priorityLabel } from '~/utils/labels';
 
-const { loading, scheduled, unscheduled, notLinked, hasFetched, confirming, confirmSchedule } = useSchedule()
-const { fetchGoogleCalendars } = useGoogleCalendar()
-const router = useRouter()
+// 排程精靈的第 3 步；「重新產生」交給精靈回到第 1 步
+const emit = defineEmits<{ regenerate: [] }>()
 
-// 按按鈕時查到沒連接或授權已失效
-const connectionMissing = ref(false)
-
-// 產生建議前先進排程精靈，精靈完成後會產生建議並導回這裡。
-// 用這一次查詢的結果判斷；不知道有沒有連接時照常進入，由精靈自己處理
-async function startWizard() {
-  const connection = await fetchGoogleCalendars()
-  connectionMissing.value = connection === 'not_linked' || connection === 'reauth'
-  if (connectionMissing.value) return
-  router.push('/schedule')
-}
+const { loading, scheduled, unscheduled, notLinked, confirming, confirmSchedule } = useSchedule()
 
 const getPriorityColor = (priority: string | undefined) => {
   switch (priority) {
@@ -54,37 +40,18 @@ const formatRange = (start: string, end: string) => {
           <span class="text-lg font-semibold text-gray-900 dark:text-white">排程建議</span>
         </div>
         <UButton
-          v-if="hasFetched"
           icon="i-lucide-refresh-cw"
           size="xs"
           color="neutral"
           variant="ghost"
-          loading-auto
-          @click="startWizard"
+          @click="emit('regenerate')"
         >
           重新產生
         </UButton>
       </div>
     </template>
 
-    <div
-      v-if="connectionMissing"
-      class="text-center text-sm text-gray-500 dark:text-gray-400 py-6"
-    >
-      <p class="mb-3">Google Calendar 未連接或授權已失效，請前往 <strong>帳號設定</strong> 連接。</p>
-      <UButton v-if="!hasFetched" icon="i-lucide-sparkles" loading-auto @click="startWizard">
-        產生排程建議
-      </UButton>
-    </div>
-
-    <div v-else-if="!hasFetched && !loading" class="text-center py-6">
-      <p class="text-sm text-gray-500 dark:text-gray-400 mb-3">尚未產生排程建議</p>
-      <UButton icon="i-lucide-sparkles" loading-auto @click="startWizard">
-        產生排程建議
-      </UButton>
-    </div>
-
-    <div v-else-if="loading">
+    <div v-if="loading">
       <USkeleton v-for="i in 2" :key="i" class="h-16 mb-4" />
     </div>
 

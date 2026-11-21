@@ -62,11 +62,6 @@ const priorityItems = computed(() =>
   <div>
     <AppHeader />
     <div class="p-4 max-w-4xl mx-auto mt-4">
-      <NuxtLink to="/" class="inline-flex items-center gap-1 text-sm text-primary hover:underline mb-4">
-        <UIcon name="i-lucide-arrow-left" class="w-4 h-4" />
-        返回主頁
-      </NuxtLink>
-
       <LoginRequiredCard
         v-if="isSignedIn === false"
         title="工作效率"

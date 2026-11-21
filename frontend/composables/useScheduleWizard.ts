@@ -29,7 +29,7 @@ function useScheduleWizardImpl() {
   const { getToken } = useAuth();
   const BASE_URL = config.public.apiBaseUrl;
 
-  const step = ref<1 | 2>(1);
+  const step = ref<1 | 2 | 3>(1);
   const saving = ref(false);
   // 依 priority 分三欄，拖到別欄即改變 priority
   const columns = reactive<Record<PriorityKey, SchedulableTask[]>>({ Low: [], Medium: [], High: [] })

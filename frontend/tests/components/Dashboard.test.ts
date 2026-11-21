@@ -24,28 +24,8 @@ vi.mock('@clerk/vue', () => ({
   useUser: () => ({ isSignedIn: isSignedInRef }),
 }))
 
-// ---------- 需要授權的 composables：每個平台各一個 spy ----------
-const fetchItemsSpies = { github: vi.fn(), jira: vi.fn(), moodle: vi.fn() }
-const syncNowSpies = { github: vi.fn(), jira: vi.fn(), moodle: vi.fn() }
-const syncedAtByPlatform = { github: '2026-11-14T04:00:00Z', jira: '2026-11-13T04:00:00Z', moodle: null }
+// ---------- 需要授權的 composables ----------
 const fetchGoogleCalendarsSpy = vi.fn()
-
-vi.mock('@/composables/usePlatformItems', () => ({
-  usePlatformItems: (platform: 'github' | 'jira' | 'moodle') => ({
-    items: ref([]),
-    account: ref(undefined),
-    fetchItems: fetchItemsSpies[platform],
-    syncNow: syncNowSpies[platform],
-    syncing: ref(false),
-    isStale: ref(false),
-    syncedAt: ref(syncedAtByPlatform[platform]),
-    authError: ref(false),
-    notLinked: ref(false),
-    needsReauth: ref(false),
-    unavailable: ref(false),
-    loading: ref(false),
-  }),
-}))
 
 const calendarReloadTokenRef = ref(0)
 const calendarUnavailableRef = ref(false)
@@ -66,6 +46,7 @@ vi.stubGlobal('useGoogleCalendar', () => ({
 const uiStubs = {
   TodayTasks: true,
   TaskForm: true,
+  TaskEditModal: true,
   ScheduleSuggestion: true,
   Leetcode: true,
   News: true,
@@ -89,10 +70,7 @@ const uiStubs = {
   }),
 }
 
-// 取出三欄各自有幾張卡片（第一層子元素），拿來比對登入前後版面是否一樣
-function columnSizes(wrapper: ReturnType<typeof mount>) {
-  return wrapper.findAll('.grid > div').map((col) => col.element.children.length)
-}
+const REMOVED_CARDS = ['TaskForm', 'ScheduleSuggestion', 'MoodleAssignmentsList', 'GithubIssuesList', 'JiraIssuesList']
 
 describe('dashboard/Dashboard.vue', () => {
   let activeWrapper: ReturnType<typeof mount> | null = null
@@ -100,8 +78,6 @@ describe('dashboard/Dashboard.vue', () => {
   beforeEach(() => {
     isSignedInRef.value = undefined
     stateStore.clear()
-    Object.values(fetchItemsSpies).forEach(spy => spy.mockClear())
-    Object.values(syncNowSpies).forEach(spy => spy.mockReset())
     fetchGoogleCalendarsSpy.mockClear()
   })
 
@@ -114,7 +90,6 @@ describe('dashboard/Dashboard.vue', () => {
   it('Clerk 還在載入（isSignedIn undefined）時，不會打任何需要授權的 API', () => {
     activeWrapper = mount(Dashboard, { global: { stubs: uiStubs } })
 
-    Object.values(fetchItemsSpies).forEach(spy => expect(spy).not.toHaveBeenCalled())
     expect(fetchGoogleCalendarsSpy).not.toHaveBeenCalled()
   })
 
@@ -125,77 +100,69 @@ describe('dashboard/Dashboard.vue', () => {
     expect(activeWrapper.find('.grid').exists()).toBe(false)
   })
 
-  it('未登入（isSignedIn=false）時，不會打任何需要授權的 API，也不掛載需要登入的元件', async () => {
+  it('issue-178 AC7：訪客只有今日卡片與行事曆兩張登入提示卡，News／Leetcode 照常顯示，不打需要授權的 API、不掛載需要登入的元件', async () => {
     isSignedInRef.value = false
     const wrapper = mount(Dashboard, { global: { stubs: uiStubs } })
     activeWrapper = wrapper
     await wrapper.vm.$nextTick()
 
-    Object.values(fetchItemsSpies).forEach(spy => expect(spy).not.toHaveBeenCalled())
     expect(fetchGoogleCalendarsSpy).not.toHaveBeenCalled()
-    // TaskForm、Moodle 掛載時會自己去抓資料，訪客不該讓它們掛載
-    for (const name of ['TodayTasks', 'TaskForm', 'ScheduleSuggestion', 'MoodleAssignmentsList', 'GithubIssuesList', 'JiraIssuesList', 'GoogleCalendarEmbed']) {
+    const titles = wrapper.findAll('.ucard span').map((el) => el.text())
+    expect(titles).toEqual(['今日', 'Google 行事曆'])
+    expect(wrapper.text()).toContain('登入後即可查看今天的任務')
+    expect(wrapper.text()).toContain('登入後即可查看 Google 行事曆')
+    expect(wrapper.findComponent({ name: 'News' }).exists()).toBe(true)
+    expect(wrapper.findComponent({ name: 'Leetcode' }).exists()).toBe(true)
+    for (const name of ['TodayTasks', 'GoogleCalendarEmbed', 'TaskEditModal', ...REMOVED_CARDS]) {
       expect(wrapper.findComponent({ name }).exists(), name).toBe(false)
     }
   })
 
-  it('未登入時，需要登入的區塊各放一張提示卡，順序跟登入後一樣；不需登入的 News／Leetcode 照常顯示', async () => {
-    isSignedInRef.value = false
-    const wrapper = mount(Dashboard, { global: { stubs: uiStubs } })
-    activeWrapper = wrapper
-    await wrapper.vm.$nextTick()
-
-    const titles = wrapper.findAll('.ucard span').map((el) => el.text())
-    expect(titles).toEqual(['任務列表', '排程建議', 'Moodle 作業', 'GitHub 參與項目', 'Jira 指派任務', 'Google 行事曆'])
-    expect(wrapper.text()).toContain('登入後即可查看與新增你的任務')
-    expect(wrapper.text()).toContain('登入後即可查看 Google 行事曆')
-    expect(wrapper.findComponent({ name: 'News' }).exists()).toBe(true)
-    expect(wrapper.findComponent({ name: 'Leetcode' }).exists()).toBe(true)
-  })
-
-  it('AC13：今日卡片位於左欄最上方，在任務列表卡片上面', async () => {
+  it('issue-178 AC5：已登入時只有今日卡片、Google 行事曆、Hacker News、LeetCode 4 張卡片；三欄版面維持左欄今日、中欄行事曆、右欄 News 與 Leetcode', async () => {
     isSignedInRef.value = true
     const wrapper = mount(Dashboard, { global: { stubs: uiStubs } })
     activeWrapper = wrapper
     await wrapper.vm.$nextTick()
 
-    const leftColumn = wrapper.findAll('.grid > div')[0]!
-    const names = Array.from(leftColumn.element.children).map((el) => el.tagName.toLowerCase())
-    expect(names[0]).toBe('today-tasks-stub')
-    expect(names[1]).toBe('task-form-stub')
-  })
-
-  it('登入前後三欄版面一樣：除了登入後多一張今日卡片，每一欄的卡片數量相同，News／Leetcode 都在右欄', async () => {
-    isSignedInRef.value = false
-    const guest = mount(Dashboard, { global: { stubs: uiStubs } })
-    await guest.vm.$nextTick()
-    const guestSizes = columnSizes(guest)
-    guest.unmount()
-
-    isSignedInRef.value = true
-    const signedIn = mount(Dashboard, { global: { stubs: uiStubs } })
-    activeWrapper = signedIn
-    await signedIn.vm.$nextTick()
-
-    expect(guestSizes).toEqual([5, 1, 2])
-    // 未登入時不顯示今日卡片（它沒有對應的登入提示卡片）
-    expect(columnSizes(signedIn)).toEqual([guestSizes[0]! + 1, guestSizes[1], guestSizes[2]])
-    const rightColumn = signedIn.findAll('.grid > div')[2]!
-    expect(rightColumn.findComponent({ name: 'News' }).exists()).toBe(true)
-    expect(rightColumn.findComponent({ name: 'Leetcode' }).exists()).toBe(true)
-  })
-
-  it('已登入（isSignedIn=true）時，才會打需要授權的 API', async () => {
-    isSignedInRef.value = true
-    const wrapper = mount(Dashboard, { global: { stubs: uiStubs } })
-    activeWrapper = wrapper
-    await wrapper.vm.$nextTick()
-
-    Object.values(fetchItemsSpies).forEach(spy => expect(spy).toHaveBeenCalledTimes(1))
-    expect(fetchGoogleCalendarsSpy).toHaveBeenCalledTimes(1)
     expect(wrapper.text()).not.toContain('登入後即可')
-    expect(wrapper.findComponent({ name: 'TaskForm' }).exists()).toBe(true)
-    expect(wrapper.findComponent({ name: 'ScheduleSuggestion' }).exists()).toBe(true)
+    const columns = wrapper.findAll('.grid > div')
+    expect(columns.map((col) => Array.from(col.element.children).map((el) => el.tagName.toLowerCase()))).toEqual([
+      ['today-tasks-stub'],
+      ['google-calendar-embed-stub'],
+      ['news-stub', 'leetcode-stub'],
+    ])
+    for (const name of REMOVED_CARDS) {
+      expect(wrapper.findComponent({ name }).exists(), name).toBe(false)
+    }
+  })
+
+  it('issue-178 AC8：已登入時掛載編輯視窗（今日卡片的「修改」要用），它不算一張卡片，不在三欄裡', async () => {
+    isSignedInRef.value = true
+    const wrapper = mount(Dashboard, { global: { stubs: uiStubs } })
+    activeWrapper = wrapper
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.findComponent({ name: 'TaskEditModal' }).exists()).toBe(true)
+    expect(wrapper.find('.grid').findComponent({ name: 'TaskEditModal' }).exists()).toBe(false)
+  })
+
+  it('issue-178 AC6：沒有「立即同步外部平台」按鈕', async () => {
+    isSignedInRef.value = true
+    const wrapper = mount(Dashboard, { global: { stubs: uiStubs } })
+    activeWrapper = wrapper
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.find('[data-testid="dashboard-sync-now"]').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('立即同步外部平台')
+  })
+
+  it('已登入（isSignedIn=true）時，才會查行事曆', async () => {
+    isSignedInRef.value = true
+    const wrapper = mount(Dashboard, { global: { stubs: uiStubs } })
+    activeWrapper = wrapper
+    await wrapper.vm.$nextTick()
+
+    expect(fetchGoogleCalendarsSpy).toHaveBeenCalledTimes(1)
   })
 
   it('Google 授權在背景進行時，只有行事曆卡片收到「連接中」，其他卡片照常掛載', async () => {
@@ -212,7 +179,7 @@ describe('dashboard/Dashboard.vue', () => {
     await wrapper.vm.$nextTick()
 
     expect(calendar.props('connecting')).toBe(true)
-    for (const name of ['TaskForm', 'ScheduleSuggestion', 'MoodleAssignmentsList', 'GithubIssuesList', 'JiraIssuesList', 'News', 'Leetcode']) {
+    for (const name of ['TodayTasks', 'News', 'Leetcode']) {
       expect(wrapper.findComponent({ name }).exists(), name).toBe(true)
     }
   })
@@ -268,46 +235,5 @@ describe('dashboard/Dashboard.vue', () => {
 
     expect(wrapper.findComponent({ name: 'GoogleCalendarEmbed' }).props('unavailable')).toBe(true)
     calendarUnavailableRef.value = false
-  })
-
-  describe('外部平台定時同步（issue #13）', () => {
-    it('AC30：打開儀表板只讀資料（fetchItems），不呼叫立即同步', async () => {
-      isSignedInRef.value = true
-      const wrapper = mount(Dashboard, { global: { stubs: uiStubs } })
-      activeWrapper = wrapper
-      await wrapper.vm.$nextTick()
-
-      Object.values(fetchItemsSpies).forEach(spy => expect(spy).toHaveBeenCalledTimes(1))
-      Object.values(syncNowSpies).forEach(spy => expect(spy).not.toHaveBeenCalled())
-    })
-
-    it('AC34、AC35：按「立即同步」同時呼叫三個平台的同步；其中一個失敗不影響其他平台', async () => {
-      isSignedInRef.value = true
-      syncNowSpies.jira.mockRejectedValueOnce(new Error('Jira 掛了'))
-      const wrapper = mount(Dashboard, { global: { stubs: uiStubs } })
-      activeWrapper = wrapper
-      await wrapper.vm.$nextTick()
-
-      await wrapper.find('[data-testid="dashboard-sync-now"]').trigger('click')
-
-      Object.values(syncNowSpies).forEach(spy => expect(spy).toHaveBeenCalledTimes(1))
-    })
-
-    it('AC36：三個平台的卡片各自收到自己的上次同步時間；卡片上不放立即同步按鈕', async () => {
-      isSignedInRef.value = true
-      const wrapper = mount(Dashboard, { global: { stubs: uiStubs } })
-      activeWrapper = wrapper
-      await wrapper.vm.$nextTick()
-
-      const cards = {
-        github: wrapper.findComponent({ name: 'GithubIssuesList' }),
-        jira: wrapper.findComponent({ name: 'JiraIssuesList' }),
-        moodle: wrapper.findComponent({ name: 'MoodleAssignmentsList' }),
-      }
-      for (const [platform, card] of Object.entries(cards)) {
-        expect(card.props('syncedAt'), platform).toBe(syncedAtByPlatform[platform as keyof typeof syncedAtByPlatform])
-        expect(card.props('onSync'), platform).toBeUndefined()
-      }
-    })
   })
 })

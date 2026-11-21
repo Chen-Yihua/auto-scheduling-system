@@ -1,6 +1,6 @@
 # 在 Google 日曆刪掉事件後，讓使用者選擇重新排程或刪除任務
 
-- 狀態：已核准
+- 狀態：部分被 [標題列改成首頁、任務管理、排程、分析 4 個頁面](issue-178-nav-pages.md) 取代（AC26）
 - 等級：高風險（改變和 Google 日曆同步的一致性：系統要依 Google 的回應清掉任務存的 Google 日曆事件編號、刪除 Google 上的事件或刪除任務，判斷錯會重複排入或誤刪）
 - issue：[#42](https://github.com/Chen-Yihua/auto-scheduling-system/issues/42)
 - PR：#124

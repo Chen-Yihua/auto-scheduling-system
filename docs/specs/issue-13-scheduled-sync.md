@@ -1,6 +1,6 @@
 # 外部平台定時同步
 
-- 狀態：已核准
+- 狀態：部分被 [標題列改成首頁、任務管理、排程、分析 4 個頁面](issue-178-nav-pages.md) 取代（AC34、AC35、AC36）
 - 等級：高風險（批次解密所有使用者的憑證；改變和外部平台同步的一致性，包括定時同步與手動同步同時發生；新增定時觸發的部署方式，屬於重大架構決策，見 [ADR 0013](../decisions/0013-scheduled-sync-trigger.md)）
 - issue：[#13](https://github.com/Chen-Yihua/auto-scheduling-system/issues/13)
 - PR：[#97](https://github.com/Chen-Yihua/auto-scheduling-system/pull/97)

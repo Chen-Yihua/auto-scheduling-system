@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { ref, reactive, computed, watch } from 'vue';
-import { useRouter } from 'vue-router';
 import { useUser } from '@clerk/vue';
 import { useSchedulableTasks } from '~/composables/useSchedulableTasks';
 import { toDatetimeLocal } from '~/utils/datetimeLocal';
 import { useSchedule } from '~/composables/useSchedule';
+import ScheduleSuggestion from '~/components/tasks/ScheduleSuggestion.vue';
 import { useScheduleWizard, PRIORITIES, type PriorityKey } from '~/composables/useScheduleWizard';
 import { useGoogleCalendar } from '~/composables/useGoogleCalendar';
 import { useGoogleCalendarAuth } from '~/composables/useGoogleCalendarAuth';
@@ -16,7 +16,6 @@ import { stageMoveBlockReason } from '~/utils/stages';
 import type { SchedulableTask } from '~/types/schedulableTask';
 import type { BlockedRecurringRule, BlockedException, RemovedCalendarEvent } from '~/types/schedule'
 
-const router = useRouter()
 const toast = useToast()
 const { isSignedIn } = useUser()
 const { tasks: schedulableTasks, loadFailed, fetchSchedulableTasks } = useSchedulableTasks()
@@ -114,6 +113,7 @@ function confirmMessage(toDelete: RemovedCalendarEvent[], toReschedule: RemovedC
   return lines.length > 0 ? lines.join('\n') : null
 }
 
+// 「處理已刪除的事件」按「取消」也用這個：不送出處理請求，那些任務下次打開排程頁時還會再問
 async function enterWizardAfterRemovedStep() {
   await fetchSchedulableTasks()
   initWizard(schedulableTasks.value)
@@ -164,7 +164,6 @@ const sourceIcon: Record<SchedulableTask['source'], string> = {
   moodle: 'custom:moodle',
 }
 
-// 最後一步只是說明送出後的結果，不在這個頁面上
 type StepKey = 'removed' | 1 | 2 | 3
 const steps = computed<{ key: StepKey; label: string }[]>(() => [
   ...(hasRemovedStep.value ? [{ key: 'removed' as const, label: '處理已刪除的事件' }] : []),
@@ -215,12 +214,14 @@ async function handleConfirmOrder() {
 async function handleFinish() {
   await finish(async () => {
     await fetchScheduleSuggestion(sanitizedPreferences.value)
-    router.push('/')
+    step.value = 3
   })
 }
 
-function cancel() {
-  router.push('/')
+// 確認排程後任務已寫進日曆，回到第 1 步要重新讀任務，已排程的才不會留在三欄裡
+async function regenerate() {
+  await fetchSchedulableTasks()
+  initWizard(schedulableTasks.value)
 }
 
 function onDueDateInput(task: SchedulableTask, event: Event) {
@@ -356,7 +357,7 @@ function onExceptionEndInput(exception: BlockedException, event: Event) {
           </label>
 
           <div class="flex justify-end gap-3 mt-6">
-            <UButton type="button" variant="link" class="bg-gray-200 text-black hover:bg-gray-300" @click="cancel">
+            <UButton type="button" variant="link" class="bg-gray-200 text-black hover:bg-gray-300" @click="enterWizardAfterRemovedStep">
               取消
             </UButton>
             <UButton :loading="resolving" :disabled="resolving" @click="handleResolveRemoved">
@@ -381,9 +382,6 @@ function onExceptionEndInput(exception: BlockedException, event: Event) {
             </ul>
             <p class="text-sm text-gray-500 dark:text-gray-400">已逾期的任務可以在首頁的今日卡片重新排程。</p>
           </template>
-          <div class="pt-2">
-            <UButton @click="cancel">回首頁</UButton>
-          </div>
         </div>
 
         <!-- Step 1：三欄拖拉排序 -->
@@ -431,9 +429,6 @@ function onExceptionEndInput(exception: BlockedException, event: Event) {
           </div>
 
           <div class="flex justify-end gap-3 mt-6">
-            <UButton type="button" variant="link" class="bg-gray-200 text-black hover:bg-gray-300" @click="cancel">
-              取消
-            </UButton>
             <UButton :disabled="!hasTasks" loading-auto :loading="saving" @click="handleConfirmOrder">
               下一步
             </UButton>
@@ -441,7 +436,7 @@ function onExceptionEndInput(exception: BlockedException, event: Event) {
         </div>
 
         <!-- Step 2：確認截止日期與所需時長、排程偏好設定 -->
-        <div v-else class="space-y-3">
+        <div v-else-if="step === 2" class="space-y-3">
           <p class="text-sm text-gray-500 dark:text-gray-400 mb-2 text-center">
             這裡可以調整截止日期與所需時長；優先權跟順序已經鎖定，回上一步才能改。
           </p>
@@ -587,6 +582,9 @@ function onExceptionEndInput(exception: BlockedException, event: Event) {
             </UButton>
           </div>
         </div>
+
+        <!-- Step 3：排程建議 -->
+        <ScheduleSuggestion v-else @regenerate="regenerate" />
       </template>
     </div>
   </div>

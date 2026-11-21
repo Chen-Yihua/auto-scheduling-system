@@ -6,7 +6,7 @@ import { describeError, getFriendlyErrorTitle, isAuthError, isNotLinkedError, is
 import { useGoogleCalendar } from '@/composables/useGoogleCalendar'
 import { useGoogleCalendarAuth } from '@/composables/useGoogleCalendarAuth'
 
-// 共用狀態：從精靈頁導回首頁時 ScheduleSuggestion 會重新掛載，結果不能消失
+// 共用狀態：排程精靈的完成流程和第 3 步的 ScheduleSuggestion 要看到同一份結果
 function useScheduleImpl() {
   const toast = useToast()
   const config = useRuntimeConfig()
@@ -22,7 +22,6 @@ function useScheduleImpl() {
   const unscheduled = ref<UnscheduledTask[]>([])
   // 還沒連接 Google Calendar 是正常狀態，顯示提示而不是錯誤
   const notLinked = ref(false)
-  const hasFetched = ref(false)
   const confirming = ref(false)
 
   // preferences 不存資料庫，記下來供確認後或過期時重新產生使用
@@ -66,7 +65,6 @@ function useScheduleImpl() {
       })
     } finally {
       loading.value = false
-      hasFetched.value = true
     }
   }
 
@@ -140,7 +138,6 @@ function useScheduleImpl() {
     scheduled,
     unscheduled,
     notLinked,
-    hasFetched,
     confirming,
     lastPreferences,
     fetchScheduleSuggestion,

@@ -65,23 +65,23 @@ async function printPostSignInDiagnostics(page: Page, redirects: string[], diagn
     })
     .catch((error: unknown) => ({ error: sanitizeForLog(String(error), secrets) }))
   const browserStorageNames = (await page.context().cookies()).map((cookie) => cookie.name).sort()
-  const addTaskButtonCount = await page.getByRole('button', { name: '新增任務' }).count()
+  const todayCardCount = await page.getByText('今日', { exact: true }).count()
   logger.error(
-    '[e2e] 登入後診斷：' + JSON.stringify({ clerkState, addTaskButtonCount, browserStorageNames, redirects }, null, 2),
+    '[e2e] 登入後診斷：' + JSON.stringify({ clerkState, todayCardCount, browserStorageNames, redirects }, null, 2),
   )
   diagnostics.setClerkVersion(await readClerkVersion(page))
   logger.error(diagnostics.format('登入後等待逾時'))
 }
 
 describe('Dashboard（真實瀏覽器 E2E）', () => {
-  it('訪客未登入時，版面跟登入後一樣，需要登入的區塊只顯示提示、新增任務按鈕不能按', withSanitizedErrors(secrets, async () => {
+  it('訪客未登入時，版面跟登入後一樣，今日卡片與行事曆的位置只顯示提示、標題列沒有新增任務按鈕', withSanitizedErrors(secrets, async () => {
     const page = await createPage('/')
-    await page.waitForSelector('text=登入後即可查看與新增你的任務')
+    await page.waitForSelector('text=登入後即可查看今天的任務')
 
     const bodyText = await page.textContent('body')
     expect(bodyText).toContain('登入後即可查看 Google 行事曆')
-    // 訪客也看得到「新增任務」按鈕，但是 disabled
-    expect(await page.locator('button[aria-label="新增任務"][disabled]').count()).toBe(1)
+    // 新增任務只在任務管理頁，標題列沒有按鈕
+    expect(await page.locator('button[aria-label="新增任務"]').count()).toBe(0)
 
     await page.close()
   }))
@@ -127,9 +127,12 @@ describe('Dashboard（真實瀏覽器 E2E）', () => {
 
       await page.goto(url('/'))
       try {
-        // 用 aria-label 找：icon 是元件 prop，不會出現在 HTML 屬性上
-        // 按鈕變成可按才代表登入完成
-        await page.waitForSelector('button[aria-label="新增任務"]:not([disabled])', { timeout: 30_000 })
+        // 今日卡片的標題出現、而且訪客的登入提示消失，才代表登入完成
+        await page.waitForFunction(
+          () => document.body.textContent?.includes('今日') && !document.body.textContent.includes('登入後即可查看'),
+          undefined,
+          { timeout: 30_000 },
+        )
       } catch (error) {
         await printPostSignInDiagnostics(page, redirects, diagnostics)
         throw error

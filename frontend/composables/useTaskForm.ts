@@ -25,7 +25,7 @@ interface SubtaskDraft {
 
 const emptySubtaskDraft = (): SubtaskDraft => ({ title: '', priority: '', duration: '', due_date: '' })
 
-// 共用狀態：AppHeader 的「+」按鈕要能打開 TaskForm 裡的 Modal
+// 共用狀態：任務列表的「新增任務」、今日卡片的「修改」要能打開 TaskEditModal 的視窗
 function useTaskFormImpl() {
     const showEditModal = ref(false)
 

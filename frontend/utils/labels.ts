@@ -7,7 +7,7 @@ export const priorityLabels: Record<string, string> = {
 }
 
 export const taskStatusLabels: Record<string, string> = {
-  'To Do': '待辦',
+  'To Do': '未開始',
   'In Progress': '進行中',
   Done: '已完成',
 }
@@ -38,6 +38,8 @@ function labelOf(labels: Record<string, string>, value: string | undefined | nul
 }
 
 export const priorityLabel = (value: string | undefined | null) => labelOf(priorityLabels, value)
+// 排程狀態：任務有沒有寫進 Google 日曆（有 calendar_event_id），和完成狀態是兩件事
+export const scheduleStatusLabel = (scheduled: boolean) => (scheduled ? '已排程' : '未排程')
 export const taskStatusLabel = (value: string | undefined | null) => labelOf(taskStatusLabels, value)
 export const githubStateLabel = (value: string | undefined | null) => labelOf(githubStateLabels, value)
 export const sourceLabel = (value: string | undefined | null) => labelOf(sourceLabels, value)

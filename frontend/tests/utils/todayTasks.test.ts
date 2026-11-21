@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildTodayView } from '~/utils/todayTasks'
+import { buildTodayView, isOverdue } from '~/utils/todayTasks'
 import type { SchedulableTask } from '~/types/schedulableTask'
 
 // 測試時區固定為 Asia/Taipei（vitest.config.ts）
@@ -131,5 +131,20 @@ describe('buildTodayView', () => {
     ], NOW)
 
     expect(view.laterStageCount).toBe(1)
+  })
+})
+
+describe('isOverdue（任務管理頁與今日卡片共用）', () => {
+  it('issue-178 AC15：沒完成、截止日期是昨天 → 已逾期；主任務只看自己的截止日期，也一樣', () => {
+    expect(isOverdue(task({ id: 'a', due_date: '2026-11-20T00:00:00+08:00' }), NOW)).toBe(true)
+    expect(isOverdue(task({ id: 'p', is_parent: true, due_date: '2026-11-20T00:00:00+08:00' }), NOW)).toBe(true)
+  })
+
+  it('issue-178 AC16：沒完成、時段結束時間已過、截止日期還沒到 → 已逾期', () => {
+    expect(isOverdue(task({ id: 'a', due_date: '2026-11-22T00:00:00+08:00', scheduled_end: '2026-11-21T09:00:00+08:00' }), NOW)).toBe(true)
+  })
+
+  it('issue-178 AC17：已完成的任務即使截止日期已過 → 不算已逾期', () => {
+    expect(isOverdue(task({ id: 'a', status: 'Done', due_date: '2026-11-20T00:00:00+08:00' }), NOW)).toBe(false)
   })
 })

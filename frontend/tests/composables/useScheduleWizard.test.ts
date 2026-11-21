@@ -177,6 +177,15 @@ describe('useScheduleWizard composable', () => {
     expect(ctx.hasTasks.value).toBe(true)
   })
 
+  it('issue-178 AC39：initWizard 把精靈放回第 1 步（上次停在第 3 步也一樣）', () => {
+    const ctx = useScheduleWizard()
+    ctx.step.value = 3
+
+    ctx.initWizard([fakeTask({ id: 'a' })])
+
+    expect(ctx.step.value).toBe(1)
+  })
+
   it('moveTask 同欄內搬動順序', () => {
     const ctx = useScheduleWizard()
     ctx.initWizard([

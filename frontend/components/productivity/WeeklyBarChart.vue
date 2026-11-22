@@ -41,10 +41,10 @@ const columns = computed(() => {
 </script>
 
 <template>
-  <div>
+  <div class="lg:h-full">
     <svg
       :viewBox="`0 0 ${width} ${BASELINE + 20}`"
-      class="w-full h-auto max-h-64"
+      class="w-full h-auto max-h-64 lg:h-full lg:max-h-none"
       role="img"
       aria-label="近幾週每週完成的任務數"
     >

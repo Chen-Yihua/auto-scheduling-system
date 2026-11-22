@@ -33,7 +33,10 @@ vi.mock('~/composables/useSchedule', () => ({
 const UCardStub = defineComponent({
   name: 'UCard',
   setup(_props, { slots }) {
-    return () => h('div', { class: 'u-card-stub' }, [slots.header?.(), slots.default?.()])
+    return () => h('div', { class: 'u-card-stub' }, [
+      h('div', { 'data-testid': 'card-header' }, slots.header?.()),
+      h('div', { 'data-testid': 'card-body' }, slots.default?.()),
+    ])
   },
 })
 
@@ -111,24 +114,46 @@ describe('ScheduleSuggestion.vue', () => {
     expect(wrapper.text()).toContain('沒有足夠的空檔可以安排')
   })
 
-  it('有已排入時段的任務時顯示「確認排程並寫入 Calendar」按鈕，按下去呼叫 confirmSchedule', async () => {
+  const CONFIRM = '確認排程並寫入 Calendar'
+  const confirmIn = (wrapper: ReturnType<typeof render>, area: 'card-header' | 'card-body') =>
+    wrapper.find(`[data-testid="${area}"]`).findAll('button').find((b) => b.text().includes(CONFIRM))
+
+  it('fit-viewport-layout AC20：有已排入時段的任務時，確認按鈕在標題列、排在「重新產生」後面，內容區沒有；按下去呼叫 confirmSchedule', async () => {
     scheduledRef.value = [
       { task_id: 't1', title: '已排任務', priority: 'High', start: '2026-09-10T09:00:00Z', end: '2026-09-10T10:00:00Z' },
     ]
 
     const wrapper = render()
-    const confirmButton = wrapper.findAll('button').find((b) => b.text().includes('確認排程並寫入 Calendar'))
-    expect(confirmButton).toBeTruthy()
+    const headerTexts = wrapper.find('[data-testid="card-header"]').findAll('button').map((b) => b.text())
+    expect(headerTexts).toEqual(['重新產生', CONFIRM])
+    expect(confirmIn(wrapper, 'card-body')).toBeUndefined()
 
-    await confirmButton!.trigger('click')
+    await confirmIn(wrapper, 'card-header')!.trigger('click')
     expect(confirmSpy).toHaveBeenCalledTimes(1)
   })
 
-  it('沒有已排入時段的任務時，不顯示確認排程按鈕', () => {
-    unscheduledRef.value = [{ task_id: 't2', title: '排不進去的任務', priority: 'Low', reason: '沒有足夠的空檔可以安排' }]
+  describe('fit-viewport-layout AC21：標題列沒有確認按鈕的情況', () => {
+    const scheduledItem: ScheduledTask = { task_id: 't1', title: '已排任務', priority: 'High', start: '2026-09-10T09:00:00Z', end: '2026-09-10T10:00:00Z' }
 
-    const wrapper = render()
-    const confirmButton = wrapper.findAll('button').find((b) => b.text().includes('確認排程並寫入 Calendar'))
-    expect(confirmButton).toBeUndefined()
+    it('載入中', () => {
+      scheduledRef.value = [scheduledItem]
+      loadingRef.value = true
+      expect(confirmIn(render(), 'card-header')).toBeUndefined()
+    })
+
+    it('Google Calendar 未連接', () => {
+      scheduledRef.value = [scheduledItem]
+      notLinkedRef.value = true
+      expect(confirmIn(render(), 'card-header')).toBeUndefined()
+    })
+
+    it('沒有可排程的任務', () => {
+      expect(confirmIn(render(), 'card-header')).toBeUndefined()
+    })
+
+    it('只有排不進去的任務', () => {
+      unscheduledRef.value = [{ task_id: 't2', title: '排不進去的任務', priority: 'Low', reason: '沒有足夠的空檔可以安排' }]
+      expect(confirmIn(render(), 'card-header')).toBeUndefined()
+    })
   })
 })

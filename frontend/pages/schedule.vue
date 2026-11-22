@@ -266,14 +266,14 @@ function onExceptionEndInput(exception: BlockedException, event: Event) {
 </script>
 
 <template>
-  <div>
-    <AppHeader />
+  <div class="lg:h-dvh lg:flex lg:flex-col">
+    <AppHeader class="shrink-0" />
 
     <div v-if="isSignedIn === false" class="p-4 max-w-2xl mx-auto mt-4">
       <LoginRequiredCard title="排程精靈" icon="i-lucide-calendar-clock" message="登入後即可使用排程精靈" />
     </div>
 
-    <div v-else-if="isSignedIn" class="p-4 max-w-3xl mx-auto mt-4">
+    <div v-else-if="isSignedIn" class="p-4 max-w-3xl w-full mx-auto mt-4 lg:flex-1 lg:min-h-0 lg:flex lg:flex-col">
       <div
         v-if="pageState === 'missing'"
         class="rounded-xl border border-default text-center text-sm text-gray-500 dark:text-gray-400 py-10"
@@ -286,7 +286,7 @@ function onExceptionEndInput(exception: BlockedException, event: Event) {
       </div>
 
       <template v-else>
-        <div class="flex flex-wrap items-center justify-center gap-2 mb-6">
+        <div class="shrink-0 flex flex-wrap items-center justify-center gap-2 mb-6">
           <template v-for="(s, i) in steps" :key="s.key">
             <div class="flex items-center gap-2">
               <div
@@ -312,52 +312,54 @@ function onExceptionEndInput(exception: BlockedException, event: Event) {
 
         <div
           v-if="removedQueryNotice === 'reauth'"
-          class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-error/40 bg-error/10 px-3 py-2 mb-4 text-sm"
+          class="shrink-0 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-error/40 bg-error/10 px-3 py-2 mb-4 text-sm"
         >
           <span>Google Calendar 授權已失效，無法確認 Google 日曆上的事件</span>
           <UButton size="xs" color="error" variant="soft" @click="goToGoogleAuth">重新連接 Google Calendar</UButton>
         </div>
         <div
           v-else-if="removedQueryNotice === 'error'"
-          class="rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 mb-4 text-sm"
+          class="shrink-0 rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 mb-4 text-sm"
         >
           暫時無法確認 Google 日曆上的事件，排程未更新
         </div>
 
         <!-- 處理已刪除的事件：勾選的重新排程，沒勾的手動任務從系統刪除 -->
-        <div v-if="inRemovedStep" class="space-y-3">
-          <div v-if="resolveFailed" class="rounded-lg border border-error/40 bg-error/10 px-3 py-2 text-sm">
-            處理失敗，請重試
-          </div>
-          <p class="text-sm text-gray-500 dark:text-gray-400 text-center">
-            勾選要重新排程的任務；沒勾的任務會從系統刪除。
-          </p>
-
-          <label
-            v-for="item in removedItems"
-            :key="item.id"
-            class="flex items-start gap-3 rounded-lg border border-default bg-white dark:bg-gray-800 px-3 py-3"
-          >
-            <input
-              type="checkbox"
-              class="mt-1"
-              :checked="isRescheduled(item)"
-              :disabled="item.source !== 'manual'"
-              @change="onRescheduleToggle(item, $event)"
-            >
-            <div class="min-w-0 flex-1 space-y-0.5">
-              <div class="flex items-center gap-2">
-                <UIcon :name="sourceIcon[item.source]" class="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
-                <span class="text-sm font-medium truncate">{{ item.title }}</span>
-              </div>
-              <p v-if="item.parent_id" class="text-xs text-gray-400 truncate">{{ stageLabel(item) }}</p>
-              <p class="text-xs text-gray-500 dark:text-gray-400">Google 日曆上的事件已被刪除</p>
-              <p v-if="item.source !== 'manual'" class="text-xs text-gray-500 dark:text-gray-400">外部平台的項目會重新排程</p>
-              <p v-if="laterStagesNote(item)" class="text-xs text-warning">{{ laterStagesNote(item) }}</p>
+        <div v-if="inRemovedStep" class="space-y-3 lg:flex-1 lg:min-h-0 lg:flex lg:flex-col">
+          <div class="space-y-3 lg:flex-1 lg:min-h-0 lg:overflow-y-auto">
+            <div v-if="resolveFailed" class="rounded-lg border border-error/40 bg-error/10 px-3 py-2 text-sm">
+              處理失敗，請重試
             </div>
-          </label>
+            <p class="text-sm text-gray-500 dark:text-gray-400 text-center">
+              勾選要重新排程的任務；沒勾的任務會從系統刪除。
+            </p>
 
-          <div class="flex justify-end gap-3 mt-6">
+            <label
+              v-for="item in removedItems"
+              :key="item.id"
+              class="flex items-start gap-3 rounded-lg border border-default bg-white dark:bg-gray-800 px-3 py-3"
+            >
+              <input
+                type="checkbox"
+                class="mt-1"
+                :checked="isRescheduled(item)"
+                :disabled="item.source !== 'manual'"
+                @change="onRescheduleToggle(item, $event)"
+              >
+              <div class="min-w-0 flex-1 space-y-0.5">
+                <div class="flex items-center gap-2">
+                  <UIcon :name="sourceIcon[item.source]" class="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                  <span class="text-sm font-medium truncate">{{ item.title }}</span>
+                </div>
+                <p v-if="item.parent_id" class="text-xs text-gray-400 truncate">{{ stageLabel(item) }}</p>
+                <p class="text-xs text-gray-500 dark:text-gray-400">Google 日曆上的事件已被刪除</p>
+                <p v-if="item.source !== 'manual'" class="text-xs text-gray-500 dark:text-gray-400">外部平台的項目會重新排程</p>
+                <p v-if="laterStagesNote(item)" class="text-xs text-warning">{{ laterStagesNote(item) }}</p>
+              </div>
+            </label>
+          </div>
+
+          <div class="shrink-0 flex justify-end gap-3 mt-6">
             <UButton type="button" variant="link" class="bg-gray-200 text-black hover:bg-gray-300" @click="enterWizardAfterRemovedStep">
               取消
             </UButton>
@@ -386,50 +388,52 @@ function onExceptionEndInput(exception: BlockedException, event: Event) {
         </div>
 
         <!-- Step 1：三欄拖拉排序 -->
-        <div v-else-if="step === 1">
-          <p class="text-sm text-gray-500 dark:text-gray-400 mb-4 text-center">
-            把任務拖到對應的優先權欄位；同一欄內的上下順序也會影響排程的先後。
-          </p>
+        <div v-else-if="step === 1" class="lg:flex-1 lg:min-h-0 lg:flex lg:flex-col">
+          <div class="lg:flex-1 lg:min-h-0 lg:flex lg:flex-col">
+            <p class="shrink-0 text-sm text-gray-500 dark:text-gray-400 mb-4 text-center">
+              把任務拖到對應的優先權欄位；同一欄內的上下順序也會影響排程的先後。
+            </p>
 
-          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div
-              v-for="p in PRIORITIES"
-              :key="p"
-              class="rounded-xl border border-default bg-gray-50 dark:bg-gray-900 p-3 min-h-[200px]"
-              @dragover.prevent
-              @drop.prevent="onDropOnColumnEnd(p)"
-            >
-              <div class="flex items-center gap-2 mb-3">
-                <UBadge :color="columnColor[p]" variant="soft" size="sm">{{ columnLabel[p] }}</UBadge>
-                <span class="text-xs text-gray-400">({{ columns[p].length }})</span>
-              </div>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 lg:flex-1 lg:min-h-0 lg:grid-rows-[minmax(0,1fr)]">
+              <div
+                v-for="p in PRIORITIES"
+                :key="p"
+                class="rounded-xl border border-default bg-gray-50 dark:bg-gray-900 p-3 min-h-[200px] lg:overflow-y-auto"
+                @dragover.prevent
+                @drop.prevent="onDropOnColumnEnd(p)"
+              >
+                <div class="flex items-center gap-2 mb-3">
+                  <UBadge :color="columnColor[p]" variant="soft" size="sm">{{ columnLabel[p] }}</UBadge>
+                  <span class="text-xs text-gray-400">({{ columns[p].length }})</span>
+                </div>
 
-              <div class="space-y-2">
-                <div
-                  v-for="(task, index) in columns[p]"
-                  :key="task.id"
-                  class="flex items-center gap-2 rounded-lg border border-default bg-white dark:bg-gray-800 px-3 py-2 cursor-move"
-                  draggable="true"
-                  @dragstart="onDragStart(p, index)"
-                  @dragover.prevent
-                  @drop.stop.prevent="onDropOnRow(p, index)"
-                >
-                  <UIcon name="i-lucide-grip-vertical" class="w-4 h-4 text-gray-400 flex-shrink-0" />
-                  <UIcon :name="sourceIcon[task.source]" class="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
-                  <div class="min-w-0 flex-1">
-                    <p class="text-sm truncate">{{ task.title }}</p>
-                    <p v-if="task.parent_id" class="text-xs text-gray-400 truncate">{{ stageLabel(task) }}</p>
+                <div class="space-y-2">
+                  <div
+                    v-for="(task, index) in columns[p]"
+                    :key="task.id"
+                    class="flex items-center gap-2 rounded-lg border border-default bg-white dark:bg-gray-800 px-3 py-2 cursor-move"
+                    draggable="true"
+                    @dragstart="onDragStart(p, index)"
+                    @dragover.prevent
+                    @drop.stop.prevent="onDropOnRow(p, index)"
+                  >
+                    <UIcon name="i-lucide-grip-vertical" class="w-4 h-4 text-gray-400 flex-shrink-0" />
+                    <UIcon :name="sourceIcon[task.source]" class="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                    <div class="min-w-0 flex-1">
+                      <p class="text-sm truncate">{{ task.title }}</p>
+                      <p v-if="task.parent_id" class="text-xs text-gray-400 truncate">{{ stageLabel(task) }}</p>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              <div v-if="columns[p].length === 0" class="text-center text-xs text-gray-400 py-6">
-                拖任務到這裡
+                <div v-if="columns[p].length === 0" class="text-center text-xs text-gray-400 py-6">
+                  拖任務到這裡
+                </div>
               </div>
             </div>
           </div>
 
-          <div class="flex justify-end gap-3 mt-6">
+          <div class="shrink-0 flex justify-end gap-3 mt-6">
             <UButton :disabled="!hasTasks" loading-auto :loading="saving" @click="handleConfirmOrder">
               下一步
             </UButton>
@@ -437,142 +441,144 @@ function onExceptionEndInput(exception: BlockedException, event: Event) {
         </div>
 
         <!-- Step 2：確認截止日期與所需時長、排程偏好設定 -->
-        <div v-else-if="step === 2" class="space-y-3">
-          <p class="text-sm text-gray-500 dark:text-gray-400 mb-2 text-center">
-            這裡可以調整截止日期與所需時長；優先權跟順序已經鎖定，回上一步才能改。
-          </p>
+        <div v-else-if="step === 2" class="space-y-3 lg:flex-1 lg:min-h-0 lg:flex lg:flex-col">
+          <div class="space-y-3 lg:flex-1 lg:min-h-0 lg:overflow-y-auto">
+            <p class="text-sm text-gray-500 dark:text-gray-400 mb-2 text-center">
+              這裡可以調整截止日期與所需時長；優先權跟順序已經鎖定，回上一步才能改。
+            </p>
 
-          <div class="rounded-lg border border-default bg-gray-50 dark:bg-gray-900 p-4 space-y-4 mb-4">
-            <p class="text-sm font-semibold text-gray-700 dark:text-gray-300">排程偏好設定</p>
+            <div class="rounded-lg border border-default bg-gray-50 dark:bg-gray-900 p-4 space-y-4 mb-4">
+              <p class="text-sm font-semibold text-gray-700 dark:text-gray-300">排程偏好設定</p>
 
-            <div class="flex flex-wrap gap-4">
-              <label class="text-xs text-gray-500 dark:text-gray-400 flex flex-col gap-1">
-                任務間緩衝時間（分鐘）
-                <input
-                  v-model.number="preferences.buffer_minutes"
-                  type="number"
-                  min="0"
-                  class="border border-default rounded-md px-2 py-1 text-sm bg-transparent w-32"
-                >
-              </label>
-              <label class="text-xs text-gray-500 dark:text-gray-400 flex flex-col gap-1">
-                每天最多排多少分鐘（留空＝不限制）
-                <input
-                  type="number"
-                  min="1"
-                  class="border border-default rounded-md px-2 py-1 text-sm bg-transparent w-40"
-                  :value="preferences.daily_max_minutes ?? ''"
-                  @change="onDailyMaxMinutesInput"
-                >
-              </label>
-            </div>
-
-            <div>
-              <div class="flex items-center justify-between mb-2">
-                <span class="text-xs font-semibold text-gray-600 dark:text-gray-400">每週固定不工作時段</span>
-                <UButton size="xs" variant="soft" @click="addBlockedRecurringRule">新增規律</UButton>
-              </div>
-              <p v-if="preferences.blocked_recurring.length === 0" class="text-xs text-gray-400">
-                沒有設定，代表整週空檔都可以排
-              </p>
-              <div
-                v-for="(rule, index) in preferences.blocked_recurring"
-                :key="index"
-                class="flex flex-wrap items-center gap-2 mb-2 rounded-md border border-default px-2 py-2"
-              >
-                <div class="flex gap-1">
-                  <button
-                    v-for="(label, day) in dayLabels"
-                    :key="day"
-                    type="button"
-                    class="w-6 h-6 rounded-full text-xs"
-                    :class="rule.days_of_week.includes(day)
-                      ? 'bg-primary text-white'
-                      : 'bg-gray-200 dark:bg-gray-700 text-gray-500'"
-                    @click="toggleRuleDay(rule, day)"
+              <div class="flex flex-wrap gap-4">
+                <label class="text-xs text-gray-500 dark:text-gray-400 flex flex-col gap-1">
+                  任務間緩衝時間（分鐘）
+                  <input
+                    v-model.number="preferences.buffer_minutes"
+                    type="number"
+                    min="0"
+                    class="border border-default rounded-md px-2 py-1 text-sm bg-transparent w-32"
                   >
-                    {{ label }}
-                  </button>
-                </div>
-                <label class="text-xs text-gray-500 flex items-center gap-1">
-                  <input type="checkbox" :checked="rule.all_day" @change="toggleAllDay(rule, ($event.target as HTMLInputElement).checked)">
-                  整天
                 </label>
-                <input v-model="rule.start_time" type="time" :disabled="rule.all_day" class="border border-default rounded-md px-1 py-0.5 text-xs bg-transparent disabled:opacity-50">
-                <span class="text-xs text-gray-400">～</span>
-                <input v-model="rule.end_time" type="time" :disabled="rule.all_day" class="border border-default rounded-md px-1 py-0.5 text-xs bg-transparent disabled:opacity-50">
-                <UButton size="xs" variant="ghost" color="error" @click="removeBlockedRecurringRule(index)">移除</UButton>
+                <label class="text-xs text-gray-500 dark:text-gray-400 flex flex-col gap-1">
+                  每天最多排多少分鐘（留空＝不限制）
+                  <input
+                    type="number"
+                    min="1"
+                    class="border border-default rounded-md px-2 py-1 text-sm bg-transparent w-40"
+                    :value="preferences.daily_max_minutes ?? ''"
+                    @change="onDailyMaxMinutesInput"
+                  >
+                </label>
+              </div>
+
+              <div>
+                <div class="flex items-center justify-between mb-2">
+                  <span class="text-xs font-semibold text-gray-600 dark:text-gray-400">每週固定不工作時段</span>
+                  <UButton size="xs" variant="soft" @click="addBlockedRecurringRule">新增規律</UButton>
+                </div>
+                <p v-if="preferences.blocked_recurring.length === 0" class="text-xs text-gray-400">
+                  沒有設定，代表整週空檔都可以排
+                </p>
+                <div
+                  v-for="(rule, index) in preferences.blocked_recurring"
+                  :key="index"
+                  class="flex flex-wrap items-center gap-2 mb-2 rounded-md border border-default px-2 py-2"
+                >
+                  <div class="flex gap-1">
+                    <button
+                      v-for="(label, day) in dayLabels"
+                      :key="day"
+                      type="button"
+                      class="w-6 h-6 rounded-full text-xs"
+                      :class="rule.days_of_week.includes(day)
+                        ? 'bg-primary text-white'
+                        : 'bg-gray-200 dark:bg-gray-700 text-gray-500'"
+                      @click="toggleRuleDay(rule, day)"
+                    >
+                      {{ label }}
+                    </button>
+                  </div>
+                  <label class="text-xs text-gray-500 flex items-center gap-1">
+                    <input type="checkbox" :checked="rule.all_day" @change="toggleAllDay(rule, ($event.target as HTMLInputElement).checked)">
+                    整天
+                  </label>
+                  <input v-model="rule.start_time" type="time" :disabled="rule.all_day" class="border border-default rounded-md px-1 py-0.5 text-xs bg-transparent disabled:opacity-50">
+                  <span class="text-xs text-gray-400">～</span>
+                  <input v-model="rule.end_time" type="time" :disabled="rule.all_day" class="border border-default rounded-md px-1 py-0.5 text-xs bg-transparent disabled:opacity-50">
+                  <UButton size="xs" variant="ghost" color="error" @click="removeBlockedRecurringRule(index)">移除</UButton>
+                </div>
+              </div>
+
+              <div>
+                <div class="flex items-center justify-between mb-2">
+                  <span class="text-xs font-semibold text-gray-600 dark:text-gray-400">額外不排的時段（過了就自動移除）</span>
+                  <UButton size="xs" variant="soft" @click="addBlockedException">新增例外時段</UButton>
+                </div>
+                <p v-if="preferences.blocked_exceptions.length === 0" class="text-xs text-gray-400">
+                  沒有額外的例外時段
+                </p>
+                <div
+                  v-for="(exception, index) in preferences.blocked_exceptions"
+                  :key="index"
+                  class="flex flex-wrap items-center gap-2 mb-2"
+                >
+                  <input
+                    type="datetime-local"
+                    class="border border-default rounded-md px-2 py-1 text-xs bg-transparent"
+                    :value="toDatetimeLocal(exception.start)"
+                    @change="onExceptionStartInput(exception, $event)"
+                  >
+                  <span class="text-xs text-gray-400">～</span>
+                  <input
+                    type="datetime-local"
+                    class="border border-default rounded-md px-2 py-1 text-xs bg-transparent"
+                    :value="toDatetimeLocal(exception.end)"
+                    @change="onExceptionEndInput(exception, $event)"
+                  >
+                  <UButton size="xs" variant="ghost" color="error" @click="removeBlockedException(index)">移除</UButton>
+                </div>
               </div>
             </div>
 
-            <div>
-              <div class="flex items-center justify-between mb-2">
-                <span class="text-xs font-semibold text-gray-600 dark:text-gray-400">額外不排的時段（過了就自動移除）</span>
-                <UButton size="xs" variant="soft" @click="addBlockedException">新增例外時段</UButton>
+            <div
+              v-for="task in allTasksFlat"
+              :key="task.id"
+              class="rounded-lg border border-default bg-white dark:bg-gray-800 px-3 py-3 space-y-2"
+            >
+              <div class="flex items-center gap-2">
+                <UIcon :name="sourceIcon[task.source]" class="w-4 h-4 text-gray-400 flex-shrink-0" />
+                <UBadge :color="columnColor[task.priority as PriorityKey]" variant="soft" size="sm">
+                  {{ priorityLabel(task.priority) }}
+                </UBadge>
+                <span class="text-sm font-medium truncate">{{ task.title }}</span>
+                <span v-if="task.parent_id" class="text-xs text-gray-400 truncate">{{ stageLabel(task) }}</span>
               </div>
-              <p v-if="preferences.blocked_exceptions.length === 0" class="text-xs text-gray-400">
-                沒有額外的例外時段
-              </p>
-              <div
-                v-for="(exception, index) in preferences.blocked_exceptions"
-                :key="index"
-                class="flex flex-wrap items-center gap-2 mb-2"
-              >
-                <input
-                  type="datetime-local"
-                  class="border border-default rounded-md px-2 py-1 text-xs bg-transparent"
-                  :value="toDatetimeLocal(exception.start)"
-                  @change="onExceptionStartInput(exception, $event)"
-                >
-                <span class="text-xs text-gray-400">～</span>
-                <input
-                  type="datetime-local"
-                  class="border border-default rounded-md px-2 py-1 text-xs bg-transparent"
-                  :value="toDatetimeLocal(exception.end)"
-                  @change="onExceptionEndInput(exception, $event)"
-                >
-                <UButton size="xs" variant="ghost" color="error" @click="removeBlockedException(index)">移除</UButton>
+              <div class="flex flex-wrap gap-4">
+                <label class="text-xs text-gray-500 dark:text-gray-400 flex flex-col gap-1">
+                  截止日期
+                  <input
+                    type="datetime-local"
+                    class="border border-default rounded-md px-2 py-1 text-sm bg-transparent"
+                    :value="toDatetimeLocal(task.due_date)"
+                    @change="onDueDateInput(task, $event)"
+                  >
+                </label>
+                <label class="text-xs text-gray-500 dark:text-gray-400 flex flex-col gap-1">
+                  所需時長（分鐘）
+                  <input
+                    type="number"
+                    min="1"
+                    class="border border-default rounded-md px-2 py-1 text-sm bg-transparent w-28"
+                    :value="task.duration ?? ''"
+                    @change="onDurationInput(task, $event)"
+                  >
+                </label>
               </div>
             </div>
           </div>
 
-          <div
-            v-for="task in allTasksFlat"
-            :key="task.id"
-            class="rounded-lg border border-default bg-white dark:bg-gray-800 px-3 py-3 space-y-2"
-          >
-            <div class="flex items-center gap-2">
-              <UIcon :name="sourceIcon[task.source]" class="w-4 h-4 text-gray-400 flex-shrink-0" />
-              <UBadge :color="columnColor[task.priority as PriorityKey]" variant="soft" size="sm">
-                {{ priorityLabel(task.priority) }}
-              </UBadge>
-              <span class="text-sm font-medium truncate">{{ task.title }}</span>
-              <span v-if="task.parent_id" class="text-xs text-gray-400 truncate">{{ stageLabel(task) }}</span>
-            </div>
-            <div class="flex flex-wrap gap-4">
-              <label class="text-xs text-gray-500 dark:text-gray-400 flex flex-col gap-1">
-                截止日期
-                <input
-                  type="datetime-local"
-                  class="border border-default rounded-md px-2 py-1 text-sm bg-transparent"
-                  :value="toDatetimeLocal(task.due_date)"
-                  @change="onDueDateInput(task, $event)"
-                >
-              </label>
-              <label class="text-xs text-gray-500 dark:text-gray-400 flex flex-col gap-1">
-                所需時長（分鐘）
-                <input
-                  type="number"
-                  min="1"
-                  class="border border-default rounded-md px-2 py-1 text-sm bg-transparent w-28"
-                  :value="task.duration ?? ''"
-                  @change="onDurationInput(task, $event)"
-                >
-              </label>
-            </div>
-          </div>
-
-          <div class="flex justify-end gap-3 mt-4">
+          <div class="shrink-0 flex justify-end gap-3 mt-4">
             <UButton type="button" variant="link" class="bg-gray-200 text-black hover:bg-gray-300" @click="backToStep1">
               上一步
             </UButton>
@@ -583,7 +589,7 @@ function onExceptionEndInput(exception: BlockedException, event: Event) {
         </div>
 
         <!-- Step 3：排程建議 -->
-        <ScheduleSuggestion v-else @regenerate="regenerate" />
+        <ScheduleSuggestion v-else class="lg:min-h-0" @regenerate="regenerate" />
       </template>
     </div>
   </div>

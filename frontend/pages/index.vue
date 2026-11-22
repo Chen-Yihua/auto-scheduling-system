@@ -10,8 +10,8 @@ useGoogleOAuthCallback();
 </script>
 
 <template>
-  <div>
-    <AppHeader />
+  <div class="lg:min-h-dvh lg:flex lg:flex-col">
+    <AppHeader class="shrink-0" />
     <Dashboard />
   </div>
 </template>

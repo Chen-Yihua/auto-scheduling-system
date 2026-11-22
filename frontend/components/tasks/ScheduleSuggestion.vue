@@ -32,22 +32,34 @@ const formatRange = (start: string, end: string) => {
 </script>
 
 <template>
-  <UCard>
+  <UCard :ui="{ root: 'lg:min-h-0 lg:flex lg:flex-col', body: 'lg:flex-1 lg:min-h-0 lg:overflow-y-auto' }">
     <template #header>
-      <div class="flex items-center justify-between">
+      <div class="flex flex-wrap items-center justify-between gap-2">
         <div class="flex items-center gap-2">
           <UIcon name="i-lucide-calendar-clock" class="w-5 h-5" />
           <span class="text-lg font-semibold text-gray-900 dark:text-white">排程建議</span>
         </div>
-        <UButton
-          icon="i-lucide-refresh-cw"
-          size="xs"
-          color="neutral"
-          variant="ghost"
-          @click="emit('regenerate')"
-        >
-          重新產生
-        </UButton>
+        <div class="flex items-center gap-2">
+          <UButton
+            icon="i-lucide-refresh-cw"
+            size="xs"
+            color="neutral"
+            variant="ghost"
+            @click="emit('regenerate')"
+          >
+            重新產生
+          </UButton>
+          <UButton
+            v-if="!loading && !notLinked && scheduled.length > 0"
+            size="xs"
+            icon="i-lucide-calendar-check"
+            loading-auto
+            :loading="confirming"
+            @click="confirmSchedule"
+          >
+            確認排程並寫入 Calendar
+          </UButton>
+        </div>
       </div>
     </template>
 
@@ -71,18 +83,7 @@ const formatRange = (start: string, end: string) => {
 
     <div v-else class="space-y-4">
       <div v-if="scheduled.length > 0">
-        <div class="flex items-center justify-between mb-2">
-          <div class="text-sm font-semibold text-gray-700 dark:text-gray-300">已排入時段</div>
-          <UButton
-            size="xs"
-            icon="i-lucide-calendar-check"
-            loading-auto
-            :loading="confirming"
-            @click="confirmSchedule"
-          >
-            確認排程並寫入 Calendar
-          </UButton>
-        </div>
+        <div class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">已排入時段</div>
         <div class="grid grid-cols-1 gap-2">
           <div
             v-for="item in scheduled"

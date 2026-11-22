@@ -27,20 +27,23 @@ watch(googleConnectedCount, () => {
 </script>
 
 <template>
-  <div class="p-4">
+  <div class="p-4 lg:flex-1 lg:flex lg:flex-col">
     <!-- 今日卡片的「修改」要用這個視窗；訪客不掛載，它掛載時會讀需要登入的資料 -->
     <TaskEditModal v-if="isSignedIn" />
     <!-- Clerk 初始化完成前不顯示，避免已登入的人先看到「請先登入」 -->
     <div
       v-if="isSignedIn !== undefined"
-      class="grid grid-cols-1 lg:grid-cols-[320px_1fr_320px] gap-6 mt-4 items-start"
+      class="grid grid-cols-1 lg:grid-cols-[320px_1fr_320px] gap-6 mt-4 items-start lg:items-stretch lg:flex-1"
     >
-      <div class="space-y-6">
-        <TodayTasks v-if="isSignedIn" />
-        <LoginRequiredCard v-else title="今日" icon="i-lucide-calendar-check" message="登入後即可查看今天的任務" />
+      <!-- 寬螢幕時欄內容用 absolute 脫離版面：欄高只由中間的行事曆決定，今日卡片超過欄高時在卡片裡面捲動 -->
+      <div class="lg:relative">
+        <div class="lg:absolute lg:inset-0 lg:flex lg:flex-col">
+          <TodayTasks v-if="isSignedIn" />
+          <LoginRequiredCard v-else title="今日" icon="i-lucide-calendar-check" message="登入後即可查看今天的任務" />
+        </div>
       </div>
 
-      <div>
+      <div class="lg:flex lg:flex-col lg:min-h-[400px]">
         <GoogleCalendarEmbed
           v-if="isSignedIn"
           :id="primaryCalendarId"
@@ -54,9 +57,11 @@ watch(googleConnectedCount, () => {
         <LoginRequiredCard v-else title="Google 行事曆" icon="i-lucide-calendar" message="登入後即可查看 Google 行事曆" />
       </div>
 
-      <div class="space-y-6">
-        <News />
-        <Leetcode />
+      <div class="lg:relative">
+        <div class="space-y-6 lg:absolute lg:inset-0 lg:overflow-y-auto">
+          <News />
+          <Leetcode />
+        </div>
       </div>
     </div>
   </div>

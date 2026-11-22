@@ -59,9 +59,9 @@ const priorityItems = computed(() =>
 </script>
 
 <template>
-  <div>
-    <AppHeader />
-    <div class="p-4 max-w-4xl mx-auto mt-4">
+  <div class="lg:min-h-dvh lg:flex lg:flex-col">
+    <AppHeader class="shrink-0" />
+    <div class="p-4 max-w-4xl lg:max-w-6xl w-full mx-auto mt-4 lg:flex-1 lg:flex lg:flex-col">
       <LoginRequiredCard
         v-if="isSignedIn === false"
         title="工作效率"
@@ -96,8 +96,8 @@ const priorityItems = computed(() =>
           </p>
         </UCard>
 
-        <div v-else-if="summary" class="space-y-6">
-          <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div v-else-if="summary" class="space-y-6 lg:space-y-0 lg:grid lg:grid-cols-4 lg:gap-4 lg:flex-1">
+          <div class="grid grid-cols-2 lg:flex lg:flex-col gap-4">
             <UCard data-testid="kpi-completion">
               <p class="text-sm text-gray-500 dark:text-gray-400">完成率</p>
               <p class="text-3xl font-semibold text-gray-900 dark:text-white">{{ formatPercent(summary.completion_rate) }}</p>
@@ -125,17 +125,23 @@ const priorityItems = computed(() =>
             </UCard>
           </div>
 
-          <UCard>
+          <div class="space-y-6 lg:space-y-0 lg:col-span-3 lg:flex lg:flex-col lg:gap-4">
+          <!-- 寬螢幕時圖表用 absolute 填滿剩下的高度：它不撐高卡片，卡片高度才由視窗決定 -->
+          <UCard :ui="{ root: 'lg:flex-1 lg:flex lg:flex-col', body: 'lg:flex-1 lg:flex lg:flex-col' }">
             <template #header>
               <span class="font-semibold text-gray-900 dark:text-white">近 {{ summary.weekly.length }} 週完成數</span>
             </template>
-            <WeeklyBarChart :weeks="summary.weekly" />
+            <div class="lg:relative lg:flex-1 lg:min-h-[160px]">
+              <div class="lg:absolute lg:inset-0">
+                <WeeklyBarChart :weeks="summary.weekly" />
+              </div>
+            </div>
             <p v-if="summary.untracked_done" class="mt-3 text-xs text-gray-500 dark:text-gray-400">
               有 {{ summary.untracked_done }} 個任務在開始記錄完成時間前就已完成，沒有列入每週趨勢和準時完成率。
             </p>
           </UCard>
 
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 lg:shrink-0">
             <UCard data-testid="by-source">
               <template #header>
                 <span class="font-semibold text-gray-900 dark:text-white">依來源</span>
@@ -148,6 +154,7 @@ const priorityItems = computed(() =>
               </template>
               <ProgressList :items="priorityItems" />
             </UCard>
+          </div>
           </div>
         </div>
       </template>

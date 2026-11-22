@@ -7,6 +7,7 @@ import type { SchedulableTask } from '~/types/schedulableTask';
 
 import TaskForm from '~/components/tasks/TaskForm.vue';
 import { useTaskForm } from '~/composables/useTaskForm';
+import { useSchedulableTasks } from '~/composables/useSchedulableTasks';
 
 enableAutoUnmount(afterEach);
 
@@ -75,6 +76,14 @@ const StubCard = defineComponent({
   },
 })
 
+// 只留 TaskForm 用到的 props 與事件：目前頁碼、總筆數、每頁筆數
+const StubPagination = defineComponent({
+  name: 'UPagination',
+  props: { page: { type: Number, default: 1 }, total: { type: Number, default: 0 }, itemsPerPage: { type: Number, default: 10 } },
+  emits: ['update:page'],
+  setup: () => () => h('div', { 'data-testid': 'pagination' }),
+})
+
 // 標籤的文字要看得到
 const StubBadge = defineComponent({
   name: 'UBadge',
@@ -85,6 +94,7 @@ const uiStubs: Record<string, boolean | Component> = {
   UButton: StubButton,
   UCard: StubCard,
   UBadge: StubBadge,
+  UPagination: StubPagination,
   USkeleton: true,
   UIcon: true,
 }
@@ -141,6 +151,8 @@ describe('TaskForm.vue（任務管理頁的任務列表）', () => {
     tokenSpy.mockClear()
     linkedKeys.value = allLinked()
     fetchKeysImpl = async () => {}
+    // jsdom 沒有 scrollIntoView；換頁會呼叫它
+    Element.prototype.scrollIntoView = vi.fn()
   })
 
   afterEach(() => {
@@ -429,5 +441,143 @@ describe('TaskForm.vue（任務管理頁的任務列表）', () => {
 
     expect(syncButton(wrapper).exists()).toBe(true)
     expect(notLinkedHint(wrapper).exists()).toBe(false)
+  })
+
+  // ---------- 分頁（fit-viewport-layout） ----------
+
+  const manyTasks = (n: number) => fakeSchedulableTasks(n)
+  const pagination = (wrapper: Wrapper) => wrapper.findComponent({ name: 'UPagination' })
+  const titles = (wrapper: Wrapper) => rows(wrapper).map((r) => r.find('.flex-1').text())
+  const goToPage = async (wrapper: Wrapper, page: number) => {
+    pagination(wrapper).vm.$emit('update:page', page)
+    await flushPromises()
+  }
+  // 換掉清單：和同步外部平台、刪除任務後重新讀取走同一條路
+  const reload = async (tasks: SchedulableTask[]) => {
+    mockFetchByUrl({ '/schedule/tasks': tasks })
+    await useSchedulableTasks().fetchSchedulableTasks()
+    await flushPromises()
+  }
+
+  it('fit-viewport-layout AC26：30 筆頂層項目一次顯示 30 列，沒有分頁元件', async () => {
+    const wrapper = await render(manyTasks(30))
+
+    expect(rows(wrapper)).toHaveLength(30)
+    expect(pagination(wrapper).exists()).toBe(false)
+  })
+
+  it('fit-viewport-layout AC27：31 筆時第 1 頁 30 列、有分頁元件；切到第 2 頁只有第 31 筆', async () => {
+    const wrapper = await render(manyTasks(31))
+
+    expect(rows(wrapper)).toHaveLength(30)
+    expect(titles(wrapper)).not.toContain('任務30')
+    expect(pagination(wrapper).exists()).toBe(true)
+    expect(pagination(wrapper).props()).toMatchObject({ page: 1, total: 31, itemsPerPage: 30 })
+
+    await goToPage(wrapper, 2)
+
+    expect(titles(wrapper)).toEqual(['任務30'])
+  })
+
+  it('fit-viewport-layout AC28：28 筆手動任務加 GitHub、Jira、Moodle 各 1 筆，外部平台項目也算一筆，第 2 頁只有 Moodle', async () => {
+    const external = (source: 'github' | 'jira' | 'moodle') =>
+      task({ id: `${source}:1`, source, title: `${source}項目`, url: 'https://example.com' })
+    const wrapper = await render([...manyTasks(28), external('github'), external('jira'), external('moodle')])
+
+    expect(rows(wrapper)).toHaveLength(30)
+    expect(titles(wrapper).slice(-2)).toEqual(['github項目', 'jira項目'])
+
+    await goToPage(wrapper, 2)
+
+    expect(titles(wrapper)).toEqual(['moodle項目'])
+  })
+
+  it('fit-viewport-layout AC29：第 30 筆是主任務，展開後 3 個階段留在第 1 頁、不算進 30 筆；第 2 頁只有第 31 筆', async () => {
+    const parent = task({ id: 'manual:p1', title: '主任務', is_parent: true })
+    const stages = [1, 2, 3].map((stage) => task({
+      id: `manual:s${stage}`, title: `階段任務${stage}`, parent_id: 'manual:p1', stage, stage_count: 3,
+    }))
+    const wrapper = await render([...manyTasks(29), parent, ...stages, task({ id: 'manual:last', title: '第31筆' })])
+
+    await wrapper.findAll('button').find((b) => b.text().includes('展開階段'))!.trigger('click')
+
+    expect(rows(wrapper)).toHaveLength(33)
+    expect(titles(wrapper).slice(-3)).toEqual(['階段任務1', '階段任務2', '階段任務3'])
+    expect(wrapper.text()).toContain('階段 3/3')
+
+    await goToPage(wrapper, 2)
+
+    expect(titles(wrapper)).toEqual(['第31筆'])
+  })
+
+  describe('換頁後捲到「任務列表」卡片的頂端', () => {
+    const scrollSpy = vi.fn()
+    beforeEach(() => {
+      scrollSpy.mockClear()
+      Element.prototype.scrollIntoView = scrollSpy
+    })
+
+    it('fit-viewport-layout AC30：使用者換頁時，對卡片的根元素呼叫一次 scrollIntoView，block 是 start', async () => {
+      const wrapper = await render(manyTasks(31))
+
+      await goToPage(wrapper, 2)
+
+      expect(scrollSpy).toHaveBeenCalledTimes(1)
+      expect(scrollSpy).toHaveBeenCalledWith(expect.objectContaining({ block: 'start' }))
+      expect((scrollSpy.mock.contexts[0] as HTMLElement).classList.contains('u-card-stub')).toBe(true)
+    })
+
+    it('fit-viewport-layout AC30：筆數變少自動回到第 1 頁時不捲動', async () => {
+      const wrapper = await render(manyTasks(31))
+      await goToPage(wrapper, 2)
+      scrollSpy.mockClear()
+
+      await reload(manyTasks(30))
+
+      expect(scrollSpy).not.toHaveBeenCalled()
+    })
+  })
+
+  it('fit-viewport-layout AC31：在第 2 頁時筆數剩 30 筆，改顯示第 1 頁的 30 筆，分頁元件消失', async () => {
+    const wrapper = await render(manyTasks(31))
+    await goToPage(wrapper, 2)
+
+    await reload(manyTasks(30))
+
+    expect(rows(wrapper)).toHaveLength(30)
+    expect(titles(wrapper)[0]).toBe('任務0')
+    expect(pagination(wrapper).exists()).toBe(false)
+  })
+
+  it('fit-viewport-layout AC32：在第 2 頁新增一筆（第 62 筆），仍停在第 2 頁、顯示原本第 31～60 筆', async () => {
+    const wrapper = await render(manyTasks(61))
+    await goToPage(wrapper, 2)
+    const before = titles(wrapper)
+
+    await reload([...manyTasks(61), task({ id: 'manual:new', title: '新任務' })])
+
+    expect(titles(wrapper)).toEqual(before)
+    expect(titles(wrapper)).toHaveLength(30)
+    expect(pagination(wrapper).props()).toMatchObject({ page: 2, total: 62, itemsPerPage: 30 })
+  })
+
+  it('fit-viewport-layout AC39：重新讀取中顯示骨架畫面、沒有分頁元件；讀取完成後分頁元件再出現', async () => {
+    const wrapper = await render(manyTasks(31))
+    expect(pagination(wrapper).exists()).toBe(true)
+
+    let release!: (v: SchedulableTask[]) => void
+    mockFetchByUrl({ '/schedule/tasks': new Promise<SchedulableTask[]>((r) => { release = r }) as never })
+    const pending = useSchedulableTasks().fetchSchedulableTasks()
+    await flushPromises()
+
+    expect(wrapper.findAll('u-skeleton-stub').length).toBeGreaterThan(0)
+    expect(pagination(wrapper).exists()).toBe(false)
+
+    release(manyTasks(31))
+    await pending
+    await flushPromises()
+
+    expect(wrapper.findAll('u-skeleton-stub').length).toBe(0)
+    expect(pagination(wrapper).exists()).toBe(true)
   })
 })

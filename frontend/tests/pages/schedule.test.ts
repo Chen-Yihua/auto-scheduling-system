@@ -556,7 +556,7 @@ describe('pages/schedule.vue', () => {
     const wrapper = await render()
     await wrapper.findAll('.cursor-move')[0]!.trigger('dragstart') // low1
     // 三欄依 Low／Medium／High 排列，欄位容器是帶 min-h 的那層
-    const columns = wrapper.findAll('[class*="min-h-"]')
+    const columns = wrapper.findAll('[class*="min-h-[200px]"]')
     await columns[2]!.trigger('drop')
 
     expect(moveTaskSpy).toHaveBeenCalledWith('Low', 0, 'High', 2)
@@ -596,7 +596,7 @@ describe('pages/schedule.vue', () => {
 
     const wrapper = await render()
     await wrapper.findAll('.cursor-move')[1]!.trigger('dragstart') // 階段 2
-    await wrapper.findAll('[class*="min-h-"]')[2]!.trigger('drop') // 丟到 High 欄
+    await wrapper.findAll('[class*="min-h-[200px]"]')[2]!.trigger('drop') // 丟到 High 欄
 
     expect(moveTaskSpy).not.toHaveBeenCalled()
     expect(toastSpy.add).toHaveBeenCalledWith(expect.objectContaining({ description: expect.stringContaining('階段 2') }))
@@ -621,7 +621,7 @@ describe('pages/schedule.vue', () => {
 
     const wrapper = await render()
     await wrapper.findAll('.cursor-move')[0]!.trigger('dragstart') // 階段 1
-    await wrapper.findAll('[class*="min-h-"]')[0]!.trigger('drop') // 丟到 Low 欄
+    await wrapper.findAll('[class*="min-h-[200px]"]')[0]!.trigger('drop') // 丟到 Low 欄
 
     expect(moveTaskSpy).not.toHaveBeenCalled()
     expect(toastSpy.add).toHaveBeenCalledWith(expect.objectContaining({ description: expect.stringContaining('階段 2') }))
@@ -633,7 +633,7 @@ describe('pages/schedule.vue', () => {
 
     const wrapper = await render()
     await wrapper.findAll('.cursor-move')[1]!.trigger('dragstart')
-    await wrapper.findAll('[class*="min-h-"]')[0]!.trigger('drop') // 丟到 Low 欄
+    await wrapper.findAll('[class*="min-h-[200px]"]')[0]!.trigger('drop') // 丟到 Low 欄
 
     expect(moveTaskSpy).toHaveBeenCalledWith('Medium', 1, 'Low', 0)
     expect(toastSpy.add).not.toHaveBeenCalled()

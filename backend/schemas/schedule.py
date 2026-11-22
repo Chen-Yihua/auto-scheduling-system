@@ -179,8 +179,8 @@ class SavedSchedulePreferences(BaseModel):
     """
     blocked_recurring: list[SavedBlockedRecurringRule] = Field(default_factory=list, max_length=50)
     blocked_exceptions: list[BlockedException] = Field(default_factory=list, max_length=50)
-    buffer_minutes: int = 0
-    daily_max_minutes: Optional[int] = None
+    buffer_minutes: int = Field(default=0, ge=0, le=1440)
+    daily_max_minutes: Optional[int] = Field(default=None, ge=1, le=1440)
 
 
 class SchedulePreferences(BaseModel):

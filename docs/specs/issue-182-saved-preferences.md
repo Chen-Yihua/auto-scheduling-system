@@ -60,12 +60,14 @@
 18. 儲存偏好時，每週規律、一次性例外各最多 50 條。
 19. 儲存偏好時，每條每週規律的 `days_of_week` 最多 7 個，每個是 0 到 6 的整數。
 20. 儲存偏好時，`start_time`、`end_time` 是 `null` 或 `HH:MM` 格式（00:00 到 23:59）；空字串不合法。
-21. 儲存偏好的內容不符合需求 18–20 時，系統回 422，不寫入。
+21. 儲存偏好的內容不符合需求 18–20、27、28 時，系統回 422，不寫入。
 22. 第 2 步一次性例外的標題從「這次額外不排的時段」改成「額外不排的時段（過了就自動移除）」。
 23. 沒有一次性例外時的提示從「沒有這次額外的例外時段」改成「沒有額外的例外時段」。
 24. 使用者勾選「整天」時，這條每週規律的兩個時間輸入框維持顯示、不能編輯，起訖時間自動變成 `00:00`、`23:59`。
 25. 使用者取消勾選「整天」時，兩個時間輸入框變回可以編輯，起訖時間清空（畫面顯示 `--:--`）。
 26. 勾了「整天」的每週規律，系統送出（產生排程建議與儲存偏好）時，起訖時間一律是 `"00:00"`、`"23:59"`，不管規律裡原本存的是什麼（例如舊資料）。排程計算照舊依 `all_day` 擋掉整天（`backend/services/scheduler.py:98-100`），所以排程結果不變。
+27. 儲存偏好時，`buffer_minutes` 是 0 到 1440 的整數。
+28. 儲存偏好時，`daily_max_minutes` 是 `null`，或 1 到 1440 的整數。
 
 ## 不做
 
@@ -75,7 +77,7 @@
 - 不處理兩個分頁同時按「完成」的情況：最後存的那次為準。偏好只影響使用者自己的下一次排程，不會讓資料前後不一致。
 - 使用者在另一個分頁改了偏好，這個分頁要重新整理才看得到：偏好只在打開排程頁時讀一次（需求 8）。
 - 確認排程後、建議過期時自動重新產生的建議，不另外存偏好：用的是剛送出、已經存過的同一份偏好。
-- 不改 `POST /schedule/suggest` 的 request 格式、驗證與計算方式：需求 18–21 的上限只加在儲存偏好的 endpoint；需求 26 只改前端送出的值，排程結果不變。
+- 不改 `POST /schedule/suggest` 的 request 格式、驗證與計算方式：需求 18–21、27、28 的上限只加在儲存偏好的 endpoint；需求 26 只改前端送出的值，排程結果不變。
 - 不另外處理「讀取偏好失敗後，使用者填了一部分就按『完成』，存成功時蓋掉之前存的完整偏好」：這是需求 14、15 的直接結果，提示已經請使用者重新填寫。
 
 ## 驗收條件
@@ -115,6 +117,8 @@
 | AC31 | 使用者勾選「整天」，這條規律的兩個時間輸入框顯示 `00:00`、`23:59`，而且不能編輯 |
 | AC32 | 使用者取消勾選「整天」，這條規律的兩個時間輸入框變成空白、可以編輯 |
 | AC33 | 存的偏好裡有一條勾了「整天」的規律，使用者打開排程頁後取消勾選，兩個時間輸入框變成空白 |
+| AC34 | 儲存偏好時 `buffer_minutes` 是 -1、1441 或超過 64 位元整數（例如 `10**20`），或 `daily_max_minutes` 是 0、1441 或超過 64 位元整數，系統回 422，資料庫裡原本的偏好不變 |
+| AC35 | 儲存偏好時 `buffer_minutes` 是 0 或 1440，`daily_max_minutes` 是 `null`、1 或 1440，系統存成功 |
 
 ## 不適用的情境
 
@@ -130,7 +134,7 @@
 
 1. `backend/schemas/schedule.py`：
    - 新增 `SavedBlockedRecurringRule`：繼承 `BlockedRecurringRule`，加上需求 19、20 的驗證（`days_of_week` 最多 7 個、每個 0–6；`start_time`、`end_time` 是 `None` 或符合 `HH:MM`、00:00–23:59）。
-   - 新增 `SavedSchedulePreferences`：欄位是 `blocked_recurring: list[SavedBlockedRecurringRule]`、`blocked_exceptions: list[BlockedException]`（兩個清單都 `max_length=50`）、`buffer_minutes`、`daily_max_minutes`，預設值和 `SchedulePreferences` 相同，沒有 `timezone`。
+   - 新增 `SavedSchedulePreferences`：欄位是 `blocked_recurring: list[SavedBlockedRecurringRule]`、`blocked_exceptions: list[BlockedException]`（兩個清單都 `max_length=50`）、`buffer_minutes`（0–1440）、`daily_max_minutes`（`null` 或 1–1440，需求 27、28），預設值和 `SchedulePreferences` 相同，沒有 `timezone`。
    - `SchedulePreferences` 不加上限（AC25），只改 docstring，拿掉「不存進資料庫」。
    - 兩個 model 分開寫，不用繼承讓 `SchedulePreferences` 得到上限：`POST /schedule/suggest` 的驗證不改。
 2. `backend/crud/user.py`：新增兩個函式。
@@ -138,7 +142,7 @@
    - 儲存：用 `$set` 整份換掉 `schedule_preferences`（只留最近一次）；`matched_count == 0` 時丟 `NotFoundError`。`blocked_exceptions` 的時間照 `model_dump()` 存成 datetime。
 3. `backend/routers/user.py`：新增兩支 endpoint，都要登入，只用 JWT 的 `sub` 找使用者（需求 17）。
    - `GET /users/me/schedule-preferences` → `SavedSchedulePreferences`。
-   - `PUT /users/me/schedule-preferences`，body 是 `SavedSchedulePreferences` → 200，不回內容。
+   - `PUT /users/me/schedule-preferences`，body 是 `SavedSchedulePreferences` → 200，回 `{"success": true}`（同 `PUT /users/me`）。
 4. 不改 `UserOut`、`UserUpdate`：`PUT /users/me` 不會碰到偏好，`GET /users/me` 也不會回傳偏好（AC27）。
 5. 不用改刪除帳號：`delete_user_by_clerk_id` 刪整份 `users` 文件，偏好一起刪除（AC26）。
 
@@ -165,7 +169,7 @@
 
 ### 文件
 
-1. `docs/api.md`：在 users 那張表加上兩支新 endpoint，寫明需求 18–21 的上限與 422。
+1. `docs/api.md`：在 users 那張表加上兩支新 endpoint，寫明需求 18–21、27、28 的上限與 422。
 2. `docs/architecture.md`：`users` 那一列的內容加上「排程偏好」。
 3. `docs/specs/` 裡沒有規格寫過「偏好不存」，所以不用把舊規格標成被取代。
 
@@ -193,7 +197,7 @@
 | AC12 | 前端頁面測試：有已刪除的事件，處理完後進入第 2 步（按「取消」走同一個函式 `enterWizardAfterRemovedStep`，不另外測） | 整個測試只呼叫一次 `GET /users/me/schedule-preferences`（`initWizard` 不改 `preferences` 由 AC10 的 composable 測試負責） |
 | AC13 | 前端頁面測試：建議成功、`PUT` 回 500 | 畫面在第 3 步，顯示排程建議 |
 | AC14 | 同 AC13 | 跳出 toast，標題或說明是「排程偏好沒有存成功，下次要重新填」 |
-| AC15 | 前端頁面測試：`GET /users/me/schedule-preferences` 回 500 | 進到第 2 步時，`preferences` 等於空白預設值 |
+| AC15 | 前端 composable 測試：讀取函式呼叫 `GET /users/me/schedule-preferences` 回 500（頁面測試把 `useScheduleWizard` 換成假的，驗不到讀取失敗的處理） | `preferences` 等於空白預設值 |
 | AC16 | 同 AC15 | 跳出 toast「讀不到上次的排程偏好，請重新填寫」 |
 | AC17 | 後端 `tests/integration/test_user_api.py`：不帶登入打 GET、PUT | 都回 401；PUT 後資料庫的 `users` 文件沒有改變 |
 | AC18 | 後端 `tests/integration/test_user_api.py`：用 A 的登入身分 PUT，換成 B 的身分 GET，再換回 A 的身分 GET | B 拿到空白預設值；A 拿到 A 存的內容 |
@@ -212,11 +216,15 @@
 | AC31 | 前端 composable 測試：一條 `start_time: "09:00"`、`end_time: "10:00"` 的規律，呼叫切換「整天」的函式勾選；前端頁面測試：勾了整天的規律，再點一條沒勾整天的規律的「整天」勾選框（寫法照 `tests/pages/schedule.test.ts:412-419`） | composable：規律是 `{all_day: true, start_time: "00:00", end_time: "23:59"}`；頁面：勾了整天的規律兩個時間輸入框有 `disabled`；點勾選框後，切換「整天」函式的 spy 收到這條規律與勾選狀態 |
 | AC32 | 前端 composable 測試：接 AC31，再呼叫切換函式取消勾選；前端頁面測試：沒勾整天的規律（可併進 `tests/pages/schedule.test.ts:423-426`） | composable：規律是 `{all_day: false, start_time: null, end_time: null}`；頁面：兩個時間輸入框沒有 `disabled` |
 | AC33 | 前端 composable 測試：讀取函式帶入一條 `{all_day: true, start_time: "00:00", end_time: "23:59"}` 的規律，呼叫切換函式取消勾選 | 規律是 `{all_day: false, start_time: null, end_time: null}` |
+| AC34 | 後端 `tests/integration/test_user_api.py`：同 AC19 的做法，分別 PUT AC34 寫的 6 種值 | 都回 422；GET 是原本那份 |
+| AC35 | 後端 `tests/integration/test_user_api.py`：PUT AC35 寫的邊界值，再 GET | PUT 回 200；GET 回傳的內容和 PUT 的一樣 |
 
 ## 修改紀錄
 
 | 日期 | 修改 | 原因 | 確認者 |
 |---|---|---|---|
+| 2026-11-22 | 新增需求 27、28，AC34、AC35；需求 21、不做、實作計畫後端第 1 點與文件第 1 點跟著改 | 實作審查第 1 輪 #1：緩衝時間與每日上限沒有範圍，超過 64 位元整數時存偏好回 500；開發者決定儲存偏好的 endpoint 限制 `buffer_minutes` 0–1440、`daily_max_minutes` `null` 或 1–1440，超出回 422 → 需求 27、28，AC34、AC35；檢查過 AC19–AC25 不用改，`POST /schedule/suggest` 照舊不驗證（AC25） | 開發者 |
+| 2026-11-22 | AC15 的測試對應改成 composable 測試；實作計畫後端第 3 點的 `PUT` 回應改成 `{"success": true}` | 實作審查第 1 輪 #3：開發者確認規格改成和實作一致，不改驗收條件；AC28、AC29 照舊手動檢查，刪掉實作多加的頁面測試 → AC15 測試對應、實作計畫；檢查過 AC16 照「同 AC15」跟著改，AC28、AC29 不用改 | 開發者 |
 
 ## 請你決定
 

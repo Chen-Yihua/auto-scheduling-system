@@ -378,7 +378,7 @@ describe('pages/schedule.vue', () => {
       })
     })
 
-    it('AC1、AC8：打開排程頁時讀一次偏好，而且在 initWizard 之前', async () => {
+    it('AC1：打開排程頁時讀一次偏好，而且在 initWizard 之前', async () => {
       const order: string[] = []
       loadSavedPreferencesSpy.mockImplementation(async () => { order.push('load') })
       initWizardSpy.mockImplementation(() => { order.push('init') })
@@ -397,7 +397,7 @@ describe('pages/schedule.vue', () => {
       expect(savePreferencesSpy).not.toHaveBeenCalled()
     })
 
-    it('按「完成」且產生建議成功才存偏好，存失敗也停在第 3 步（AC13）', async () => {
+    it('產生建議成功才存偏好，存完進到第 3 步（AC13 的「存失敗不丟例外」由 composable 測試負責）', async () => {
       fetchScheduleSuggestionSpy.mockResolvedValue(true)
       const wrapper = await render()
 
@@ -436,14 +436,6 @@ describe('pages/schedule.vue', () => {
 
       expect(initWizardSpy).toHaveBeenCalledTimes(2)
       expect(loadSavedPreferencesSpy).toHaveBeenCalledTimes(1)
-    })
-
-    it('AC28、AC29：一次性例外的標題與沒有例外時的提示文字', async () => {
-      const wrapper = await render()
-
-      expect(wrapper.text()).toContain('額外不排的時段（過了就自動移除）')
-      expect(wrapper.text()).toContain('沒有額外的例外時段')
-      expect(wrapper.text()).not.toContain('這次額外')
     })
 
     it('AC31、AC32：勾了整天的規律兩個時間輸入框 disabled；勾選框呼叫 toggleAllDay', async () => {

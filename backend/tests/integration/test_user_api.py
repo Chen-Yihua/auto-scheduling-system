@@ -340,3 +340,27 @@ async def test_issue182_ac27_users_me_still_only_returns_id_email_name(logged_in
         res = await ac.get("/users/me")
 
     assert set(res.json().keys()) == {"id", "email", "name"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("field,value", [
+    ("buffer_minutes", -1), ("buffer_minutes", 1441), ("buffer_minutes", 10**20),
+    ("daily_max_minutes", 0), ("daily_max_minutes", 1441), ("daily_max_minutes", 10**20),
+])
+async def test_issue182_ac34_out_of_range_minutes_is_422(logged_in_user, prefs_users, field, value):
+    """AC34：緩衝時間或每日上限超出範圍（含超過 64 位元整數，不能回 500）→ 422，原本的偏好不變。"""
+    await _assert_rejected_keeps_original({field: value})
+
+
+@pytest.mark.asyncio
+async def test_issue182_ac35_minutes_boundaries_are_accepted(logged_in_user, prefs_users):
+    """AC35：緩衝 0 或 1440、每日上限 null、1 或 1440 → 存成功，讀回來一樣。"""
+    for buffer, daily in [(0, None), (1440, 1), (0, 1440)]:
+        body = {"buffer_minutes": buffer, "daily_max_minutes": daily}
+
+        put = await _put(body)
+
+        assert put.status_code == 200
+        got = (await _get()).json()
+        assert got["buffer_minutes"] == buffer
+        assert got["daily_max_minutes"] == daily

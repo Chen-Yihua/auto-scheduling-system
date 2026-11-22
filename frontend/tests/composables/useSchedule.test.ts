@@ -97,6 +97,19 @@ describe('useSchedule composable', () => {
     expect(ctx.loading.value).toBe(false)
   })
 
+  it('issue-182 AC8：fetchScheduleSuggestion 成功回 true，失敗（500、尚未連接）回 false，呼叫端靠它決定要不要存偏好', async () => {
+    const ctx = useSchedule()
+
+    fetchSpy.mockResolvedValueOnce({ scheduled: [], unscheduled: [] })
+    expect(await ctx.fetchScheduleSuggestion()).toBe(true)
+
+    fetchSpy.mockRejectedValueOnce({ response: { status: 500 } })
+    expect(await ctx.fetchScheduleSuggestion()).toBe(false)
+
+    fetchSpy.mockRejectedValueOnce({ response: { status: 400 }, data: { error_code: 'NOT_LINKED' } })
+    expect(await ctx.fetchScheduleSuggestion()).toBe(false)
+  })
+
   it('尚未連接 Google Calendar（NOT_LINKED）→ notLinked 為 true，不跳錯誤 toast', async () => {
     fetchSpy.mockRejectedValueOnce({ response: { status: 400 }, data: { error_code: 'NOT_LINKED' } })
 

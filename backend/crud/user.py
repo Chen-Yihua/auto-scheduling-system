@@ -1,4 +1,5 @@
 from core.database import db
+from schemas.schedule import SavedSchedulePreferences
 from schemas.user import UserCreate, UserUpdate
 from pymongo.errors import DuplicateKeyError
 from core.errors import ConflictError, InvalidRequestError, NotFoundError
@@ -37,6 +38,23 @@ async def update_user_by_clerk_id(clerk_id: str, data: UserUpdate) -> None:
     # 用 matched_count：值沒變時 modified_count 是 0，但使用者存在，不該回 404
     if result.matched_count == 0:
         raise NotFoundError("User not found or no changes made")
+
+async def get_schedule_preferences(clerk_id: str) -> SavedSchedulePreferences:
+    """沒存過偏好（舊文件沒有這個欄位）時回傳預設值。"""
+    user = await db.users.find_one({"_id": clerk_id}, {"schedule_preferences": 1})
+    if not user:
+        raise NotFoundError("User not found")
+    return SavedSchedulePreferences.model_validate(user.get("schedule_preferences") or {})
+
+async def save_schedule_preferences(clerk_id: str, preferences: SavedSchedulePreferences) -> None:
+    """整份換掉，只留最近一次。"""
+    result = await db.users.update_one(
+        {"_id": clerk_id},
+        {"$set": {"schedule_preferences": preferences.model_dump()}},
+    )
+    # 用 matched_count：值沒變時 modified_count 是 0，但使用者存在
+    if result.matched_count == 0:
+        raise NotFoundError("User not found")
 
 async def delete_user_by_clerk_id(clerk_id: str) -> bool:
     """刪除使用者和他名下的所有資料，回傳使用者是否存在。"""

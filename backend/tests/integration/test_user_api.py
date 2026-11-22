@@ -1,5 +1,6 @@
 # 透過 HTTP 確認路由、登入驗證、回應格式和錯誤狀態碼；細部邏輯由 unit 測試負責
 import pytest
+import pytest_asyncio
 from httpx import AsyncClient
 from httpx._transports.asgi import ASGITransport
 from unittest.mock import AsyncMock, patch
@@ -153,3 +154,213 @@ async def test_get_current_user_requires_login():
         response = await ac.get("/users/me")
 
     assert response.status_code in (401, 403)
+
+
+"""
+測試排程偏好（issue-182）
+"""
+from core import database  # noqa: E402
+
+PREFS_URL = "/users/me/schedule-preferences"
+
+_EMPTY_PREFS = {"blocked_recurring": [], "blocked_exceptions": [], "buffer_minutes": 0, "daily_max_minutes": None}
+
+_FULL_PREFS = {
+    "blocked_recurring": [{"days_of_week": [0, 2], "all_day": False, "start_time": "12:00", "end_time": "13:00"}],
+    "blocked_exceptions": [{"start": "2030-01-01T09:00:00Z", "end": "2030-01-01T10:00:00Z"}],
+    "buffer_minutes": 15,
+    "daily_max_minutes": 240,
+}
+
+
+def _rule(**overrides):
+    rule = {"days_of_week": [1], "all_day": False, "start_time": "09:00", "end_time": "10:00"}
+    rule.update(overrides)
+    return rule
+
+
+@pytest_asyncio.fixture
+async def prefs_users():
+    """準備 test_user_123 與 other_user 兩份 users 文件，結束後清掉。"""
+    users = database.db.users
+    await users.delete_many({})
+    await users.insert_one({"_id": "test_user_123", "name": "A", "email": "a@example.com"})
+    await users.insert_one({"_id": "other_user", "name": "B", "email": "b@example.com"})
+    yield users
+    await users.delete_many({})
+
+
+async def _put(body):
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        return await ac.put(PREFS_URL, json=body)
+
+
+async def _get():
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        return await ac.get(PREFS_URL)
+
+
+@pytest.mark.asyncio
+async def test_issue182_ac1_ac2_saved_preferences_round_trip(logged_in_user, prefs_users):
+    """AC1、AC2：PUT 一份 4 種都有的偏好，再 GET 得到同一份（偏好存在後端，同帳號任何裝置讀到的都一樣）。"""
+    put = await _put(_FULL_PREFS)
+    assert put.status_code == 200
+
+    got = await _get()
+
+    assert got.status_code == 200
+    body = got.json()
+    assert body["blocked_recurring"] == _FULL_PREFS["blocked_recurring"]
+    assert body["buffer_minutes"] == 15
+    assert body["daily_max_minutes"] == 240
+    assert len(body["blocked_exceptions"]) == 1
+    assert body["blocked_exceptions"][0]["start"].startswith("2030-01-01T09:00:00")
+    assert body["blocked_exceptions"][0]["end"].startswith("2030-01-01T10:00:00")
+
+
+@pytest.mark.asyncio
+async def test_issue182_ac3_no_saved_preferences_returns_defaults(logged_in_user, prefs_users):
+    """AC3：從來沒存過偏好 → GET 回空白預設值。"""
+    got = await _get()
+
+    assert got.status_code == 200
+    assert got.json() == _EMPTY_PREFS
+
+
+@pytest.mark.asyncio
+async def test_issue182_ac17_requires_login(prefs_users):
+    """AC17：沒登入打 GET、PUT 都回 401，資料庫不變。"""
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        got = await ac.get(PREFS_URL)
+        put = await ac.put(PREFS_URL, json=_FULL_PREFS)
+
+    assert got.status_code == 401
+    assert put.status_code == 401
+    doc = await prefs_users.find_one({"_id": "test_user_123"})
+    assert "schedule_preferences" not in doc
+
+
+@pytest.mark.asyncio
+async def test_issue182_ac18_users_only_see_their_own_preferences(logged_in_user, prefs_users):
+    """AC18：A 存偏好後，B 讀到自己的（沒存過就是預設值），A 的不變。"""
+    from core.security import get_current_clerk_user
+
+    await _put(_FULL_PREFS)
+
+    async def as_b():
+        return {"sub": "other_user"}
+
+    app.dependency_overrides[get_current_clerk_user] = as_b
+    b_got = await _get()
+
+    async def as_a():
+        return {"sub": "test_user_123"}
+
+    app.dependency_overrides[get_current_clerk_user] = as_a
+    a_got = await _get()
+
+    assert b_got.json() == _EMPTY_PREFS
+    assert a_got.json()["buffer_minutes"] == 15
+
+
+async def _assert_rejected_keeps_original(body):
+    await _put(_FULL_PREFS)
+    res = await _put(body)
+    assert res.status_code == 422
+    got = await _get()
+    assert got.json()["buffer_minutes"] == 15
+    assert got.json()["blocked_recurring"] == _FULL_PREFS["blocked_recurring"]
+
+
+@pytest.mark.asyncio
+async def test_issue182_ac19_wrong_type_is_422(logged_in_user, prefs_users):
+    """AC19：型別不對（buffer_minutes 是 "abc"）→ 422，原本的偏好不變。"""
+    await _assert_rejected_keeps_original({"buffer_minutes": "abc"})
+
+
+@pytest.mark.asyncio
+async def test_issue182_ac20_too_many_recurring_rules_is_422(logged_in_user, prefs_users):
+    """AC20：每週規律 51 條 → 422，原本的偏好不變。"""
+    await _assert_rejected_keeps_original({"blocked_recurring": [_rule() for _ in range(51)]})
+
+
+@pytest.mark.asyncio
+async def test_issue182_ac21_too_many_exceptions_is_422(logged_in_user, prefs_users):
+    """AC21：一次性例外 51 條 → 422，原本的偏好不變。"""
+    exc = {"start": "2030-01-01T09:00:00Z", "end": "2030-01-01T10:00:00Z"}
+    await _assert_rejected_keeps_original({"blocked_exceptions": [exc for _ in range(51)]})
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("days", [[0, 1, 2, 3, 4, 5, 6, 0], [7], [-1]])
+async def test_issue182_ac22_invalid_days_of_week_is_422(logged_in_user, prefs_users, days):
+    """AC22：days_of_week 超過 7 個、或含 0–6 以外的數字 → 422，原本的偏好不變。"""
+    await _assert_rejected_keeps_original({"blocked_recurring": [_rule(days_of_week=days)]})
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("field,value", [
+    ("start_time", "24:00"), ("start_time", "9:00"), ("start_time", "abc"), ("start_time", ""), ("end_time", "24:00"),
+])
+async def test_issue182_ac23_invalid_time_is_422(logged_in_user, prefs_users, field, value):
+    """AC23：起訖時間不是 null 或 HH:MM（00:00–23:59）→ 422，原本的偏好不變。"""
+    await _assert_rejected_keeps_original({"blocked_recurring": [_rule(**{field: value})]})
+
+
+@pytest.mark.asyncio
+async def test_issue182_ac24_boundary_values_are_accepted(logged_in_user, prefs_users):
+    """AC24：各 50 條、days_of_week 是 0–6 全選、時間 00:00–23:59 → 存成功，讀回來一樣。"""
+    rules = [_rule(days_of_week=[0, 1, 2, 3, 4, 5, 6], start_time="00:00", end_time="23:59") for _ in range(50)]
+    excs = [{"start": "2030-01-01T09:00:00Z", "end": "2030-01-01T10:00:00Z"} for _ in range(50)]
+
+    put = await _put({"blocked_recurring": rules, "blocked_exceptions": excs, "buffer_minutes": 0, "daily_max_minutes": None})
+
+    assert put.status_code == 200
+    got = (await _get()).json()
+    assert got["blocked_recurring"] == rules
+    assert len(got["blocked_exceptions"]) == 50
+
+
+@pytest.mark.asyncio
+async def test_issue182_null_times_are_accepted(logged_in_user, prefs_users):
+    """start_time、end_time 可以是 null（整天的規律）。"""
+    rule = _rule(all_day=True, start_time=None, end_time=None)
+
+    put = await _put({"blocked_recurring": [rule]})
+
+    assert put.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_issue182_ac27_users_me_still_only_returns_id_email_name(logged_in_user, prefs_users):
+    """AC27：存了偏好之後，GET /users/me 仍然只有 id、email、name。"""
+    await _put(_FULL_PREFS)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        res = await ac.get("/users/me")
+
+    assert set(res.json().keys()) == {"id", "email", "name"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("field,value", [
+    ("buffer_minutes", -1), ("buffer_minutes", 1441), ("buffer_minutes", 10**20),
+    ("daily_max_minutes", 0), ("daily_max_minutes", 1441), ("daily_max_minutes", 10**20),
+])
+async def test_issue182_ac34_out_of_range_minutes_is_422(logged_in_user, prefs_users, field, value):
+    """AC34：緩衝時間或每日上限超出範圍（含超過 64 位元整數，不能回 500）→ 422，原本的偏好不變。"""
+    await _assert_rejected_keeps_original({field: value})
+
+
+@pytest.mark.asyncio
+async def test_issue182_ac35_minutes_boundaries_are_accepted(logged_in_user, prefs_users):
+    """AC35：緩衝 0 或 1440、每日上限 null、1 或 1440 → 存成功，讀回來一樣。"""
+    for buffer, daily in [(0, None), (1440, 1), (0, 1440)]:
+        body = {"buffer_minutes": buffer, "daily_max_minutes": daily}
+
+        put = await _put(body)
+
+        assert put.status_code == 200
+        got = (await _get()).json()
+        assert got["buffer_minutes"] == buffer
+        assert got["daily_max_minutes"] == daily

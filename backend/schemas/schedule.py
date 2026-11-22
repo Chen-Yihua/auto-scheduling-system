@@ -1,4 +1,5 @@
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+import re
 from pydantic import BaseModel, Field, field_validator
 from typing import Optional
 from datetime import datetime
@@ -150,8 +151,40 @@ class BlockedException(BaseModel):
     end: datetime
 
 
+_HH_MM = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
+
+
+class SavedBlockedRecurringRule(BlockedRecurringRule):
+    """儲存偏好用的每週規律：比 BlockedRecurringRule 多驗證星期與時間格式。"""
+
+    @field_validator("days_of_week")
+    @classmethod
+    def _valid_days(cls, value: list[int]) -> list[int]:
+        if len(value) > 7 or any(d < 0 or d > 6 for d in value):
+            raise ValueError("days_of_week 最多 7 個，每個是 0 到 6")
+        return value
+
+    @field_validator("start_time", "end_time")
+    @classmethod
+    def _valid_time(cls, value: Optional[str]) -> Optional[str]:
+        if value is not None and not _HH_MM.match(value):
+            raise ValueError("時間要是 null 或 HH:MM（00:00 到 23:59）")
+        return value
+
+
+class SavedSchedulePreferences(BaseModel):
+    """
+    存在 users 文件上、下次打開排程頁帶入的偏好，不含時區（每次用瀏覽器當時的時區）。
+    上限只加在這裡：POST /schedule/suggest 的 SchedulePreferences 驗證不變。
+    """
+    blocked_recurring: list[SavedBlockedRecurringRule] = Field(default_factory=list, max_length=50)
+    blocked_exceptions: list[BlockedException] = Field(default_factory=list, max_length=50)
+    buffer_minutes: int = Field(default=0, ge=0, le=1440)
+    daily_max_minutes: Optional[int] = Field(default=None, ge=1, le=1440)
+
+
 class SchedulePreferences(BaseModel):
-    """排程精靈中填的偏好，不存進資料庫，只影響這一次的計算。"""
+    """排程精靈中填的偏好，每次產生排程建議都要帶。要記住的部分見 SavedSchedulePreferences。"""
     blocked_recurring: list[BlockedRecurringRule] = []
     blocked_exceptions: list[BlockedException] = []
     buffer_minutes: int = 0

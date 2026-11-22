@@ -61,6 +61,9 @@ const preferencesRef = vueRef({
   daily_max_minutes: null as number | null,
 })
 const initWizardSpy = vi.fn()
+const loadSavedPreferencesSpy = vi.fn()
+const savePreferencesSpy = vi.fn()
+const toggleAllDaySpy = vi.fn()
 const moveTaskSpy = vi.fn()
 const confirmOrderSpy = vi.fn()
 const backToStep1Spy = vi.fn()
@@ -82,6 +85,9 @@ vi.mock('~/composables/useScheduleWizard', () => ({
     sanitizedPreferences: vueComputed(() => preferencesRef.value),
     hasTasks: vueComputed(() => (['Low', 'Medium', 'High'] as const).some((p) => columnsRef[p].length > 0)),
     initWizard: initWizardSpy,
+    loadSavedPreferences: loadSavedPreferencesSpy,
+    savePreferences: savePreferencesSpy,
+    toggleAllDay: toggleAllDaySpy,
     moveTask: moveTaskSpy,
     confirmOrder: confirmOrderSpy,
     backToStep1: backToStep1Spy,
@@ -163,6 +169,9 @@ describe('pages/schedule.vue', () => {
     fetchSchedulableTasksSpy.mockReset()
     fetchScheduleSuggestionSpy.mockClear()
     initWizardSpy.mockClear()
+    loadSavedPreferencesSpy.mockReset()
+    savePreferencesSpy.mockReset()
+    toggleAllDaySpy.mockClear()
     moveTaskSpy.mockClear()
     confirmOrderSpy.mockClear()
     backToStep1Spy.mockClear()
@@ -355,6 +364,97 @@ describe('pages/schedule.vue', () => {
     expect(stepRef.value).toBe(3)
   })
 
+  describe('issue-182：記住排程偏好', () => {
+    async function clickFinish(wrapper: Awaited<ReturnType<typeof render>>) {
+      await wrapper.findAll('button').find((b) => b.text() === '確認並產生排程建議')!.trigger('click')
+      await flushMicrotasks()
+    }
+
+    beforeEach(() => {
+      stepRef.value = 2
+      columnsRef.Medium = [fakeTask({ id: 'a' })]
+      finishSpy.mockImplementation(async (onDone: () => Promise<void>) => {
+        await onDone()
+      })
+    })
+
+    it('AC1：打開排程頁時讀一次偏好，而且在 initWizard 之前', async () => {
+      const order: string[] = []
+      loadSavedPreferencesSpy.mockImplementation(async () => { order.push('load') })
+      initWizardSpy.mockImplementation(() => { order.push('init') })
+
+      await render()
+
+      expect(loadSavedPreferencesSpy).toHaveBeenCalledTimes(1)
+      expect(order).toEqual(['load', 'init'])
+    })
+
+    it('AC7：改了第 2 步的設定、沒按「完成」，不存偏好', async () => {
+      const wrapper = await render()
+      preferencesRef.value.blocked_recurring = [{ days_of_week: [1], all_day: false, start_time: '09:00', end_time: '10:00' }]
+      await wrapper.findAll('button').find((b) => b.text() === '新增例外時段')!.trigger('click')
+
+      expect(savePreferencesSpy).not.toHaveBeenCalled()
+    })
+
+    it('產生建議成功才存偏好，存完進到第 3 步（AC13 的「存失敗不丟例外」由 composable 測試負責）', async () => {
+      fetchScheduleSuggestionSpy.mockResolvedValue(true)
+      const wrapper = await render()
+
+      await clickFinish(wrapper)
+
+      expect(savePreferencesSpy).toHaveBeenCalledTimes(1)
+      expect(stepRef.value).toBe(3)
+    })
+
+    it('AC8：產生建議失敗時不存偏好', async () => {
+      fetchScheduleSuggestionSpy.mockResolvedValue(false)
+      const wrapper = await render()
+
+      await clickFinish(wrapper)
+
+      expect(savePreferencesSpy).not.toHaveBeenCalled()
+      expect(stepRef.value).toBe(3)
+    })
+
+    it('AC10、AC11：第 3 步按「重新產生」回到第 2 步的過程，不再讀偏好', async () => {
+      const wrapper = await render()
+      stepRef.value = 3
+      await flushMicrotasks()
+      await wrapper.get('[data-testid="suggestion"]').trigger('click')
+      await flushMicrotasks()
+
+      expect(initWizardSpy).toHaveBeenCalledTimes(2)
+      expect(loadSavedPreferencesSpy).toHaveBeenCalledTimes(1)
+    })
+
+    it('AC12：有已刪除的事件，處理完進入精靈時不再讀偏好', async () => {
+      removedQueries([removedItem()])
+      resolveRemovedEventsSpy.mockResolvedValue('done')
+      const wrapper = await render()
+      await clickNext(wrapper)
+
+      expect(initWizardSpy).toHaveBeenCalledTimes(2)
+      expect(loadSavedPreferencesSpy).toHaveBeenCalledTimes(1)
+    })
+
+    it('AC31、AC32：勾了整天的規律兩個時間輸入框 disabled；勾選框呼叫 toggleAllDay', async () => {
+      const allDay = { days_of_week: [1], all_day: true, start_time: '00:00', end_time: '23:59' }
+      const normal = { days_of_week: [2], all_day: false, start_time: '09:00', end_time: '10:00' }
+      preferencesRef.value.blocked_recurring = [allDay, normal]
+      const wrapper = await render()
+
+      const times = wrapper.findAll('input[type="time"]')
+      expect(times).toHaveLength(4)
+      expect(times.slice(0, 2).every((i) => i.attributes('disabled') !== undefined)).toBe(true)
+      expect(times.slice(2).every((i) => i.attributes('disabled') === undefined)).toBe(true)
+      expect((times[0]!.element as HTMLInputElement).value).toBe('00:00')
+
+      await wrapper.findAll('input[type="checkbox"]')[1]!.setValue(true)
+      expect(toggleAllDaySpy).toHaveBeenCalledWith(normal, true)
+    })
+  })
+
   it('issue-178 AC32：已登入、已連接、沒有已刪除的事件時，直接顯示第 1 步的三欄，沒有排程建議的內容', async () => {
     columnsRef.Low = [fakeTask({ id: 'low1', title: '低優先任務' })]
 
@@ -423,7 +523,8 @@ describe('pages/schedule.vue', () => {
       preferencesRef.value.blocked_recurring = [{ days_of_week: [5], all_day: false, start_time: '22:00', end_time: '08:00' }]
       const wrapper = await render()
 
-      expect(wrapper.findAll('input[type="time"]').length).toBe(2) // 沒勾整天才顯示起訖時間
+      expect(wrapper.findAll('input[type="time"]').length).toBe(2)
+      expect(wrapper.findAll('input[type="time"]').every((i) => !i.attributes('disabled'))).toBe(true) // 沒勾整天才能編輯起訖時間
 
       await wrapper.findAll('button').find((b) => b.text() === '移除')!.trigger('click')
       expect(removeBlockedRecurringRuleSpy).toHaveBeenCalledWith(0)

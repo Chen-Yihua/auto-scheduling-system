@@ -726,3 +726,22 @@ async def test_reschedule_tasks_requires_login():
         res = await ac.post("/schedule/tasks/reschedule", json={"task_ids": ["manual:x"]})
 
     assert res.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+@pytest.mark.asyncio
+async def test_issue182_ac25_suggest_accepts_more_than_50_recurring_rules(monkeypatch, logged_in_user):
+    """AC25：POST /schedule/suggest 收到 51 條每週規律照舊產生建議（50 條上限只加在儲存偏好的 endpoint）。"""
+    async def mock_get_tasks(user_id):
+        return []
+
+    async def mock_get_free_slots(user_id):
+        return []
+
+    monkeypatch.setattr(schedule_router, "get_all_schedulable_items", mock_get_tasks)
+    monkeypatch.setattr(schedule_router, "get_free_slots_for_user", mock_get_free_slots)
+    rules = [{"days_of_week": [0], "start_time": "09:00", "end_time": "10:00"} for _ in range(51)]
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        res = await ac.post("/schedule/suggest", json={"blocked_recurring": rules})
+
+    assert res.status_code == status.HTTP_200_OK

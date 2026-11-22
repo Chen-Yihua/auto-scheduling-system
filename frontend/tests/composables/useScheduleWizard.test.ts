@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { ref as vueRef, reactive as vueReactive, computed as vueComputed } from 'vue'
 
 import { useScheduleWizard } from '~/composables/useScheduleWizard'
+import { defaultSchedulePreferences } from '~/types/schedule'
 import type { SchedulableTask } from '~/types/schedulableTask'
 
 vi.mock('@clerk/vue', () => ({
@@ -43,6 +44,8 @@ describe('useScheduleWizard composable', () => {
   beforeEach(() => {
     fetchSpy = vi.fn().mockResolvedValue({})
     toastSpy.add.mockClear()
+    // 共用狀態：initWizard 不再重設偏好，每個測試自己歸零
+    useScheduleWizard().preferences.value = defaultSchedulePreferences()
   })
 
   it('initWizard 依 priority 把任務分到三欄，濾掉 Done 的任務', () => {
@@ -72,18 +75,21 @@ describe('useScheduleWizard composable', () => {
     expect(ctx.columns.Medium[0]!.priority).toBe('Medium')
   })
 
-  it('initWizard 每次都把 preferences 重置成預設值（不工作時段每次精靈重新選，不留上一輪的設定）', () => {
+  it('issue-182 AC10、AC11：initWizard 保留 preferences（精靈回到第 1 步後，第 2 步仍是畫面上填的內容，不管有沒有存成）', async () => {
     const ctx = useScheduleWizard()
-    ctx.initWizard([fakeTask({ id: 'a', priority: 'Low' })])
+    fetchSpy = vi.fn().mockResolvedValue({
+      blocked_recurring: [{ days_of_week: [1], all_day: false, start_time: '09:00', end_time: '10:00' }],
+      blocked_exceptions: [], buffer_minutes: 0, daily_max_minutes: null,
+    })
+    await ctx.loadSavedPreferences()
+    ctx.preferences.value.blocked_recurring[0]!.days_of_week = [2, 3]
+    ctx.addBlockedException()
     ctx.preferences.value.buffer_minutes = 30
-    ctx.addBlockedRecurringRule()
+    const edited = JSON.parse(JSON.stringify(ctx.preferences.value))
 
     ctx.initWizard([fakeTask({ id: 'b', priority: 'Low' })])
 
-    expect(ctx.preferences.value).toEqual({
-      blocked_recurring: [], blocked_exceptions: [], buffer_minutes: 0, daily_max_minutes: null,
-      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-    })
+    expect(ctx.preferences.value).toEqual(edited)
   })
 
   it('addBlockedRecurringRule／removeBlockedRecurringRule 增刪每週固定規律', () => {
@@ -340,5 +346,146 @@ describe('useScheduleWizard composable', () => {
 
     const ids = [...ctx.columns.Low, ...ctx.columns.Medium, ...ctx.columns.High].map((t) => t.id)
     expect(ids.sort()).toEqual(['manual:plain', 'manual:s1'])
+  })
+})
+
+
+describe('issue-182：記住排程偏好', () => {
+  const rule = (o: Record<string, unknown> = {}) => ({ days_of_week: [0], all_day: false, start_time: '12:00', end_time: '13:00', ...o })
+
+  beforeEach(() => {
+    vi.useRealTimers()
+    fetchSpy = vi.fn().mockResolvedValue({})
+    toastSpy.add.mockClear()
+    useScheduleWizard().preferences.value = defaultSchedulePreferences()
+  })
+
+  it('AC1、AC6：loadSavedPreferences 把存的偏好帶進 preferences，時區用瀏覽器當時的', async () => {
+    // 只還原這個 spy：restoreAllMocks 會把登入 mock 的回傳值也清掉
+    const timeZoneSpy = vi.spyOn(Intl.DateTimeFormat.prototype, 'resolvedOptions').mockReturnValue({ timeZone: 'Asia/Tokyo' } as Intl.ResolvedDateTimeFormatOptions)
+    const future = { start: '2999-01-01T09:00:00.000Z', end: '2999-01-01T10:00:00.000Z' }
+    fetchSpy = vi.fn().mockResolvedValue({
+      blocked_recurring: [rule()], blocked_exceptions: [future], buffer_minutes: 15, daily_max_minutes: 240,
+    })
+    const ctx = useScheduleWizard()
+
+    await ctx.loadSavedPreferences()
+    timeZoneSpy.mockRestore()
+
+    expect(fetchSpy.mock.calls[0]![0]).toBe('http://api/users/me/schedule-preferences')
+    expect(ctx.preferences.value).toEqual({
+      blocked_recurring: [rule()], blocked_exceptions: [future], buffer_minutes: 15, daily_max_minutes: 240,
+      timezone: 'Asia/Tokyo',
+    })
+  })
+
+  it('AC3：沒存過偏好（後端回預設值）→ preferences 是空白預設值', async () => {
+    fetchSpy = vi.fn().mockResolvedValue({ blocked_recurring: [], blocked_exceptions: [], buffer_minutes: 0, daily_max_minutes: null })
+    const ctx = useScheduleWizard()
+
+    await ctx.loadSavedPreferences()
+
+    expect(ctx.preferences.value).toEqual({
+      blocked_recurring: [], blocked_exceptions: [], buffer_minutes: 0, daily_max_minutes: null,
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    })
+  })
+
+  it('AC9：帶入時拿掉結束時間已過的一次性例外，每週規律一律保留', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2030-06-01T12:00:00Z'))
+    const past = { start: '2030-06-01T09:00:00.000Z', end: '2030-06-01T10:00:00.000Z' }
+    const notYet = { start: '2030-06-01T13:00:00.000Z', end: '2030-06-01T14:00:00.000Z' }
+    fetchSpy = vi.fn().mockResolvedValue({
+      blocked_recurring: [rule()], blocked_exceptions: [past, notYet], buffer_minutes: 0, daily_max_minutes: null,
+    })
+    const ctx = useScheduleWizard()
+
+    await ctx.loadSavedPreferences()
+
+    expect(ctx.preferences.value.blocked_exceptions).toEqual([notYet])
+    expect(ctx.preferences.value.blocked_recurring).toEqual([rule()])
+  })
+
+  it('AC15、AC16：讀取失敗 → preferences 是空白預設值，跳「讀不到上次的排程偏好，請重新填寫」', async () => {
+    fetchSpy = vi.fn().mockRejectedValue(new Error('boom'))
+    const ctx = useScheduleWizard()
+    ctx.preferences.value.buffer_minutes = 99
+
+    await ctx.loadSavedPreferences()
+
+    expect(ctx.preferences.value.buffer_minutes).toBe(0)
+    expect(ctx.preferences.value.blocked_recurring).toEqual([])
+    expect(toastSpy.add).toHaveBeenCalledTimes(1)
+    expect(JSON.stringify(toastSpy.add.mock.calls[0]![0])).toContain('讀不到上次的排程偏好，請重新填寫')
+  })
+
+  it('AC4、AC5：savePreferences 用 PUT 送出只有填完整的時段、不含時區的內容', async () => {
+    const ctx = useScheduleWizard()
+    ctx.preferences.value = {
+      blocked_recurring: [rule({ days_of_week: [] }), rule()],
+      blocked_exceptions: [], buffer_minutes: 15, daily_max_minutes: 240, timezone: 'Asia/Taipei',
+    }
+
+    await ctx.savePreferences()
+
+    const [url, opts] = fetchSpy.mock.calls[0]!
+    expect(url).toBe('http://api/users/me/schedule-preferences')
+    expect(opts.method).toBe('PUT')
+    expect(opts.body).toEqual({
+      blocked_recurring: [rule()], blocked_exceptions: [], buffer_minutes: 15, daily_max_minutes: 240,
+    })
+  })
+
+  it('AC13、AC14：存偏好失敗不丟例外，跳「排程偏好沒有存成功，下次要重新填」', async () => {
+    fetchSpy = vi.fn().mockRejectedValue(new Error('boom'))
+    const ctx = useScheduleWizard()
+
+    await expect(ctx.savePreferences()).resolves.toBeUndefined()
+
+    expect(toastSpy.add).toHaveBeenCalledTimes(1)
+    expect(JSON.stringify(toastSpy.add.mock.calls[0]![0])).toContain('排程偏好沒有存成功，下次要重新填')
+  })
+
+  it('AC30：勾了整天的規律送出時一律是 00:00、23:59，畫面上的規律物件不變', async () => {
+    const ctx = useScheduleWizard()
+    ctx.preferences.value.blocked_recurring = [
+      { days_of_week: [1], all_day: true, start_time: '', end_time: null },
+    ]
+    const expected = [{ days_of_week: [1], all_day: true, start_time: '00:00', end_time: '23:59' }]
+
+    expect(ctx.sanitizedPreferences.value.blocked_recurring).toEqual(expected)
+    await ctx.savePreferences()
+
+    expect(fetchSpy.mock.calls[0]![1].body.blocked_recurring).toEqual(expected)
+    expect(ctx.preferences.value.blocked_recurring[0]).toEqual(
+      { days_of_week: [1], all_day: true, start_time: '', end_time: null },
+    )
+  })
+
+  it('AC31、AC32：toggleAllDay 勾選時起訖變 00:00、23:59，取消勾選時清成 null', () => {
+    const ctx = useScheduleWizard()
+    const r = { days_of_week: [1], all_day: false, start_time: '09:00' as string | null, end_time: '10:00' as string | null }
+
+    ctx.toggleAllDay(r, true)
+    expect(r).toEqual({ days_of_week: [1], all_day: true, start_time: '00:00', end_time: '23:59' })
+
+    ctx.toggleAllDay(r, false)
+    expect(r).toEqual({ days_of_week: [1], all_day: false, start_time: null, end_time: null })
+  })
+
+  it('AC33：帶入的整天規律取消勾選後，起訖時間變成空白', async () => {
+    fetchSpy = vi.fn().mockResolvedValue({
+      blocked_recurring: [rule({ all_day: true, start_time: '00:00', end_time: '23:59' })],
+      blocked_exceptions: [], buffer_minutes: 0, daily_max_minutes: null,
+    })
+    const ctx = useScheduleWizard()
+    await ctx.loadSavedPreferences()
+
+    ctx.toggleAllDay(ctx.preferences.value.blocked_recurring[0]!, false)
+
+    expect(ctx.preferences.value.blocked_recurring[0]).toEqual(
+      { days_of_week: [0], all_day: false, start_time: null, end_time: null },
+    )
   })
 })

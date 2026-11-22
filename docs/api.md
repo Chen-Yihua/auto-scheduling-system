@@ -13,6 +13,8 @@
 | GET | `/users/me` | ✅ | — | `UserOut` | 目前登入的使用者 |
 | POST | `/users/` | ✅ | `UserCreate` | `UserOut`（201） | 註冊目前登入的使用者，已註冊回 409 `ALREADY_EXISTS` |
 | PUT | `/users/me` | ✅ | `UserUpdate` | — | 更新使用者資料；沒有可更新的欄位回 400 |
+| GET | `/users/me/schedule-preferences` | ✅ | — | `SavedSchedulePreferences` | 排程精靈上次存的偏好（不含時區）；沒存過回預設值（沒有時段、緩衝 0、沒有每日上限） |
+| PUT | `/users/me/schedule-preferences` | ✅ | `SavedSchedulePreferences` | — | 整份換掉偏好，只留最近一次；每週規律、一次性例外各最多 50 條，`days_of_week` 最多 7 個且每個是 0–6，`start_time`、`end_time` 是 `null` 或 `HH:MM`（00:00–23:59），`buffer_minutes` 是 0–1440、`daily_max_minutes` 是 `null` 或 1–1440，不符回 422；`POST /schedule/suggest` 不受這些上限影響 |
 | DELETE | `/users/me` | ✅ | — | — | 刪除使用者 |
 | POST | `/users/webhook/clerk` | Svix 簽章 | Clerk 事件 | — | Clerk 使用者事件同步；簽章錯誤或伺服器沒設定密鑰回 401 |
 

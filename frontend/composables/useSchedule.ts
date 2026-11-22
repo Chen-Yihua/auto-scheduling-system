@@ -24,10 +24,11 @@ function useScheduleImpl() {
   const notLinked = ref(false)
   const confirming = ref(false)
 
-  // preferences 不存資料庫，記下來供確認後或過期時重新產生使用
+  // 記下最近一次送出的 preferences，供確認後或過期時重新產生使用
   const lastPreferences = ref<SchedulePreferences>(defaultSchedulePreferences())
 
-  const fetchScheduleSuggestion = async (preferences?: SchedulePreferences) => {
+  // 回傳是否成功產生建議；尚未連接 Google Calendar 不算成功
+  const fetchScheduleSuggestion = async (preferences?: SchedulePreferences): Promise<boolean> => {
     if (preferences) lastPreferences.value = preferences
     loading.value = true
     notLinked.value = false
@@ -43,6 +44,7 @@ function useScheduleImpl() {
 
       scheduled.value = res.scheduled
       unscheduled.value = res.unscheduled
+      return true
     } catch (error) {
       scheduled.value = []
       unscheduled.value = []
@@ -50,12 +52,12 @@ function useScheduleImpl() {
 
       if (isNotLinkedError(error)) {
         notLinked.value = true
-        return
+        return false
       }
 
       if (isAuthError(error)) {
         toast.add(reauthToast())
-        return
+        return false
       }
       toast.add({
         title: getFriendlyErrorTitle(error, '排程建議產生失敗'),
@@ -63,6 +65,7 @@ function useScheduleImpl() {
         color: 'error',
         icon: 'i-lucide-x',
       })
+      return false
     } finally {
       loading.value = false
     }

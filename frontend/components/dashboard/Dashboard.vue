@@ -37,10 +37,10 @@ watch(googleConnectedCount, () => {
     >
       <!-- 寬螢幕時欄內容用 absolute 脫離版面：欄高只由中間的行事曆決定，今日卡片超過欄高時在卡片裡面捲動 -->
       <div class="lg:relative">
-       <div class="lg:absolute lg:inset-0 lg:flex lg:flex-col">
-        <TodayTasks v-if="isSignedIn" />
-        <LoginRequiredCard v-else title="今日" icon="i-lucide-calendar-check" message="登入後即可查看今天的任務" />
-       </div>
+        <div class="lg:absolute lg:inset-0 lg:flex lg:flex-col">
+          <TodayTasks v-if="isSignedIn" />
+          <LoginRequiredCard v-else title="今日" icon="i-lucide-calendar-check" message="登入後即可查看今天的任務" />
+        </div>
       </div>
 
       <div class="lg:flex lg:flex-col lg:min-h-[400px]">

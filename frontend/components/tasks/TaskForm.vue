@@ -298,7 +298,7 @@ onMounted(async () => {
       </div>
     </div>
     <UPagination
-      v-if="topLevelTasks.length > PAGE_SIZE"
+      v-if="!loading && topLevelTasks.length > PAGE_SIZE"
       class="mt-4 flex justify-center"
       :page="page"
       :total="topLevelTasks.length"

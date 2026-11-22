@@ -87,6 +87,7 @@
 44. 按「回到頂端」後，頁面平滑捲回最上面。
 45. 新增／編輯任務視窗打開時，「回到頂端」按鈕隱藏；視窗關閉後，再依捲動位置決定是否顯示。
 46. 任務管理頁的新增任務視窗照需求 1～4。
+47. 任務列表讀取中時（顯示載入中的骨架畫面），不顯示分頁按鈕。
 
 ## 不做
 
@@ -156,13 +157,14 @@
 | AC29 | 第 30 筆是有 3 個階段的主任務時，展開它，3 個階段顯示在第 1 頁、它的下面；第 2 頁的第一列是第 31 筆 |
 | AC30 | 在任務管理頁捲到列表最下面，按分頁按鈕換頁，頁面捲到「任務列表」卡片的頂端 |
 | AC31 | 任務管理頁有 31 筆、目前在第 2 頁時，第 31 筆被刪除（只剩 30 筆），列表改顯示第 1 頁，分頁按鈕消失 |
-| AC32 | 任務管理頁有 61 筆、目前在第 1 頁時，新增一筆任務，列表停在第 1 頁 |
+| AC32 | 任務管理頁有 61 筆、目前在第 2 頁時，新增一筆任務，列表停在第 2 頁，第 2 頁的內容不變 |
 | AC33 | 任務管理頁有 31 筆時，在一般筆電的大小，整頁往下捲動可以捲到列表最下面的分頁按鈕；「任務列表」卡片裡面沒有自己的捲軸 |
 | AC34 | 任務管理頁在頁面頂端時，沒有「回到頂端」按鈕 |
 | AC35 | 任務管理頁往下捲超過一個視窗高度後，螢幕右下角出現「回到頂端」按鈕；繼續捲動時，按鈕留在右下角 |
 | AC36 | 按「回到頂端」後，頁面捲回最上面，按鈕隱藏 |
 | AC37 | 任務管理頁往下捲出現「回到頂端」後，按某一列的「編輯」打開視窗，按鈕隱藏；按「取消」關閉視窗後，按鈕再出現 |
 | AC38 | 承 AC37，在手機的大小，視窗底部的「取消」「儲存變更」沒有被任何按鈕蓋住，按得到 |
+| AC39 | 任務管理頁有 31 筆、列表重新讀取中時，顯示載入中的骨架畫面，沒有分頁按鈕；讀取完成後分頁按鈕再出現 |
 
 ## 不適用的情境
 
@@ -245,7 +247,7 @@ UCard 要在卡片裡捲動時，用 `:ui` 讓 root 變成 flex 欄、body `flex
 - header 外層的 `flex items-center justify-between` 加 `flex-wrap gap-2`：手機上放不下時，兩個按鈕那一組換到標題下面一行（需求 31）。
 - body 裡「已排入時段」那一行只留標題文字。
 
-### 5. 任務管理頁（需求 34～46）
+### 5. 任務管理頁（需求 34～47）
 
 - [pages/tasks.vue](../../frontend/pages/tasks.vue)：不改成固定高度（需求 35）。檢查最外層與 `mt-4`、`p-4` 有沒有讓 5 筆任務時整頁超出一點點；有的話調整外距（AC25）。
 - [TaskForm.vue](../../frontend/components/tasks/TaskForm.vue) 分頁：
@@ -253,7 +255,7 @@ UCard 要在卡片裡捲動時，用 `:ui` 讓 root 變成 flex 欄、body `flex
   - `pageCount = Math.max(1, Math.ceil(topLevelTasks.length / PAGE_SIZE))`。`topLevelTasks` 已經包含外部平台項目（沒有 `parent_id` 的都算），符合需求 36。
   - 頁碼超過 `pageCount` 時，顯示用的頁碼取 `Math.min(page, pageCount)`；同時把 `page` 寫回這個值，分頁按鈕才顯示正確的頁（需求 40）。用 `watch(pageCount, …)` 或在 computed 裡計算後回寫，擇一。
   - `visibleRows` 改成先取目前這一頁的 `topLevelTasks.slice((page-1)*30, page*30)`，再接展開的階段（需求 37）。
-  - `topLevelTasks.length > PAGE_SIZE` 時，在列表下方顯示 `<UPagination v-model:page="page" :total="topLevelTasks.length" :items-per-page="PAGE_SIZE" />`。放在 `overflow-x-auto` 的 `<div>` 外面，窄螢幕橫向捲動表格時，分頁按鈕不會跟著捲走。
+  - `!loading && topLevelTasks.length > PAGE_SIZE` 時（需求 47），在列表下方顯示 `<UPagination v-model:page="page" :total="topLevelTasks.length" :items-per-page="PAGE_SIZE" />`。放在 `overflow-x-auto` 的 `<div>` 外面，窄螢幕橫向捲動表格時，分頁按鈕不會跟著捲走。
   - 換頁時（使用者改了 `page`），用 template ref 拿到 UCard 的根元素，呼叫 `scrollIntoView({ behavior: 'smooth', block: 'start' })`（需求 39）。只在使用者按分頁按鈕時捲動；需求 40 自動修正頁碼時不捲動，避免刪除任務後畫面突然跳動。
   - 新增任務後重新讀取列表不重設 `page`（需求 41）；頁碼存在元件裡，不放進 URL 或 localStorage（不做）。
 - 「回到頂端」按鈕（需求 42～45）：
@@ -308,13 +310,14 @@ UCard 要在卡片裡捲動時，用 `:ui` 讓 root 變成 flex 欄、body `flex
 | AC29 | vitest：`TaskForm.test.ts`，給 29 筆一般任務 + 第 30 筆是有 3 個階段的主任務 + 第 31 筆一般任務，展開第 30 筆 | 1. 第 1 頁共 33 列：30 筆與 3 個階段<br>2. 最後 3 列是「階段 1/3」～「階段 3/3」<br>3. 第 2 頁只有第 31 筆 |
 | AC30 | vitest：`TaskForm.test.ts`，給 31 筆，stub `Element.prototype.scrollIntoView`，切到第 2 頁；另一個測試：給 31 筆、在第 2 頁，把 schedulable tasks 換成前 30 筆 | 1. 切到第 2 頁時，「任務列表」卡片的根元素呼叫了一次 `scrollIntoView`，參數有 `block: 'start'`<br>2. 筆數變少自動回到第 1 頁時，沒有呼叫 `scrollIntoView`<br>手動：一般筆電、31 筆，捲到底按第 2 頁，畫面捲到「任務列表」標題 |
 | AC31 | vitest：`TaskForm.test.ts`，給 31 筆，切到第 2 頁，再把 schedulable tasks 換成前 30 筆 | 1. 顯示第 1 頁的 30 筆<br>2. 沒有分頁元件 |
-| AC32 | vitest：`TaskForm.test.ts`，給 61 筆（第 1 頁），再把 schedulable tasks 換成 62 筆（新任務插在第 31 筆的位置） | 1. 仍顯示原本第 1 頁的 30 筆<br>2. 分頁元件的目前頁是第 1 頁、總共 3 頁 |
+| AC32 | vitest：`TaskForm.test.ts`，給 61 筆，切到第 2 頁，再把 schedulable tasks 換成 62 筆（新任務加在最後，第 62 筆） | 1. 仍顯示原本第 2 頁的第 31～60 筆<br>2. 分頁元件的目前頁是第 2 頁、總共 3 頁 |
 | AC33 | 手動：任務管理頁有 31 筆，一般筆電 | 1. 整頁往下捲到分頁按鈕<br>2. 在卡片上滾動時整頁一起捲 |
 | AC34 | vitest：`tests/pages/tasks.test.ts`，已登入，`window.scrollY` 為 0 | 沒有 `aria-label="回到頂端"` 的按鈕 |
 | AC35 | vitest：`tests/pages/tasks.test.ts`，已登入，`window.innerHeight` 設 800，`window.scrollY` 設 801 後觸發 `scroll` 事件；再設成 799 觸發一次<br>手動：一般筆電、31 筆，往下捲 | 1. scrollY 801 時出現「回到頂端」按鈕<br>2. scrollY 799 時按鈕消失<br>手動：按鈕在螢幕右下角，繼續捲動時位置不變 |
 | AC36 | vitest：`tests/pages/tasks.test.ts`，承 AC35 出現按鈕後，stub `window.scrollTo`，按下按鈕<br>手動：一般筆電，按「回到頂端」 | 1. `window.scrollTo` 被呼叫一次，參數是 `{ top: 0, behavior: 'smooth' }`<br>手動：頁面平滑捲回最上面，按鈕消失 |
 | AC37 | vitest：`tests/pages/tasks.test.ts`，承 AC35 出現按鈕後，把 `showEditModal` 設成 true，再設回 false | 1. true 時沒有「回到頂端」按鈕<br>2. 設回 false 後按鈕再出現 |
 | AC38 | 手動：一般筆電改成手機，任務管理頁 31 筆，往下捲到按鈕出現，按某一列的「編輯」 | 1. 右下角沒有「回到頂端」按鈕<br>2. 「取消」「儲存變更」完整看得到，按「取消」可以關閉視窗 |
+| AC39 | vitest：`TaskForm.test.ts`，給 31 筆，把 `loading` 設成 true，再設回 false | 1. true 時有骨架畫面、沒有分頁元件<br>2. 設回 false 後分頁元件再出現 |
 
 既有測試要全部照常通過：
 - 元件測試：`TaskForm.test.ts`、`TaskForm.actions.test.ts`、`TaskForm.sync.test.ts`、`TaskEditModal.test.ts`、`TaskEditModal.actions.test.ts`、`ScheduleSuggestion.test.ts`、`Dashboard.test.ts`、`GoogleCalendarEmbed.test.ts`、`TodayTasks.test.ts`、`News.test.ts`、`WeeklyBarChart.test.ts`。
@@ -327,6 +330,8 @@ UCard 要在卡片裡捲動時，用 `:ui` 讓 root 變成 flex 欄、body `flex
 
 | 日期 | 修改 | 原因 | 確認者 |
 |---|---|---|---|
+| 2026-11-23 | AC32 改成在第 2 頁新增任務，仍停在第 2 頁 | 實作審查第 1 輪 #1：原本在第 1 頁新增，分不出「停在目前這頁」和「列表一變就回第 1 頁」→ AC32 與測試對應；檢查過需求 41、AC31 不用改 | 開發者 |
+| 2026-11-23 | 新增需求 47、AC39：列表讀取中不顯示分頁按鈕 | 實作審查第 1 輪 #2：重新讀取時骨架畫面和分頁按鈕同時出現 → 需求 47、AC39；檢查過需求 38、AC26、實作計畫第 5 節（UPagination 的 `v-if` 加 `!loading`） | 開發者 |
 
 ## 請你決定
 

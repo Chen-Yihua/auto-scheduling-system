@@ -549,15 +549,35 @@ describe('TaskForm.vue（任務管理頁的任務列表）', () => {
     expect(pagination(wrapper).exists()).toBe(false)
   })
 
-  it('fit-viewport-layout AC32：在第 1 頁新增一筆（插在第 31 筆的位置），仍停在第 1 頁、顯示原本的 30 筆', async () => {
+  it('fit-viewport-layout AC32：在第 2 頁新增一筆（第 62 筆），仍停在第 2 頁、顯示原本第 31～60 筆', async () => {
     const wrapper = await render(manyTasks(61))
+    await goToPage(wrapper, 2)
     const before = titles(wrapper)
 
-    const grown = manyTasks(61)
-    grown.splice(30, 0, task({ id: 'manual:new', title: '新任務' }))
-    await reload(grown)
+    await reload([...manyTasks(61), task({ id: 'manual:new', title: '新任務' })])
 
     expect(titles(wrapper)).toEqual(before)
-    expect(pagination(wrapper).props()).toMatchObject({ page: 1, total: 62, itemsPerPage: 30 })
+    expect(titles(wrapper)).toHaveLength(30)
+    expect(pagination(wrapper).props()).toMatchObject({ page: 2, total: 62, itemsPerPage: 30 })
+  })
+
+  it('fit-viewport-layout AC39：重新讀取中顯示骨架畫面、沒有分頁元件；讀取完成後分頁元件再出現', async () => {
+    const wrapper = await render(manyTasks(31))
+    expect(pagination(wrapper).exists()).toBe(true)
+
+    let release!: (v: SchedulableTask[]) => void
+    mockFetchByUrl({ '/schedule/tasks': new Promise<SchedulableTask[]>((r) => { release = r }) as never })
+    const pending = useSchedulableTasks().fetchSchedulableTasks()
+    await flushPromises()
+
+    expect(wrapper.findAll('u-skeleton-stub').length).toBeGreaterThan(0)
+    expect(pagination(wrapper).exists()).toBe(false)
+
+    release(manyTasks(31))
+    await pending
+    await flushPromises()
+
+    expect(wrapper.findAll('u-skeleton-stub').length).toBe(0)
+    expect(pagination(wrapper).exists()).toBe(true)
   })
 })

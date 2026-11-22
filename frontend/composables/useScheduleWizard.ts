@@ -2,7 +2,7 @@ import { ref, reactive, computed } from 'vue';
 import { useAuth } from '@clerk/vue';
 import { createSharedComposable } from '@vueuse/core';
 import type { SchedulableTask } from '@/types/schedulableTask';
-import type { SchedulePreferences } from '@/types/schedule';
+import type { SchedulePreferences, SavedSchedulePreferences, BlockedRecurringRule } from '@/types/schedule';
 import { defaultSchedulePreferences } from '@/types/schedule';
 import { getErrorDetail, getFriendlyErrorTitle } from '@/utils/errorMessages';
 
@@ -34,7 +34,7 @@ function useScheduleWizardImpl() {
   // 依 priority 分三欄，拖到別欄即改變 priority
   const columns = reactive<Record<PriorityKey, SchedulableTask[]>>({ Low: [], Medium: [], High: [] })
 
-  // 每次執行精靈都重新填，不存進資料庫
+  // 打開排程頁時由 loadSavedPreferences 帶入上次存的；initWizard 不重設，精靈回到第 1 步時保留畫面上填的內容
   const preferences = ref<SchedulePreferences>(defaultSchedulePreferences())
 
   function addBlockedRecurringRule() {
@@ -53,11 +53,19 @@ function useScheduleWizardImpl() {
     preferences.value.blocked_exceptions.splice(index, 1)
   }
 
-  // 濾掉還沒填完的時段，否則後端驗證會讓整個請求失敗
+  function toggleAllDay(rule: BlockedRecurringRule, checked: boolean) {
+    rule.all_day = checked
+    rule.start_time = checked ? '00:00' : null
+    rule.end_time = checked ? '23:59' : null
+  }
+
+  // 濾掉還沒填完的時段，否則後端驗證會讓整個請求失敗；
+  // 整天的規律一律送 00:00、23:59，儲存偏好的 endpoint 不收空字串（舊資料可能不是這個值）
   const sanitizedPreferences = computed<SchedulePreferences>(() => ({
     ...preferences.value,
-    blocked_recurring: preferences.value.blocked_recurring.filter((rule) =>
-      rule.days_of_week.length > 0 && (rule.all_day || (!!rule.start_time && !!rule.end_time))),
+    blocked_recurring: preferences.value.blocked_recurring
+      .filter((rule) => rule.days_of_week.length > 0 && (rule.all_day || (!!rule.start_time && !!rule.end_time)))
+      .map((rule) => (rule.all_day ? { ...rule, start_time: '00:00', end_time: '23:59' } : rule)),
     blocked_exceptions: preferences.value.blocked_exceptions.filter((e) => !!e.start && !!e.end),
   }))
 
@@ -78,7 +86,49 @@ function useScheduleWizardImpl() {
         .sort(defaultOrderWithinColumn)
     }
     step.value = 1
-    preferences.value = defaultSchedulePreferences()
+  }
+
+  async function loadSavedPreferences() {
+    try {
+      const token = await getToken.value()
+      if (!token) throw new Error('找不到 JWT')
+      const saved = await $fetch<SavedSchedulePreferences>(`${BASE_URL}/users/me/schedule-preferences`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const now = Date.now()
+      preferences.value = {
+        ...defaultSchedulePreferences(),
+        ...saved,
+        blocked_exceptions: saved.blocked_exceptions.filter((e) => new Date(e.end).getTime() > now),
+      }
+    } catch {
+      preferences.value = defaultSchedulePreferences()
+      toast.add({
+        title: '讀不到上次的排程偏好，請重新填寫',
+        color: 'warning',
+        icon: 'i-lucide-alert-triangle',
+      })
+    }
+  }
+
+  // 存失敗不擋住排程建議，只提醒使用者下次要重新填
+  async function savePreferences() {
+    try {
+      const token = await getToken.value()
+      if (!token) throw new Error('找不到 JWT')
+      const { timezone: _timezone, ...body } = sanitizedPreferences.value
+      await $fetch(`${BASE_URL}/users/me/schedule-preferences`, {
+        method: 'PUT',
+        body,
+        headers: { Authorization: `Bearer ${token}` },
+      })
+    } catch {
+      toast.add({
+        title: '排程偏好沒有存成功，下次要重新填',
+        color: 'warning',
+        icon: 'i-lucide-alert-triangle',
+      })
+    }
   }
 
   function moveTask(fromColumn: PriorityKey, fromIndex: number, toColumn: PriorityKey, toIndex: number) {
@@ -172,6 +222,9 @@ function useScheduleWizardImpl() {
     preferences,
     sanitizedPreferences,
     initWizard,
+    loadSavedPreferences,
+    savePreferences,
+    toggleAllDay,
     moveTask,
     confirmOrder,
     backToStep1,

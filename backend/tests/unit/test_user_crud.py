@@ -157,3 +157,59 @@ async def test_delete_user_by_clerk_id_removes_all_data_of_that_user_only():
     for name, owner_field in collections.items():
         assert await getattr(db, name).count_documents({owner_field: "del_alice"}) == 0
         assert await getattr(db, name).count_documents({owner_field: "del_bob"}) == 1
+
+
+# ---------- 排程偏好（issue-182） ----------
+
+@pytest.mark.asyncio
+async def test_issue182_ac3_get_schedule_preferences_defaults_when_field_missing():
+    """AC3：users 文件沒有 schedule_preferences 欄位（舊文件）→ 回傳預設值。"""
+    await user_crud.db.users.delete_many({})
+    await user_crud.db.users.insert_one({"_id": "uid_prefs", "name": "A", "email": "a@example.com"})
+
+    result = await user_crud.get_schedule_preferences("uid_prefs")
+
+    assert result.model_dump() == {
+        "blocked_recurring": [], "blocked_exceptions": [], "buffer_minutes": 0, "daily_max_minutes": None,
+    }
+
+
+@pytest.mark.asyncio
+async def test_issue182_get_schedule_preferences_raises_404_when_user_missing():
+    """使用者不存在 → 404。"""
+    await user_crud.db.users.delete_many({})
+
+    with pytest.raises(NotFoundError):
+        await user_crud.get_schedule_preferences("nobody")
+
+
+@pytest.mark.asyncio
+async def test_issue182_save_schedule_preferences_replaces_whole_value_and_raises_404_when_missing():
+    """儲存是整份換掉（只留最近一次）；使用者不存在 → 404。"""
+    from schemas.schedule import SavedSchedulePreferences
+
+    await user_crud.db.users.delete_many({})
+    await user_crud.db.users.insert_one({"_id": "uid_prefs", "name": "A", "email": "a@example.com"})
+
+    await user_crud.save_schedule_preferences("uid_prefs", SavedSchedulePreferences(buffer_minutes=30, daily_max_minutes=60))
+    await user_crud.save_schedule_preferences("uid_prefs", SavedSchedulePreferences(buffer_minutes=5))
+
+    result = await user_crud.get_schedule_preferences("uid_prefs")
+    assert result.buffer_minutes == 5
+    assert result.daily_max_minutes is None
+    with pytest.raises(NotFoundError):
+        await user_crud.save_schedule_preferences("nobody", SavedSchedulePreferences())
+
+
+@pytest.mark.asyncio
+async def test_issue182_ac26_deleting_user_removes_saved_preferences():
+    """AC26：刪除帳號後，users 文件（含偏好）整份不見。"""
+    from schemas.schedule import SavedSchedulePreferences
+
+    await user_crud.db.users.delete_many({})
+    await user_crud.db.users.insert_one({"_id": "uid_prefs", "name": "A", "email": "a@example.com"})
+    await user_crud.save_schedule_preferences("uid_prefs", SavedSchedulePreferences(buffer_minutes=30))
+
+    await user_crud.delete_user_by_clerk_id("uid_prefs")
+
+    assert await user_crud.db.users.find_one({"_id": "uid_prefs"}) is None

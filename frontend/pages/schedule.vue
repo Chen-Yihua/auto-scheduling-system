@@ -22,7 +22,7 @@ const { tasks: schedulableTasks, loadFailed, fetchSchedulableTasks } = useSchedu
 const { fetchScheduleSuggestion } = useSchedule()
 const {
   step, columns, saving, hasTasks, preferences, sanitizedPreferences,
-  initWizard, moveTask, confirmOrder, backToStep1, updateDueDate, updateDuration, finish,
+  initWizard, loadSavedPreferences, savePreferences, toggleAllDay, moveTask, confirmOrder, backToStep1, updateDueDate, updateDuration, finish,
   addBlockedRecurringRule, removeBlockedRecurringRule, addBlockedException, removeBlockedException,
 } = useScheduleWizard()
 
@@ -48,7 +48,7 @@ async function initPage() {
     pageState.value = 'missing'
     return
   }
-  const [, query] = await Promise.all([fetchSchedulableTasks(), fetchRemovedEvents()])
+  const [, query] = await Promise.all([fetchSchedulableTasks(), fetchRemovedEvents(), loadSavedPreferences()])
   initWizard(schedulableTasks.value)
   if (query !== 'ok') {
     removedQueryNotice.value = query
@@ -213,7 +213,8 @@ async function handleConfirmOrder() {
 
 async function handleFinish() {
   await finish(async () => {
-    await fetchScheduleSuggestion(sanitizedPreferences.value)
+    const ok = await fetchScheduleSuggestion(sanitizedPreferences.value)
+    if (ok) await savePreferences()
     step.value = 3
   })
 }
@@ -494,25 +495,23 @@ function onExceptionEndInput(exception: BlockedException, event: Event) {
                   </button>
                 </div>
                 <label class="text-xs text-gray-500 flex items-center gap-1">
-                  <input v-model="rule.all_day" type="checkbox">
+                  <input type="checkbox" :checked="rule.all_day" @change="toggleAllDay(rule, ($event.target as HTMLInputElement).checked)">
                   整天
                 </label>
-                <template v-if="!rule.all_day">
-                  <input v-model="rule.start_time" type="time" class="border border-default rounded-md px-1 py-0.5 text-xs bg-transparent">
-                  <span class="text-xs text-gray-400">～</span>
-                  <input v-model="rule.end_time" type="time" class="border border-default rounded-md px-1 py-0.5 text-xs bg-transparent">
-                </template>
+                <input v-model="rule.start_time" type="time" :disabled="rule.all_day" class="border border-default rounded-md px-1 py-0.5 text-xs bg-transparent disabled:opacity-50">
+                <span class="text-xs text-gray-400">～</span>
+                <input v-model="rule.end_time" type="time" :disabled="rule.all_day" class="border border-default rounded-md px-1 py-0.5 text-xs bg-transparent disabled:opacity-50">
                 <UButton size="xs" variant="ghost" color="error" @click="removeBlockedRecurringRule(index)">移除</UButton>
               </div>
             </div>
 
             <div>
               <div class="flex items-center justify-between mb-2">
-                <span class="text-xs font-semibold text-gray-600 dark:text-gray-400">這次額外不排的時段</span>
+                <span class="text-xs font-semibold text-gray-600 dark:text-gray-400">額外不排的時段（過了就自動移除）</span>
                 <UButton size="xs" variant="soft" @click="addBlockedException">新增例外時段</UButton>
               </div>
               <p v-if="preferences.blocked_exceptions.length === 0" class="text-xs text-gray-400">
-                沒有這次額外的例外時段
+                沒有額外的例外時段
               </p>
               <div
                 v-for="(exception, index) in preferences.blocked_exceptions"

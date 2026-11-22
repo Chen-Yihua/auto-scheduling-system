@@ -7,6 +7,7 @@ from svix.webhooks import Webhook, WebhookVerificationError
 
 from core.errors import AppError, ConflictError, InvalidRequestError, NotFoundError
 from crud import user as user_crud
+from schemas.schedule import SavedSchedulePreferences
 from schemas.user import UserCreate, UserOut, UserUpdate
 from typing import Optional
 from core.security import get_current_clerk_user
@@ -75,6 +76,19 @@ async def register_user(
 @router.put("/me")
 async def update_user(data: UserUpdate, clerk_user: dict = Depends(get_current_clerk_user)):
     await user_crud.update_user_by_clerk_id(clerk_user['sub'], data)
+    return {"success": True}
+
+# 只用 JWT 的 sub：使用者只讀得到、改得到自己的偏好
+@router.get("/me/schedule-preferences", response_model=SavedSchedulePreferences)
+async def get_schedule_preferences(clerk_user: dict = Depends(get_current_clerk_user)):
+    return await user_crud.get_schedule_preferences(clerk_user["sub"])
+
+@router.put("/me/schedule-preferences")
+async def save_schedule_preferences(
+    data: SavedSchedulePreferences,
+    clerk_user: dict = Depends(get_current_clerk_user),
+):
+    await user_crud.save_schedule_preferences(clerk_user["sub"], data)
     return {"success": True}
 
 @router.delete("/me")

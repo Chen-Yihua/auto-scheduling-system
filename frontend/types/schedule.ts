@@ -77,13 +77,17 @@ export interface BlockedException {
   end: string;
 }
 
-// 不存資料庫，每次請求都要帶
-export interface SchedulePreferences {
+// 對應後端 SavedSchedulePreferences：存在使用者帳號上、下次打開排程頁帶入的部分
+export interface SavedSchedulePreferences {
   blocked_recurring: BlockedRecurringRule[];
   blocked_exceptions: BlockedException[];
   buffer_minutes: number;
   daily_max_minutes: number | null;
-  // IANA 時區，後端用來把當地時間換算成 UTC
+}
+
+// 每次產生排程建議都要帶
+export interface SchedulePreferences extends SavedSchedulePreferences {
+  // IANA 時區，後端用來把當地時間換算成 UTC；不存，每次用瀏覽器當時的
   timezone: string;
 }
 

@@ -102,12 +102,14 @@ onMounted(async () => {
           <UForm 
               :validate="validate"
               :state="state" 
-              class="space-y-6 shadow-xl rounded-2xl p-8 w-full max-w-xl bg-gray-100" 
+              class="flex flex-col min-h-0 gap-6 shadow-xl rounded-2xl p-8 w-full max-w-xl bg-gray-100" 
               @submit="handleSubmit"
           >
-            <h2 class="text-2xl font-bold text-gray-800">
+            <h2 class="shrink-0 text-2xl font-bold text-gray-800">
               {{ isEditMode ? '編輯任務' : '新增任務' }}
             </h2>
+
+            <div class="flex-1 min-h-0 overflow-y-auto space-y-6">
 
             <div v-if="willReschedule" data-testid="reschedule-note" class="flex items-start gap-2 rounded-lg bg-amber-50 text-amber-800 text-sm px-4 py-3">
               <UIcon name="i-lucide-calendar-x" class="w-4 h-4 flex-shrink-0 mt-0.5" />
@@ -324,8 +326,9 @@ onMounted(async () => {
                 </UButton>
               </div>
             </div>
+            </div>
 
-            <div class="flex items-end space-x-3 mt-2">
+            <div class="flex items-end space-x-3 shrink-0">
               <UButton 
                 v-if="isEditMode" 
                 type="button" 

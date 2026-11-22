@@ -116,7 +116,7 @@ async function batchReschedule() {
 </script>
 
 <template>
-  <div>
+  <div class="lg:min-h-0 lg:flex lg:flex-col">
     <UModal v-if="externalTask" :open="true" :dismissible="false" :close-on-esc="false">
       <!-- Nuxt UI 3.1.0 的 slot 型別和新版 Vue 不相容（誤報）；升級後不再報錯時 vue-tsc 會提示移除 -->
       <!-- @vue-expect-error -->
@@ -152,7 +152,7 @@ async function batchReschedule() {
       </template>
     </UModal>
 
-    <UCard>
+    <UCard :ui="{ root: 'lg:min-h-0 lg:flex lg:flex-col', body: 'lg:flex-1 lg:min-h-0 lg:overflow-y-auto' }">
       <template #header>
         <div class="flex items-center justify-between gap-2">
           <div class="flex items-center gap-2">

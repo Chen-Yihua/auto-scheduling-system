@@ -20,7 +20,7 @@ const calendarUrl = computed(() => {
 </script>
 
 <template>
-  <UCard>
+  <UCard :ui="{ root: 'lg:flex-1 lg:flex lg:flex-col', body: 'lg:flex-1 lg:min-h-0 lg:flex lg:flex-col' }">
     <template #header>
       <div class="flex items-center gap-2">
         <UIcon name="i-lucide-calendar" class="w-5 h-5" />
@@ -33,8 +33,8 @@ const calendarUrl = computed(() => {
       <span class="ml-2 text-primary">正在連接 Google Calendar，請稍候…</span>
     </div>
 
-    <div v-else-if="loading">
-      <USkeleton class="h-[600px] w-full" />
+    <div v-else-if="loading" class="lg:flex-1 lg:flex lg:flex-col">
+      <USkeleton class="h-[600px] w-full lg:h-auto lg:flex-1 lg:min-h-[400px]" />
     </div>
 
     <div
@@ -44,11 +44,11 @@ const calendarUrl = computed(() => {
       Google 行事曆暫時無法載入，請稍後再試
     </div>
 
-    <div v-else-if="connect" class="rounded-lg overflow-hidden">
+    <div v-else-if="connect" class="rounded-lg overflow-hidden lg:flex-1 lg:flex lg:flex-col">
       <iframe
         :key="reloadToken"
         :src="calendarUrl"
-        class="w-full h-[600px] border-0"
+        class="w-full h-[600px] border-0 lg:h-auto lg:flex-1 lg:min-h-[400px]"
         frameborder="0"
         scrolling="no"
       />

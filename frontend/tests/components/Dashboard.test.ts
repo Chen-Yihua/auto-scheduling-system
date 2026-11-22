@@ -126,7 +126,7 @@ describe('dashboard/Dashboard.vue', () => {
 
     expect(wrapper.text()).not.toContain('登入後即可')
     const columns = wrapper.findAll('.grid > div')
-    expect(columns.map((col) => Array.from(col.element.children).map((el) => el.tagName.toLowerCase()))).toEqual([
+    expect(columns.map((col) => Array.from(col.element.querySelectorAll('*')).map((el) => el.tagName.toLowerCase()).filter((tag) => tag.endsWith('-stub')))).toEqual([
       ['today-tasks-stub'],
       ['google-calendar-embed-stub'],
       ['news-stub', 'leetcode-stub'],

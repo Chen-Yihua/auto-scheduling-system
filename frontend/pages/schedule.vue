@@ -266,14 +266,14 @@ function onExceptionEndInput(exception: BlockedException, event: Event) {
 </script>
 
 <template>
-  <div>
-    <AppHeader />
+  <div class="lg:h-dvh lg:flex lg:flex-col">
+    <AppHeader class="shrink-0" />
 
     <div v-if="isSignedIn === false" class="p-4 max-w-2xl mx-auto mt-4">
       <LoginRequiredCard title="排程精靈" icon="i-lucide-calendar-clock" message="登入後即可使用排程精靈" />
     </div>
 
-    <div v-else-if="isSignedIn" class="p-4 max-w-3xl mx-auto mt-4">
+    <div v-else-if="isSignedIn" class="p-4 max-w-3xl w-full mx-auto mt-4 lg:flex-1 lg:min-h-0 lg:flex lg:flex-col">
       <div
         v-if="pageState === 'missing'"
         class="rounded-xl border border-default text-center text-sm text-gray-500 dark:text-gray-400 py-10"
@@ -286,7 +286,7 @@ function onExceptionEndInput(exception: BlockedException, event: Event) {
       </div>
 
       <template v-else>
-        <div class="flex flex-wrap items-center justify-center gap-2 mb-6">
+        <div class="shrink-0 flex flex-wrap items-center justify-center gap-2 mb-6">
           <template v-for="(s, i) in steps" :key="s.key">
             <div class="flex items-center gap-2">
               <div
@@ -312,20 +312,21 @@ function onExceptionEndInput(exception: BlockedException, event: Event) {
 
         <div
           v-if="removedQueryNotice === 'reauth'"
-          class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-error/40 bg-error/10 px-3 py-2 mb-4 text-sm"
+          class="shrink-0 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-error/40 bg-error/10 px-3 py-2 mb-4 text-sm"
         >
           <span>Google Calendar 授權已失效，無法確認 Google 日曆上的事件</span>
           <UButton size="xs" color="error" variant="soft" @click="goToGoogleAuth">重新連接 Google Calendar</UButton>
         </div>
         <div
           v-else-if="removedQueryNotice === 'error'"
-          class="rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 mb-4 text-sm"
+          class="shrink-0 rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 mb-4 text-sm"
         >
           暫時無法確認 Google 日曆上的事件，排程未更新
         </div>
 
         <!-- 處理已刪除的事件：勾選的重新排程，沒勾的手動任務從系統刪除 -->
-        <div v-if="inRemovedStep" class="space-y-3">
+        <div v-if="inRemovedStep" class="space-y-3 lg:flex-1 lg:min-h-0 lg:flex lg:flex-col">
+          <div class="space-y-3 lg:flex-1 lg:min-h-0 lg:overflow-y-auto">
           <div v-if="resolveFailed" class="rounded-lg border border-error/40 bg-error/10 px-3 py-2 text-sm">
             處理失敗，請重試
           </div>
@@ -356,8 +357,9 @@ function onExceptionEndInput(exception: BlockedException, event: Event) {
               <p v-if="laterStagesNote(item)" class="text-xs text-warning">{{ laterStagesNote(item) }}</p>
             </div>
           </label>
+          </div>
 
-          <div class="flex justify-end gap-3 mt-6">
+          <div class="shrink-0 flex justify-end gap-3 mt-6">
             <UButton type="button" variant="link" class="bg-gray-200 text-black hover:bg-gray-300" @click="enterWizardAfterRemovedStep">
               取消
             </UButton>
@@ -386,16 +388,17 @@ function onExceptionEndInput(exception: BlockedException, event: Event) {
         </div>
 
         <!-- Step 1：三欄拖拉排序 -->
-        <div v-else-if="step === 1">
-          <p class="text-sm text-gray-500 dark:text-gray-400 mb-4 text-center">
+        <div v-else-if="step === 1" class="lg:flex-1 lg:min-h-0 lg:flex lg:flex-col">
+          <div class="lg:flex-1 lg:min-h-0 lg:flex lg:flex-col">
+          <p class="shrink-0 text-sm text-gray-500 dark:text-gray-400 mb-4 text-center">
             把任務拖到對應的優先權欄位；同一欄內的上下順序也會影響排程的先後。
           </p>
 
-          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 lg:flex-1 lg:min-h-0 lg:grid-rows-[minmax(0,1fr)]">
             <div
               v-for="p in PRIORITIES"
               :key="p"
-              class="rounded-xl border border-default bg-gray-50 dark:bg-gray-900 p-3 min-h-[200px]"
+              class="rounded-xl border border-default bg-gray-50 dark:bg-gray-900 p-3 min-h-[200px] lg:overflow-y-auto"
               @dragover.prevent
               @drop.prevent="onDropOnColumnEnd(p)"
             >
@@ -428,8 +431,9 @@ function onExceptionEndInput(exception: BlockedException, event: Event) {
               </div>
             </div>
           </div>
+          </div>
 
-          <div class="flex justify-end gap-3 mt-6">
+          <div class="shrink-0 flex justify-end gap-3 mt-6">
             <UButton :disabled="!hasTasks" loading-auto :loading="saving" @click="handleConfirmOrder">
               下一步
             </UButton>
@@ -437,7 +441,8 @@ function onExceptionEndInput(exception: BlockedException, event: Event) {
         </div>
 
         <!-- Step 2：確認截止日期與所需時長、排程偏好設定 -->
-        <div v-else-if="step === 2" class="space-y-3">
+        <div v-else-if="step === 2" class="space-y-3 lg:flex-1 lg:min-h-0 lg:flex lg:flex-col">
+          <div class="space-y-3 lg:flex-1 lg:min-h-0 lg:overflow-y-auto">
           <p class="text-sm text-gray-500 dark:text-gray-400 mb-2 text-center">
             這裡可以調整截止日期與所需時長；優先權跟順序已經鎖定，回上一步才能改。
           </p>
@@ -571,8 +576,9 @@ function onExceptionEndInput(exception: BlockedException, event: Event) {
               </label>
             </div>
           </div>
+          </div>
 
-          <div class="flex justify-end gap-3 mt-4">
+          <div class="shrink-0 flex justify-end gap-3 mt-4">
             <UButton type="button" variant="link" class="bg-gray-200 text-black hover:bg-gray-300" @click="backToStep1">
               上一步
             </UButton>
@@ -583,7 +589,7 @@ function onExceptionEndInput(exception: BlockedException, event: Event) {
         </div>
 
         <!-- Step 3：排程建議 -->
-        <ScheduleSuggestion v-else @regenerate="regenerate" />
+        <ScheduleSuggestion v-else class="lg:min-h-0" @regenerate="regenerate" />
       </template>
     </div>
   </div>

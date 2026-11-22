@@ -2,7 +2,7 @@
 import { useTaskForm } from '~/composables/useTaskForm';
 import { useSchedulableTasks } from '~/composables/useSchedulableTasks';
 import { usePlatformItems } from '~/composables/usePlatformItems';
-import { onMounted, computed, ref } from 'vue';
+import { onMounted, computed, nextTick, ref, watch } from 'vue';
 import type { SchedulableTask } from '~/types/schedulableTask';
 import { priorityLabel, scheduleStatusLabel, sourceLabel, taskStatusLabel } from '~/utils/labels';
 import { isOverdue } from '~/utils/todayTasks';
@@ -32,9 +32,25 @@ function toggleExpanded(parentId: string) {
   expandedParents.value = next
 }
 
-// 展開的主任務後面接著它的階段，整份列表用同一種列
+const PAGE_SIZE = 30
+const page = ref(1)
+const pageCount = computed(() => Math.max(1, Math.ceil(topLevelTasks.value.length / PAGE_SIZE)))
+// 筆數變少、目前這頁不存在時改到最後一頁；寫回 page，之後筆數變多才不會跳回舊頁碼
+watch(pageCount, (count) => {
+  if (page.value > count) page.value = count
+})
+
+const cardRef = ref<{ $el: HTMLElement } | null>(null)
+// 只有使用者按分頁按鈕才捲動，上面自動修正頁碼時不捲，避免刪除任務後畫面跳動
+async function onPageChange(next: number) {
+  page.value = next
+  await nextTick()
+  cardRef.value?.$el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
+// 展開的主任務後面接著它的階段，整份列表用同一種列；階段不算進每頁的筆數
 const visibleRows = computed(() =>
-  topLevelTasks.value.flatMap((task) => [
+  topLevelTasks.value.slice((page.value - 1) * PAGE_SIZE, page.value * PAGE_SIZE).flatMap((task) => [
     { task, isStage: false },
     ...(task.is_parent && expandedParents.value.has(task.id)
       ? (subtasksByParent.value[task.id] ?? []).map((stage) => ({ task: stage, isStage: true }))
@@ -146,7 +162,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <UCard>
+  <UCard ref="cardRef">
     <template #header>
       <div class="flex items-center justify-between gap-2">
         <div class="flex items-center gap-2">
@@ -281,6 +297,14 @@ onMounted(async () => {
         </div>
       </div>
     </div>
+    <UPagination
+      v-if="topLevelTasks.length > PAGE_SIZE"
+      class="mt-4 flex justify-center"
+      :page="page"
+      :total="topLevelTasks.length"
+      :items-per-page="PAGE_SIZE"
+      @update:page="onPageChange"
+    />
   </UCard>
 </template>
 

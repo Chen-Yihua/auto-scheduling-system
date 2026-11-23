@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CardTitle from '~/components/CardTitle.vue';
 import { ref, computed, onMounted } from 'vue'
 import { useSchedulableTasks } from '~/composables/useSchedulableTasks'
 import { useTaskForm } from '~/composables/useTaskForm'
@@ -26,7 +27,8 @@ const pad = (n: number) => String(n).padStart(2, '0')
 const clock = (d: Date) => `${pad(d.getHours())}:${pad(d.getMinutes())}`
 const monthDay = (d: Date) => `${d.getMonth() + 1}/${d.getDate()}`
 
-function dateText(task: SchedulableTask): string {
+// 時段和截止日各一行，卡片窄時才不會從日期中間斷行
+function dateLines(task: SchedulableTask): string[] {
   const parts: string[] = []
   if (task.scheduled_start && task.scheduled_end) {
     const start = new Date(task.scheduled_start)
@@ -36,7 +38,7 @@ function dateText(task: SchedulableTask): string {
     const due = new Date(task.due_date)
     parts.push(`截止 ${monthDay(due)} ${clock(due)}`)
   }
-  return parts.join('・') || '無期限'
+  return parts.length ? parts : ['無期限']
 }
 
 const stageText = (task: SchedulableTask) => task.parent_id ? `${task.parent_title ?? ''} · 階段 ${task.stage}/${task.stage_count}` : ''
@@ -121,27 +123,27 @@ async function batchReschedule() {
       <!-- Nuxt UI 3.1.0 的 slot 型別和新版 Vue 不相容（誤報）；升級後不再報錯時 vue-tsc 會提示移除 -->
       <!-- @vue-expect-error -->
       <template #content>
-        <div class="space-y-4 shadow-xl rounded-2xl p-8 w-full max-w-xl bg-gray-100" data-testid="external-form">
-          <h2 class="text-2xl font-bold text-gray-800">修改任務</h2>
-          <p class="text-sm text-gray-700">{{ externalTask.title }}</p>
+        <div class="space-y-4 rounded-2xl p-8 w-full max-w-xl bg-default" data-testid="external-form">
+          <h2 class="text-xl font-semibold text-highlighted">修改任務</h2>
+          <p class="text-sm text-toned">{{ externalTask.title }}</p>
           <div
             v-if="externalTask.calendar_event_id"
             data-testid="reschedule-note"
-            class="flex items-start gap-2 rounded-lg bg-amber-50 text-amber-800 text-sm px-4 py-3"
+            class="flex items-start gap-2 rounded-lg bg-warning/10 text-warning text-sm px-4 py-3"
           >
             <UIcon name="i-lucide-calendar-x" class="w-4 h-4 flex-shrink-0 mt-0.5" />
             <p>儲存後會從 Google 日曆移除這個任務的時段（後面已排程的階段也會一起移除），任務回到排程清單。</p>
           </div>
-          <label class="text-sm text-gray-700 flex flex-col gap-1">
+          <label class="text-sm text-toned flex flex-col gap-1">
             截止日期
             <input v-model="externalDue" type="datetime-local" data-testid="external-due" class="border border-default rounded-md px-2 py-1 bg-white">
           </label>
-          <label class="text-sm text-gray-700 flex flex-col gap-1">
+          <label class="text-sm text-toned flex flex-col gap-1">
             所需時長（分鐘）
             <input v-model="externalDuration" type="number" min="1" data-testid="external-duration" class="border border-default rounded-md px-2 py-1 bg-white">
           </label>
           <div class="flex justify-end gap-3">
-            <UButton type="button" variant="link" class="bg-gray-200 text-black hover:bg-gray-300" @click="closeExternal">
+            <UButton type="button" color="neutral" variant="soft" @click="closeExternal">
               取消
             </UButton>
             <UButton data-testid="external-save" :loading="externalSaving" :disabled="externalSaving" @click="saveExternal">
@@ -152,13 +154,15 @@ async function batchReschedule() {
       </template>
     </UModal>
 
-    <UCard :ui="{ root: 'lg:min-h-0 lg:flex lg:flex-col', body: 'lg:flex-1 lg:min-h-0 lg:overflow-y-auto' }">
+    <UCard
+      :ui="{
+        root: 'lg:min-h-0 lg:flex lg:flex-col',
+        body: 'lg:flex-1 lg:min-h-0 lg:overflow-y-auto',
+      }"
+    >
       <template #header>
         <div class="flex items-center justify-between gap-2">
-          <div class="flex items-center gap-2">
-            <UIcon name="i-lucide-calendar-check" class="w-5 h-5" />
-            <span class="text-lg font-semibold text-gray-900 dark:text-white">今日</span>
-          </div>
+          <CardTitle icon="i-lucide-calendar-check" title="今日" />
           <UButton
             v-if="view.batchIds.length > 0"
             data-testid="today-batch-reschedule"
@@ -177,33 +181,33 @@ async function batchReschedule() {
       <div v-if="loading" data-testid="today-loading">
         <USkeleton v-for="i in 2" :key="i" class="h-16 mb-3" />
       </div>
-      <div v-else-if="loadFailed" data-testid="today-error" class="text-center text-sm text-gray-500 dark:text-gray-400 py-6">
+      <div v-else-if="loadFailed" data-testid="today-error" class="text-center text-sm text-muted py-6">
         暫時無法載入任務
       </div>
-      <div v-else-if="!hasRows" data-testid="today-empty" class="text-center text-sm text-gray-500 dark:text-gray-400 py-6">
+      <div v-else-if="!hasRows" data-testid="today-empty" class="text-center text-sm text-muted py-6">
         今天沒有排程的任務，也沒有已逾期的任務
       </div>
-      <div v-else class="space-y-2">
+      <div v-else class="space-y-2.5">
         <div
           v-for="row in ([...view.overdue, ...view.today] as TodayRow[])"
           :key="row.task.id"
           data-testid="today-row"
-          class="rounded-lg border border-default px-3 py-2"
+          class="rounded-xl border border-default border-l-4 px-3.5 py-2.5"
+          :class="row.overdue ? 'border-l-error' : row.task.status === 'Done' ? 'border-l-fern-400' : 'border-l-palette-1'"
         >
-          <div class="flex items-center gap-1.5 min-w-0">
-            <span class="text-sm font-semibold truncate flex-1">{{ row.task.title }}</span>
-            <UBadge data-testid="today-label" :color="labelColor[row.label]" variant="soft" size="sm">{{ row.label }}</UBadge>
-          </div>
-          <p v-if="row.task.parent_id" class="text-xs text-gray-400 truncate">{{ stageText(row.task) }}</p>
-          <div class="flex items-center justify-between gap-2 mt-1">
-            <span
-              data-testid="today-date"
-              class="text-xs truncate"
-              :class="row.overdue ? 'text-red-600 dark:text-red-400' : 'text-gray-500'"
-            >
-              {{ dateText(row.task) }}
-            </span>
-            <div v-if="row.task.status !== 'Done'" class="flex items-center gap-1 flex-shrink-0">
+          <!-- 卡片窄：名稱、日期各自一行並靠左對齊；狀態標籤和按鈕放最後一行 -->
+          <p class="text-base font-semibold break-words">{{ row.task.title }}</p>
+          <p v-if="row.task.parent_id" class="text-xs break-words mt-0.5">{{ stageText(row.task) }}</p>
+          <p
+            data-testid="today-date"
+            class="mt-1 text-sm space-y-0.5"
+            :class="row.overdue ? 'text-error font-semibold' : ''"
+          >
+            <span v-for="line in dateLines(row.task)" :key="line" class="block">{{ line }}</span>
+          </p>
+          <div class="flex items-center gap-1 mt-2">
+            <UBadge data-testid="today-label" :color="labelColor[row.label]" variant="soft" size="sm" class="mr-auto">{{ row.label }}</UBadge>
+            <template v-if="row.task.status !== 'Done'">
               <UButton data-testid="today-edit" icon="i-lucide-pencil" size="xs" color="info" variant="ghost" @click="onEdit(row.task)">
                 修改
               </UButton>
@@ -214,11 +218,12 @@ async function batchReschedule() {
                 size="xs"
                 color="error"
                 variant="ghost"
+                class="-mr-1.5"
                 @click="onDelete(row.task)"
               >
                 刪除
               </UButton>
-            </div>
+            </template>
           </div>
         </div>
       </div>

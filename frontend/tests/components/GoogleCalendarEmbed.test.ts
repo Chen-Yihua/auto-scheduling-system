@@ -20,7 +20,7 @@ const USkeletonStub = defineComponent({
 
 const uiStubs = { UIcon: true, UCard: UCardStub, USkeleton: USkeletonStub };
 
-const NEEDS_CONNECT_TEXT = 'Google Calendar 未連接或授權已失效，請前往 帳號設定 連接。';
+const NEEDS_CONNECT_TEXT = 'Google Calendar 未連接或授權已失效。點右上角的頭像，在 金鑰 頁連接。';
 
 describe('GoogleCalendarEmbed.vue', () => {
   it('connect=true 且有 calendarIds 時會嵌入 Google Calendar iframe', () => {
@@ -46,7 +46,7 @@ describe('GoogleCalendarEmbed.vue', () => {
 
     expect(wrapper.find('iframe').exists()).toBe(false)
     expect(wrapper.text()).toContain(NEEDS_CONNECT_TEXT)
-    expect(wrapper.find('strong').text()).toBe('帳號設定')
+    expect(wrapper.find('strong').text()).toBe('金鑰')
     expect(wrapper.text()).not.toContain('尚未連接')
     expect(wrapper.text()).not.toContain('請重新連接。')
   })

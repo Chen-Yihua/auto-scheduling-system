@@ -51,7 +51,7 @@ const copyKey = (platform: string, key: string, isMasked?: boolean) => {
         <div
           v-for="keyItem in keys"
           :key="keyItem.platform"
-          class="mb-6 border border-gray-200 dark:border-gray-700 rounded-lg p-4 bg-white dark:bg-gray-800"
+          class="mb-6 border border-default rounded-lg p-4 bg-white"
         >
           <div class="flex items-center gap-2 mb-3">
             <UIcon :name="keyItem.icon" class="w-5 h-5" />
@@ -59,7 +59,7 @@ const copyKey = (platform: string, key: string, isMasked?: boolean) => {
           </div>
 
           <template v-if="keyItem.needsReauth && !keyItem.editing">
-            <p class="text-sm text-red-600 dark:text-red-400 mb-2">憑證無法讀取，請重新連結</p>
+            <p class="text-sm text-error mb-2">憑證無法讀取，請重新連結</p>
             <div class="flex gap-2 justify-end">
               <UButton
                 size="sm"
@@ -82,13 +82,13 @@ const copyKey = (platform: string, key: string, isMasked?: boolean) => {
           <template v-else-if="keyItem.value && !keyItem.editing">
             <div class="flex items-center gap-2 mb-2">
               <UAvatar v-if="keyItem.avatar" :src="keyItem.avatar" size="sm" />
-              <span v-if="keyItem.username" class="text-sm text-gray-600">{{
+              <span v-if="keyItem.username" class="text-sm text-toned">{{
                 keyItem.username
               }}</span>
             </div>
 
             <div class="grid grid-cols-[1fr_auto_auto] gap-x-2 items-center">
-              <div class="text-sm text-gray-400 truncate">****{{ keyItem.value.slice(-4) ?? '' }}</div>
+              <div class="text-sm text-dimmed truncate">****{{ keyItem.value.slice(-4) ?? '' }}</div>
               <UButton
                 v-if="!keyItem.isMasked"
                 size="sm"
@@ -97,7 +97,7 @@ const copyKey = (platform: string, key: string, isMasked?: boolean) => {
                 title="複製金鑰（僅限剛建立/更新時）"
                 @click="() => copyKey(keyItem.platform, keyItem.value ?? '', keyItem.isMasked)"
               />
-              <span v-else class="text-xs text-gray-400 whitespace-nowrap" title="金鑰已隱藏，如需複製請重新輸入">
+              <span v-else class="text-xs text-dimmed whitespace-nowrap" title="金鑰已隱藏，如需複製請重新輸入">
                 已隱藏
               </span>
               <UButton
@@ -141,7 +141,7 @@ const copyKey = (platform: string, key: string, isMasked?: boolean) => {
               </UInput>
               <p
                 v-if="keyItem.platform === 'jira' && keyItem.value && !keyItem.needsReauth"
-                class="text-xs text-gray-400 -mt-1"
+                class="text-xs text-dimmed -mt-1"
               >
                 基於安全考量無法顯示原 API Key；留空即代表 API Key 維持不變
               </p>
@@ -174,7 +174,7 @@ const copyKey = (platform: string, key: string, isMasked?: boolean) => {
               </UInput>
               <p
                 v-if="keyItem.platform === 'moodle' && keyItem.value && !keyItem.needsReauth"
-                class="text-xs text-gray-400 -mt-1"
+                class="text-xs text-dimmed -mt-1"
               >
                 基於安全考量無法顯示原密碼；留空即代表密碼維持不變
               </p>

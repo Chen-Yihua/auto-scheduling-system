@@ -98,9 +98,9 @@ describe('TodayTasks.vue', () => {
     const rows = byTestId(wrapper, 'today-row')
     expect(rows).toHaveLength(2)
     expect(rows[0]!.find('[data-testid="today-label"]').text()).toBe('已逾期')
-    expect(rows[0]!.find('[data-testid="today-date"]').classes().join(' ')).toContain('text-red')
+    expect(rows[0]!.find('[data-testid="today-date"]').classes().join(' ')).toContain('text-error')
     expect(rows[1]!.find('[data-testid="today-label"]').text()).toBe('未開始')
-    expect(rows[1]!.find('[data-testid="today-date"]').classes().join(' ')).not.toContain('text-red')
+    expect(rows[1]!.find('[data-testid="today-date"]').classes().join(' ')).not.toContain('text-error')
   })
 
   it('掛載時自己抓一次任務清單，不依賴同一頁的其他元件', () => {

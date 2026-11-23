@@ -52,7 +52,6 @@ const stubs = {
   NuxtLink: NuxtLinkStub,
   UIcon: true,
   UButton: UButtonStub,
-  ColorModeButton: true,
   AccountSettings: true,
   SignedIn: {
     setup(_props: unknown, { slots }: SetupContext) {

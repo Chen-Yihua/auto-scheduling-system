@@ -1,10 +1,15 @@
 <script setup lang="ts">
+import NoticeBox from '~/components/NoticeBox.vue';
+import CardTitle from '~/components/CardTitle.vue';
+import PriorityBadge from '~/components/PriorityBadge.vue';
+import SourceBadge from '~/components/SourceBadge.vue';
+import TaskStatus from '~/components/TaskStatus.vue';
 import { useTaskForm } from '~/composables/useTaskForm';
 import { useSchedulableTasks } from '~/composables/useSchedulableTasks';
 import { usePlatformItems } from '~/composables/usePlatformItems';
 import { onMounted, computed, nextTick, ref, watch } from 'vue';
 import type { SchedulableTask } from '~/types/schedulableTask';
-import { priorityLabel, scheduleStatusLabel, sourceLabel, taskStatusLabel } from '~/utils/labels';
+import { scheduleStatusLabel } from '~/utils/labels';
 import { isOverdue } from '~/utils/todayTasks';
 
 // 新增、編輯任務的視窗在同一頁的 TaskEditModal（tasks.vue 掛載）；這裡只負責列表
@@ -48,15 +53,24 @@ async function onPageChange(next: number) {
   cardRef.value?.$el.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
-// 展開的主任務後面接著它的階段，整份列表用同一種列；階段不算進每頁的筆數
-const visibleRows = computed(() =>
-  topLevelTasks.value.slice((page.value - 1) * PAGE_SIZE, page.value * PAGE_SIZE).flatMap((task) => [
-    { task, isStage: false },
-    ...(task.is_parent && expandedParents.value.has(task.id)
-      ? (subtasksByParent.value[task.id] ?? []).map((stage) => ({ task: stage, isStage: true }))
-      : []),
-  ])
+// 展開的主任務和它的階段放在同一組，畫面上框在一起；階段不算進每頁的筆數
+const visibleGroups = computed(() =>
+  topLevelTasks.value.slice((page.value - 1) * PAGE_SIZE, page.value * PAGE_SIZE).map((task) => {
+    const stages = task.is_parent && expandedParents.value.has(task.id) ? (subtasksByParent.value[task.id] ?? []) : []
+    return {
+      task,
+      expanded: stages.length > 0,
+      rows: [{ task, isStage: false }, ...stages.map((stage) => ({ task: stage, isStage: true }))],
+    }
+  })
 )
+
+// 左邊色條：逾期紅、完成綠、其他藍灰；完成的整列淡綠底，和表頭分得開
+function rowTone(task: SchedulableTask): string {
+  if (overdue(task)) return 'border-l-error'
+  if (task.status === 'Done') return 'border-l-fern-400 bg-fern-100/70'
+  return 'border-l-palette-1'
+}
 
 function progressText(parentId: string): string {
   const subtasks = subtasksByParent.value[parentId] ?? []
@@ -74,20 +88,6 @@ function openSchedulableTask(item: SchedulableTask) {
   if (item.url) window.open(item.url, '_blank')
 }
 
-const getPriorityColor = (priority: string | null | undefined) => {
-  switch (priority) {
-    case 'Low':
-      return 'success'
-    case 'Medium':
-      return 'warning'
-    case 'High':
-      return 'error'
-    default:
-      return 'neutral'
-  }
-}
-
-const statusColor = (status: string) => (status === 'Done' ? 'success' : status === 'In Progress' ? 'info' : 'neutral')
 
 const pad = (n: number) => String(n).padStart(2, '0')
 const monthDay = (d: Date) => `${d.getMonth() + 1}/${d.getDate()}`
@@ -165,10 +165,7 @@ onMounted(async () => {
   <UCard ref="cardRef">
     <template #header>
       <div class="flex items-center justify-between gap-2">
-        <div class="flex items-center gap-2">
-          <UIcon name="i-lucide-list-todo" class="w-5 h-5" />
-          <span class="text-lg font-semibold text-gray-900 dark:text-white">任務列表</span>
-        </div>
+        <CardTitle icon="i-lucide-list-todo" title="任務列表" />
         <div class="flex items-center gap-2">
           <UButton
             v-if="showSyncButton"
@@ -189,26 +186,22 @@ onMounted(async () => {
       </div>
     </template>
 
-    <p
-      v-if="showNotLinked"
-      data-testid="tasks-not-linked"
-      class="text-center text-sm text-gray-500 dark:text-gray-400 pb-4"
-    >
-      尚未連結外部平台，請前往 <strong>帳號設定 → 金鑰</strong> 新增
-    </p>
+    <NoticeBox v-if="showNotLinked" data-testid="tasks-not-linked" icon="i-lucide-link" class="mb-4">
+      尚未綁定外部平台。點右上角的頭像，在 <strong>金鑰</strong> 頁加入 GitHub、Jira 或 Moodle，那些平台的任務也會列在這裡。
+    </NoticeBox>
 
     <div v-if="loading">
       <USkeleton v-for="i in 3" :key="i" class="h-12 mb-4" />
     </div>
     <div
       v-else-if="schedulableTasks.length === 0"
-      class="text-center text-sm text-gray-500 dark:text-gray-400 py-6"
+      class="text-center text-sm text-muted py-6"
     >
       目前沒有任務，點擊右上角的「新增任務」新增一個吧
     </div>
     <div v-else class="overflow-x-auto">
-      <div class="min-w-[960px] space-y-2">
-        <div class="task-grid px-3 text-xs text-gray-500 dark:text-gray-400">
+      <div class="min-w-[1100px] space-y-2">
+        <div class="task-grid border-b-2 border-palette-2 px-3 pt-1 pb-2 text-sm font-semibold">
           <span>名稱</span>
           <span>截止日</span>
           <span>優先級</span>
@@ -219,80 +212,97 @@ onMounted(async () => {
         </div>
 
         <div
-          v-for="{ task, isStage } in visibleRows"
-          :key="task.id"
-          class="task-row task-grid rounded-lg border border-default px-3 py-2"
-          :class="[isStage ? 'subtask-row' : '', task.source !== 'manual' ? 'cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800' : '']"
-          @click="task.source === 'manual' ? undefined : openSchedulableTask(task)"
+          v-for="group in visibleGroups"
+          :key="group.task.id"
+          :class="group.expanded ? 'rounded-lg border border-palette-1 overflow-hidden' : ''"
         >
-          <div class="flex items-center gap-1.5 min-w-0" :class="isStage ? 'pl-6' : ''">
-            <span v-if="isStage" class="text-xs text-gray-500 flex-shrink-0">
-              階段 {{ task.stage }}/{{ task.stage_count }}
+          <div
+            v-for="{ task, isStage } in group.rows"
+            :key="task.id"
+            class="task-row task-grid border-l-4 px-3 py-2.5"
+            :class="[
+              isStage ? 'subtask-row border-t border-steel-200' : '',
+              group.expanded ? '' : 'rounded-lg border border-default',
+              task.source !== 'manual' ? 'cursor-pointer hover:bg-muted' : '',
+              rowTone(task),
+              isStage && task.status !== 'Done' ? 'bg-steel-50' : '',
+            ]"
+            @click="task.source === 'manual' ? undefined : openSchedulableTask(task)"
+          >
+            <!-- 名稱可以換到第二行，不截斷；來源、逾期這些標籤放在名稱下面，不跟名稱搶寬度 -->
+            <div class="min-w-0 space-y-1 relative" :class="isStage ? 'pl-7' : ''">
+              <UIcon v-if="isStage" name="i-lucide-corner-down-right" class="absolute left-1 top-0.5 size-4 text-steel-700" />
+              <p
+                data-testid="task-title"
+                class="line-clamp-2 break-words text-balance"
+                :class="[isStage ? 'text-sm' : 'text-base', isStage || task.status === 'Done' ? 'font-normal' : 'font-semibold']"
+              >
+                {{ task.title }}
+              </p>
+              <div
+                v-if="isStage || task.source !== 'manual' || overdue(task) || task.is_parent"
+                class="flex flex-wrap items-center gap-1.5"
+              >
+                <span v-if="isStage" class="text-xs">階段 {{ task.stage }}/{{ task.stage_count }}</span>
+                <SourceBadge v-if="task.source !== 'manual'" data-testid="task-source" :source="task.source" />
+                <UBadge v-if="overdue(task)" data-testid="task-overdue" color="error" variant="soft" size="sm">已逾期</UBadge>
+                <span v-if="task.is_parent" class="text-xs">進度 {{ progressText(task.id) }}</span>
+              </div>
+            </div>
+
+            <span data-testid="task-due" class="text-sm" :class="!task.due_date ? 'text-dimmed' : overdue(task) ? 'text-error font-semibold' : ''">
+              {{ task.due_date ? compactDueDate(task.due_date) : '無期限' }}
             </span>
-            <UBadge v-if="task.source !== 'manual'" data-testid="task-source" color="neutral" variant="outline" size="sm" class="flex-shrink-0">
-              {{ sourceLabel(task.source) }}
-            </UBadge>
-            <span class="text-sm truncate flex-1" :class="isStage ? '' : 'font-semibold'">{{ task.title }}</span>
-            <UBadge v-if="overdue(task)" data-testid="task-overdue" color="error" variant="soft" size="sm" class="flex-shrink-0">已逾期</UBadge>
-            <span v-if="task.is_parent" class="text-xs text-gray-500 flex-shrink-0">
-              進度 {{ progressText(task.id) }}
+
+            <span data-testid="task-priority" class="text-sm">
+              <PriorityBadge v-if="task.priority" :priority="task.priority" />
+              <template v-else>—</template>
             </span>
-          </div>
 
-          <span data-testid="task-due" class="text-xs truncate" :class="task.due_date ? 'text-gray-500' : 'text-gray-400'">
-            {{ task.due_date ? compactDueDate(task.due_date) : '無期限' }}
-          </span>
+            <span data-testid="task-status">
+              <TaskStatus :status="task.status" />
+            </span>
 
-          <span data-testid="task-priority" class="text-xs">
-            <UBadge v-if="task.priority" :color="getPriorityColor(task.priority)" variant="soft" size="sm">
-              {{ priorityLabel(task.priority) }}
-            </UBadge>
-            <template v-else>—</template>
-          </span>
+            <span data-testid="task-schedule-status" class="text-sm">
+              {{ task.is_parent ? '—' : scheduleStatusLabel(!!task.calendar_event_id) }}
+            </span>
 
-          <span data-testid="task-status" class="text-xs">
-            <UBadge :color="statusColor(task.status)" variant="soft" size="sm">{{ taskStatusLabel(task.status) }}</UBadge>
-          </span>
+            <span data-testid="task-schedule-time" class="text-sm">{{ scheduleTime(task) }}</span>
 
-          <span data-testid="task-schedule-status" class="text-xs text-gray-500">
-            {{ task.is_parent ? '—' : scheduleStatusLabel(!!task.calendar_event_id) }}
-          </span>
-
-          <span data-testid="task-schedule-time" class="text-xs text-gray-500 truncate">{{ scheduleTime(task) }}</span>
-
-          <div class="flex items-center gap-1 justify-end">
-            <UButton
-              v-if="task.is_parent"
-              :icon="expandedParents.has(task.id) ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'"
-              size="xs"
-              color="neutral"
-              variant="ghost"
-              @click.stop="toggleExpanded(task.id)"
-            >
-              {{ expandedParents.has(task.id) ? '收合階段' : '展開階段' }}
-            </UButton>
-            <UButton
-              v-if="task.source === 'manual'"
-              icon="i-lucide-pencil"
-              size="xs"
-              color="info"
-              variant="ghost"
-              @click.stop="startEditSchedulableTask(task)"
-            >
-              編輯
-            </UButton>
-            <!-- 主任務的狀態依子任務自動計算，不能手動標記 -->
-            <UButton
-              icon="i-lucide-check"
-              size="xs"
-              :color="task.status === 'Done' ? 'neutral' : 'success'"
-              variant="ghost"
-              :disabled="task.is_parent"
-              :title="task.is_parent ? '依階段的完成狀態自動計算' : undefined"
-              @click.stop="task.is_parent ? undefined : toggleDone(task)"
-            >
-              {{ task.status === 'Done' ? '取消完成' : '標記完成' }}
-            </UButton>
+            <div class="flex flex-wrap items-center gap-1 justify-end">
+              <UButton
+                v-if="task.is_parent"
+                :icon="expandedParents.has(task.id) ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'"
+                size="xs"
+                color="neutral"
+                variant="ghost"
+                @click.stop="toggleExpanded(task.id)"
+              >
+                {{ expandedParents.has(task.id) ? '收合階段' : '展開階段' }}
+              </UButton>
+              <UButton
+                v-if="task.source === 'manual'"
+                icon="i-lucide-pencil"
+                size="xs"
+                color="info"
+                variant="ghost"
+                @click.stop="startEditSchedulableTask(task)"
+              >
+                編輯
+              </UButton>
+              <!-- 主任務的狀態依子任務自動計算，不能手動標記 -->
+              <UButton
+                icon="i-lucide-check"
+                size="xs"
+                :color="task.status === 'Done' ? 'neutral' : 'success'"
+                variant="ghost"
+                :disabled="task.is_parent"
+                :title="task.is_parent ? '依階段的完成狀態自動計算' : undefined"
+                @click.stop="task.is_parent ? undefined : toggleDone(task)"
+              >
+                {{ task.status === 'Done' ? '取消完成' : '標記完成' }}
+              </UButton>
+            </div>
           </div>
         </div>
       </div>
@@ -311,7 +321,7 @@ onMounted(async () => {
 <style scoped>
 .task-grid {
   display: grid;
-  grid-template-columns: minmax(160px, 1fr) 80px 64px 72px 72px 150px 250px;
+  grid-template-columns: minmax(240px, 1fr) 100px 72px 92px 84px 150px 220px;
   column-gap: 0.75rem;
   align-items: center;
 }

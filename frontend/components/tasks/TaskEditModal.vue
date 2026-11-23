@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import NoticeBox from '~/components/NoticeBox.vue';
 import { useTaskForm } from '~/composables/useTaskForm';
 import { useSchedulableTasks } from '~/composables/useSchedulableTasks';
 import { onMounted, computed } from 'vue';
@@ -102,28 +103,25 @@ onMounted(async () => {
           <UForm 
               :validate="validate"
               :state="state" 
-              class="flex flex-col min-h-0 gap-6 shadow-xl rounded-2xl p-8 w-full max-w-xl bg-gray-100" 
+              class="flex flex-col min-h-0 gap-6 rounded-2xl p-8 w-full max-w-xl bg-default" 
               @submit="handleSubmit"
           >
-            <h2 class="shrink-0 text-2xl font-bold text-gray-800">
+            <h2 class="shrink-0 text-xl font-semibold text-highlighted">
               {{ isEditMode ? '編輯任務' : '新增任務' }}
             </h2>
 
             <div class="flex-1 min-h-0 overflow-y-auto space-y-6">
 
-              <div v-if="willReschedule" data-testid="reschedule-note" class="flex items-start gap-2 rounded-lg bg-amber-50 text-amber-800 text-sm px-4 py-3">
+              <div v-if="willReschedule" data-testid="reschedule-note" class="flex items-start gap-2 rounded-lg bg-warning/10 text-warning text-sm px-4 py-3">
                 <UIcon name="i-lucide-calendar-x" class="w-4 h-4 flex-shrink-0 mt-0.5" />
                 <p>儲存後會從 Google 日曆移除這個任務的時段（後面已排程的階段也會一起移除），任務回到排程清單。</p>
               </div>
 
-              <div class="flex items-start gap-2 rounded-lg bg-blue-50 text-blue-800 text-sm px-4 py-3">
-                <UIcon name="i-lucide-sparkles" class="w-4 h-4 flex-shrink-0 mt-0.5" />
-                <p>
-                  「優先級」「預估時長」不確定的話都可以先留空，AI 會依照標題和描述自動幫你判斷。
-                  如果有標題、描述講不清楚、但會影響判斷的細節（例如這份報告的老師改得特別嚴格），
-                  可以寫在下面的「給 AI 的提醒」欄位，AI 判斷時會一併參考。
-                </p>
-              </div>
+              <NoticeBox icon="i-lucide-sparkles">
+                「優先級」「預估時長」不確定的話都可以先留空，AI 會依照標題和描述自動幫你判斷。
+                如果有標題、描述講不清楚、但會影響判斷的細節（例如這份報告的老師改得特別嚴格），
+                可以寫在下面的「給 AI 的提醒」欄位，AI 判斷時會一併參考。
+              </NoticeBox>
 
               <UInput
                 v-model="state.title"
@@ -142,23 +140,25 @@ onMounted(async () => {
                 class="w-full"
               />
 
-              <div class="flex flex-nowrap items-center mb-4 text-m gap-x-6">
-                <label v-if="!hidesOwnSchedulingFields" class="w-26 whitespace-nowrap text-gray-700">優先級</label>
+              <!-- 每列一個欄位：優先級和截止日期放同一列時，日期按鈕會撐出左右捲軸 -->
+              <div v-if="!hidesOwnSchedulingFields" class="flex items-center gap-x-6">
+                <label class="w-26 shrink-0 whitespace-nowrap text-toned">優先級</label>
                 <UFormField
-                  v-if="!hidesOwnSchedulingFields"
                   name="Priority"
                   size="lg"
                   hint="不確定可留空，AI 會幫你評估"
-                  class="flex-1"
+                  class="flex-1 min-w-0"
                 >
-                  <USelect v-model="state.priority" placeholder="留空讓 AI 評估" :items="priorityItems" />
+                  <USelect v-model="state.priority" placeholder="留空讓 AI 評估" :items="priorityItems" class="w-full" />
                 </UFormField>
+              </div>
 
-                <label class="w-26 whitespace-nowrap text-gray-700">截止日期</label>
+              <div class="flex items-center gap-x-6">
+                <label class="w-26 shrink-0 whitespace-nowrap text-toned">截止日期</label>
                 <UFormField
                   size="lg"
                   hint="選填"
-                  class="flex-shrink-0"
+                  class="flex-1 min-w-0"
                 >
                   <UPopover>
                       <UButton class="justify-start text-left w-full" color="neutral" variant="subtle" icon="i-lucide-calendar">
@@ -185,12 +185,12 @@ onMounted(async () => {
                 </UFormField>
               </div>
 
-              <div v-if="!hidesOwnSchedulingFields" class="flex flex-nowrap items-center mb-4 text-m gap-x-6">
-                <label class="w-26 whitespace-nowrap text-gray-700">預估時長</label>
+              <div v-if="!hidesOwnSchedulingFields" class="flex items-center gap-x-6">
+                <label class="w-26 shrink-0 whitespace-nowrap text-toned">預估時長</label>
                 <UFormField
                   size="lg"
                   hint="不確定可留空，AI 會幫你評估"
-                  class="flex-1"
+                  class="flex-1 min-w-0"
                 >
                   <UInput
                     v-model="state.duration"
@@ -202,12 +202,12 @@ onMounted(async () => {
                 </UFormField>
               </div>
 
-              <div v-if="!hidesOwnSchedulingFields" class="flex flex-nowrap items-start mb-4 text-m gap-x-6">
-                <label class="w-26 whitespace-nowrap text-gray-700 mt-2">給 AI 的提醒</label>
+              <div v-if="!hidesOwnSchedulingFields" class="flex items-start gap-x-6">
+                <label class="w-26 shrink-0 whitespace-nowrap text-toned mt-2">給 AI 的提醒</label>
                 <UFormField
                   size="lg"
                   hint="優先權/時長留空讓 AI 評估時，這裡可以補充你知道、但標題描述看不出來的資訊，例如「老師改得特別嚴格」"
-                  class="flex-1"
+                  class="flex-1 min-w-0"
                 >
                   <UTextarea
                     v-model="state.inference_hint"
@@ -221,7 +221,7 @@ onMounted(async () => {
               <!-- 新增任務時一起拆成階段 -->
               <div v-if="!isEditMode" class="space-y-2">
                 <div class="flex items-center justify-between">
-                  <span class="text-sm font-semibold text-gray-700">拆成階段（選填）</span>
+                  <span class="text-sm font-semibold text-toned">拆成階段（選填）</span>
                   <UButton
                     type="button"
                     size="xs"
@@ -233,7 +233,7 @@ onMounted(async () => {
                     新增階段
                   </UButton>
                 </div>
-                <p v-if="state.subtasks.length > 0" class="text-xs text-gray-500">
+                <p v-if="state.subtasks.length > 0" class="text-xs text-muted">
                   依順序成為階段 1～{{ state.subtasks.length }}（最多 {{ maxSubtasks }} 個）；後面階段的優先級不能高於前面的階段，
                   優先級和時長留空由 AI 評估。
                 </p>
@@ -242,7 +242,7 @@ onMounted(async () => {
                   :key="index"
                   class="flex flex-wrap items-center gap-2 rounded-md border border-default px-2 py-2"
                 >
-                  <span class="text-xs text-gray-500 whitespace-nowrap">階段 {{ index + 1 }}</span>
+                  <span class="text-xs text-muted whitespace-nowrap">階段 {{ index + 1 }}</span>
                   <UInput v-model="subtask.title" placeholder="階段標題" size="sm" class="flex-1 min-w-32" />
                   <USelect v-model="subtask.priority" placeholder="優先級" :items="priorityItems" size="sm" class="w-24" />
                   <UInput v-model="subtask.duration" type="number" min="1" placeholder="分鐘" size="sm" class="w-20" />
@@ -255,14 +255,14 @@ onMounted(async () => {
 
               <!-- 編輯主任務：列出階段，可以在指定位置插入或刪除 -->
               <div v-if="isEditingParent" class="space-y-2">
-                <span class="text-sm font-semibold text-gray-700">階段</span>
+                <span class="text-sm font-semibold text-toned">階段</span>
                 <div
                   v-for="subtask in editingSubtasks"
                   :key="subtask.id"
                   class="subtask-edit-row flex items-center gap-2 rounded-md border border-default px-2 py-1"
                 >
-                  <span class="text-xs text-gray-500 whitespace-nowrap">階段 {{ subtask.stage }}</span>
-                  <span class="text-sm truncate flex-1">{{ subtask.title }}</span>
+                  <span class="text-xs text-muted whitespace-nowrap">階段 {{ subtask.stage }}</span>
+                  <span class="text-sm flex-1 line-clamp-2 break-words text-balance min-w-0">{{ subtask.title }}</span>
                   <UButton
                     type="button"
                     size="xs"
@@ -297,14 +297,14 @@ onMounted(async () => {
 
               <!-- 編輯一般任務：可以拆成階段 -->
               <div v-else-if="isEditMode && !isEditingSubtask && !showSubtaskDraft" class="text-sm">
-                <p v-if="splitBlockedReason" class="text-xs text-gray-500">{{ splitBlockedReason }}</p>
+                <p v-if="splitBlockedReason" class="text-xs text-muted">{{ splitBlockedReason }}</p>
                 <UButton v-else type="button" size="xs" variant="soft" icon="i-lucide-list-tree" @click="startAddSubtask()">
                   拆成階段
                 </UButton>
               </div>
 
               <div v-if="showSubtaskDraft" class="space-y-2 rounded-md border border-default px-3 py-3">
-                <p class="text-xs text-gray-500">
+                <p class="text-xs text-muted">
                   新增為階段 {{ subtaskDraft.position }}{{ isEditingParent ? '，後面的階段編號會依序加 1' : '；這個任務會變成主任務，本身的優先級和時長改由階段決定' }}
                 </p>
                 <div class="flex flex-wrap items-center gap-2">
@@ -344,8 +344,8 @@ onMounted(async () => {
               <div class="flex space-x-3 ml-auto">
                 <UButton 
                     type="button" 
-                    variant="link"
-                    class="bg-gray-200 text-black hover:bg-gray-300" 
+                    color="neutral"
+                    variant="soft"
                     @click="onCancel"
                 >
                     取消
@@ -354,8 +354,6 @@ onMounted(async () => {
                     type="submit"
                     :loading="submitting"
                     :disabled="submitting"
-                    class="bg-green-500 text-white hover:bg-green-600"
-
                 >
                     {{ isEditMode ? '儲存變更' : '提交' }}
                 </UButton>

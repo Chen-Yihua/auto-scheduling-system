@@ -10,7 +10,7 @@ defineProps<{
 </script>
 
 <template>
-  <div class="flex items-center justify-between gap-2 mb-2 text-xs text-gray-500 dark:text-gray-400">
+  <div class="flex items-center justify-between gap-2 mb-2 text-xs text-muted">
     <span data-testid="synced-at">{{ syncedAt ? `上次同步：${formatRelativeTime(syncedAt)}` : '尚未同步' }}</span>
     <UButton
       v-if="onSync"

@@ -107,7 +107,7 @@ describe('dashboard/Dashboard.vue', () => {
     await wrapper.vm.$nextTick()
 
     expect(fetchGoogleCalendarsSpy).not.toHaveBeenCalled()
-    const titles = wrapper.findAll('.ucard span').map((el) => el.text())
+    const titles = wrapper.findAll('.ucard h2').map((el) => el.text())
     expect(titles).toEqual(['今日', 'Google 行事曆'])
     expect(wrapper.text()).toContain('登入後即可查看今天的任務')
     expect(wrapper.text()).toContain('登入後即可查看 Google 行事曆')

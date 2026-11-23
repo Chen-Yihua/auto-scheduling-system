@@ -643,7 +643,7 @@ describe('pages/schedule.vue', () => {
 
 // ---------- issue-42：處理在 Google 日曆上被刪除的事件 ----------
 
-const NOT_CONNECTED_TEXT = 'Google Calendar 未連接或授權已失效，請前往 帳號設定 連接。'
+const NOT_CONNECTED_TEXT = 'Google Calendar 未連接或授權已失效。點右上角的頭像，在 金鑰 頁連接。'
 const STEP1_HINT = '把任務拖到對應的優先權欄位'
 const RESOLVE_FAILED = '處理失敗，請重試'
 

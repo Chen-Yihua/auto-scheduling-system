@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import NoticeBox from '~/components/NoticeBox.vue';
+import CardTitle from '~/components/CardTitle.vue';
 import { computed } from 'vue';
 import type { MoodleAssignment } from '~/types/moodle';
 import StaleDataBanner from './StaleDataBanner.vue';
@@ -35,10 +37,7 @@ const openAssignment = (url: string) => {
 <template>
   <UCard>
     <template #header>
-      <div class="flex items-center gap-2">
-        <UIcon name="custom:moodle" class="w-5 h-5" />
-        <span class="text-lg font-semibold text-gray-900 dark:text-white">Moodle 作業</span>
-      </div>
+      <CardTitle icon="custom:moodle" title="Moodle 作業" />
     </template>
 
     <SyncStatus :synced-at="syncedAt ?? null" :on-sync="onSync" :syncing="syncing ?? false" />
@@ -53,31 +52,25 @@ const openAssignment = (url: string) => {
 
     <div
       v-if="unavailable"
-      class="text-center text-sm text-gray-500 dark:text-gray-400 py-6"
+      class="text-center text-sm text-muted py-6"
     >
       暫時無法載入，請稍後再試
     </div>
 
-    <div
-      v-else-if="needsReauth"
-      class="text-center text-sm text-gray-500 dark:text-gray-400 py-6"
-    >
-      Moodle 憑證無法讀取，請到右上角頭像 → 金鑰重新連結
-    </div>
+    <NoticeBox v-else-if="needsReauth" icon="i-lucide-key-round" class="my-4">
+      Moodle 憑證無法讀取。點右上角的頭像，在 <strong>金鑰</strong> 頁重新連結。
+    </NoticeBox>
 
-    <div
-      v-else-if="notLinked"
-      class="text-center text-sm text-gray-500 dark:text-gray-400 py-6"
-    >
-      尚未綁定 Moodle 帳號，請先設定
-    </div>
+    <NoticeBox v-else-if="notLinked" icon="i-lucide-link" class="my-4">
+      尚未綁定 Moodle 帳號。點右上角的頭像，在 <strong>金鑰</strong> 頁加入。
+    </NoticeBox>
 
     <div v-else-if="loading" class="flex justify-center items-center py-6">
       <UIcon name="i-lucide-loader" class="animate-spin w-6 h-6 text-primary" />
       <span class="ml-2 text-primary">載入中...</span>
     </div>
 
-    <div v-else-if="assignments.length === 0" class="text-center text-sm text-gray-500 dark:text-gray-400 py-6">
+    <div v-else-if="assignments.length === 0" class="text-center text-sm text-muted py-6">
       目前沒有未繳作業
     </div>
 
@@ -95,7 +88,7 @@ const openAssignment = (url: string) => {
           <div class="font-medium mb-2">作業標題 : {{ item.title }}</div>
 
         <template #footer>
-          <div class="text-sm text-gray-500">截止日期 : {{ item.due_date }}</div>
+          <div class="text-sm text-muted">截止日期 : {{ item.due_date }}</div>
         </template>
       </UCard>
     </div>

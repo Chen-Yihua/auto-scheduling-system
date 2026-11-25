@@ -1,0 +1,6 @@
+[run]
+source = .
+omit =
+    */tests/*
+    */test_*.py
+    */__init__.py

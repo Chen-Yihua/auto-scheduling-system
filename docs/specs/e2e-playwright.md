@@ -3,7 +3,7 @@
 - 狀態：已核准
 - 等級：高風險（改的是「token、cookie 不出現在公開的 CI log」這項保證：拿掉 issue-50 的清理用 reporter（把測試結果印到終端機的元件），改成一般做法）
 - 規格審查：有（高風險一定做；審查時規格還沒拆開，任務與排程流程拆到 `e2e-user-flows`（之後的 PR））
-- PR：（開 PR 後填）
+- PR：[#189](https://github.com/Chen-Yihua/auto-scheduling-system/pull/189)
 
 ## 簡短說明
 前端 E2E 測試改用 `@playwright/test` 執行，測試自己啟動前端、後端與 MongoDB，不連 Cloud Run，開著 `npm run dev` 也能跑。CI log 的機密處理改成一般做法：機密放在 GitHub secrets 由 GitHub 自動遮掉，測試只印清理過的登入診斷，CI 不上傳 trace（可以一步步重播測試的紀錄檔）與報告。任務管理與排程的使用者流程在下一份規格 `e2e-user-flows`（之後的 PR），要等這份合併後才做。

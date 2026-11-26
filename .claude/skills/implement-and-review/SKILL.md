@@ -121,7 +121,7 @@ description: 整理交付清單交給 feature-implementer 實作與開 PR、交�
 1. 先查重複：`gh issue list --state all --search "<關鍵字>"`。已有相同問題時，在既有 issue 留言補充（`gh issue comment`），不另開。
 2. 一項發現一個 issue；同一個檔案、同一個原因的多項發現合併成一個。
 3. 內容照 `docs/issues.md`，最後附來源 PR 的連結，「來源」寫 `PR #NN 第 N 輪規格審查／實作審查 #M`。
-4. 標籤：程式行為不正確（包括原本就有的問題）用 `bug`，其餘（測試補強、可讀性、文件）用 `enhancement`。不加優先度，交給 `/issue-triage`。
+4. 標籤：程式行為不正確（包括原本就有的問題）用 `bug`，其餘（例如測試補強、可讀性、文件）用 `enhancement`。不加優先度，交給 `/issue-triage`。
 5. 在這一輪審查檔案「處理」的「結果」寫上 issue 連結。
 
 ## 漏洞的處理

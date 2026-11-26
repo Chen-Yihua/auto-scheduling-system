@@ -1,6 +1,6 @@
 # 0018. 需求清楚的改動走快速路徑
 
-- 狀態：已採用（決定 3 改走完整流程時一定做規格審查，已被 [0019](0019-simplify-spec-review-and-ac-derivation.md) 取代）
+- 狀態：已採用（部分被 [0019](0019-simplify-spec-review-and-ac-derivation.md) 取代）
 - 日期：2026-11-20
 
 ## 背景

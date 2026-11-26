@@ -69,7 +69,7 @@ description: 整理交付清單交給 feature-implementer 實作與開 PR、交�
 4. 有標題開頭是「漏洞：」的發現時，報告原文要保留給重新審查用，所以另外複製成 `<功能>-spec-review-r<N>-comment.md` 或 `<功能>-impl-review-r<N>-comment.md`，在這份照「漏洞的處理」第 4 步改寫，貼這一份。
 5. 用 `gh pr comment <PR> --body-file <檔案>` 貼出。成功時印出的網址就是留言連結，回報時附上。
 
-留言貼出後不修改，也不另貼補充留言。最後一輪的留言貼出後才有的修正（例如開發者後來要求的修改），主 session 看過 diff，commit 訊息寫清楚原因；新增或改了驗收條件的，照「核准後修改規格」記在規格的修改紀錄，再照「重新審查」審一輪。
+留言貼出後不修改。最後一輪的留言貼出後才有的修正（例如開發者後來要求的修改），主 session 看過 diff，commit 訊息寫清楚原因；新增或改了驗收條件的，照「核准後修改規格」記在規格的修改紀錄，再照「重新審查」審一輪。
 
 時機：規格審查的留言在 `feature-implementer` 回報 PR 已建立之後、交給 `acceptance-reviewer` 之前，依輪次貼出；實作審查的留言在這一輪的修正都 commit 後、下一輪審查前貼出。
 
@@ -77,7 +77,7 @@ description: 整理交付清單交給 feature-implementer 實作與開 PR、交�
 
 交給 `acceptance-reviewer` 前先 `git fetch origin main`，附上規格檔路徑、等級、分支名稱、PR 編號、規格審查每一輪留言的連結與 PR 描述全文（`gh api repos/{owner}/{repo}/pulls/<PR> --jq .body`）；第 2 輪以後再附上前幾輪實作審查留言的連結，以及這一輪的審查範圍（見「重新審查」）。
 
-沒有規格審查時，改附「沒有規格審查」與原因，`acceptance-reviewer` 會補做規格審查的檢查。沒有規格審查的情況有 3 種：規格寫「規格審查：沒有」、快速路徑（不附規格檔路徑，等級寫「一般（快速路徑）」），以及規格審查的留言檔遺失、開發者決定不補（見 `feature/references/resume.md`）。
+沒有規格審查時，改附「沒有規格審查」與原因，`acceptance-reviewer` 會補做規格審查的檢查。沒有規格審查的情況有 3 種：規格寫「規格審查：沒有」、快速路徑（不附規格檔路徑，等級寫「一般（快速路徑）」），以及規格審查的檔案遺失、還沒貼出，開發者決定不補（見 `feature/references/resume.md`）。
 
 ## 發現處理
 
@@ -116,7 +116,7 @@ description: 整理交付清單交給 feature-implementer 實作與開 PR、交�
 
 ## 開 issue 追蹤
 
-照「發現處理」第 6 步判斷要開的，才照下面的步驟開。先查重複，才知道要開新的還是在既有 issue 留言；issue 開好，才有連結可以寫進留言檔。所以照順序做：
+照「發現處理」第 6 步判斷要開的，才照下面的步驟開。先查重複，才知道要開新的還是在既有 issue 留言；issue 開好，才有連結可以寫進審查檔案。所以照順序做：
 
 1. 先查重複：`gh issue list --state all --search "<關鍵字>"`。已有相同問題時，在既有 issue 留言補充（`gh issue comment`），不另開。
 2. 一項發現一個 issue；同一個檔案、同一個原因的多項發現合併成一個。

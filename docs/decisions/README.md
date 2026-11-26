@@ -2,7 +2,7 @@
 
 記錄「之後的人會想問為什麼不用 X」的決定。一個決定一個檔案，檔名 `NNNN-<簡短名稱>.md`，編號遞增、不重複使用。
 
-決定被推翻時不要刪掉舊檔：新增一份新的 ADR，並把舊檔的狀態改成「已被 NNNN 取代」；只推翻一部分時，改成「已採用（部分被 NNNN 取代）」。取代了哪一部分寫在新 ADR 的「影響」，舊檔的狀態只列編號。舊檔的背景、決定、放棄的做法保留原樣，它記錄的是當時的判斷。
+決定被推翻時不要刪掉舊檔：新增一份新的 ADR，並把舊檔的狀態改成「已被 NNNN 取代」；只推翻一部分時，改成「已採用（部分被 NNNN 取代）」。取代了哪一部分寫在新 ADR，舊檔的狀態只列編號。舊檔的背景、決定、放棄的做法保留原樣，它記錄的是當時的判斷。
 
 核准前只維護草稿資料夾（`.drafts/`）裡的一份工作草稿，核准後才轉成正式文件 commit。
 
@@ -33,7 +33,7 @@
 |---|---|---|
 | [0001](0001-separate-feature-roles.md) | `/feature` 流程分開提需求、實作與審查的 agent | 已採用（部分被 [0005](0005-specification-review.md)、[0007](0007-process-depth-by-risk.md) 取代） |
 | [0002](0002-specs-in-repo.md) | 功能規格放進 repo，和程式碼同一個 PR | 已採用（部分被 [0007](0007-process-depth-by-risk.md)、[0018](0018-fast-path.md) 取代） |
-| [0003](0003-issue-workflow.md) | 用 GitHub Issues 管理待辦，`/issue` 共用 `/feature` 的流程 | 已採用（部分被 [0017](0017-review-findings-conventional-labels.md) 取代） |
+| [0003](0003-issue-workflow.md) | 用 GitHub Issues 管理待辦，`/issue` 共用 `/feature` 的流程 | 已採用（部分被 [0006](0006-bugs-use-full-spec.md)、[0017](0017-review-findings-conventional-labels.md) 取代） |
 | [0004](0004-subtask-order-on-parent.md) | 子任務的階段順序存在主任務上 | 已採用 |
 | [0005](0005-specification-review.md) | 規格核准前加入規格審查，審查分類依根本原因區分 | 已採用（部分被 [0006](0006-bugs-use-full-spec.md)、[0015](0015-review-results-in-pr-comments.md)、[0017](0017-review-findings-conventional-labels.md)、[0019](0019-simplify-spec-review-and-ac-derivation.md) 取代） |
 | [0006](0006-bugs-use-full-spec.md) | bug 也用完整規格格式並做規格審查 | 已採用（部分被 [0007](0007-process-depth-by-risk.md)、[0018](0018-fast-path.md)、[0019](0019-simplify-spec-review-and-ac-derivation.md) 取代） |

@@ -98,7 +98,7 @@ GitHub 上不公開的漏洞報告。
 ## 備註
 
 - 術語表的格式改寫自 [mattpocock/skills](https://github.com/mattpocock/skills) 的 `domain-modeling`（`GLOSSARY-FORMAT`，commit `4ae2317`，MIT 授權）。
-- 讀舊的規格、審查紀錄與 ADR 時，審查問題的英文舊名稱用下表對照（現在改用標籤加阻擋，見 `reviews/README.md`「分類」）：
+- 讀舊的規格、審查紀錄、ADR 與實驗紀錄時，審查問題的英文舊名稱用下表對照（現在改用標籤加阻擋，見 `reviews/README.md`「分類」）：
 
 | 英文舊名稱 | 意思 |
 |---|---|

@@ -48,7 +48,7 @@ reviewer 沒有實際驗證的推論，在「依據」寫明是推論與推斷�
 
 漏洞是實際可被利用的程式漏洞；安全改善建議不是漏洞，標 `suggestion`。
 
-- 漏洞的標題開頭寫「漏洞：」，阻擋照上面「阻擋」判斷。
+- 漏洞的標題（摘要表的「標題」欄，也就是問題說明裡冒號後面的那段）開頭寫「漏洞：」，例如 `### #1 \`issue\`（阻擋）：漏洞：…`。阻擋照上面「阻擋」判斷。之後所有「標題開頭是『漏洞：』」都是指這一段。
 - 處理照 `implement-and-review`「漏洞的處理」。
 - 漏洞不論「特殊情況的判斷」怎麼寫，都照這一節處理。
 
@@ -64,7 +64,6 @@ reviewer 沒有實際驗證的推論，在「依據」寫明是推論與推斷�
 ````markdown
 ## 摘要
 
-- 阻擋：N 項（#1、#3）
 - 主要風險：一到三句，用使用者的操作與結果描述，不用函式名稱
 - 建議優先處理：#1 → #3 → …，各附一句理由
 
@@ -96,7 +95,7 @@ reviewer 沒有實際驗證的推論，在「依據」寫明是推論與推斷�
 reviewer 各自的檢查表：
 
 - `specification-reviewer`：「查證紀錄」表與「已接受的風險」。
-- `acceptance-reviewer`：「驗收條件」表與「已接受的風險」（列「特殊情況的判斷」的「暫存檔遺失時」判定不算問題的情況，以及規格「不做」裡寫明不處理的情況，另見「特殊情況的判斷」；沒有寫「無」）。
+- `acceptance-reviewer`：「驗收條件」表與「已接受的風險」（列「特殊情況的判斷」的「暫存檔遺失時」判定不算問題的情況，以及規格「不做」裡寫明不處理的情況，另見「特殊情況的判斷」；沒有寫「無」）；沒有規格審查時，另附 `specification-reviewer` 的「查證紀錄」表。
 - 高風險等級，兩種 reviewer 另外填「安全與一致性檢查」表。規格審查看驗收條件與實作計畫有沒有定義，實作審查看程式與測試有沒有做到：
 
 | 項目 | 結果（有涵蓋／沒有涵蓋／不適用） | 依據（AC 編號或檔案:行號） |
@@ -132,7 +131,3 @@ reviewer 各自的檢查表：
 - 「決定者」寫開發者、規則（例如阻擋的發現，不用改規格，直接請 `feature-implementer` 修正），或主 session（照 `implement-and-review`「發現處理」由主 session 決定的項目；規格核准後的修改一律由開發者確認）。
 - 「結果」寫下面其中一種：修正的 commit、issue 或 advisory 編號；「不改：<原因>」；「不開 issue：<原因>」；「等開發者決定」；規格審查在核准前，寫「規格已修改」或「開發者決定不採用」。實作審查的留言在這一輪的修正都 commit 後才貼，所以要修的項目直接寫 commit。
 - 「開發者決定」表只列開發者決定的項目，寫選項與理由；沒有時寫「無」。
-
-## 備註
-
-標籤與阻擋分開判斷的做法參考 [Conventional Comments](https://conventionalcomments.org/)、Google〈[The Standard of Code Review](https://google.github.io/eng-practices/review/reviewer/standard.html)〉與 [GitLab Code Review Guidelines](https://docs.gitlab.com/development/code_review/)。

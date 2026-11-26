@@ -1,6 +1,6 @@
 # 0003. 用 GitHub Issues 管理待辦，`/issue` 共用 `/feature` 的流程
 
-- 狀態：已採用（部分被 [0017](0017-review-findings-conventional-labels.md) 取代）
+- 狀態：已採用（部分被 [0006](0006-bugs-use-full-spec.md)、[0017](0017-review-findings-conventional-labels.md) 取代）
 - 日期：2026-11-04
 
 ## 背景

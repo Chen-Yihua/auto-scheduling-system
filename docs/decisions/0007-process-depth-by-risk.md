@@ -1,6 +1,6 @@
 # 0007. 依變更碰到的範圍決定規格與審查的深度
 
-- 狀態：已採用（文字修正在 plan mode 列改動已被 [0008](0008-grilling-without-plan-mode.md)取代；輕量與標準分級、輕量只審 1 輪與「未經審查」已被 [0012](0012-simplify-process-levels.md) 取代；「放棄的做法」裡的輕量不做規格審查，快速路徑的例外見 [0018](0018-fast-path.md)）
+- 狀態：已採用（文字修正在 plan mode 列改動已被 [0008](0008-grilling-without-plan-mode.md)取代；輕量與標準分級、輕量只審 1 輪與「未經審查」已被 [0012](0012-simplify-process-levels.md) 取代；「放棄的做法」裡的輕量不做規格審查，快速路徑的例外見 [0018](0018-fast-path.md)；「放棄的做法」不採用一般等級不做規格審查，已被 [0019](0019-simplify-spec-review-and-ac-derivation.md) 取代）
 - 日期：2026-11-08
 
 ## 背景

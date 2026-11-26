@@ -24,11 +24,11 @@
 | 暫存檔 | 檔名 | 正式版本（找不到時） |
 |---|---|---|
 | 已確認的決定與待問 | `<功能>-grill.md` | 核准後以規格為準，不重建（核准前：從需求問答重做） |
-| 術語 | `<功能>-glossary.md` | PR 分支或 `origin/main` 的 `docs/glossary.md`（核准前：重新確認） |
-| 規格草稿（文字修正是改動清單） | `<功能>-spec.md` | PR 分支的 `docs/specs/<功能>.md`；快速路徑是 GitHub 上的 PR 描述（`gh api repos/{owner}/{repo}/pulls/<PR> --jq .body`）（文字修正的改動清單：請開發者補上項目） |
+| 術語 | `<功能>-glossary.md` | PR 分支或 `origin/main` 的 `docs/glossary.md`；要修改時只把要改的條目複製到 `<功能>-glossary.md`，不含檔頭（核准前：重新確認） |
+| 規格草稿（文字修正是改動清單） | `<功能>-spec.md` | PR 分支的 `docs/specs/<功能>.md`；快速路徑是 GitHub 上的 PR 描述（`gh api repos/{owner}/{repo}/pulls/<PR> --jq .body`）。都找不到時，已核准的規格請開發者選擇重寫再核准或取消（文字修正的改動清單：請開發者補上項目） |
 | ADR 草稿 | `<功能>-adr-<名稱>.md` | PR 分支的 `docs/decisions/`（沒有時重寫，和規格一起重新核准） |
 | 審查報告原文 | `<功能>-spec-review-r<N>.md`、`<功能>-impl-review-r<N>.md`（N 是第幾輪） | 已貼出的看 PR 留言（`gh pr view <PR> --json comments`）；還沒貼出的請開發者選擇重跑或不補 |
-| 審查留言 | `<功能>-spec-review-r<N>-comment.md`、`<功能>-impl-review-r<N>-comment.md` | PR 留言，不重建 |
+| 改寫漏洞細節的留言（只在有漏洞時） | `<功能>-spec-review-r<N>-comment.md`、`<功能>-impl-review-r<N>-comment.md` | PR 留言，不重建 |
 | 上一版規格 | `<功能>-spec-v<N>.md` | 只給第 2 次規格審查比對用，不恢復；遺失時只附修改內容與原因 |
 | advisory 的內容 | `<功能>-advisory.json` | GitHub 上的 advisory（用 GHSA 編號讀回），不重建 |
 | PR 描述 | `<功能>-pr-body.md` | GitHub 上的 PR 描述，不重建 |

@@ -31,7 +31,7 @@ description: 寫規格草稿（和重大架構決策的 ADR 草稿）、交給 s
 
 1. 高風險：做。
 2. 一般，規格有影響實作的重要歧義（照字面可以做出兩種行為不同的程式），或需求問答中有開發者做的決定：做。只是確認細節不算。
-3. 其他的一般與快速路徑：不做。在規格開頭的「規格審查」寫「沒有（<理由>）」，和規格一起核准；之後由 `acceptance-reviewer` 補做事實查證。
+3. 其他的一般：不做。在規格開頭的「規格審查」寫「沒有（<理由>）」，和規格一起核准；之後由 `acceptance-reviewer` 補做規格審查的檢查。快速路徑照「什麼時候做規格審查」上面的說明不做。
 
 做的時候，把草稿 `<功能>-spec.md` 的路徑、等級、`<功能>-grill.md` 的路徑，以及 ADR 草稿、`<功能>-glossary.md` 的路徑（有的話）交給 `specification-reviewer`。
 
@@ -50,7 +50,7 @@ description: 寫規格草稿（和重大架構決策的 ADR 草稿）、交給 s
 
 ### 審查紀錄
 
-每一輪的報告原文存成草稿資料夾的 `<功能>-spec-review-r<N>.md`；處理完這一輪的發現，寫成留言檔 `<功能>-spec-review-r<N>-comment.md`（寫法見 `implement-and-review`「審查留言」）。規格審查在 PR 開之前做，留言在 PR 開好後（`feature-implementer` 回報 PR 已建立）、交給 `acceptance-reviewer` 前，照 `implement-and-review`「審查留言」依輪次貼出。
+檔案的寫法與貼出的時機照 `implement-and-review`「審查留言」：規格審查在 PR 開之前做，所以留言在 PR 開好後才貼。
 
 ## 交給開發者核准
 

@@ -1,6 +1,6 @@
 # 0010. scratchpad 遺失時以暫存產物為單位恢復，審查不逐一要求特定案例
 
-- 狀態：已採用（暫存產物表的位置已移到 feature/references/resume.md，見 [0012](0012-simplify-process-levels.md)；遺失的對象（scratchpad）已被 [0014](0014-drafts-folder.md) 取代；「審查豁免」裡「才列為發現並阻擋」的「並阻擋」，以及「影響」裡「保留三種實際風險仍然阻擋」，已被 [0017](0017-review-findings-conventional-labels.md) 取代）
+- 狀態：已採用（暫存產物表的位置已移到 feature/references/resume.md，見 [0012](0012-simplify-process-levels.md)；遺失的對象（scratchpad）已被 [0014](0014-drafts-folder.md) 取代；「審查豁免」裡「才列為發現並阻擋」的「並阻擋」，以及「影響」裡「保留三種實際風險仍然阻擋」，已被 [0017](0017-review-findings-conventional-labels.md) 取代；暫存產物表寫出產生它的步驟與每一種的恢復方式，已被 [0019](0019-simplify-spec-review-and-ac-derivation.md) 取代）
 - 日期：2026-11-09
 
 ## 背景

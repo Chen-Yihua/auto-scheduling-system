@@ -128,7 +128,7 @@ reviewer 各自的檢查表：
 
 ## 處理
 
-主 session 在留言檔最後加的一節，寫這一輪每項發現怎麼處理。決定怎麼記照 `.claude/skills/clarify-requirements/SKILL.md`「記錄決定」。
+主 session 在審查檔案最後加的一節，寫這一輪每項發現怎麼處理。決定怎麼記照 `.claude/skills/clarify-requirements/SKILL.md`「記錄決定」。
 
 ```markdown
 ## 處理

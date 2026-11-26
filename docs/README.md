@@ -9,7 +9,7 @@
 | [specs/](specs/) | 規格：核准當時的需求、假設、驗收條件與修改紀錄 | `/feature`、`/issue` 的每個變更一份（文字修正除外；快速路徑的短版規格在 PR 描述，不放這裡）；核准後驗收條件的修改記在「修改紀錄」 |
 | `glossary.md`（第一個術語合併時才建立） | 術語表：產品領域、使用者看得到的概念用哪個名稱、指的是什麼（格式見本文件「術語表」） | 文字修正以外的開發確定了新術語或修改了定義時，由 `feature-implementer` 照交付清單合併 |
 | [issues.md](issues.md) | GitHub issue 的寫法：情境與技術背景兩層 | issue 的欄位或寫法改變時 |
-| [reviews/](reviews/) | 規格審查與實作審查的分類、報告格式與「處理」的寫法；ADR 0015 以前的審查紀錄檔。之後每一輪的審查結果貼在 PR 留言 | 分類、報告格式或「處理」的寫法改變時；既有紀錄檔不更新 |
+| [reviews/](reviews/) | 規格審查與實作審查的分類、報告格式與「處理」的寫法；改用 PR 留言前的審查紀錄檔。每一輪的審查結果貼在 PR 留言 | 分類、報告格式或「處理」的寫法改變時；既有紀錄檔不更新 |
 | [experiments/](experiments/) | 開發流程的實驗：目的、指標與紀錄 | 開始新的流程實驗，或實驗結束整理結果時 |
 
 欄位層級的 request / response 格式以後端的 `backend/schemas/` 和 FastAPI 自動產生的 `/docs` 為準，這裡不重複列。
@@ -18,7 +18,8 @@
 
 | 類型 | 文件 | 規則 |
 |---|---|---|
-| 永久保存（歷史紀錄） | `specs/`、`reviews/specification/`、`reviews/implementation/`、`reviews/*-round<N>.md`、`decisions/` | 不刪除，也不因為過時就改寫內容。`reviews/` 底下既有的紀錄檔保留，之後的審查結果在 PR 留言（ADR 0015）。被取代時只改狀態並連結新的文件：規格照 [specs/README.md](specs/README.md)「規格和目前系統的關係」，ADR 照 [decisions/README.md](decisions/README.md)。記錄的是當時的決定，不是目前的系統 |
+| 歷史紀錄：ADR | `decisions/` | 不刪除，也不因為過時就改寫內容。被取代時只改狀態並連結新的 ADR，照 [decisions/README.md](decisions/README.md)。記錄的是當時的決定，不是目前的系統 |
+| 歷史紀錄：規格與審查紀錄 | `specs/`、`reviews/specification/`、`reviews/implementation/`、`reviews/*-round<N>.md` | 不因為過時就改寫內容；被取代時照 [specs/README.md](specs/README.md)「規格和目前系統的關係」只改狀態。之後的審查結果在 PR 留言，不再新增紀錄檔。沒有持續參考價值時可以刪除：保留下來的程式、測試（包括用 AC 編號對應規格的測試）、文件、ADR 與 open issue 都沒有引用它。刪除在 PR 描述列出檔案與理由，由開發者決定；刪掉的內容從 git 歷史找 |
 | 持續更新（目前狀態） | `api.md`、`architecture.md`、`architecture.drawio`、`issues.md`、`glossary.md` | 和程式碼、流程保持一致，改動時在同一個 PR 更新（時機見上表）。不記歷史，歷史看 git、規格與 ADR |
 | 暫存（不 commit） | 草稿資料夾（`.drafts/`；`<功能>-` 開頭的暫存檔，種類與檔名見 `.claude/skills/feature/references/resume.md` 的暫存檔表） | 只放當下的開發需要的內容，不會進 git。核准後由誰把哪個暫存檔存成正式文件見 `implement-and-review`「Commit 責任」，審查結果怎麼貼成 PR 留言見同一個檔案「審查留言」；回報前的確認與刪除見 `/feature`「清理暫存」 |
 | 選擇性保存（實驗） | `experiments/` | README 寫實驗目的、指標與結論，TEMPLATE 是紀錄格式，`records/` 保留有參考價值的紀錄。流程的版本用紀錄裡的「流程版本」（commit）對應，不另外備份每一版的 skill。既有紀錄不自動刪除，也不為了符合新規則修改；要刪除時先寫出它沒有參考價值的理由，由開發者決定 |
@@ -51,8 +52,6 @@
 <1–2 句定義：它是什麼>
 _避免_：<不採用的說法>、<不採用的說法>
 ```
-
-格式改寫自 [mattpocock/skills](https://github.com/mattpocock/skills) 的 `domain-modeling`（`GLOSSARY-FORMAT`，commit `4ae2317`，MIT 授權）。
 
 ### 流程用語
 
@@ -96,11 +95,12 @@ _避免_：scratchpad
 **advisory**：
 GitHub 上不公開的漏洞報告。
 
-#### 問題類型與嚴重程度的舊名稱
+## 備註
 
-審查問題的類型與嚴重程度以前用英文名稱。讀舊的規格、審查紀錄、ADR 與實驗紀錄時，用這張表對照：
+- 術語表的格式改寫自 [mattpocock/skills](https://github.com/mattpocock/skills) 的 `domain-modeling`（`GLOSSARY-FORMAT`，commit `4ae2317`，MIT 授權）。
+- 讀舊的規格、審查紀錄、ADR 與實驗紀錄時，審查問題的英文舊名稱用下表對照（現在改用標籤加阻擋，見 `reviews/README.md`「分類」）：
 
-| 英文舊名稱 | 中文名稱（ADR 0017 以前） |
+| 英文舊名稱 | 意思 |
 |---|---|
 | Factual Error | 規格對現有系統的描述和程式不符 |
 | Specification Defect | 規格內容互相矛盾或沒有依據 |
@@ -112,5 +112,3 @@ GitHub 上不公開的漏洞報告。
 | Major | 一般操作就會遇到的錯 |
 | Minor | 影響小的問題 |
 | Info | 不影響功能，只供參考 |
-
-這些類型與嚴重程度已由 [ADR 0017](decisions/0017-review-findings-conventional-labels.md) 改成標籤加阻擋，讀舊紀錄時用這張表對照。

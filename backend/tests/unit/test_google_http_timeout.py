@@ -81,8 +81,8 @@ async def test_refresh_google_calendar_token_uses_relaxed_timeout(monkeypatch):
     async def mock_update_one(*a, **k):
         pass
 
-    monkeypatch.setattr(google_tokens.db.googleCalendarTokens, "find_one", mock_find_one)
-    monkeypatch.setattr(google_tokens.db.googleCalendarTokens, "update_one", mock_update_one)
+    monkeypatch.setattr(google_tokens.database.db.googleCalendarTokens, "find_one", mock_find_one)
+    monkeypatch.setattr(google_tokens.database.db.googleCalendarTokens, "update_one", mock_update_one)
 
     assert await google_oauth.refresh_google_calendar_token("uid123") == "new-access"
     _assert_relaxed(timeouts)

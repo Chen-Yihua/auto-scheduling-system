@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime, timezone
-from core.database import db
+from core import database
 from core.datetimes import to_utc_datetime
 from schemas.manual_task import MAX_SUBTASKS, ManualTaskOut, StatusEnum
 from core.errors import InvalidRequestError, NotFoundError
@@ -144,7 +144,7 @@ def completed_at_after_status_change(previous_status, previous_completed_at, new
 
 
 async def get_manual_task_by_idempotency_key(user_id: str, idempotency_key: str) -> dict | None:
-    doc = await db.manual_tasks.find_one({"user_id": user_id, "idempotency_key": idempotency_key})
+    doc = await database.get_db().manual_tasks.find_one({"user_id": user_id, "idempotency_key": idempotency_key})
     if not doc:
         return None
     task = _to_task(doc)
@@ -164,10 +164,10 @@ def _is_duplicate_key_error(error: PyMongoError) -> bool:
 
 async def get_subtasks(parent_id: str, user_id: str) -> list[dict]:
     """依主任務 subtask_ids 排序的子任務，附上階段編號。"""
-    parent = await db.manual_tasks.find_one({"_id": parent_id, "user_id": user_id})
+    parent = await database.get_db().manual_tasks.find_one({"_id": parent_id, "user_id": user_id})
     if not parent:
         return []
-    docs = await db.manual_tasks.find(
+    docs = await database.get_db().manual_tasks.find(
         {"user_id": user_id, "_id": {"$in": parent.get("subtask_ids") or []}}
     ).to_list(length=None)
     return _ordered_subtasks(_to_task(parent), {doc["_id"]: _to_task(doc) for doc in docs})
@@ -185,9 +185,9 @@ async def create_manual_task_with_subtasks(parent: dict, subtasks: list[dict], i
     # 主任務放最後：中途失敗時，已寫入的子任務不在任何主任務的順序裡，讀取時不會出現
     docs = [*subtasks, parent]
     try:
-        await db.manual_tasks.insert_many(docs)
+        await database.get_db().manual_tasks.insert_many(docs)
     except PyMongoError as e:
-        await db.manual_tasks.delete_many({"_id": {"$in": [doc["_id"] for doc in docs]}})
+        await database.get_db().manual_tasks.delete_many({"_id": {"$in": [doc["_id"] for doc in docs]}})
         # 同一個 key 的請求同時送達，另一個已經建立成功，回傳那一筆
         existing = (
             await get_manual_task_by_idempotency_key(parent["user_id"], idempotency_key)
@@ -220,7 +220,7 @@ async def insert_subtask(
         doc["idempotency_key"] = idempotency_key
     # 重複的 key 在第一步就被唯一索引擋下，不會動到主任務
     try:
-        await db.manual_tasks.insert_one(doc)
+        await database.get_db().manual_tasks.insert_one(doc)
     except DuplicateKeyError:
         if idempotency_key:
             return False
@@ -256,12 +256,12 @@ async def insert_subtask(
         rejected = f"子任務已達 {MAX_SUBTASKS} 個上限，或插入位置已經不存在，請重新整理後再試"
 
     try:
-        result = await db.manual_tasks.update_one({"_id": parent_id, "user_id": user_id, **condition}, update)
+        result = await database.get_db().manual_tasks.update_one({"_id": parent_id, "user_id": user_id, **condition}, update)
     except PyMongoError:
-        await db.manual_tasks.delete_one({"_id": doc["_id"]})
+        await database.get_db().manual_tasks.delete_one({"_id": doc["_id"]})
         raise
     if result.matched_count == 0:
-        await db.manual_tasks.delete_one({"_id": doc["_id"]})
+        await database.get_db().manual_tasks.delete_one({"_id": doc["_id"]})
         raise InvalidRequestError(rejected)
     return True
 
@@ -276,7 +276,7 @@ async def delete_subtask(subtask: dict) -> bool:
     「清單裡有它、而且至少 2 個」寫在同一次更新的 filter 裡（ADR 0004），同時送出的刪除也不會刪到一個都不剩。
     條件不成立（它是唯一的子任務，或已經不在清單裡）時什麼都不改，回傳 False；成功回傳 True。
     """
-    result = await db.manual_tasks.update_one(
+    result = await database.get_db().manual_tasks.update_one(
         {
             "_id": subtask["parent_id"], "user_id": subtask["user_id"],
             "subtask_ids": subtask["id"], "subtask_ids.1": {"$exists": True},
@@ -300,14 +300,14 @@ async def delete_parent_if_only_subtask(subtask: dict) -> bool:
     「正好只有它」寫在刪除主任務的 filter 裡，用的是當下清單的內容，不是另外讀到的數量。
     條件不成立時什麼都不改，回傳 False；成功回傳 True。
     """
-    result = await db.manual_tasks.delete_one({
+    result = await database.get_db().manual_tasks.delete_one({
         "_id": subtask["parent_id"], "user_id": subtask["user_id"],
         "subtask_ids": subtask["id"], "subtask_ids.1": {"$exists": False},
     })
     if result.deleted_count == 0:
         return False
     # 主任務已經刪掉：之後刪子任務失敗時，留下的子任務沒有主任務，讀取時不會出現
-    await db.manual_tasks.delete_many({"user_id": subtask["user_id"], "parent_id": subtask["parent_id"]})
+    await database.get_db().manual_tasks.delete_many({"user_id": subtask["user_id"], "parent_id": subtask["parent_id"]})
     return True
 
 
@@ -318,7 +318,7 @@ async def is_subtask_listed(subtask: dict) -> bool:
     參數：
     - subtask：要查的子任務，至少要有 id、parent_id、user_id。
     """
-    parent = await db.manual_tasks.find_one(
+    parent = await database.get_db().manual_tasks.find_one(
         {"_id": subtask["parent_id"], "user_id": subtask["user_id"], "subtask_ids": subtask["id"]},
         {"_id": 1},
     )
@@ -332,7 +332,7 @@ async def delete_subtask_document(subtask: dict) -> None:
     參數：
     - subtask：要刪的子任務，至少要有 id、user_id。
     """
-    await db.manual_tasks.delete_one({"_id": subtask["id"], "user_id": subtask["user_id"]})
+    await database.get_db().manual_tasks.delete_one({"_id": subtask["id"], "user_id": subtask["user_id"]})
 
 
 async def delete_parent_with_subtasks(parent_id: str, user_id: str) -> None:
@@ -344,8 +344,8 @@ async def delete_parent_with_subtasks(parent_id: str, user_id: str) -> None:
     - user_id：任務擁有者，只刪這個使用者的文件。
     """
     # 先刪主任務：之後刪子任務失敗時，留下的子任務沒有主任務，讀取時不會出現
-    await db.manual_tasks.delete_one({"_id": parent_id, "user_id": user_id})
-    await db.manual_tasks.delete_many({"user_id": user_id, "parent_id": parent_id})
+    await database.get_db().manual_tasks.delete_one({"_id": parent_id, "user_id": user_id})
+    await database.get_db().manual_tasks.delete_many({"user_id": user_id, "parent_id": parent_id})
 
 
 async def create_manual_task(task: ManualTaskOut, idempotency_key: str | None = None) -> dict:
@@ -354,7 +354,7 @@ async def create_manual_task(task: ManualTaskOut, idempotency_key: str | None = 
     if idempotency_key:
         doc["idempotency_key"] = idempotency_key
     try:
-        await db.manual_tasks.insert_one(doc)
+        await database.get_db().manual_tasks.insert_one(doc)
     except DuplicateKeyError:
         # 同一個 key 的請求同時送達，另一個已經建立成功，回傳那一筆
         existing = await get_manual_task_by_idempotency_key(task.user_id, idempotency_key) if idempotency_key else None
@@ -381,7 +381,7 @@ async def create_manual_task(task: ManualTaskOut, idempotency_key: str | None = 
     }
 
 async def get_manual_task_by_id(task_id: str, user_id: str):
-    task = await db.manual_tasks.find_one({"_id": task_id, "user_id": user_id})
+    task = await database.get_db().manual_tasks.find_one({"_id": task_id, "user_id": user_id})
     if not task:
         raise NotFoundError(TASK_NOT_FOUND_DETAIL)
     task = _to_task(task)
@@ -400,7 +400,7 @@ async def _with_stage_fields(task: dict) -> dict:
     return task
 
 async def get_manual_tasks_by_user_id(user_id: str):
-    tasks = await db.manual_tasks.find({"user_id": user_id}).to_list()
+    tasks = await database.get_db().manual_tasks.find({"user_id": user_id}).to_list()
     return _with_parents_computed([_to_task(task) for task in tasks])
 
 async def write_manual_task_order(user_id: str, items: list[dict]) -> None:
@@ -412,7 +412,7 @@ async def write_manual_task_order(user_id: str, items: list[dict]) -> None:
     """
     now = datetime.now(timezone.utc)
     for item in items:
-        await db.manual_tasks.update_one(
+        await database.get_db().manual_tasks.update_one(
             {"_id": item["task_id"], "user_id": user_id},
             {"$set": {"sort_order": item["sort_order"], "priority": item["priority"], "updated": now}},
         )
@@ -456,7 +456,7 @@ async def set_calendar_event_id(
     確認排程建立行事曆事件後呼叫，事件編號與時段在同一次更新寫入。calendar_event_id 不開放透過一般更新 API 寫入，
     否則 client 可以假裝任務已排入行事曆。
     """
-    await db.manual_tasks.update_one(
+    await database.get_db().manual_tasks.update_one(
         {"_id": task_id, "user_id": user_id},
         {"$set": {
             "calendar_event_id": calendar_event_id,
@@ -471,7 +471,7 @@ async def clear_calendar_event_id(task_id: str, user_id: str, calendar_event_id:
     任務的 Google 日曆事件編號還是 calendar_event_id 時，把編號和排程時段一起清成 None；條件寫在同一次寫入的 filter 裡。
     編號已被換掉、任務不存在或不屬於 user_id 時什麼都不改，回傳 False。
     """
-    result = await db.manual_tasks.update_one(
+    result = await database.get_db().manual_tasks.update_one(
         {"_id": task_id, "user_id": user_id, "calendar_event_id": calendar_event_id},
         {"$set": {
             "calendar_event_id": None, "scheduled_start": None, "scheduled_end": None,
@@ -493,10 +493,10 @@ async def update_manual_task_by_id(task_id: str, data: dict):
     if data.get("is_parent"):
         computed.add("status")
     fields = {key: value for key, value in data.items() if key not in computed}
-    result = await db.manual_tasks.update_one({"_id": task_id}, {"$set": fields})
+    result = await database.get_db().manual_tasks.update_one({"_id": task_id}, {"$set": fields})
     if result.modified_count == 0:
         raise InvalidRequestError("No valid fields to update")
-    doc = await db.manual_tasks.find_one({"_id": task_id})
+    doc = await database.get_db().manual_tasks.find_one({"_id": task_id})
     if doc is None:
         raise NotFoundError(TASK_NOT_FOUND_DETAIL)
     task = _to_task(doc)
@@ -514,6 +514,6 @@ async def delete_manual_task_by_id(task_id: str, user_id: str) -> None:
 
     沒有刪到任何文件時丟 NotFoundError（404）。
     """
-    result = await db.manual_tasks.delete_one({"_id": task_id, "user_id": user_id})
+    result = await database.get_db().manual_tasks.delete_one({"_id": task_id, "user_id": user_id})
     if result.deleted_count == 0:
         raise NotFoundError(TASK_NOT_FOUND_DETAIL)

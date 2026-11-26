@@ -10,7 +10,31 @@ from schemas.task_inference import TaskFieldInference
 
 logger = logging.getLogger(__name__)
 
-client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+# Gemini client 在 app 啟動（main.py 的 lifespan）時才建立，import 時不需要 GEMINI_API_KEY
+client: genai.Client | None = None
+
+
+def get_client() -> genai.Client:
+    """測試會替換 client 的方法，所以每次呼叫都重新讀 client。"""
+    if client is None:
+        raise RuntimeError("Gemini client 還沒建立：要在 app 啟動後才能使用")
+    return client
+
+
+def open_client() -> bool:
+    """建立 client；已經建立過時不重建，回傳 False。"""
+    global client
+    if client is not None:
+        return False
+    client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+    return True
+
+
+def close_client() -> None:
+    global client
+    if client is not None:
+        client.close()
+        client = None
 
 DEFAULT_PRIORITY = "Medium"
 DEFAULT_DURATION_MINUTES = 60
@@ -36,7 +60,7 @@ async def infer_missing_task_fields(title: str, description: str, hint: str | No
             hint=hint or "（無）",
         )
         response = await run_in_threadpool(
-            client.models.generate_content,
+            get_client().models.generate_content,
             model="gemini-2.0-flash",
             contents=prompt,
             config={
@@ -81,7 +105,7 @@ async def infer_missing_subtask_fields(parent_title: str, parent_description: st
             subtasks=lines,
         )
         response = await run_in_threadpool(
-            client.models.generate_content,
+            get_client().models.generate_content,
             model="gemini-2.0-flash",
             contents=prompt,
             config={

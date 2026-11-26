@@ -7,7 +7,7 @@
 from datetime import datetime
 from typing import Callable, Optional, TypedDict
 
-from core.database import db
+from core import database
 
 
 class PlatformUserInfo(TypedDict):
@@ -43,7 +43,7 @@ class PlatformAdapter:
     @property
     def collection(self):
         # 不能改成 db[name]：測試替換的是 db 的屬性，db[name] 會拿到真的 collection
-        return getattr(db, self.collection_name)
+        return getattr(database.get_db(), self.collection_name)
 
     def credentials_from_account(self, account: dict, decrypt: Callable[[str], str]) -> Optional[dict]:
         """從帳號資料取出抓資料用的憑證。回傳 None 代表資料不完整，當成還沒連結。"""

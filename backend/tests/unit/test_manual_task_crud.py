@@ -12,31 +12,31 @@ from pymongo.errors import DuplicateKeyError
 @pytest.mark.asyncio
 async def test_get_manual_task_by_id_returns_own_task_with_id():
     """查自己的任務 → 回傳任務內容，任務 id 放在 id 欄位（跟 API 回傳的格式一致），不是 _id。"""
-    await manual_task_crud.db.manual_tasks.insert_one({"_id": "crud-t1", "user_id": "alice", "title": "Alice 的任務"})
+    await manual_task_crud.database.db.manual_tasks.insert_one({"_id": "crud-t1", "user_id": "alice", "title": "Alice 的任務"})
     try:
         task = await manual_task_crud.get_manual_task_by_id("crud-t1", "alice")
         assert task["title"] == "Alice 的任務"
         assert task["id"] == "crud-t1"
         assert "_id" not in task
     finally:
-        await manual_task_crud.db.manual_tasks.delete_many({"_id": "crud-t1"})
+        await manual_task_crud.database.db.manual_tasks.delete_many({"_id": "crud-t1"})
 
 
 @pytest.mark.asyncio
 async def test_get_manual_task_by_id_hides_other_users_task():
     """使用者 bob 查 alice 的任務 → 404，不能讓他看到。"""
-    await manual_task_crud.db.manual_tasks.insert_one({"_id": "crud-t2", "user_id": "alice", "title": "Alice 的任務"})
+    await manual_task_crud.database.db.manual_tasks.insert_one({"_id": "crud-t2", "user_id": "alice", "title": "Alice 的任務"})
     try:
         with pytest.raises(NotFoundError) as exc_info:
             await manual_task_crud.get_manual_task_by_id("crud-t2", "bob")
     finally:
-        await manual_task_crud.db.manual_tasks.delete_many({"_id": "crud-t2"})
+        await manual_task_crud.database.db.manual_tasks.delete_many({"_id": "crud-t2"})
 
 
 @pytest.mark.asyncio
 async def test_get_manual_tasks_by_user_id_returns_only_own_tasks():
     """列出任務只會回傳自己的（不含別人的），每筆的任務 id 都放在 id 欄位。"""
-    collection = manual_task_crud.db.manual_tasks
+    collection = manual_task_crud.database.db.manual_tasks
     await collection.insert_many([
         {"_id": "crud-t3", "user_id": "alice", "title": "Alice 的任務一"},
         {"_id": "crud-t4", "user_id": "alice", "title": "Alice 的任務二"},
@@ -58,7 +58,7 @@ async def test_get_manual_task_by_id_raises_404_when_not_found(monkeypatch):
     async def mock_find_one(query):
         return None
 
-    monkeypatch.setattr(manual_task_crud.db.manual_tasks, "find_one", mock_find_one)
+    monkeypatch.setattr(manual_task_crud.database.db.manual_tasks, "find_one", mock_find_one)
 
     with pytest.raises(NotFoundError) as exc_info:
         await manual_task_crud.get_manual_task_by_id("task1", "uid123")
@@ -74,7 +74,7 @@ async def test_get_manual_tasks_by_user_id_returns_empty_list_when_no_tasks(monk
         async def to_list(self):
             return []
 
-    monkeypatch.setattr(manual_task_crud.db.manual_tasks, "find", lambda query: FakeCursor())
+    monkeypatch.setattr(manual_task_crud.database.db.manual_tasks, "find", lambda query: FakeCursor())
 
     result = await manual_task_crud.get_manual_tasks_by_user_id("uid123")
 
@@ -88,7 +88,7 @@ _T = datetime(2026, 9, 10, 9, 0, tzinfo=timezone.utc)
 @pytest.mark.asyncio
 async def test_set_calendar_event_id_writes_id_and_does_not_touch_other_tasks():
     """確認排程成功後把 calendar_event_id 寫回去，且只會動到指定的那筆任務。"""
-    collection = manual_task_crud.db.manual_tasks
+    collection = manual_task_crud.database.db.manual_tasks
     await collection.insert_many([
         {"_id": "confirm-t1", "user_id": "alice", "title": "任務一"},
         {"_id": "confirm-t2", "user_id": "alice", "title": "任務二"},
@@ -107,7 +107,7 @@ async def test_set_calendar_event_id_writes_id_and_does_not_touch_other_tasks():
 @pytest.mark.asyncio
 async def test_set_calendar_event_id_writes_scheduled_times_in_same_update():
     """排程成功寫回事件編號時，同一次更新也存開始、結束時間（AC7：今日卡片用它判斷今天與已逾期）。"""
-    collection = manual_task_crud.db.manual_tasks
+    collection = manual_task_crud.database.db.manual_tasks
     await collection.insert_one({"_id": "confirm-times", "user_id": "alice", "title": "任務"})
     start = datetime(2026, 9, 10, 9, 0, tzinfo=timezone.utc)
     end = datetime(2026, 9, 10, 10, 0, tzinfo=timezone.utc)
@@ -125,7 +125,7 @@ async def test_set_calendar_event_id_writes_scheduled_times_in_same_update():
 @pytest.mark.asyncio
 async def test_clear_calendar_event_id_clears_scheduled_times_in_same_update():
     """清掉事件編號時，開始、結束時間同一次更新清成 None（AC10、AC38）；編號已被換掉時三個欄位都不動（AC42）。"""
-    collection = manual_task_crud.db.manual_tasks
+    collection = manual_task_crud.database.db.manual_tasks
     start = datetime(2026, 9, 10, 9, 0, tzinfo=timezone.utc)
     await collection.insert_one({
         "_id": "clear-times", "user_id": "alice", "title": "任務",
@@ -157,7 +157,7 @@ async def _sort_orders(user_id):
 @pytest.mark.asyncio
 async def test_write_manual_task_order_writes_sort_order_from_each_item():
     """依每筆傳入的 sort_order 寫回（呼叫端依跨來源的完整清單指定，不是這裡自己算的）。"""
-    collection = manual_task_crud.db.manual_tasks
+    collection = manual_task_crud.database.db.manual_tasks
     await collection.insert_many([
         {"_id": "reorder-t1", "user_id": "alice", "title": "任務一", "priority": "Medium"},
         {"_id": "reorder-t2", "user_id": "alice", "title": "任務二", "priority": "Medium"},
@@ -179,7 +179,7 @@ async def test_write_manual_task_order_writes_sort_order_from_each_item():
 @pytest.mark.asyncio
 async def test_write_manual_task_order_writes_priority_from_which_column_task_was_dropped_in():
     """拖到不同欄（priority）要跟著寫回去——這是三欄式拖拉排序畫面「拖去別欄＝改優先權」的核心行為。"""
-    collection = manual_task_crud.db.manual_tasks
+    collection = manual_task_crud.database.db.manual_tasks
     await collection.insert_many([
         {"_id": "reorder-t8", "user_id": "alice", "title": "任務", "priority": "Low"},
     ])
@@ -196,7 +196,7 @@ async def test_write_manual_task_order_writes_priority_from_which_column_task_wa
 @pytest.mark.asyncio
 async def test_write_manual_task_order_does_not_touch_another_users_task():
     """寫入時也帶 user_id 條件：就算呼叫端漏檢查，別人的任務也不會被改。"""
-    collection = manual_task_crud.db.manual_tasks
+    collection = manual_task_crud.database.db.manual_tasks
     await collection.insert_many([
         {"_id": "reorder-t5", "user_id": "bob", "title": "Bob 的任務", "priority": "Medium", "sort_order": 9},
     ])
@@ -211,7 +211,7 @@ async def test_write_manual_task_order_does_not_touch_another_users_task():
 @pytest.mark.asyncio
 async def test_write_manual_task_order_same_order_again_does_not_raise():
     """重新提交跟現在一模一樣的順序（sort_order 沒有真的變動）→ 不能因此噴錯。"""
-    collection = manual_task_crud.db.manual_tasks
+    collection = manual_task_crud.database.db.manual_tasks
     await collection.insert_many([
         {"_id": "reorder-t6", "user_id": "alice", "title": "任務一", "priority": "Medium", "sort_order": 0},
         {"_id": "reorder-t7", "user_id": "alice", "title": "任務二", "priority": "Medium", "sort_order": 1},
@@ -235,7 +235,7 @@ async def test_update_manual_task_by_id_raises_400_when_nothing_modified(monkeyp
     async def mock_update_one(query, update):
         return type("Result", (), {"modified_count": 0})()
 
-    monkeypatch.setattr(manual_task_crud.db.manual_tasks, "update_one", mock_update_one)
+    monkeypatch.setattr(manual_task_crud.database.db.manual_tasks, "update_one", mock_update_one)
 
     with pytest.raises(InvalidRequestError) as exc_info:
         await manual_task_crud.update_manual_task_by_id("task1", {"title": "沒變"})
@@ -254,8 +254,8 @@ async def test_update_manual_task_by_id_returns_updated_doc(monkeypatch):
     async def mock_find_one(query):
         return {"_id": "task1", "title": "新標題"}
 
-    monkeypatch.setattr(manual_task_crud.db.manual_tasks, "update_one", mock_update_one)
-    monkeypatch.setattr(manual_task_crud.db.manual_tasks, "find_one", mock_find_one)
+    monkeypatch.setattr(manual_task_crud.database.db.manual_tasks, "update_one", mock_update_one)
+    monkeypatch.setattr(manual_task_crud.database.db.manual_tasks, "find_one", mock_find_one)
 
     result = await manual_task_crud.update_manual_task_by_id("task1", {"id": "task1", "title": "新標題"})
 
@@ -271,7 +271,7 @@ async def test_delete_manual_task_by_id_raises_404_when_nothing_deleted(monkeypa
     async def mock_delete_one(query):
         return type("Result", (), {"deleted_count": 0})()
 
-    monkeypatch.setattr(manual_task_crud.db.manual_tasks, "delete_one", mock_delete_one)
+    monkeypatch.setattr(manual_task_crud.database.db.manual_tasks, "delete_one", mock_delete_one)
 
     with pytest.raises(NotFoundError):
         await manual_task_crud.delete_manual_task_by_id("task1", "alice")
@@ -280,7 +280,7 @@ async def test_delete_manual_task_by_id_raises_404_when_nothing_deleted(monkeypa
 @pytest.mark.asyncio
 async def test_delete_manual_task_by_id_only_deletes_own_task():
     """issue-30 AC18：刪除時同時以 user_id 篩選 → 別人的任務刪不到（404），仍在資料庫裡。"""
-    collection = manual_task_crud.db.manual_tasks
+    collection = manual_task_crud.database.db.manual_tasks
     await collection.insert_one({"_id": "issue30-own", "user_id": "alice", "title": "Alice 的任務"})
     try:
         with pytest.raises(NotFoundError):
@@ -313,7 +313,7 @@ async def test_create_manual_task_stores_idempotency_key(monkeypatch):
     async def fake_insert_one(doc):
         saved.update(doc)
 
-    monkeypatch.setattr(manual_task_crud.db.manual_tasks, "insert_one", fake_insert_one)
+    monkeypatch.setattr(manual_task_crud.database.db.manual_tasks, "insert_one", fake_insert_one)
 
     await manual_task_crud.create_manual_task(_task(), "key-1")
 
@@ -330,8 +330,8 @@ async def test_create_manual_task_returns_existing_when_same_key_inserted_concur
         assert query == {"user_id": "idem_user", "idempotency_key": "key-1"}
         return {"_id": "first-task", "user_id": "idem_user", "title": "期末報告"}
 
-    monkeypatch.setattr(manual_task_crud.db.manual_tasks, "insert_one", fake_insert_one)
-    monkeypatch.setattr(manual_task_crud.db.manual_tasks, "find_one", fake_find_one)
+    monkeypatch.setattr(manual_task_crud.database.db.manual_tasks, "insert_one", fake_insert_one)
+    monkeypatch.setattr(manual_task_crud.database.db.manual_tasks, "find_one", fake_find_one)
 
     result = await manual_task_crud.create_manual_task(_task(), "key-1")
 
@@ -375,7 +375,7 @@ def test_ac16_parent_status_is_computed_from_subtasks(statuses, expected):
 @pytest.mark.asyncio
 async def test_ac16_reading_parent_returns_computed_status_and_progress_not_stored_values():
     """AC16 / 假設 1：讀取主任務時才依子任務計算狀態與進度；主任務沒有優先序和時長。"""
-    collection = manual_task_crud.db.manual_tasks
+    collection = manual_task_crud.database.db.manual_tasks
     await collection.insert_many([
         {"_id": "ac16-p", "user_id": "alice", "title": "報告", "is_parent": True, "subtask_ids": ["ac16-s1", "ac16-s2"]},
         {"_id": "ac16-s1", "user_id": "alice", "title": "一", "parent_id": "ac16-p", "status": "Done", "priority": "High", "duration": 30},
@@ -458,7 +458,7 @@ async def test_ac4_write_failure_removes_documents_already_written():
     """AC4 / 假設 4：insert_many 寫到一半失敗 → 刪掉這次已寫入的文件，主任務和子任務都不留下，例外照樣往外丟。"""
     from pymongo.errors import PyMongoError
 
-    collection = manual_task_crud.db.manual_tasks
+    collection = manual_task_crud.database.db.manual_tasks
     real_insert_one = collection.insert_one
 
     async def insert_first_then_fail(docs, **kwargs):
@@ -482,7 +482,7 @@ async def test_ac4_write_failure_removes_documents_already_written():
 
 async def _insert_chain(prefix, count):
     subtask_ids = [f"{prefix}-s{i}" for i in range(1, count + 1)]
-    await manual_task_crud.db.manual_tasks.insert_many(
+    await manual_task_crud.database.db.manual_tasks.insert_many(
         [{"_id": f"{prefix}-p", "user_id": "alice", "title": "主任務", "is_parent": True, "subtask_ids": subtask_ids}]
         + [
             {"_id": f"{prefix}-s{i}", "user_id": "alice", "title": f"階段{i}", "parent_id": f"{prefix}-p",
@@ -508,10 +508,10 @@ async def test_ac10_inserting_shifts_later_stages_by_one():
         assert [(s["title"], s["stage"]) for s in stages] == [("階段1", 1), ("插入的", 2), ("階段2", 3), ("階段3", 4)]
         assert stages[1]["parent_id"] == "ac10-p"
         # ADR 0004：階段編號是在主任務 subtask_ids 裡的位置，不存在子任務上
-        assert (await manual_task_crud.db.manual_tasks.find_one({"_id": "ac10-p"}))["subtask_ids"][1] == "ac10-new"
-        assert await manual_task_crud.db.manual_tasks.count_documents({"_id": {"$regex": "^ac10-"}, "stage": {"$exists": True}}) == 0
+        assert (await manual_task_crud.database.db.manual_tasks.find_one({"_id": "ac10-p"}))["subtask_ids"][1] == "ac10-new"
+        assert await manual_task_crud.database.db.manual_tasks.count_documents({"_id": {"$regex": "^ac10-"}, "stage": {"$exists": True}}) == 0
     finally:
-        await manual_task_crud.db.manual_tasks.delete_many({"_id": {"$regex": "^ac10-"}})
+        await manual_task_crud.database.db.manual_tasks.delete_many({"_id": {"$regex": "^ac10-"}})
 
 
 @pytest.mark.asyncio
@@ -525,21 +525,21 @@ async def test_ac29_deleting_a_stage_moves_later_stages_forward():
         stages = await manual_task_crud.get_subtasks("ac29-p", "alice")
         assert [(s["title"], s["stage"]) for s in stages] == [("階段1", 1), ("階段3", 2)]
     finally:
-        await manual_task_crud.db.manual_tasks.delete_many({"_id": {"$regex": "^ac29-"}})
+        await manual_task_crud.database.db.manual_tasks.delete_many({"_id": {"$regex": "^ac29-"}})
 
 
 @pytest.mark.asyncio
 async def test_ac28_deleting_parent_removes_all_its_subtasks_only():
     """AC28：刪除主任務 → 主任務和它的子任務都刪掉，別的任務不受影響。"""
     await _insert_chain("ac28", 2)
-    await manual_task_crud.db.manual_tasks.insert_one({"_id": "ac28-other", "user_id": "alice", "title": "別的"})
+    await manual_task_crud.database.db.manual_tasks.insert_one({"_id": "ac28-other", "user_id": "alice", "title": "別的"})
     try:
         await manual_task_crud.delete_parent_with_subtasks("ac28-p", "alice")
 
-        remaining = await manual_task_crud.db.manual_tasks.find({"_id": {"$regex": "^ac28-"}}).to_list(length=None)
+        remaining = await manual_task_crud.database.db.manual_tasks.find({"_id": {"$regex": "^ac28-"}}).to_list(length=None)
         assert [d["_id"] for d in remaining] == ["ac28-other"]
     finally:
-        await manual_task_crud.db.manual_tasks.delete_many({"_id": {"$regex": "^ac28-"}})
+        await manual_task_crud.database.db.manual_tasks.delete_many({"_id": {"$regex": "^ac28-"}})
 
 
 def test_ac6_inferred_priority_lower_than_next_stage_is_raised_to_next():
@@ -616,9 +616,9 @@ async def test_ac39_insert_into_full_parent_is_rejected_and_leaves_no_trace():
             await manual_task_crud.insert_subtask("ac39a-p", "alice", _new_subtask("ac39a-new"), position=11)
 
         assert len(await _visible_titles("ac39a-p")) == 10
-        assert await manual_task_crud.db.manual_tasks.find_one({"_id": "ac39a-new"}) is None
+        assert await manual_task_crud.database.db.manual_tasks.find_one({"_id": "ac39a-new"}) is None
     finally:
-        await manual_task_crud.db.manual_tasks.delete_many({"_id": {"$regex": "^ac39a-"}})
+        await manual_task_crud.database.db.manual_tasks.delete_many({"_id": {"$regex": "^ac39a-"}})
 
 
 @pytest.mark.asyncio
@@ -631,7 +631,7 @@ async def test_ac39_insert_position_beyond_current_count_is_rejected():
 
         assert await _visible_titles("ac39b-p") == ["階段1", "階段2"]
     finally:
-        await manual_task_crud.db.manual_tasks.delete_many({"_id": {"$regex": "^ac39b-"}})
+        await manual_task_crud.database.db.manual_tasks.delete_many({"_id": {"$regex": "^ac39b-"}})
 
 
 @pytest.mark.asyncio
@@ -640,7 +640,7 @@ async def test_ac39_failure_updating_parent_keeps_stages_unchanged():
     from pymongo.errors import PyMongoError
 
     await _insert_chain("ac39c", 2)
-    collection = manual_task_crud.db.manual_tasks
+    collection = manual_task_crud.database.db.manual_tasks
     original = collection.update_one
 
     async def fail_on_parent(filter, update, **kwargs):
@@ -665,7 +665,7 @@ async def test_ac39_failure_updating_parent_keeps_stages_unchanged():
 @pytest.mark.asyncio
 async def test_ac39_converting_task_that_changed_meanwhile_is_rejected_and_unchanged():
     """AC39：一般任務在轉換當下已經完成（另一個請求改的）→ 400，任務維持一般任務，不留下子任務。"""
-    collection = manual_task_crud.db.manual_tasks
+    collection = manual_task_crud.database.db.manual_tasks
     await collection.insert_one({"_id": "ac39d-t", "user_id": "alice", "title": "一般", "status": "Done", "priority": "Low"})
     try:
         with pytest.raises(InvalidRequestError):
@@ -681,7 +681,7 @@ async def test_ac39_converting_task_that_changed_meanwhile_is_rejected_and_uncha
 @pytest.mark.asyncio
 async def test_ac39_conversion_sets_parent_fields_and_first_subtask_in_one_update():
     """AC39 / AC12：轉換成主任務時，is_parent、清空的欄位和第一個子任務在同一次更新完成。"""
-    collection = manual_task_crud.db.manual_tasks
+    collection = manual_task_crud.database.db.manual_tasks
     await collection.insert_one({
         "_id": "ac39e-t", "user_id": "alice", "title": "一般", "status": "In Progress", "priority": "Low",
         "duration": 30, "inference_hint": "提醒",
@@ -706,7 +706,7 @@ async def test_issue30_ac6_removing_the_only_stage_from_the_list_is_refused():
 
         assert await _visible_titles("ac39f-p") == ["階段1"]
     finally:
-        await manual_task_crud.db.manual_tasks.delete_many({"_id": {"$regex": "^ac39f-"}})
+        await manual_task_crud.database.db.manual_tasks.delete_many({"_id": {"$regex": "^ac39f-"}})
 
 
 @pytest.mark.asyncio
@@ -721,9 +721,9 @@ async def test_issue30_ac6_deleting_parent_through_only_subtask_requires_list_to
 
         only = await manual_task_crud.get_manual_task_by_id("i30only-s1", "alice")
         assert await manual_task_crud.delete_parent_if_only_subtask(only) is True
-        assert await manual_task_crud.db.manual_tasks.count_documents({"_id": {"$regex": "^i30only-"}}) == 0
+        assert await manual_task_crud.database.db.manual_tasks.count_documents({"_id": {"$regex": "^i30only-"}}) == 0
     finally:
-        await manual_task_crud.db.manual_tasks.delete_many({"_id": {"$regex": "^i30(only|two)-"}})
+        await manual_task_crud.database.db.manual_tasks.delete_many({"_id": {"$regex": "^i30(only|two)-"}})
 
 
 @pytest.mark.asyncio
@@ -732,7 +732,7 @@ async def test_ac39_subtask_not_in_parent_order_is_hidden_everywhere():
     import crud.schedulable_items as schedulable_items
 
     await _insert_chain("ac39g", 1)
-    collection = manual_task_crud.db.manual_tasks
+    collection = manual_task_crud.database.db.manual_tasks
     await collection.insert_many([
         {**_new_subtask("ac39g-stray"), "parent_id": "ac39g-p"},
         {**_new_subtask("ac39g-orphan"), "parent_id": "ac39g-gone"},

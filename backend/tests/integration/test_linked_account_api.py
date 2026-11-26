@@ -28,7 +28,7 @@ async def test_create_linked_account(monkeypatch, logged_in_user):
     async def mock_insert_one(doc):
         return type("Mock", (), {"inserted_id": "test_user_123_github"})()
 
-    monkeypatch.setattr(linked_mod.db.linkedAccounts, "insert_one", mock_insert_one)
+    monkeypatch.setattr(linked_mod.database.db.linkedAccounts, "insert_one", mock_insert_one)
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
@@ -53,7 +53,7 @@ async def test_get_linked_accounts(monkeypatch, logged_in_user):
                 }
             return generator()
 
-    monkeypatch.setattr(linked_mod.db.linkedAccounts, "find", lambda q: MockCursor())
+    monkeypatch.setattr(linked_mod.database.db.linkedAccounts, "find", lambda q: MockCursor())
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:

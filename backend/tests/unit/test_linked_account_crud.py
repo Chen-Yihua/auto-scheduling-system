@@ -47,7 +47,7 @@ async def test_create_github_account_success(monkeypatch):
     async def mock_fetch_github_userinfo(token):
         return {"username": "mock_user", "avatar_url": "https://avatar"}
 
-    monkeypatch.setattr(linked_mod.db.linkedAccounts, "insert_one", mock_insert_one)
+    monkeypatch.setattr(linked_mod.database.db.linkedAccounts, "insert_one", mock_insert_one)
     monkeypatch.setattr(github_platform, "fetch_github_userinfo", mock_fetch_github_userinfo)
 
     account = LinkedAccountCreate(platform="github", apiKey="token123", status="", username="")
@@ -133,7 +133,7 @@ async def test_create_jira_account_success(monkeypatch):
     async def mock_fetch_jira_userinfo(api_key, domain):
         return {"username": "jira_user", "avatar_url": "https://avatar"}
 
-    monkeypatch.setattr(linked_mod.db.linkedAccounts, "insert_one", mock_insert_one)
+    monkeypatch.setattr(linked_mod.database.db.linkedAccounts, "insert_one", mock_insert_one)
     monkeypatch.setattr(jira_platform, "fetch_jira_userinfo", mock_fetch_jira_userinfo)
 
     account = LinkedAccountCreate(
@@ -158,7 +158,7 @@ async def test_create_moodle_account_success(monkeypatch):
     def mock_verify_succeeds(username, password):
         return True
 
-    monkeypatch.setattr(linked_mod.db.linkedAccounts, "insert_one", mock_insert_one)
+    monkeypatch.setattr(linked_mod.database.db.linkedAccounts, "insert_one", mock_insert_one)
     monkeypatch.setattr(moodle_platform, "verify_moodle_login", mock_verify_succeeds)
 
     account = LinkedAccountCreate(platform="moodle", username="stu001", password="pw123", status="")
@@ -195,7 +195,7 @@ async def test_get_linked_accounts(monkeypatch):
                 yield {"_id": "uid123_github", "platform": "github", "username": "test"}
             return generator()
 
-    monkeypatch.setattr(linked_mod.db.linkedAccounts, "find", lambda q: MockCursor())
+    monkeypatch.setattr(linked_mod.database.db.linkedAccounts, "find", lambda q: MockCursor())
     result = await get_linked_accounts_by_clerk_id("uid123")
 
     assert isinstance(result, list)
@@ -218,7 +218,7 @@ async def test_get_linked_accounts_masks_sensitive_fields(monkeypatch):
                 }
             return generator()
 
-    monkeypatch.setattr(linked_mod.db.linkedAccounts, "find", lambda q: MockCursor())
+    monkeypatch.setattr(linked_mod.database.db.linkedAccounts, "find", lambda q: MockCursor())
     result = await get_linked_accounts_by_clerk_id("uid123")
 
     assert result[0]["password"] != "real-password"
@@ -243,12 +243,12 @@ async def test_update_github_account_with_token(monkeypatch):
     async def mock_find_one(query):
         return {"_id": "uid123_github", "apiKey": encrypt_secret("old-token")}
 
-    monkeypatch.setattr(linked_mod.db.linkedAccounts, "find_one", mock_find_one)
+    monkeypatch.setattr(linked_mod.database.db.linkedAccounts, "find_one", mock_find_one)
     async def mock_find_one(query):
         return {"_id": "uid123_github", "apiKey": encrypt_secret("old-token")}
 
-    monkeypatch.setattr(linked_mod.db.linkedAccounts, "find_one", mock_find_one)
-    monkeypatch.setattr(linked_mod.db.linkedAccounts, "update_one", mock_update_one)
+    monkeypatch.setattr(linked_mod.database.db.linkedAccounts, "find_one", mock_find_one)
+    monkeypatch.setattr(linked_mod.database.db.linkedAccounts, "update_one", mock_update_one)
     monkeypatch.setattr(github_platform, "fetch_github_userinfo", mock_fetch_github_userinfo)
 
     result = await update_linked_account_by_clerk_id(
@@ -274,7 +274,7 @@ async def test_update_github_account_basic(monkeypatch):
     async def mock_update_one(*args, **kwargs):
         return type("Mock", (), {"matched_count": 1})()
 
-    monkeypatch.setattr(linked_mod.db.linkedAccounts, "update_one", mock_update_one)
+    monkeypatch.setattr(linked_mod.database.db.linkedAccounts, "update_one", mock_update_one)
     result = await update_linked_account_by_clerk_id(
         "uid123", "github", {"status": "connected"}
     )
@@ -297,12 +297,12 @@ async def test_update_jira_account_with_domain_reverifies(monkeypatch):
     async def mock_find_one(query):
         return {"_id": "uid123_jira", "apiKey": encrypt_secret("oldkey"), "domain": "old.atlassian.net"}
 
-    monkeypatch.setattr(linked_mod.db.linkedAccounts, "find_one", mock_find_one)
+    monkeypatch.setattr(linked_mod.database.db.linkedAccounts, "find_one", mock_find_one)
     async def mock_find_one(query):
         return {"_id": "uid123_jira", "apiKey": encrypt_secret("oldkey"), "domain": "old.atlassian.net"}
 
-    monkeypatch.setattr(linked_mod.db.linkedAccounts, "find_one", mock_find_one)
-    monkeypatch.setattr(linked_mod.db.linkedAccounts, "update_one", mock_update_one)
+    monkeypatch.setattr(linked_mod.database.db.linkedAccounts, "find_one", mock_find_one)
+    monkeypatch.setattr(linked_mod.database.db.linkedAccounts, "update_one", mock_update_one)
     monkeypatch.setattr(jira_platform, "fetch_jira_userinfo", mock_fetch_jira_userinfo)
 
     result = await update_linked_account_by_clerk_id(
@@ -322,7 +322,7 @@ async def test_update_account_that_does_not_exist_returns_false_without_calling_
     async def fail_if_called(*a, **k):
         raise AssertionError("不該呼叫平台驗證")
 
-    monkeypatch.setattr(linked_mod.db.linkedAccounts, "find_one", mock_find_one)
+    monkeypatch.setattr(linked_mod.database.db.linkedAccounts, "find_one", mock_find_one)
     monkeypatch.setattr(jira_platform, "fetch_jira_userinfo", fail_if_called)
 
     result = await update_linked_account_by_clerk_id(
@@ -350,8 +350,8 @@ async def test_update_jira_apikey_only_reverifies_with_existing_domain(monkeypat
         updated = update["$set"]
         return type("Mock", (), {"matched_count": 1})()
 
-    monkeypatch.setattr(linked_mod.db.linkedAccounts, "find_one", mock_find_one)
-    monkeypatch.setattr(linked_mod.db.linkedAccounts, "update_one", mock_update_one)
+    monkeypatch.setattr(linked_mod.database.db.linkedAccounts, "find_one", mock_find_one)
+    monkeypatch.setattr(linked_mod.database.db.linkedAccounts, "update_one", mock_update_one)
     monkeypatch.setattr(jira_platform, "fetch_jira_userinfo", mock_fetch_jira_userinfo)
 
     result = await update_linked_account_by_clerk_id(
@@ -383,8 +383,8 @@ async def test_update_jira_domain_only_reverifies_with_existing_apikey(monkeypat
         updated = update["$set"]
         return type("Mock", (), {"matched_count": 1})()
 
-    monkeypatch.setattr(linked_mod.db.linkedAccounts, "find_one", mock_find_one)
-    monkeypatch.setattr(linked_mod.db.linkedAccounts, "update_one", mock_update_one)
+    monkeypatch.setattr(linked_mod.database.db.linkedAccounts, "find_one", mock_find_one)
+    monkeypatch.setattr(linked_mod.database.db.linkedAccounts, "update_one", mock_update_one)
     monkeypatch.setattr(jira_platform, "fetch_jira_userinfo", mock_fetch_jira_userinfo)
 
     result = await update_linked_account_by_clerk_id(
@@ -414,8 +414,8 @@ async def test_update_moodle_password_reverifies_with_existing_username(monkeypa
         updated = update["$set"]
         return type("Mock", (), {"matched_count": 1})()
 
-    monkeypatch.setattr(linked_mod.db.linkedAccounts, "find_one", mock_find_one)
-    monkeypatch.setattr(linked_mod.db.linkedAccounts, "update_one", mock_update_one)
+    monkeypatch.setattr(linked_mod.database.db.linkedAccounts, "find_one", mock_find_one)
+    monkeypatch.setattr(linked_mod.database.db.linkedAccounts, "update_one", mock_update_one)
     monkeypatch.setattr(moodle_platform, "verify_moodle_login", mock_verify)
 
     result = await update_linked_account_by_clerk_id(
@@ -446,8 +446,8 @@ async def test_update_moodle_username_only_reverifies_with_existing_password(mon
         updated = update["$set"]
         return type("Mock", (), {"matched_count": 1})()
 
-    monkeypatch.setattr(linked_mod.db.linkedAccounts, "find_one", mock_find_one)
-    monkeypatch.setattr(linked_mod.db.linkedAccounts, "update_one", mock_update_one)
+    monkeypatch.setattr(linked_mod.database.db.linkedAccounts, "find_one", mock_find_one)
+    monkeypatch.setattr(linked_mod.database.db.linkedAccounts, "update_one", mock_update_one)
     monkeypatch.setattr(moodle_platform, "verify_moodle_login", mock_verify)
 
     result = await update_linked_account_by_clerk_id(
@@ -469,7 +469,7 @@ async def test_update_moodle_wrong_password_raises_401(monkeypatch):
     def mock_verify_fails(username, password):
         raise NonRetryableError("wrong password")
 
-    monkeypatch.setattr(linked_mod.db.linkedAccounts, "find_one", mock_find_one)
+    monkeypatch.setattr(linked_mod.database.db.linkedAccounts, "find_one", mock_find_one)
     monkeypatch.setattr(moodle_platform, "verify_moodle_login", mock_verify_fails)
 
     with pytest.raises(ReauthRequiredError):
@@ -486,7 +486,7 @@ async def test_delete_linked_account_success(monkeypatch):
     async def mock_delete_one(filter):
         return type("Mock", (), {"deleted_count": 1})()
 
-    monkeypatch.setattr(linked_mod.db.linkedAccounts, "delete_one", mock_delete_one)
+    monkeypatch.setattr(linked_mod.database.db.linkedAccounts, "delete_one", mock_delete_one)
     await delete_linked_account_by_id("uid123_github")
 
 
@@ -496,7 +496,7 @@ async def test_delete_linked_account_not_found(monkeypatch):
     async def mock_delete_one(filter):
         return type("Mock", (), {"deleted_count": 0})()
 
-    monkeypatch.setattr(linked_mod.db.linkedAccounts, "delete_one", mock_delete_one)
+    monkeypatch.setattr(linked_mod.database.db.linkedAccounts, "delete_one", mock_delete_one)
     with pytest.raises(NotFoundError) as exc_info:
         await delete_linked_account_by_id("uid123_github")
 

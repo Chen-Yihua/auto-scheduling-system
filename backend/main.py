@@ -1,17 +1,19 @@
 from dotenv import load_dotenv
 load_dotenv()
-
-from contextlib import asynccontextmanager
-from fastapi import FastAPI, Depends
-from fastapi.middleware.cors import CORSMiddleware
 import os
-from core.logging_config import setup_logging
 
+from contextlib import AsyncExitStack, asynccontextmanager
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from core.logging_config import setup_logging
 setup_logging()
 
 from routers import user, linked_account, pr_review_webhook, manual_task, google_calendar, schedule, analytics, scheduled_sync
 from platforms.router import platform_routers
-from core.database import ensure_indexes
+from core.database import open_database, close_database, ensure_indexes
+from core.cache import open_cache, close_cache
+from services import task_inference
 from slowapi.errors import RateLimitExceeded
 from core.rate_limit import limiter, rate_limit_exceeded_handler
 from pymongo.errors import ConnectionFailure, PyMongoError
@@ -31,8 +33,18 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await ensure_indexes()
-    yield
+    # 用 AsyncExitStack：照建立的相反順序關閉，前面的關閉失敗也會繼續關後面的
+    async with AsyncExitStack() as stack:
+        await open_database()
+        stack.push_async_callback(close_database)
+        open_cache()
+        stack.push_async_callback(close_cache)
+        if task_inference.open_client():
+            stack.callback(task_inference.close_client)
+        if pr_review_webhook.open_client():
+            stack.push_async_callback(pr_review_webhook.close_client)
+        await ensure_indexes()
+        yield
 
 
 app = FastAPI(

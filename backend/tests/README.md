@@ -4,7 +4,7 @@
 
 ```
 tests/
-├── conftest.py      共用設定（假資料庫、假登入 logged_in_user），所有子資料夾都會自動使用
+├── conftest.py      共用設定（假資料庫、假登入 logged_in_user），所有子資料夾都會自動使用；假資料庫在每個測試開始前清空
 ├── unit/            單元測試：不碰 HTTP，直接呼叫函式（crud、router 函式、services、cache、crypto…）
 └── integration/     整合 / API 測試：用 AsyncClient 打 endpoint（*_api、*_scenario，以及
                      資料庫錯誤處理、兜底 500、CORS、限流）
@@ -55,7 +55,7 @@ pytest                     # 全部（CI 用這個）
   `test_unhandled_error_handling.py`（兜底：沒預期的例外回帶 CORS 的 JSON 500）、
   `test_cors.py`、`test_rate_limit.py`。
 - `unit/`（不走 HTTP）：`test_security.py`（登入驗證）、`test_cache.py`、`test_crypto.py`、
-  `test_db_indexes.py`、`test_platform_sync.py`、`test_logging.py`、`test_ci_env_requirements.py`、
+  `test_db_indexes.py`、`test_app_lifespan.py`（app 啟動時建立連線、關閉時釋放）、`test_platform_sync.py`、`test_logging.py`、`test_ci_env_requirements.py`、
   `test_datetimes.py`（時間轉成帶時區的 UTC）等。
 
 ## 共用工具

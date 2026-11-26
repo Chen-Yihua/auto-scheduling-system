@@ -959,7 +959,7 @@ async def test_issue30_ac24_retry_after_document_deletion_failed_returns_404(sta
     """issue-30 AC24：子任務已移出清單、刪文件時資料庫失敗 → 重試回 404，其他子任務和主任務不變。"""
     parent, ids = await _two_stage_parent(("ev-1", "ev-2"))
     other_before = await _doc(ids[1])
-    collection = manual_task_router.manual_task_crud.db.manual_tasks
+    collection = manual_task_router.manual_task_crud.database.db.manual_tasks
     real_delete_one = collection.delete_one
     failures = []
 

@@ -33,7 +33,7 @@ def _mock_update_one(stored: dict):
 async def test_create_moodle_account_encrypts_password(monkeypatch):
     """建立 Moodle 帳號時，密碼存進資料庫前要加密，不能存明文；解密後要等於原本的密碼。"""
     stored = {}
-    monkeypatch.setattr(linked_mod.db.linkedAccounts, "insert_one", _mock_insert_one(stored))
+    monkeypatch.setattr(linked_mod.database.db.linkedAccounts, "insert_one", _mock_insert_one(stored))
     monkeypatch.setattr(moodle_platform, "verify_moodle_login", lambda username, password: True)
 
     account = LinkedAccountCreate(platform="moodle", status="", username="stu123", password="my-real-password")
@@ -49,7 +49,7 @@ async def test_create_moodle_account_rejects_wrong_credentials(monkeypatch):
     from platforms.sync import NonRetryableError
 
     stored = {}
-    monkeypatch.setattr(linked_mod.db.linkedAccounts, "insert_one", _mock_insert_one(stored))
+    monkeypatch.setattr(linked_mod.database.db.linkedAccounts, "insert_one", _mock_insert_one(stored))
 
     def fake_verify(username, password):
         raise NonRetryableError("Moodle 登入失敗，使用者：stu123")
@@ -73,7 +73,7 @@ async def test_create_github_account_encrypts_apikey(monkeypatch):
         assert token == "ghp_real_token"  # 呼叫 GitHub 驗證時必須拿到明文
         return {"username": "octocat", "avatar_url": "https://avatar"}
 
-    monkeypatch.setattr(linked_mod.db.linkedAccounts, "insert_one", _mock_insert_one(stored))
+    monkeypatch.setattr(linked_mod.database.db.linkedAccounts, "insert_one", _mock_insert_one(stored))
     monkeypatch.setattr(github_platform, "fetch_github_userinfo", mock_fetch_github_userinfo)
 
     account = LinkedAccountCreate(platform="github", status="", username="", apiKey="ghp_real_token")
@@ -102,7 +102,7 @@ async def test_get_linked_accounts_never_returns_plaintext_or_ciphertext(monkeyp
                 }
             return generator()
 
-    monkeypatch.setattr(linked_mod.db.linkedAccounts, "find", lambda q: MockCursor())
+    monkeypatch.setattr(linked_mod.database.db.linkedAccounts, "find", lambda q: MockCursor())
 
     result = await get_linked_accounts_by_clerk_id("uid123")
     returned_password = result[0]["password"]
@@ -119,13 +119,13 @@ async def test_get_linked_accounts_never_returns_plaintext_or_ciphertext(monkeyp
 async def test_update_moodle_password_encrypts_before_save(monkeypatch):
     """更新 Moodle 密碼時，存進資料庫前也要加密。"""
     stored = {}
-    monkeypatch.setattr(linked_mod.db.linkedAccounts, "update_one", _mock_update_one(stored))
+    monkeypatch.setattr(linked_mod.database.db.linkedAccounts, "update_one", _mock_update_one(stored))
     monkeypatch.setattr(moodle_platform, "verify_moodle_login", lambda username, password: True)
 
     async def mock_find_one(query):
         return {"username": "stu123"}  # 密碼單獨更新時，拿現有帳號一起驗證
 
-    monkeypatch.setattr(linked_mod.db.linkedAccounts, "find_one", mock_find_one)
+    monkeypatch.setattr(linked_mod.database.db.linkedAccounts, "find_one", mock_find_one)
 
     result = await update_linked_account_by_clerk_id(
         "uid123", "moodle", {"password": "new-password"}
@@ -144,8 +144,8 @@ async def test_update_jira_apikey_without_domain_still_encrypted(monkeypatch):
     async def mock_find_one(query):
         return {"_id": "uid123_jira"}  # 現有資料也沒有 domain，所以不會呼叫 Jira 驗證
 
-    monkeypatch.setattr(linked_mod.db.linkedAccounts, "find_one", mock_find_one)
-    monkeypatch.setattr(linked_mod.db.linkedAccounts, "update_one", _mock_update_one(stored))
+    monkeypatch.setattr(linked_mod.database.db.linkedAccounts, "find_one", mock_find_one)
+    monkeypatch.setattr(linked_mod.database.db.linkedAccounts, "update_one", _mock_update_one(stored))
 
     result = await update_linked_account_by_clerk_id(
         "uid123", "jira", {"apiKey": "new-jira-token"}

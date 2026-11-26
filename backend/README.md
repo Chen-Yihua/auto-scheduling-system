@@ -192,15 +192,17 @@ class NoteOut(NoteCreate):
 
 ```python
 from uuid import uuid4
-from core.database import db
+from core import database
 from schemas.note import NoteCreate
 
 async def create_note(user_id: str, note: NoteCreate) -> dict:
     # 自己產生字串 id 存進 _id：唯一性由 _id 保證，也不用處理 ObjectId 的轉換
     note_id = str(uuid4())
-    await db.notes.insert_one({"_id": note_id, "user_id": user_id, **note.model_dump()})
+    await database.get_db().notes.insert_one({"_id": note_id, "user_id": user_id, **note.model_dump()})
     return {"id": note_id, "user_id": user_id, **note.model_dump()}
 ```
+
+資料庫連線在 app 啟動時才建立，所以用 `database.get_db()` 取得，不要在 import 時寫 `from core.database import db`：那時候拿到的會是 `None`。
 
 資料庫連不上不用在這裡 `try/except`，見上方「錯誤處理」。
 

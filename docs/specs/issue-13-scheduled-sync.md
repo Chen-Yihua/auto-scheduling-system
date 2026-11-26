@@ -1,7 +1,7 @@
 # 外部平台定時同步
 
 - 狀態：部分被 [標題列改成首頁、任務管理、排程、分析 4 個頁面](issue-178-nav-pages.md) 取代（AC34、AC35、AC36）
-- 等級：高風險（批次解密所有使用者的憑證；改變和外部平台同步的一致性，包括定時同步與手動同步同時發生；新增定時觸發的部署方式，屬於重大架構決策，見 [ADR 0013](../decisions/0013-scheduled-sync-trigger.md)）
+- 等級：高風險（批次解密所有使用者的憑證；改變和外部平台同步的一致性，包括定時同步與手動同步同時發生；新增定時觸發的部署方式，屬於重大架構決策，見 [ADR 0003](../decisions/0003-scheduled-sync-trigger.md)）
 - issue：[#13](https://github.com/Chen-Yihua/auto-scheduling-system/issues/13)
 - PR：[#97](https://github.com/Chen-Yihua/auto-scheduling-system/pull/97)
 
@@ -31,7 +31,7 @@
 **定時同步**
 
 1. 每天台灣時間 12:00（Asia/Taipei）自動同步一次。所有使用者用同一個時間。
-2. 定時同步由 GitHub Actions 的排程觸發，呼叫後端的新 endpoint（[ADR 0013](../decisions/0013-scheduled-sync-trigger.md)）。
+2. 定時同步由 GitHub Actions 的排程觸發，呼叫後端的新 endpoint（[ADR 0003](../decisions/0003-scheduled-sync-trigger.md)）。
 3. 新 endpoint 用共用密鑰驗證，不用 Clerk 登入。
 4. 後端沒設定密鑰，或密鑰是空字串時，新 endpoint 一律拒絕。
 4a. 請求的格式不是 `Authorization: Bearer <值>`，或 `Bearer` 後面是空的，新 endpoint 也拒絕。
@@ -103,7 +103,7 @@
 ## 假設
 
 1. 目前只有一位使用者（開發者確認），所以定時同步在一次請求裡處理完所有帳號。超過 Cloud Run 單次請求的時間上限時，還沒處理到的帳號等下一次排程。
-2. GitHub 排程延遲 5 到 30 分鐘可以接受（ADR 0013「影響」）。
+2. GitHub 排程延遲 5 到 30 分鐘可以接受（ADR 0003「影響」）。
 
 ## 驗收條件
 
@@ -265,7 +265,7 @@
 5. **新增 `POST /internal/scheduled-sync`**（新 router 檔）：
    - 用 `hmac.compare_digest` 比對 `Authorization: Bearer <SCHEDULED_SYNC_SECRET>`。
    - 密鑰沒設定或是空字串（`if not SECRET`）、header 格式不對、`Bearer` 後面是空的、值不符時，都丟 `AppError` 回 401，`error_code` 為 `INVALID_SCHEDULER_TOKEN`。
-   - 新的 `error_code` 要改三個地方：`backend/core/error_codes.py`、ADR 0011 的對照表、ADR 0011 的「例外」一節（和 webhook 一樣，沒設定密鑰也回 401）。
+   - 新的 `error_code` 要改三個地方：`backend/core/error_codes.py`、ADR 0002 的對照表、ADR 0002 的「例外」一節（和 webhook 一樣，沒設定密鑰也回 401）。
    - 依序列出所有 `linkedAccounts`，逐一呼叫第 2 點的函式。每一筆用 `try/except Exception` 包住，失敗只記 log（使用者 id、平台、`error_code`；未預期的例外記例外類別名稱），接著處理下一筆。
    - 回應格式：`{"succeeded": n, "failed": n, "skipped": n}`。分類照需求 13a：被取代、帳號已變更、憑證解不開、憑證資料不完整算 `skipped`；等不到鎖、鎖被拿走、失敗算 `failed`；成功算 `succeeded`。
    - 加限流 `5/hour`，降低密鑰外洩時的濫用風險。
@@ -296,7 +296,7 @@
 
 ### 部署與文件
 
-14. 新增 `.github/workflows/scheduled-sync.yml`（ADR 0013）：
+14. 新增 `.github/workflows/scheduled-sync.yml`（ADR 0003）：
     - `schedule: cron: '0 4 * * *'`，加上 `workflow_dispatch`。
     - 執行 `curl -fsS -X POST "$BACKEND_URL/internal/scheduled-sync" -H "Authorization: Bearer $SCHEDULED_SYNC_SECRET" --max-time 900`。
     - 只輸出回應的筆數。
@@ -310,7 +310,7 @@
     - 「外部平台同步」資料流改成定時同步加立即同步。
     - `linkedAccounts` 的內容加上同步結果。
     - 組成表加上 GitHub Actions 的定時觸發。
-18. ADR 0013 存進 `docs/decisions/`，並更新 `docs/decisions/README.md` 的清單。
+18. ADR 0003 存進 `docs/decisions/`，並更新 `docs/decisions/README.md` 的清單。
 19. 合併前，請開發者設定三項（不讀取、不設定這些值）：
     - Cloud Run 環境變數 `SCHEDULED_SYNC_SECRET`，值用至少 32 bytes 的隨機值產生，例如 `openssl rand -hex 32`。
     - GitHub secret `SCHEDULED_SYNC_SECRET`，和 Cloud Run 的值相同。
@@ -319,7 +319,7 @@
 
 ### 考慮過、沒選的做法
 
-- **排程機制**：見 ADR 0013（程式內建定時器、Cloud Scheduler、Cloud Run Jobs、背景執行先回 202）。
+- **排程機制**：見 ADR 0003（程式內建定時器、Cloud Scheduler、Cloud Run Jobs、背景執行先回 202）。
 - **打開頁面時，超過 24 小時才自動同步**：開發者選擇由自己看同步時間決定要不要按按鈕。
 - **同時同步的處理**：
   - 用 `asyncio.Lock`：最多有 3 個 instance，記憶體裡的鎖不共用。

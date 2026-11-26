@@ -102,7 +102,7 @@ describe('sanitizeReportText：文字規則', () => {
   })
 
   it('#50 AC21：有 diff 只印出一部分的標頭時，整個字串換成 [diff omitted]', () => {
-    expect(text('- Expected\n+ Received\n\n@@ -18,8 +18,16 @@\n+     84,\n+     79,\n    ],')).toBe('[diff omitted]')
+    expect(text('- Expected\n+ Received\n\n -18,8 +18,16 \n+     84,\n+     79,\n    ],')).toBe('[diff omitted]')
     expect(text('  Uint8Array [\n+   1,\n  ]')).toBe('  [binary]')
   })
 })

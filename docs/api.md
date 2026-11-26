@@ -4,7 +4,7 @@
 
 ## 錯誤回應
 
-本後端產生的錯誤回應都是 `{"detail": <給人看的訊息>, "error_code": <原因>}`：狀態碼表示類別，`error_code` 表示具體原因，前端依 `error_code` 判斷畫面，`detail` 只用來顯示。422 的 `detail` 是驗證錯誤的清單，不帶輸入值。狀態碼一律照 [ADR 0011](decisions/0011-api-error-status-codes.md) 的對照表，由 `error_code` 決定；對照表沒有的 `error_code` 一律回 500 `INTERNAL_ERROR`。外部服務限流（503 `UPSTREAM_RATE_LIMITED`）時，對方回應帶秒數的 `Retry-After` 會一併帶上（跨來源也讀得到）。Cloud Run 自己回的回應與網路錯誤沒有 `error_code`。
+本後端產生的錯誤回應都是 `{"detail": <給人看的訊息>, "error_code": <原因>}`：狀態碼表示類別，`error_code` 表示具體原因，前端依 `error_code` 判斷畫面，`detail` 只用來顯示。422 的 `detail` 是驗證錯誤的清單，不帶輸入值。狀態碼一律照 [ADR 0002](decisions/0002-api-error-status-codes.md) 的對照表，由 `error_code` 決定；對照表沒有的 `error_code` 一律回 500 `INTERNAL_ERROR`。外部服務限流（503 `UPSTREAM_RATE_LIMITED`）時，對方回應帶秒數的 `Retry-After` 會一併帶上（跨來源也讀得到）。Cloud Run 自己回的回應與網路錯誤沒有 `error_code`。
 
 ## 使用者
 
@@ -101,7 +101,7 @@
 
 | 方法 | 路徑 | 登入 | Response | 說明 |
 |---|---|---|---|---|
-| POST | `/internal/scheduled-sync` | 共用密鑰（`Authorization: Bearer <SCHEDULED_SYNC_SECRET>`） | `{"succeeded": n, "failed": n, "skipped": n}` | 由 GitHub Actions 每天呼叫（[ADR 0013](decisions/0013-scheduled-sync-trigger.md)），依序同步所有已連結的平台帳號；回應只帶筆數。密鑰錯誤、格式不對或伺服器沒設定密鑰回 401 `INVALID_SCHEDULER_TOKEN`；限流 5/時 |
+| POST | `/internal/scheduled-sync` | 共用密鑰（`Authorization: Bearer <SCHEDULED_SYNC_SECRET>`） | `{"succeeded": n, "failed": n, "skipped": n}` | 由 GitHub Actions 每天呼叫（[ADR 0003](decisions/0003-scheduled-sync-trigger.md)），依序同步所有已連結的平台帳號；回應只帶筆數。密鑰錯誤、格式不對或伺服器沒設定密鑰回 401 `INVALID_SCHEDULER_TOKEN`；限流 5/時 |
 
 ## 前端 server route
 

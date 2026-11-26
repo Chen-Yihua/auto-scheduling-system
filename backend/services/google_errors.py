@@ -1,4 +1,4 @@
-"""依 Google 回應的狀態碼與 error.errors[].reason 判斷錯誤原因（ADR 0011 的 error_code）。"""
+"""依 Google 回應的狀態碼與 error.errors[].reason 判斷錯誤原因（ADR 0002 的 error_code）。"""
 import httpx
 
 from core.errors import retry_after_header

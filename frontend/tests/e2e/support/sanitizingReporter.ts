@@ -32,7 +32,7 @@ const BINARY_TYPES = [
 const REDACTED = '[redacted]'
 const BINARY = '[binary]'
 
-const PARTIAL_DIFF_HEADER = /@@ -\d+,\d+ \+\d+,\d+ @@/
+const PARTIAL_DIFF_HEADER = / -\d+,\d+ \+\d+,\d+ /
 const NAME_WITH_SEPARATOR = /["'`]?([A-Za-z0-9_.-]+)["'`]?\s*[:=]\s*/g
 const NAME_FIELD = /(?<![A-Za-z0-9_.-])["'`]?name["'`]?\s*[:=]\s*["'`]?([^"'`\s,}]*)/g
 const VALUE_FIELD = /(?<![A-Za-z0-9_.-])["'`]?value["'`]?\s*[:=]\s*/g

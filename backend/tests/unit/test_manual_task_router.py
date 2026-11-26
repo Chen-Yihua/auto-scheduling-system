@@ -375,7 +375,7 @@ async def _add(task_id, idempotency_key=None, **fields):
 
 
 async def _stage_docs(parent_id):
-    # 階段順序以主任務的 subtask_ids 為準（ADR 0004）
+    # 階段順序以主任務的 subtask_ids 為準（ADR 0001）
     return await manual_task_router.manual_task_crud.get_subtasks(parent_id, STAGE_USER["sub"])
 
 

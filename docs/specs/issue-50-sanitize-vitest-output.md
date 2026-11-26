@@ -38,7 +38,7 @@ e2e 測試失敗時，vitest 會把 diff、錯誤的其他屬性、hook 錯誤�
   - 訊息：`expected Buffer[ 47, 99, 98, …(-86) ] to deeply equal Buffer[ 120 ]`、`Uint8Array[ 47, 99, 98 ]`。
   - `Buffer` 的 diff：`"data": [` 底下一行一個數字，後面接 `"type": "Buffer"`。
   - `Uint8Array` 的 diff：`Uint8Array [` 底下一行一個數字。
-- vitest 的 diff 預設只印改動前後各 5 行，前面用 `@@ -28,11 +28,11 @@` 這類標頭帶過（`frontend/node_modules/@vitest/utils/dist/diff.js:1402`、`:1420`）。這時 `"name"`、`"data": [`、`Uint8Array [` 這些開頭行可能不在畫面上，例如比對 4 個 cookie 的陣列只有最後一個不同時，前一個 cookie 的 `"value": "dvb_…"` 會印出、它的 `"name"` 不會。設定 `test.diff: { expand: true }` 後，測試與 hook 的錯誤會完整印出（`frontend/node_modules/vitest/dist/chunks/reporters.d.DG9VKi4m.d.ts:1866`、`frontend/node_modules/@vitest/runner/dist/index.js:1212`、`:1374-1387`）；沒被接住的錯誤和測試檔收集階段的錯誤組 diff 時不帶這個設定，仍然只印改動附近的行（`frontend/node_modules/vitest/dist/chunks/execute.BpmIjFTD.js:557`、`frontend/node_modules/@vitest/runner/dist/index.js:1142-1143`）。
+- vitest 的 diff 預設只印改動前後各 5 行，前面用 ` -28,11 +28,11 ` 這類標頭帶過（`frontend/node_modules/@vitest/utils/dist/diff.js:1402`、`:1420`）。這時 `"name"`、`"data": [`、`Uint8Array [` 這些開頭行可能不在畫面上，例如比對 4 個 cookie 的陣列只有最後一個不同時，前一個 cookie 的 `"value": "dvb_…"` 會印出、它的 `"name"` 不會。設定 `test.diff: { expand: true }` 後，測試與 hook 的錯誤會完整印出（`frontend/node_modules/vitest/dist/chunks/reporters.d.DG9VKi4m.d.ts:1866`、`frontend/node_modules/@vitest/runner/dist/index.js:1212`、`:1374-1387`）；沒被接住的錯誤和測試檔收集階段的錯誤組 diff 時不帶這個設定，仍然只印改動附近的行（`frontend/node_modules/vitest/dist/chunks/execute.BpmIjFTD.js:557`、`frontend/node_modules/@vitest/runner/dist/index.js:1142-1143`）。
 - Playwright cookie 這類物件在 diff 裡是多行，欄位照字母排序：`"domain"`、`"name"`、`"path"`、`"value"`。在訊息裡是同一行：`{ name: '__clerk_db_jwt', …(3) }`。
 - reporter 在 `onTaskUpdate`、`onTestRunEnd`、`onFinished` 原地改掉這些資料之後，diff、Serialized Error、`::error` 附註、沒被接住的錯誤、hook 錯誤裡執行時產生的機密都不再出現（實驗：44 次 → 0 次）。剩下的是原始碼節錄裡寫死的字串。
 
@@ -99,7 +99,7 @@ e2e 測試失敗時，vitest 會把 diff、錯誤的其他屬性、hook 錯誤�
 | AC18 | 執行 `npm run test:e2e` 時，`test.diff.expand` 是 `true`：diff 只差在長陣列尾端時，仍從第一行完整印出 | 不變條件（安全） |
 | AC19 | 文字規則 7：`dvb_`（Clerk dev browser token 的開頭）前面不是英數字或 `_`、後面接英數字時，`dvb_` 和後面的英數字換成 `[redacted]`。`"expected 'dvb_2abcXYZ' to be 'x'"` 完全等於 `"expected '[redacted]' to be 'x'"` | 不變條件（安全） |
 | AC20 | 登入失敗時印出的登入後診斷，經過清理後仍看得到 session 有沒有建立、有哪些 cookie 名稱：`'{\n  "clerkState": {\n    "hasClerkSid": true\n  },\n  "browserStorageNames": [\n    "__clerk_db_jwt",\n    "__session"\n  ]\n}'` 經過 `sanitizeReportText` 後不變 | 使用者行為（開發者看 CI log） |
-| AC21 | 文字規則 8（拿掉 ANSI 色碼之後、其他規則之前）：字串裡有一行符合 `@@ -<數字>,<數字> +<數字>,<數字> @@`（diff 只印出一部分的標頭）時，整個字串換成 `[diff omitted]`。`'- Expected\n+ Received\n\n@@ -18,8 +18,16 @@\n+     84,\n+     79,\n    ],'` 完全等於 `'[diff omitted]'`；`'  Uint8Array [\n+   1,\n  ]'` 不受這條規則影響（照 AC10 處理） | 不變條件（安全） |
+| AC21 | 文字規則 8（拿掉 ANSI 色碼之後、其他規則之前）：字串裡有一行符合 ` -<數字>,<數字> +<數字>,<數字> `（diff 只印出一部分的標頭）時，整個字串換成 `[diff omitted]`。`'- Expected\n+ Received\n\n -18,8 +18,16 \n+     84,\n+     79,\n    ],'` 完全等於 `'[diff omitted]'`；`'  Uint8Array [\n+   1,\n  ]'` 不受這條規則影響（照 AC10 處理） | 不變條件（安全） |
 
 ## 不適用的情境
 | 情境 | 原因 |

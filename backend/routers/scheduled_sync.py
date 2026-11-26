@@ -1,5 +1,5 @@
 """
-定時同步：GitHub Actions 每天呼叫一次（ADR 0013），依序同步所有已連結的平台帳號。
+定時同步：GitHub Actions 每天呼叫一次（ADR 0003），依序同步所有已連結的平台帳號。
 用共用密鑰驗證，不用 Clerk 登入。
 """
 import hmac
@@ -35,7 +35,7 @@ _SKIPPED = {
 
 
 def _invalid_token() -> AppError:
-    # 沒設定密鑰也用這個 code（對照表 401，ADR 0011「例外」）：回 500 會讓外部知道伺服器漏了設定
+    # 沒設定密鑰也用這個 code（對照表 401，ADR 0002「例外」）：回 500 會讓外部知道伺服器漏了設定
     return AppError("Invalid scheduler token", error_code="INVALID_SCHEDULER_TOKEN")
 
 

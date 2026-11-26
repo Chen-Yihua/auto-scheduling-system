@@ -1,5 +1,5 @@
 """
-例外統一轉成 {"detail", "error_code"} 的錯誤回應（ADR 0011）：狀態碼一律依 error_code 查 core/error_codes.py 的對照表。
+例外統一轉成 {"detail", "error_code"} 的錯誤回應（ADR 0002）：狀態碼一律依 error_code 查 core/error_codes.py 的對照表。
 AppError 用它帶的 error_code；HTTPException 先依狀態碼補 error_code；422 拿掉輸入值；DB 連不上、Redis 失敗是
 SERVICE_UNAVAILABLE，其他 DB 錯誤和未預期例外是 INTERNAL_ERROR。例外內容只記在 log，不回傳給前端。
 """

@@ -1,4 +1,4 @@
-// 後端的錯誤回應是 { detail, error_code }，畫面依 error_code 判斷（ADR 0011）；detail 只用來顯示。
+// 後端的錯誤回應是 { detail, error_code }，畫面依 error_code 判斷（ADR 0002）；detail 只用來顯示。
 // Cloud Run 自己回的回應與網路錯誤沒有 error_code：429 當成限流，其他顯示通用錯誤
 
 // 錯誤物件形狀不一（FetchError、Response 等），只描述會讀到的欄位

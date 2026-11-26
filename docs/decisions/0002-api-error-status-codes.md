@@ -1,4 +1,4 @@
-# 0011. API 錯誤回應：狀態碼表示類別，error_code 表示原因
+# 0002. API 錯誤回應：狀態碼表示類別，error_code 表示原因
 
 - 狀態：已採用
 - 日期：2026-11-10
@@ -70,7 +70,7 @@
 ### 例外
 
 - **webhook 沒設定簽章密鑰時回 401**：依分類原則這是我方的設定錯誤（500），但 webhook 的呼叫者是外部服務，回 500 會讓外部知道伺服器漏了設定。維持 401，另外記 error log，由監控發現。
-- **定時同步沒設定密鑰時回 401**：理由和 webhook 相同，呼叫者是 GitHub Actions（[ADR 0013](0013-scheduled-sync-trigger.md)），回 500 會讓外部知道伺服器漏了設定。維持 401 `INVALID_SCHEDULER_TOKEN`，啟動時記 error log。
+- **定時同步沒設定密鑰時回 401**：理由和 webhook 相同，呼叫者是 GitHub Actions（[ADR 0003](0003-scheduled-sync-trigger.md)），回 500 會讓外部知道伺服器漏了設定。維持 401 `INVALID_SCHEDULER_TOKEN`，啟動時記 error log。
 
 ### 過渡期間
 

@@ -7,9 +7,9 @@
 | 規格審查 | `specification-reviewer` | 規格核准前；留言在 PR 開好後貼出 |
 | 實作審查 | `acceptance-reviewer` | 實作完成後 |
 
-- 等級是「文字修正」的變更不審查，沒有審查留言。快速路徑不做規格審查，沒有規格審查留言。規格審查的次數上限見 `/feature`「判斷等級」的表；第 2 次審查的範圍見 `write-spec`「審查次數與審查後的修改」。
-- 審查 agent 只能讀、不能寫檔，所以由主 session 把報告貼成留言。標題開頭是「漏洞：」的內容是例外：repo 是公開的，貼出前照 `implement-and-review`「審查紀錄與重新審查」改寫成一般性的描述（或開發者確認建立後的 advisory 編號）。
-- `specification/`、`implementation/` 底下是 ADR 0015 以前的紀錄檔，`*-round<N>.md` 是更早的逐輪紀錄。GitHub issue、規格與實驗紀錄引用了這些路徑，所以保留原樣，不搬移也不改寫；生命週期見 [docs/README.md](../README.md)「生命週期」。
+- 等級是「文字修正」的變更不審查，沒有審查留言。什麼時候做規格審查、做幾次，見 `write-spec`「什麼時候做規格審查」「審查次數」；沒做的沒有規格審查留言。
+- 審查 agent 只能讀、不能寫檔，所以由主 session 把報告貼成留言。標題開頭是「漏洞：」的內容是例外：repo 是公開的，貼出前照 `implement-and-review`「漏洞的處理」改寫成一般性的描述（或開發者確認建立後的 advisory 編號）。
+- `specification/`、`implementation/` 底下是 ADR 0015 以前的紀錄檔，`*-round<N>.md` 是更早的逐輪紀錄。不改寫；沒有持續參考價值時才刪除，條件見 [docs/README.md](../README.md)「生命週期」。
 
 ## 分類
 
@@ -143,8 +143,7 @@ reviewer 各自的檢查表：
 ```
 
 - 「#」沿用這一輪報告的編號。
-- 「處理方式」：規格審查照 `write-spec`「處理發現」，實作審查照 `implement-and-review`「發現處理表」。
-- 「決定者」寫開發者、規則（例如阻擋的發現，不用改規格，直接請 `feature-implementer` 修正），或主 session（照 `implement-and-review`「發現處理表」與 `write-spec`「處理發現」由主 session 決定的項目；規格核准後的修改一律由開發者確認）。
-- 「結果」寫下面其中一種：commit、issue 或 advisory 編號；「交回實作」；「不改：<原因>」；「不開 issue：<原因>」；「等開發者決定」；規格審查在核准前，寫「規格已修改」或「開發者決定不採用」。
-- 上一輪「結果」是「交回實作」的項目，在這一輪的表另列一行：「#」寫「第 N 輪 #M」，「結果」寫修正的 commit。
+- 「處理方式」：照 `implement-and-review`「發現處理」。
+- 「決定者」寫開發者、規則（例如阻擋的發現，不用改規格，直接請 `feature-implementer` 修正），或主 session（照 `implement-and-review`「發現處理」由主 session 決定的項目；規格核准後的修改一律由開發者確認）。
+- 「結果」寫下面其中一種：修正的 commit、issue 或 advisory 編號；「不改：<原因>」；「不開 issue：<原因>」；「等開發者決定」；規格審查在核准前，寫「規格已修改」或「開發者決定不採用」。實作審查的留言在這一輪的修正都 commit 後才貼，所以要修的項目直接寫 commit。
 - 「開發者決定」表只列開發者決定的項目，寫選項與理由；沒有時寫「無」。

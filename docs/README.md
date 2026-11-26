@@ -18,7 +18,8 @@
 
 | 類型 | 文件 | 規則 |
 |---|---|---|
-| 永久保存（歷史紀錄） | `specs/`、`reviews/specification/`、`reviews/implementation/`、`reviews/*-round<N>.md`、`decisions/` | 不刪除，也不因為過時就改寫內容。`reviews/` 底下既有的紀錄檔保留，之後的審查結果在 PR 留言（ADR 0015）。被取代時只改狀態並連結新的文件：規格照 [specs/README.md](specs/README.md)「規格和目前系統的關係」，ADR 照 [decisions/README.md](decisions/README.md)。記錄的是當時的決定，不是目前的系統 |
+| 歷史紀錄：ADR | `decisions/` | 不刪除，也不因為過時就改寫內容。被取代時只改狀態並連結新的 ADR，照 [decisions/README.md](decisions/README.md)。記錄的是當時的決定，不是目前的系統 |
+| 歷史紀錄：規格與審查紀錄 | `specs/`、`reviews/specification/`、`reviews/implementation/`、`reviews/*-round<N>.md` | 不因為過時就改寫內容；被取代時照 [specs/README.md](specs/README.md)「規格和目前系統的關係」只改狀態。之後的審查結果在 PR 留言（ADR 0015），不再新增紀錄檔。沒有持續參考價值時可以刪除：保留下來的程式、測試（包括用 AC 編號對應規格的測試）、文件、ADR 與 open issue 都沒有引用它。刪除在 PR 描述列出檔案與理由，由開發者決定；刪掉的內容從 git 歷史找 |
 | 持續更新（目前狀態） | `api.md`、`architecture.md`、`architecture.drawio`、`issues.md`、`glossary.md` | 和程式碼、流程保持一致，改動時在同一個 PR 更新（時機見上表）。不記歷史，歷史看 git、規格與 ADR |
 | 暫存（不 commit） | 草稿資料夾（`.drafts/`；`<功能>-` 開頭的暫存檔，種類與檔名見 `.claude/skills/feature/references/resume.md` 的暫存檔表） | 只放當下的開發需要的內容，不會進 git。核准後由誰把哪個暫存檔存成正式文件見 `implement-and-review`「Commit 責任」，審查結果怎麼貼成 PR 留言見同一個檔案「審查留言」；回報前的確認與刪除見 `/feature`「清理暫存」 |
 | 選擇性保存（實驗） | `experiments/` | README 寫實驗目的、指標與結論，TEMPLATE 是紀錄格式，`records/` 保留有參考價值的紀錄。流程的版本用紀錄裡的「流程版本」（commit）對應，不另外備份每一版的 skill。既有紀錄不自動刪除，也不為了符合新規則修改；要刪除時先寫出它沒有參考價值的理由，由開發者決定 |

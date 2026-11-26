@@ -1,6 +1,6 @@
 # 0005. 規格核准前加入規格審查，審查分類依根本原因區分
 
-- 狀態：已採用（「bug 簡化格式不做規格審查」已被 [0006](0006-bugs-use-full-spec.md) 取代；「影響」裡的紀錄檔位置在 2026-11-06 改成一份審查一個檔案 `docs/reviews/specification/<功能>.md`，見 [docs/reviews/README.md](../reviews/README.md)；規格審查紀錄的存放位置已被 [0015](0015-review-results-in-pr-comments.md) 取代，改成 PR 留言；「審查分類依根本原因」與「不阻擋的發現在同一則訊息裡一起問，回答後才開 issue」已被 [0017](0017-review-findings-conventional-labels.md) 取代）
+- 狀態：已採用（「bug 簡化格式不做規格審查」已被 [0006](0006-bugs-use-full-spec.md) 取代；「影響」裡的紀錄檔位置在 2026-11-06 改成一份審查一個檔案 `docs/reviews/specification/<功能>.md`，見 [docs/reviews/README.md](../reviews/README.md)；規格審查紀錄的存放位置已被 [0015](0015-review-results-in-pr-comments.md) 取代，改成 PR 留言；「審查分類依根本原因」與「不阻擋的發現在同一則訊息裡一起問，回答後才開 issue」已被 [0017](0017-review-findings-conventional-labels.md) 取代；所有等級都做規格審查，已被 [0019](0019-simplify-spec-review-and-ac-derivation.md) 取代）
 - 日期：2026-11-06
 
 ## 背景

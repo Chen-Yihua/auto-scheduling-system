@@ -36,7 +36,7 @@ class FailedConfirmation(BaseModel):
     task_id: str
     title: str
     reason: str
-    # 寫入 Google 失敗時的原因（ADR 0011）；寫入前檢查不通過、前一個階段寫入失敗是 None
+    # 寫入 Google 失敗時的原因（ADR 0002）；寫入前檢查不通過、前一個階段寫入失敗是 None
     error_code: Optional[str] = None
 
 
@@ -90,7 +90,7 @@ class ResolveRemovedEventsInput(BaseModel):
 class ResolveRemovedEventsFailure(BaseModel):
     task_id: str
     reason: str
-    # 處理時編號已被換掉是 None；其他照 ADR 0011
+    # 處理時編號已被換掉是 None；其他照 ADR 0002
     error_code: Optional[str] = None
 
 

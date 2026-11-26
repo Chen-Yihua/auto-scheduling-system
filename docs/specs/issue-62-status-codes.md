@@ -1,7 +1,7 @@
 # 全站 API 狀態碼盤點與設計原則
 
 - 狀態：已核准
-- 等級：標準（這次不改程式碼，產出盤點、ADR 與分階段計畫；ADR 是之後所有 API 的狀態碼規則，屬於「改定義規則的文件裡的規則」。實際修改在後續各階段的 issue 另外判斷等級）
+- 等級：一般（這次不改程式碼，產出盤點、ADR 與分階段計畫；ADR 是之後所有 API 的狀態碼規則，屬於「改定義規則的文件裡的規則」。實際修改在後續各階段的 issue 另外判斷等級）
 - issue：#62
 - PR：#76
 
@@ -35,7 +35,7 @@
 
 ### 全站盤點
 
-所有需要登入的 endpoint 另外可能回：403（沒帶或無效的 JWT；抓 Clerk JWKS 失敗也是 403，見 P13）、422（schema 驗證失敗，回應帶 `input`，見 P14）、500（未預期的例外；Redis 故障也是 500，見 P18）、503（資料庫連不上）；有限流的回 429。下表只列各 endpoint 自己的情況。「建議」欄依 ADR 0011 的對照表；問題編號見下一節。
+所有需要登入的 endpoint 另外可能回：403（沒帶或無效的 JWT；抓 Clerk JWKS 失敗也是 403，見 P13）、422（schema 驗證失敗，回應帶 `input`，見 P14）、500（未預期的例外；Redis 故障也是 500，見 P18）、503（資料庫連不上）；有限流的回 429。下表只列各 endpoint 自己的情況。「建議」欄依 ADR 0002 的對照表；問題編號見下一節。
 
 | Endpoint | 目前的狀態碼與觸發情境 | 前端怎麼處理 | 建議 | 問題 |
 |---|---|---|---|---|
@@ -71,7 +71,7 @@
 
 ### 問題清單
 
-依 ADR 0011「過渡期間」：每一項的 `error_code` 部分在第一階段依實際原因給，狀態碼部分在第二階段改。
+依 ADR 0002「過渡期間」：每一項的 `error_code` 部分在第一階段依實際原因給，狀態碼部分在第二階段改。
 
 | # | 問題 | 依據 | 分類 | 影響範圍 | 階段 |
 |---|---|---|---|---|---|
@@ -103,30 +103,30 @@
 | 外部平台同步失敗但有舊資料時回 200，用 `X-Data-Stale`、`X-Auth-Error` 表達 | 使用者仍然看得到資料，畫面另外提示資料過期或要重新連結；改成錯誤狀態碼會讓舊資料顯示不出來（`X-Auth-Error` 的值依 P15 修正） |
 | `PUT /schedule/reorder` 有不屬於自己的手動任務 id 時回 400，不是 404 | 批次操作中部分 id 不合法，屬於請求內容錯誤；不屬於自己與不存在用同一個訊息，不透露資料是否存在 |
 | 確認排程時單筆寫入失敗不擋住整批，列在 `failed` | 其他項目照常寫入，使用者看得到哪些失敗（原因的改善見 P20） |
-| webhook 沒設定簽章密鑰時回 401 | 回 500 會讓外部呼叫者知道伺服器漏了設定；記 error log 由監控發現（ADR 0011「例外」） |
+| webhook 沒設定簽章密鑰時回 401 | 回 500 會讓外部呼叫者知道伺服器漏了設定；記 error log 由監控發現（ADR 0002「例外」） |
 | AI 推估、Gemini 摘要失敗時用預設值或只記 log，不回錯誤 | 推估與摘要是附加功能，失敗不該擋住建立任務與 webhook 的主流程 |
-| 查別人的任務與查不存在的任務都回 404「Task not found」 | 符合「不透露資源是否存在」（ADR 0011） |
+| 查別人的任務與查不存在的任務都回 404「Task not found」 | 符合「不透露資源是否存在」（ADR 0002） |
 
 ## 需求
 
-1. **ADR 0011**：新增 `docs/decisions/0011-api-error-status-codes.md`（內容照 scratchpad 的 ADR 草稿），`docs/decisions/README.md` 清單加一列。
+1. **ADR 0002**：新增 `docs/decisions/0002-api-error-status-codes.md`（內容照 scratchpad 的 ADR 草稿），`docs/decisions/README.md` 清單加一列。
 2. **盤點**：這份規格的「背景」就是盤點與問題清單，記錄的是核准當時的系統狀態，PR 合併後不隨程式更新。
-3. **分階段計畫**：每一項的 `error_code` 部分都在第一階段依實際原因給，狀態碼部分在第二階段改（ADR 0011「過渡期間」）。
+3. **分階段計畫**：每一項的 `error_code` 部分都在第一階段依實際原因給，狀態碼部分在第二階段改（ADR 0002「過渡期間」）。
 
    | 階段 | 範圍 | 處理的問題 |
    |---|---|---|
-   | 一 | 後端所有錯誤回應（包括未知路由的 404、405）依實際原因加 `error_code`，狀態碼一律不變；422 拿掉 `input`、`ctx`；帳號列表遇到解不開的帳號照常回 200 並標示要重新連結（`LinkedAccountOut` 加欄位、`frontend/types/` 同步）；外部平台的 `X-Auth-Error` 只在真的憑證失效時設定；Bug 類問題的 `detail` 文字和 `error_code` 的原因一致；前端的錯誤判斷全部改成看 `error_code`，沒有 `error_code` 的回應退回依狀態碼（429 當成限流，其他顯示通用錯誤），連結帳號失敗時顯示 `detail`；`backend/README.md`「錯誤處理」加上指向 ADR 0011 | P1–P11、P14–P19 的 `error_code` 部分（P19 只有格式錯誤）；P11、P14 全部；P7 的帳號列表 |
-   | 二 | 照 ADR 0011 改狀態碼，同步更新 `docs/api.md` 與 integration 測試；Clerk JWKS 失敗與 token 無效分開（包裝或替換 library 的驗證）；確認排程的 `failed` 項目加 `error_code`（`frontend/types/` 同步） | P1–P10、P15–P19 的狀態碼部分（含 P19 的不存在回 404）；P13、P20 |
+   | 一 | 後端所有錯誤回應（包括未知路由的 404、405）依實際原因加 `error_code`，狀態碼一律不變；422 拿掉 `input`、`ctx`；帳號列表遇到解不開的帳號照常回 200 並標示要重新連結（`LinkedAccountOut` 加欄位、`frontend/types/` 同步）；外部平台的 `X-Auth-Error` 只在真的憑證失效時設定；Bug 類問題的 `detail` 文字和 `error_code` 的原因一致；前端的錯誤判斷全部改成看 `error_code`，沒有 `error_code` 的回應退回依狀態碼（429 當成限流，其他顯示通用錯誤），連結帳號失敗時顯示 `detail`；`backend/README.md`「錯誤處理」加上指向 ADR 0002 | P1–P11、P14–P19 的 `error_code` 部分（P19 只有格式錯誤）；P11、P14 全部；P7 的帳號列表 |
+   | 二 | 照 ADR 0002 改狀態碼，同步更新 `docs/api.md` 與 integration 測試；Clerk JWKS 失敗與 token 無效分開（包裝或替換 library 的驗證）；確認排程的 `failed` 項目加 `error_code`（`frontend/types/` 同步） | P1–P10、P15–P19 的狀態碼部分（含 P19 的不存在回 404）；P13、P20 |
    | 三 | router 裡的 `HTTPException` 改成丟 `AppError`，統一由 `exception_handlers` 轉換 | P12 |
 
    - 第一階段向下相容：狀態碼不變，前端先改看 `error_code`，第二階段改狀態碼時前端不受影響。例外有兩個：
      - 帳號列表遇到解不開的帳號從 500 改成 200：這是使用者會遇到的 Bug，從錯誤改成成功，前端本來就當成功處理。
      - P13：區分 JWKS 失敗要包裝 library，放在第二階段，在那之前 JWKS 失敗也帶 `UNAUTHENTICATED`。
-   - 每個階段的 issue 照 `docs/issues.md` 的格式寫，附上這份規格的問題編號與 ADR 0011；每個階段的實作都要有 integration 測試斷言實際的狀態碼與 `error_code`。
+   - 每個階段的 issue 照 `docs/issues.md` 的格式寫，附上這份規格的問題編號與 ADR 0002；每個階段的實作都要有 integration 測試斷言實際的狀態碼與 `error_code`。
    - 每個階段的等級在該 issue 的 `/issue` 流程另外判斷。
 4. **開 issue 的時機與 #59**：這個 PR 合併後，主 session 只開第一階段的 issue。第一階段的 issue 與 PR 寫明：
    - PR 要 `Closes #59`：#59 的使用者問題（已連接卻顯示「尚未連接」）靠 `error_code` 在第一階段修正。
-   - #59 建議的驗收條件中「Google 用 403 回報限流時回 502」被 ADR 0011 取代：限流歸 503 `UPSTREAM_RATE_LIMITED`，狀態碼在第二階段改。
+   - #59 建議的驗收條件中「Google 用 403 回報限流時回 502」被 ADR 0002 取代：限流歸 503 `UPSTREAM_RATE_LIMITED`，狀態碼在第二階段改。
 
    第二、三階段的 issue 在前一階段的 PR 合併後才開，內容依當時的程式碼重寫，不照抄這份規格。
 
@@ -139,17 +139,17 @@
 ## 假設
 
 1. 盤點以核准當時 `main` 的程式碼為準；之後各階段開 issue 時，以當時的程式碼重新確認。
-2. Cloud Run 自己回的回應（429、5xx、504）與網路錯誤不經過後端，沒有 `error_code`；前端依狀態碼退回處理（ADR 0011「回應格式」）。
+2. Cloud Run 自己回的回應（429、5xx、504）與網路錯誤不經過後端，沒有 `error_code`；前端依狀態碼退回處理（ADR 0002「回應格式」）。
 
 ## 驗收條件
 
 | # | 條件 | 類型 |
 |---|---|---|
-| AC1 | `docs/decisions/0011-api-error-status-codes.md` 存在，內容和核准的 ADR 草稿相同：回應格式（含 422 不帶輸入值、沒有 `error_code` 時的退回處理）、分類原則（含憑證被拒、無法解密與安全的兩點）、對照表、例外（webhook 沒設定密鑰）、過渡期間、放棄的做法、影響；`docs/decisions/README.md` 清單有 0011 | 不變條件 |
+| AC1 | `docs/decisions/0002-api-error-status-codes.md` 存在，內容和核准的 ADR 草稿相同：回應格式（含 422 不帶輸入值、沒有 `error_code` 時的退回處理）、分類原則（含憑證被拒、無法解密與安全的兩點）、對照表、例外（webhook 沒設定密鑰）、過渡期間、放棄的做法、影響；`docs/decisions/README.md` 清單有 0002 | 不變條件 |
 | AC2 | 對照表的每個 `error_code` 都有狀態碼與觸發情境；「問題清單」與「盤點」的「建議」欄用到的 `error_code` 都在對照表裡 | 不變條件 |
 | AC3 | 規格的盤點涵蓋 `docs/api.md` 列出的每個後端 endpoint（前端 server route 除外），每列寫出目前的狀態碼與觸發情境（附 `檔案:行號`）、前端怎麼處理、建議 | 不變條件 |
 | AC4 | 問題清單每一項都有依據（`檔案:行號`）、分類（Bug／技術債）、影響範圍與階段；可接受的既有設計各寫理由 | 不變條件 |
-| AC5 | 分階段計畫的每個問題編號都屬於某個階段；第一階段除了帳號列表（500 改 200）以外不改任何狀態碼；問題清單的「階段」欄和需求 3 的表一致；需求 4 寫明第一階段 `Closes #59` 與 #59 中被 ADR 0011 取代的驗收條件 | 不變條件 |
+| AC5 | 分階段計畫的每個問題編號都屬於某個階段；第一階段除了帳號列表（500 改 200）以外不改任何狀態碼；問題清單的「階段」欄和需求 3 的表一致；需求 4 寫明第一階段 `Closes #59` 與 #59 中被 ADR 0002 取代的驗收條件 | 不變條件 |
 | AC6 | 這個 PR 只新增或修改規格、ADR、ADR 清單與審查紀錄，沒有改程式碼、測試、前端與 `docs/api.md` | 不變條件 |
 | AC7 | 規格、ADR、PR 描述與 commit 訊息沒有憑證、token 或第三方回應原文的範例值 | 不變條件 |
 | AC8 | PR 描述有 `Closes #62` | 使用者行為 |
@@ -167,8 +167,7 @@
 分支 `issue-62-status-codes`：
 
 - `docs/specs/issue-62-status-codes.md`（照交付清單）。
-- `docs/decisions/0011-api-error-status-codes.md`（照交付清單，從 ADR 草稿）、`docs/decisions/README.md` 清單加一列。
-- `docs/reviews/specification/issue-62-status-codes.md`、`docs/reviews/implementation/issue-62-status-codes.md`（主 session commit）。
+- `docs/decisions/0002-api-error-status-codes.md`（照交付清單，從 ADR 草稿）、`docs/decisions/README.md` 清單加一列。
 - PR 描述加 `Closes #62`。
 
 為什麼這樣做：設計原則是之後所有 API 都要遵守的決定，放 ADR；盤點記錄的是當時的狀態，放規格背景（永久保存、不隨程式更新）；`docs/api.md` 記錄目前的行為，等程式改了才更新。

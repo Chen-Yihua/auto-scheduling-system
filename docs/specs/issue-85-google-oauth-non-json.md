@@ -15,7 +15,7 @@
 
 系統在 `backend/services/google_oauth.py` 的 `refresh_google_calendar_token` 也在處理連線錯誤與 HTTP 狀態錯誤的 try/except 內直接執行 `res.json()`，同樣可能將 HTTP 200 的非 JSON 回應變成未預期的 500。
 
-HTTP 200 只表示 HTTP 層成功回應；OAuth token 交換還必須有可解析的 JSON 與必要的 `access_token`。ADR 0011 將外部服務回應無法解析或缺少必要內容分類為 `UPSTREAM_ERROR`，`backend/services/google_errors.py` 已提供固定 detail `UPSTREAM_DETAIL`，`backend/core/error_codes.py` 將其對應為 502。
+HTTP 200 只表示 HTTP 層成功回應；OAuth token 交換還必須有可解析的 JSON 與必要的 `access_token`。ADR 0002 將外部服務回應無法解析或缺少必要內容分類為 `UPSTREAM_ERROR`，`backend/services/google_errors.py` 已提供固定 detail `UPSTREAM_DETAIL`，`backend/core/error_codes.py` 將其對應為 502。
 
 ## 需求
 

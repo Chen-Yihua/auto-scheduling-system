@@ -1,5 +1,5 @@
 """
-GitHub、Jira 錯誤回應的分類（ADR 0011 的 error_code）。
+GitHub、Jira 錯誤回應的分類（ADR 0002 的 error_code）。
 
 抓項目時丟 platforms/sync.py 的例外（決定重試）；連結帳號時丟 core/errors.py 的例外。
 限流時帶出對方回應的 Retry-After。第三方回應原文只放進例外訊息與 log，detail 都是固定的文字。

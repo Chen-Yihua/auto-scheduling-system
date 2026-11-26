@@ -26,7 +26,7 @@ from core.exception_handlers import (
     validation_error_handler,
 )
 
-# ADR 0011「對照表」逐列抄寫
+# ADR 0002「對照表」逐列抄寫
 ADR_0011_TABLE = {
     "INVALID_REQUEST": 400,
     "INVALID_CREDENTIALS": 400,
@@ -65,7 +65,7 @@ def _body(response) -> dict:
 
 
 def test_error_code_table_matches_adr_0011():
-    """AC1：後端的對照表和 ADR 0011 的對照表逐列相同，沒有多也沒有少。"""
+    """AC1：後端的對照表和 ADR 0002 的對照表逐列相同，沒有多也沒有少。"""
     assert STATUS_BY_ERROR_CODE == ADR_0011_TABLE
 
 

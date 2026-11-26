@@ -324,7 +324,7 @@ async def resolve_removed_events(
     依序處理，每一項都用處理當下的資料，處理前再向 Google 確認事件仍然不存在。
     單一項目的問題（id 格式錯、不存在或不屬於自己、要刪除外部項目、編號已被換掉、階段正在被別的請求改動）
     列在 failed，繼續處理下一項。Google 的錯誤（包括授權失效）直接丟出，還沒處理的項目都不處理；
-    已處理成功的不復原。不用資料庫交易（ADR 0004）。
+    已處理成功的不復原。不用資料庫交易（ADR 0001）。
     """
     user_id = clerk_user["sub"]
     requested_ids = set(body.reschedule) | set(body.delete)
@@ -396,7 +396,7 @@ async def reschedule_tasks(
     把已排進 Google 日曆的任務放回待排。重複的 id 只處理一次。
 
     單一任務的問題（id 格式錯、不存在或不屬於自己、主任務、已完成、編號已被換掉）列在 failed，繼續處理下一個。
-    Google 的錯誤（包括授權失效）直接丟出，還沒處理的任務都不處理；已處理成功的不復原。不用資料庫交易（ADR 0004）。
+    Google 的錯誤（包括授權失效）直接丟出，還沒處理的任務都不處理；已處理成功的不復原。不用資料庫交易（ADR 0001）。
     """
     user_id = clerk_user["sub"]
     task_ids = list(dict.fromkeys(body.task_ids))

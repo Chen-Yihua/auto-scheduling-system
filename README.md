@@ -46,7 +46,7 @@
 | 前端 | Nuxt 3、Vue 3（Composition API）、TypeScript、Nuxt UI、Tailwind CSS、Clerk |
 | 後端 | FastAPI、PyMongo Async（`AsyncMongoClient`，MongoDB 官方非同步驅動程式）、Pydantic、slowapi（限流）、Selenium（Moodle 登入與爬取）、Google Gemini（AI 推估與 PR 摘要） |
 | 資料庫 | MongoDB（持久化資料）、Redis（選用：快取、限流計數） |
-| 測試 | Pytest（單元測試、整合測試）、Vitest（元件與 composable 單元測試）、Playwright（透過 `@nuxt/test-utils` 與 `@clerk/testing` 執行真實瀏覽器的 E2E 測試） |
+| 測試 | Pytest（單元測試、整合測試）、Vitest（元件與 composable 單元測試）、Playwright（`@playwright/test` 與 `@clerk/testing`，執行真實瀏覽器的 E2E 測試） |
 | 部署 | Docker → Google Cloud Run（後端）、Vercel（前端）、GitHub Actions（CI/CD） |
 
 ---
@@ -62,7 +62,7 @@
   詳見 [`backend/tests/README.md`](backend/tests/README.md)。
 - **前端**：
   - 元件與 composable 測試在 jsdom 中執行，Nuxt 的 auto-import 以 mock 取代。
-  - 另有獨立的 **E2E 測試**：實際 build 並啟動 Nuxt 應用，再以真實的 headless 瀏覽器（Playwright）操作。涵蓋未登入的畫面；若 CI 有設定 Clerk 測試使用者，也會涵蓋真實的登入流程（以該使用者 email 對應的一次性 Clerk 登入 ticket 登入）。
+  - 另有獨立的 **E2E 測試**：Playwright 自己 build 並啟動前端、後端與 MongoDB（不連 Cloud Run），再以真實的 headless 瀏覽器操作。涵蓋未登入的畫面；若 CI 有設定 Clerk 測試使用者，也會涵蓋真實的登入流程（以該使用者 email 對應的一次性 Clerk 登入 ticket 登入）。
 
 在本機執行：
 

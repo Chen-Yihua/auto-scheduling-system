@@ -1,6 +1,6 @@
 # e2e 失敗時 vitest 印出的內容用 reporter 清理
 
-- 狀態：已核准
+- 狀態：部分被 [e2e-playwright](e2e-playwright.md) 取代（AC1～AC15、AC17～AC21）
 - 等級：高風險（改的是「token、email 不出現在公開的 CI log」這項保證）
 - issue：[#50](https://github.com/Chen-Yihua/auto-scheduling-system/issues/50)、[#129](https://github.com/Chen-Yihua/auto-scheduling-system/issues/129)
 - PR：#142

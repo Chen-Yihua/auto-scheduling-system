@@ -19,7 +19,7 @@ async def test_create_user_returns_created_user(monkeypatch):
     async def mock_insert_one(doc):
         return None
 
-    monkeypatch.setattr(user_crud.db.users, "insert_one", mock_insert_one)
+    monkeypatch.setattr(user_crud.database.db.users, "insert_one", mock_insert_one)
 
     result = await user_crud.create_user(_user_create())
 
@@ -32,7 +32,7 @@ async def test_create_user_raises_409_when_already_exists(monkeypatch):
     async def mock_insert_one(doc):
         raise DuplicateKeyError("duplicate")
 
-    monkeypatch.setattr(user_crud.db.users, "insert_one", mock_insert_one)
+    monkeypatch.setattr(user_crud.database.db.users, "insert_one", mock_insert_one)
 
     with pytest.raises(ConflictError) as exc_info:
         await user_crud.create_user(_user_create())
@@ -47,7 +47,7 @@ async def test_get_user_by_clerk_id_returns_user_with_id_field(monkeypatch):
     async def mock_find_one(query):
         return {"_id": "uid123", "name": "Alice", "email": "alice@example.com"}
 
-    monkeypatch.setattr(user_crud.db.users, "find_one", mock_find_one)
+    monkeypatch.setattr(user_crud.database.db.users, "find_one", mock_find_one)
 
     result = await user_crud.get_user_by_clerk_id("uid123")
 
@@ -61,7 +61,7 @@ async def test_get_user_by_clerk_id_returns_none_when_not_found(monkeypatch):
     async def mock_find_one(query):
         return None
 
-    monkeypatch.setattr(user_crud.db.users, "find_one", mock_find_one)
+    monkeypatch.setattr(user_crud.database.db.users, "find_one", mock_find_one)
 
     result = await user_crud.get_user_by_clerk_id("uid123")
 
@@ -86,7 +86,7 @@ async def test_update_user_by_clerk_id_succeeds_when_user_matched(monkeypatch):
     async def mock_update_one(query, update):
         return type("Result", (), {"matched_count": 1, "modified_count": 0})()
 
-    monkeypatch.setattr(user_crud.db.users, "update_one", mock_update_one)
+    monkeypatch.setattr(user_crud.database.db.users, "update_one", mock_update_one)
 
     await user_crud.update_user_by_clerk_id("uid123", UserUpdate(name="Alice"))
 
@@ -97,7 +97,7 @@ async def test_update_user_by_clerk_id_raises_404_when_user_not_matched(monkeypa
     async def mock_update_one(query, update):
         return type("Result", (), {"matched_count": 0, "modified_count": 0})()
 
-    monkeypatch.setattr(user_crud.db.users, "update_one", mock_update_one)
+    monkeypatch.setattr(user_crud.database.db.users, "update_one", mock_update_one)
 
     with pytest.raises(NotFoundError) as exc_info:
         await user_crud.update_user_by_clerk_id("uid123", UserUpdate(name="Alice"))
@@ -112,7 +112,7 @@ async def test_delete_user_by_clerk_id_returns_true_when_deleted(monkeypatch):
     async def mock_delete_one(query):
         return type("Result", (), {"deleted_count": 1})()
 
-    monkeypatch.setattr(user_crud.db.users, "delete_one", mock_delete_one)
+    monkeypatch.setattr(user_crud.database.db.users, "delete_one", mock_delete_one)
 
     result = await user_crud.delete_user_by_clerk_id("uid123")
 
@@ -125,7 +125,7 @@ async def test_delete_user_by_clerk_id_returns_false_when_nothing_deleted(monkey
     async def mock_delete_one(query):
         return type("Result", (), {"deleted_count": 0})()
 
-    monkeypatch.setattr(user_crud.db.users, "delete_one", mock_delete_one)
+    monkeypatch.setattr(user_crud.database.db.users, "delete_one", mock_delete_one)
 
     result = await user_crud.delete_user_by_clerk_id("uid123")
 
@@ -135,7 +135,7 @@ async def test_delete_user_by_clerk_id_returns_false_when_nothing_deleted(monkey
 @pytest.mark.asyncio
 async def test_delete_user_by_clerk_id_removes_all_data_of_that_user_only():
     """刪除使用者 → 他的任務、綁定帳號、Google token、平台項目都要刪掉，其他使用者的資料不受影響。"""
-    db = user_crud.db
+    db = user_crud.database.db
     collections = {
         "manual_tasks": "user_id",
         "linkedAccounts": "clerk_id",
@@ -164,8 +164,8 @@ async def test_delete_user_by_clerk_id_removes_all_data_of_that_user_only():
 @pytest.mark.asyncio
 async def test_issue182_ac3_get_schedule_preferences_defaults_when_field_missing():
     """AC3：users 文件沒有 schedule_preferences 欄位（舊文件）→ 回傳預設值。"""
-    await user_crud.db.users.delete_many({})
-    await user_crud.db.users.insert_one({"_id": "uid_prefs", "name": "A", "email": "a@example.com"})
+    await user_crud.database.db.users.delete_many({})
+    await user_crud.database.db.users.insert_one({"_id": "uid_prefs", "name": "A", "email": "a@example.com"})
 
     result = await user_crud.get_schedule_preferences("uid_prefs")
 
@@ -177,7 +177,7 @@ async def test_issue182_ac3_get_schedule_preferences_defaults_when_field_missing
 @pytest.mark.asyncio
 async def test_issue182_get_schedule_preferences_raises_404_when_user_missing():
     """使用者不存在 → 404。"""
-    await user_crud.db.users.delete_many({})
+    await user_crud.database.db.users.delete_many({})
 
     with pytest.raises(NotFoundError):
         await user_crud.get_schedule_preferences("nobody")
@@ -188,8 +188,8 @@ async def test_issue182_save_schedule_preferences_replaces_whole_value_and_raise
     """儲存是整份換掉（只留最近一次）；使用者不存在 → 404。"""
     from schemas.schedule import SavedSchedulePreferences
 
-    await user_crud.db.users.delete_many({})
-    await user_crud.db.users.insert_one({"_id": "uid_prefs", "name": "A", "email": "a@example.com"})
+    await user_crud.database.db.users.delete_many({})
+    await user_crud.database.db.users.insert_one({"_id": "uid_prefs", "name": "A", "email": "a@example.com"})
 
     await user_crud.save_schedule_preferences("uid_prefs", SavedSchedulePreferences(buffer_minutes=30, daily_max_minutes=60))
     await user_crud.save_schedule_preferences("uid_prefs", SavedSchedulePreferences(buffer_minutes=5))
@@ -206,10 +206,10 @@ async def test_issue182_ac26_deleting_user_removes_saved_preferences():
     """AC26：刪除帳號後，users 文件（含偏好）整份不見。"""
     from schemas.schedule import SavedSchedulePreferences
 
-    await user_crud.db.users.delete_many({})
-    await user_crud.db.users.insert_one({"_id": "uid_prefs", "name": "A", "email": "a@example.com"})
+    await user_crud.database.db.users.delete_many({})
+    await user_crud.database.db.users.insert_one({"_id": "uid_prefs", "name": "A", "email": "a@example.com"})
     await user_crud.save_schedule_preferences("uid_prefs", SavedSchedulePreferences(buffer_minutes=30))
 
     await user_crud.delete_user_by_clerk_id("uid_prefs")
 
-    assert await user_crud.db.users.find_one({"_id": "uid_prefs"}) is None
+    assert await user_crud.database.db.users.find_one({"_id": "uid_prefs"}) is None

@@ -10,7 +10,8 @@ logger = logging.getLogger(__name__)
 
 REDIS_URL = os.getenv("REDIS_URL")
 
-_redis_client = redis.from_url(REDIS_URL, decode_responses=True) if REDIS_URL else None
+# 連線在 app 啟動（main.py 的 lifespan）時才建立；import 時不連線
+_redis_client: redis.Redis | None = None
 
 # 沒設定 REDIS_URL 時用記憶體，多個 instance 之間不共用
 _memory_store: dict[str, tuple[float, str]] = {}
@@ -20,6 +21,19 @@ if not REDIS_URL:
         "REDIS_URL 未設定，快取改用記憶體儲存"
         "（多個 Cloud Run instance 各自快取，不是全域共用，僅供本機開發/尚未接 Redis 時使用）"
     )
+
+
+def open_cache() -> None:
+    global _redis_client
+    if REDIS_URL and _redis_client is None:
+        _redis_client = redis.from_url(REDIS_URL, decode_responses=True)
+
+
+async def close_cache() -> None:
+    global _redis_client
+    if _redis_client is not None:
+        await _redis_client.aclose()
+        _redis_client = None
 
 
 async def cache_get(key: str) -> Optional[Any]:

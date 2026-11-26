@@ -126,7 +126,7 @@ async def test_create_linked_account_logs_debug(monkeypatch, caplog):
     async def mock_update_one(*args, **kwargs):
         return type("Mock", (), {"matched_count": 1, "modified_count": 1, "upserted_id": None})()
 
-    monkeypatch.setattr(linked_mod.db.linkedAccounts, "update_one", mock_update_one)
+    monkeypatch.setattr(linked_mod.database.db.linkedAccounts, "update_one", mock_update_one)
     monkeypatch.setattr(moodle_platform, "verify_moodle_login", lambda username, password: True)
 
     account = LinkedAccountCreate(

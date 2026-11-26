@@ -40,7 +40,7 @@ async def test_get_free_slots_happy_path(monkeypatch):
             "calendars": {"primary-cal-id": {"busy": [{"start": "2026-09-10T09:00:00Z", "end": "2026-09-10T10:00:00Z"}]}},
         }
 
-    monkeypatch.setattr(google_tokens.db.googleCalendarTokens, "find_one", mock_find_one)
+    monkeypatch.setattr(google_tokens.database.db.googleCalendarTokens, "find_one", mock_find_one)
     monkeypatch.setattr(calendar_service, "fetch_google_calendar_list", mock_fetch_calendar_list)
     monkeypatch.setattr(calendar_service, "fetch_freebusy", mock_fetch_freebusy)
 
@@ -78,7 +78,7 @@ async def test_get_free_slots_refreshes_token_on_401(monkeypatch):
             "calendars": {"primary-cal-id": {"busy": []}},
         }
 
-    monkeypatch.setattr(google_tokens.db.googleCalendarTokens, "find_one", mock_find_one)
+    monkeypatch.setattr(google_tokens.database.db.googleCalendarTokens, "find_one", mock_find_one)
     monkeypatch.setattr(calendar_service, "fetch_google_calendar_list", mock_fetch_calendar_list)
     monkeypatch.setattr(calendar_service, "refresh_google_calendar_token", mock_refresh)
     monkeypatch.setattr(calendar_service, "fetch_freebusy", mock_fetch_freebusy)
@@ -99,7 +99,7 @@ async def test_get_free_slots_raises_404_when_no_primary_calendar(monkeypatch):
     async def mock_fetch_calendar_list(token):
         return [{"id": "some-other-cal", "primary": False}]
 
-    monkeypatch.setattr(google_tokens.db.googleCalendarTokens, "find_one", mock_find_one)
+    monkeypatch.setattr(google_tokens.database.db.googleCalendarTokens, "find_one", mock_find_one)
     monkeypatch.setattr(calendar_service, "fetch_google_calendar_list", mock_fetch_calendar_list)
 
     with pytest.raises(NotFoundError):
@@ -113,7 +113,7 @@ async def test_get_free_slots_raises_400_when_not_connected(monkeypatch):
     async def mock_find_one(query):
         return None
 
-    monkeypatch.setattr(google_tokens.db.googleCalendarTokens, "find_one", mock_find_one)
+    monkeypatch.setattr(google_tokens.database.db.googleCalendarTokens, "find_one", mock_find_one)
 
     with pytest.raises(InvalidRequestError):
         await calendar_service.get_free_slots_for_user("uid123")
@@ -129,7 +129,7 @@ async def test_get_free_slots_raises_502_when_google_unreachable(monkeypatch):
     async def mock_fetch_calendar_list(token):
         raise httpx.ConnectError("Google 掛了")
 
-    monkeypatch.setattr(google_tokens.db.googleCalendarTokens, "find_one", mock_find_one)
+    monkeypatch.setattr(google_tokens.database.db.googleCalendarTokens, "find_one", mock_find_one)
     monkeypatch.setattr(calendar_service, "fetch_google_calendar_list", mock_fetch_calendar_list)
 
     with pytest.raises(ExternalServiceError):
@@ -158,7 +158,7 @@ async def test_get_free_slots_second_call_within_ttl_uses_cache_not_live_api(mon
             "calendars": {"primary-cal-id": {"busy": []}},
         }
 
-    monkeypatch.setattr(google_tokens.db.googleCalendarTokens, "find_one", mock_find_one)
+    monkeypatch.setattr(google_tokens.database.db.googleCalendarTokens, "find_one", mock_find_one)
     monkeypatch.setattr(calendar_service, "fetch_google_calendar_list", mock_fetch_calendar_list)
     monkeypatch.setattr(calendar_service, "fetch_freebusy", mock_fetch_freebusy)
 
@@ -190,7 +190,7 @@ async def test_get_free_slots_different_users_have_independent_cache(monkeypatch
             "calendars": {"primary-cal-id": {"busy": []}},
         }
 
-    monkeypatch.setattr(google_tokens.db.googleCalendarTokens, "find_one", mock_find_one)
+    monkeypatch.setattr(google_tokens.database.db.googleCalendarTokens, "find_one", mock_find_one)
     monkeypatch.setattr(calendar_service, "fetch_google_calendar_list", mock_fetch_calendar_list)
     monkeypatch.setattr(calendar_service, "fetch_freebusy", mock_fetch_freebusy)
 
@@ -215,7 +215,7 @@ async def test_get_free_slots_maps_google_calendar_list_errors(monkeypatch, goog
         response = httpx.Response(google_status, request=request)
         raise httpx.HTTPStatusError("error", request=request, response=response)
 
-    monkeypatch.setattr(google_tokens.db.googleCalendarTokens, "find_one", mock_find_one)
+    monkeypatch.setattr(google_tokens.database.db.googleCalendarTokens, "find_one", mock_find_one)
     monkeypatch.setattr(calendar_service, "fetch_google_calendar_list", mock_fetch_calendar_list)
 
     with pytest.raises(expected):
@@ -235,7 +235,7 @@ async def test_get_free_slots_raises_502_when_freebusy_returns_server_error(monk
         request = httpx.Request("POST", "https://example.com")
         raise httpx.HTTPStatusError("error", request=request, response=httpx.Response(503, request=request))
 
-    monkeypatch.setattr(google_tokens.db.googleCalendarTokens, "find_one", mock_find_one)
+    monkeypatch.setattr(google_tokens.database.db.googleCalendarTokens, "find_one", mock_find_one)
     monkeypatch.setattr(calendar_service, "fetch_google_calendar_list", mock_fetch_calendar_list)
     monkeypatch.setattr(calendar_service, "fetch_freebusy", mock_fetch_freebusy)
 
@@ -256,7 +256,7 @@ async def test_get_free_slots_raises_502_when_freebusy_unreachable(monkeypatch):
     async def mock_fetch_freebusy(token, calendar_id):
         raise httpx.ConnectError("Google 掛了")
 
-    monkeypatch.setattr(google_tokens.db.googleCalendarTokens, "find_one", mock_find_one)
+    monkeypatch.setattr(google_tokens.database.db.googleCalendarTokens, "find_one", mock_find_one)
     monkeypatch.setattr(calendar_service, "fetch_google_calendar_list", mock_fetch_calendar_list)
     monkeypatch.setattr(calendar_service, "fetch_freebusy", mock_fetch_freebusy)
 
@@ -291,8 +291,8 @@ async def test_get_free_slots_requires_reauth_when_access_token_cannot_be_decryp
     async def mock_delete_one(query):
         deleted.append(query)
 
-    monkeypatch.setattr(google_tokens.db.googleCalendarTokens, "find_one", mock_find_one)
-    monkeypatch.setattr(google_tokens.db.googleCalendarTokens, "delete_one", mock_delete_one)
+    monkeypatch.setattr(google_tokens.database.db.googleCalendarTokens, "find_one", mock_find_one)
+    monkeypatch.setattr(google_tokens.database.db.googleCalendarTokens, "delete_one", mock_delete_one)
 
     with pytest.raises(ReauthRequiredError, match="重新連接 Google Calendar"):
         await calendar_service.get_free_slots_for_user("uid123")
@@ -314,8 +314,8 @@ async def test_get_free_slots_requires_reauth_when_refresh_token_cannot_be_decry
     async def mock_delete_one(query):
         deleted.append(query)
 
-    monkeypatch.setattr(google_tokens.db.googleCalendarTokens, "find_one", mock_find_one)
-    monkeypatch.setattr(google_tokens.db.googleCalendarTokens, "delete_one", mock_delete_one)
+    monkeypatch.setattr(google_tokens.database.db.googleCalendarTokens, "find_one", mock_find_one)
+    monkeypatch.setattr(google_tokens.database.db.googleCalendarTokens, "delete_one", mock_delete_one)
     monkeypatch.setattr(calendar_service, "fetch_google_calendar_list", mock_fetch_calendar_list)
 
     with pytest.raises(ReauthRequiredError, match="重新連接 Google Calendar"):
@@ -339,7 +339,7 @@ async def test_get_free_slots_requires_reauth_when_calendar_list_still_401_after
     async def mock_refresh(clerk_id):
         return "new-token"
 
-    monkeypatch.setattr(google_tokens.db.googleCalendarTokens, "find_one", mock_find_one)
+    monkeypatch.setattr(google_tokens.database.db.googleCalendarTokens, "find_one", mock_find_one)
     monkeypatch.setattr(calendar_service, "fetch_google_calendar_list", mock_fetch_calendar_list)
     monkeypatch.setattr(calendar_service, "refresh_google_calendar_token", mock_refresh)
 
@@ -375,7 +375,7 @@ async def test_get_free_slots_maps_retry_errors_after_token_refresh(monkeypatch,
     async def mock_refresh(clerk_id):
         return "new-token"
 
-    monkeypatch.setattr(google_tokens.db.googleCalendarTokens, "find_one", mock_find_one)
+    monkeypatch.setattr(google_tokens.database.db.googleCalendarTokens, "find_one", mock_find_one)
     monkeypatch.setattr(calendar_service, "fetch_google_calendar_list", mock_fetch_calendar_list)
     monkeypatch.setattr(calendar_service, "refresh_google_calendar_token", mock_refresh)
 
@@ -401,7 +401,7 @@ async def test_list_calendars_returns_all_calendars_not_only_primary(monkeypatch
         assert token == "valid-token"
         return calendars
 
-    monkeypatch.setattr(google_tokens.db.googleCalendarTokens, "find_one", mock_find_one)
+    monkeypatch.setattr(google_tokens.database.db.googleCalendarTokens, "find_one", mock_find_one)
     monkeypatch.setattr(calendar_service, "fetch_google_calendar_list", mock_fetch_calendar_list)
 
     assert await calendar_service.list_calendars_for_user("uid123") == calendars
@@ -426,7 +426,7 @@ def _mock_token_and_primary_calendar(monkeypatch, calendar_id="primary-cal-id"):
     async def mock_fetch_calendar_list(token):
         return [{"id": calendar_id, "primary": True}]
 
-    monkeypatch.setattr(google_tokens.db.googleCalendarTokens, "find_one", mock_find_one)
+    monkeypatch.setattr(google_tokens.database.db.googleCalendarTokens, "find_one", mock_find_one)
     monkeypatch.setattr(calendar_service, "fetch_google_calendar_list", mock_fetch_calendar_list)
 
 
@@ -600,7 +600,7 @@ async def test_issue30_ac10_not_connected_requires_reconnect(monkeypatch):
     async def mock_find_one(query):
         return None
 
-    monkeypatch.setattr(google_tokens.db.googleCalendarTokens, "find_one", mock_find_one)
+    monkeypatch.setattr(google_tokens.database.db.googleCalendarTokens, "find_one", mock_find_one)
 
     with pytest.raises(ReauthRequiredError):
         await calendar_service.delete_calendar_events("uid123", ["ev-1"])
@@ -645,7 +645,7 @@ async def test_issue30_ac8_no_events_to_delete_does_not_call_google(monkeypatch)
     async def fail_if_called(*args, **kwargs):
         raise AssertionError("不該呼叫 Google")
 
-    monkeypatch.setattr(google_tokens.db.googleCalendarTokens, "find_one", fail_if_called)
+    monkeypatch.setattr(google_tokens.database.db.googleCalendarTokens, "find_one", fail_if_called)
     monkeypatch.setattr(calendar_service, "is_google_calendar_connected", fail_if_called)
     monkeypatch.setattr(calendar_service, "fetch_google_calendar_list", fail_if_called)
 
@@ -685,7 +685,7 @@ def _connected(monkeypatch, calendar_list=None):
     async def mock_find_one(query):
         return {"_id": "uid123", "access_token": encrypt_secret("expired-token"), "refresh_token": encrypt_secret("rt")}
 
-    monkeypatch.setattr(google_tokens.db.googleCalendarTokens, "find_one", mock_find_one)
+    monkeypatch.setattr(google_tokens.database.db.googleCalendarTokens, "find_one", mock_find_one)
     if calendar_list is not None:
         async def mock_fetch_calendar_list(token):
             return calendar_list
@@ -792,7 +792,7 @@ async def test_issue42_ac3_no_event_ids_does_not_call_google(monkeypatch):
     async def fail_if_called(*args, **kwargs):
         raise AssertionError("不該呼叫 Google")
 
-    monkeypatch.setattr(google_tokens.db.googleCalendarTokens, "find_one", fail_if_called)
+    monkeypatch.setattr(google_tokens.database.db.googleCalendarTokens, "find_one", fail_if_called)
     monkeypatch.setattr(calendar_service, "fetch_google_calendar_list", fail_if_called)
 
     assert await calendar_service.find_removed_calendar_events("uid123", []) == set()
@@ -818,7 +818,7 @@ async def test_issue42_ac24_not_connected_requires_reauth(monkeypatch):
     async def mock_find_one(query):
         return None
 
-    monkeypatch.setattr(google_tokens.db.googleCalendarTokens, "find_one", mock_find_one)
+    monkeypatch.setattr(google_tokens.database.db.googleCalendarTokens, "find_one", mock_find_one)
 
     with pytest.raises(ReauthRequiredError):
         await calendar_service.find_removed_calendar_events("uid123", ["ev-1"])

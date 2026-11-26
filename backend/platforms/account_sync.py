@@ -14,7 +14,7 @@ from enum import Enum
 from typing import Optional
 
 from core.crypto import SecretDecryptError, decrypt_secret
-from core.database import db
+from core import database
 from platforms.base import PlatformAdapter
 from platforms.sync import delete_missing_items, fetch_error_code, fetch_with_retry, upsert_items
 
@@ -62,7 +62,7 @@ def _same_link(account: Optional[dict], link_id: Optional[str]) -> bool:
 
 
 async def _changed_or_lost(account_id: str, link_id: Optional[str]) -> SyncResult:
-    current = await db.linkedAccounts.find_one({"_id": account_id})
+    current = await database.get_db().linkedAccounts.find_one({"_id": account_id})
     if not _same_link(current, link_id):
         return SyncResult(SyncOutcome.ACCOUNT_CHANGED)
     return SyncResult(SyncOutcome.LOCK_LOST)
@@ -74,7 +74,7 @@ async def _acquire_lock(account_id: str, link_id: Optional[str], owner: str) -> 
     deadline = loop.time() + LOCK_WAIT_SECONDS
     while True:
         now = _now()
-        result = await db.linkedAccounts.update_one(
+        result = await database.get_db().linkedAccounts.update_one(
             {
                 "_id": account_id,
                 **_link_filter(link_id),
@@ -85,7 +85,7 @@ async def _acquire_lock(account_id: str, link_id: Optional[str], owner: str) -> 
         )
         if result.matched_count:
             return None
-        if not _same_link(await db.linkedAccounts.find_one({"_id": account_id}), link_id):
+        if not _same_link(await database.get_db().linkedAccounts.find_one({"_id": account_id}), link_id):
             return SyncResult(SyncOutcome.ACCOUNT_CHANGED)
         if loop.time() >= deadline:
             return SyncResult(SyncOutcome.LOCK_TIMEOUT, error_code="SERVICE_UNAVAILABLE")
@@ -102,7 +102,7 @@ async def _write_with_lock(
     items: Optional[list[dict]],
     fetch_error: Optional[Exception],
 ) -> SyncResult:
-    accounts = db.linkedAccounts
+    accounts = database.get_db().linkedAccounts
     ours = {"_id": account_id, "sync_lock_owner": owner, **_link_filter(link_id)}
 
     current = await accounts.find_one({"_id": account_id})
@@ -154,7 +154,7 @@ async def sync_account(platform: PlatformAdapter, user_id: str) -> SyncResult:
     """
     started_at = _now()
     account_id = f"{user_id}_{platform.name}"
-    account = await db.linkedAccounts.find_one({"_id": account_id})
+    account = await database.get_db().linkedAccounts.find_one({"_id": account_id})
     if account is None:
         return SyncResult(SyncOutcome.ACCOUNT_CHANGED)
     link_id = account.get("link_id")
@@ -182,7 +182,7 @@ async def sync_account(platform: PlatformAdapter, user_id: str) -> SyncResult:
         return await _write_with_lock(platform, user_id, account_id, link_id, owner, started_at, items, fetch_error)
     finally:
         # 條件帶上自己的 owner：鎖過期被別人拿走時，不能釋放別人的鎖
-        await db.linkedAccounts.update_one(
+        await database.get_db().linkedAccounts.update_one(
             {"_id": account_id, "sync_lock_owner": owner},
             {"$unset": {"sync_lock_owner": "", "sync_lock_until": ""}},
         )

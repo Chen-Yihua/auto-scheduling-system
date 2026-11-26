@@ -1,5 +1,5 @@
 """
-部分模組在 import 時就需要環境變數（CLERK_*、GEMINI_API_KEY）。
+部分模組在 import 時就需要環境變數（CLERK_*）。
 確認缺少時 import 會失敗，以及 CI workflow 有帶入這些變數。
 """
 import os
@@ -11,7 +11,7 @@ WORKFLOW_PATH = os.path.abspath(
     os.path.join(BACKEND_DIR, "..", ".github", "workflows", "deploy.yml")
 )
 
-REQUIRED_ENV_VARS = ["CLERK_ISSUER", "CLERK_JWKS_URL", "GEMINI_API_KEY"]
+REQUIRED_ENV_VARS = ["CLERK_ISSUER", "CLERK_JWKS_URL"]
 
 
 def _run_import_in_clean_process(code: str, env_overrides: dict) -> subprocess.CompletedProcess:
@@ -46,19 +46,9 @@ def test_clerk_env_vars_present_allows_import():
     assert result.returncode == 0, result.stderr
 
 
-def test_missing_gemini_api_key_breaks_webhook_import():
-    """沒有 GEMINI_API_KEY 時，import routers.pr_review_webhook 要失敗。"""
+def test_missing_gemini_api_key_still_allows_webhook_import():
+    """Gemini client 在 app 啟動時才建立，沒有 GEMINI_API_KEY 也能 import routers.pr_review_webhook。"""
     result = _run_import_in_clean_process("import routers.pr_review_webhook", env_overrides={})
-
-    # 不比對錯誤訊息：SDK 沒鎖版本，訊息文字可能改變
-    assert result.returncode != 0
-
-
-def test_gemini_api_key_present_allows_webhook_import():
-    """有 GEMINI_API_KEY 時，import routers.pr_review_webhook 要成功。"""
-    result = _run_import_in_clean_process(
-        "import routers.pr_review_webhook", env_overrides={"GEMINI_API_KEY": "fake-key"}
-    )
 
     assert result.returncode == 0, result.stderr
 
@@ -81,7 +71,7 @@ def _get_job_block(workflow_text: str, job_name: str) -> str:
 
 
 def test_backend_test_job_has_required_env_vars_wired_in_ci():
-    """CI 的 backend-test job 要帶入 CLERK_ISSUER、CLERK_JWKS_URL、GEMINI_API_KEY。"""
+    """CI 的 backend-test job 要帶入 CLERK_ISSUER、CLERK_JWKS_URL。"""
     with open(WORKFLOW_PATH, encoding="utf-8") as f:
         workflow_text = f.read()
 
@@ -90,5 +80,5 @@ def test_backend_test_job_has_required_env_vars_wired_in_ci():
     for var in REQUIRED_ENV_VARS:
         assert var in job_block, (
             f"{var} 沒有出現在 backend-test job 裡——main.py 的 import chain 需要它，"
-            "少了它 pytest 連收集測試都會失敗（見 core/security.py、routers/pr_review_webhook.py）"
+            "少了它 pytest 連收集測試都會失敗（見 core/security.py）"
         )

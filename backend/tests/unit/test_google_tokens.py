@@ -10,7 +10,7 @@ async def test_is_google_calendar_connected_true_when_token_stored(monkeypatch):
     async def mock_find_one(query):
         return {"_id": "uid123", "access_token": "valid-token"}
 
-    monkeypatch.setattr(google_tokens.db.googleCalendarTokens, "find_one", mock_find_one)
+    monkeypatch.setattr(google_tokens.database.db.googleCalendarTokens, "find_one", mock_find_one)
 
     assert await google_tokens.is_google_calendar_connected("uid123") is True
 
@@ -21,7 +21,7 @@ async def test_is_google_calendar_connected_false_when_no_doc(monkeypatch):
     async def mock_find_one(query):
         return None
 
-    monkeypatch.setattr(google_tokens.db.googleCalendarTokens, "find_one", mock_find_one)
+    monkeypatch.setattr(google_tokens.database.db.googleCalendarTokens, "find_one", mock_find_one)
 
     assert await google_tokens.is_google_calendar_connected("uid123") is False
 
@@ -32,7 +32,7 @@ async def test_is_google_calendar_connected_false_when_doc_has_no_access_token(m
     async def mock_find_one(query):
         return {"_id": "uid123", "access_token": None}
 
-    monkeypatch.setattr(google_tokens.db.googleCalendarTokens, "find_one", mock_find_one)
+    monkeypatch.setattr(google_tokens.database.db.googleCalendarTokens, "find_one", mock_find_one)
 
     assert await google_tokens.is_google_calendar_connected("uid123") is False
 
@@ -49,7 +49,7 @@ async def test_save_google_calendar_token_stores_encrypted_tokens(monkeypatch):
         saved["doc"] = update["$set"]
         return None
 
-    monkeypatch.setattr(google_tokens.db.googleCalendarTokens, "update_one", mock_update_one)
+    monkeypatch.setattr(google_tokens.database.db.googleCalendarTokens, "update_one", mock_update_one)
 
     await google_tokens.save_google_calendar_token("uid123", "access-tok", "refresh-tok")
 
@@ -68,7 +68,7 @@ async def test_save_google_calendar_token_without_refresh_token(monkeypatch):
     async def mock_update_one(filter, update, upsert=False):
         saved["doc"] = update["$set"]
 
-    monkeypatch.setattr(google_tokens.db.googleCalendarTokens, "update_one", mock_update_one)
+    monkeypatch.setattr(google_tokens.database.db.googleCalendarTokens, "update_one", mock_update_one)
 
     await google_tokens.save_google_calendar_token("uid123", "access-tok", None)
 
@@ -83,7 +83,7 @@ async def test_get_google_calendar_token_returns_decrypted_token(monkeypatch):
     async def mock_find_one(query):
         return {"_id": "uid123", "access_token": encrypt_secret("access-tok")}
 
-    monkeypatch.setattr(google_tokens.db.googleCalendarTokens, "find_one", mock_find_one)
+    monkeypatch.setattr(google_tokens.database.db.googleCalendarTokens, "find_one", mock_find_one)
 
     assert await google_tokens.get_google_calendar_token("uid123") == "access-tok"
 
@@ -94,6 +94,6 @@ async def test_get_google_calendar_token_returns_none_when_not_connected(monkeyp
     async def mock_find_one(query):
         return None
 
-    monkeypatch.setattr(google_tokens.db.googleCalendarTokens, "find_one", mock_find_one)
+    monkeypatch.setattr(google_tokens.database.db.googleCalendarTokens, "find_one", mock_find_one)
 
     assert await google_tokens.get_google_calendar_token("uid123") is None

@@ -8,7 +8,7 @@ import os
 
 from fastapi import APIRouter, Request
 
-from core.database import db
+from core import database
 from core.errors import AppError
 from core.rate_limit import limiter
 from platforms import PLATFORMS
@@ -51,7 +51,7 @@ def _verify_token(authorization: str | None) -> None:
 async def run_scheduled_sync() -> dict[str, int]:
     """一次只同步一個帳號；每個帳號的失敗只記 log，接著處理下一個。"""
     counts = {"succeeded": 0, "failed": 0, "skipped": 0}
-    accounts = await db.linkedAccounts.find({}, {"clerk_id": 1, "platform": 1}).to_list(length=None)
+    accounts = await database.get_db().linkedAccounts.find({}, {"clerk_id": 1, "platform": 1}).to_list(length=None)
     for account in accounts:
         platform = PLATFORMS.get(account.get("platform", ""))
         user_id = account.get("clerk_id")

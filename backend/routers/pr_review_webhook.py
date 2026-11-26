@@ -16,7 +16,37 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+# Gemini client 在 app 啟動（main.py 的 lifespan）時才建立，import 時不需要 GEMINI_API_KEY
+client: genai.Client | None = None
+
+
+def get_client() -> genai.Client:
+    """測試會替換 client 的方法，所以每次呼叫都重新讀 client。"""
+    if client is None:
+        raise RuntimeError("Gemini client 還沒建立：要在 app 啟動後才能使用")
+    return client
+
+
+def open_client() -> bool:
+    """建立 client；已經建立過時不重建，回傳 False。"""
+    global client
+    if client is not None:
+        return False
+    client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+    return True
+
+
+async def close_client() -> None:
+    """這裡用的是非同步的 client.aio，要先關它，再關同步的連線。"""
+    global client
+    if client is None:
+        return
+    current = client
+    client = None
+    try:
+        await current.aio.aclose()
+    finally:
+        current.close()
 
 # 沒設定就略過對應的 Discord 通知
 DISCORD_WEBHOOK_URL = os.getenv("DISCORD_MR_WEBHOOK_URL")
@@ -129,7 +159,7 @@ async def github_webhook(
 
         summary = None
         try:
-            response = await client.aio.models.generate_content(
+            response = await get_client().aio.models.generate_content(
                 contents=prompt,
                 model="gemini-2.0-flash",
                 config={

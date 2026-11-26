@@ -1,7 +1,7 @@
 import logging
 import secrets
 
-from core.database import db
+from core import database
 from core.crypto import SecretDecryptError, encrypt_secret, decrypt_secret, mask_secret
 from schemas.linked_account import LinkedAccountCreate
 from platforms import PLATFORMS
@@ -78,7 +78,7 @@ async def create_linked_account(clerk_id: str, account: LinkedAccountCreate) -> 
     doc["link_id"] = _new_link_id()
 
     try:
-        await db.linkedAccounts.insert_one(doc)
+        await database.get_db().linkedAccounts.insert_one(doc)
     except DuplicateKeyError:
         raise ConflictError("Linked account already exists")
 
@@ -87,13 +87,13 @@ async def create_linked_account(clerk_id: str, account: LinkedAccountCreate) -> 
 
 
 async def get_linked_accounts_by_clerk_id(clerk_id: str):
-    cursor = db.linkedAccounts.find({"clerk_id": clerk_id})
+    cursor = database.get_db().linkedAccounts.find({"clerk_id": clerk_id})
     return [_to_public(account) async for account in cursor]
 
 
 async def find_linked_account(clerk_id: str, platform: str) -> dict | None:
     """資料庫裡的原始資料，憑證是密文。"""
-    return await db.linkedAccounts.find_one({"_id": f"{clerk_id}_{platform}"})
+    return await database.get_db().linkedAccounts.find_one({"_id": f"{clerk_id}_{platform}"})
 
 
 async def update_linked_account_by_clerk_id(clerk_id: str, platform: str, data: dict):
@@ -112,7 +112,7 @@ async def update_linked_account_by_clerk_id(clerk_id: str, platform: str, data: 
 
     # 不 upsert：帳號不存在要回 404
     # 用 matched_count：值沒變時 modified_count 是 0，但不算失敗
-    result = await db.linkedAccounts.update_one({"_id": composite_id}, {"$set": data})
+    result = await database.get_db().linkedAccounts.update_one({"_id": composite_id}, {"$set": data})
     if result.matched_count == 0:
         return False
     if reverified_platform:
@@ -121,6 +121,6 @@ async def update_linked_account_by_clerk_id(clerk_id: str, platform: str, data: 
 
 
 async def delete_linked_account_by_id(composite_id: str):
-    result = await db.linkedAccounts.delete_one({"_id": composite_id})
+    result = await database.get_db().linkedAccounts.delete_one({"_id": composite_id})
     if result.deleted_count == 0:
         raise NotFoundError("Linked account not found")

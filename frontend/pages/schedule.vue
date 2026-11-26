@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import NoticeBox from '~/components/NoticeBox.vue';
 import { ref, reactive, computed, watch } from 'vue';
 import { useUser } from '@clerk/vue';
 import { useSchedulableTasks } from '~/composables/useSchedulableTasks';
@@ -11,7 +12,8 @@ import { useGoogleCalendarAuth } from '~/composables/useGoogleCalendarAuth';
 import { useRemovedCalendarEvents } from '~/composables/useRemovedCalendarEvents';
 import AppHeader from '~/components/header/AppHeader.vue';
 import LoginRequiredCard from '~/components/LoginRequiredCard.vue';
-import { priorityLabel } from '~/utils/labels';
+import PriorityBadge from '~/components/PriorityBadge.vue';
+import { platformBrands } from '~/utils/platformBrand';
 import { stageMoveBlockReason } from '~/utils/stages';
 import type { SchedulableTask } from '~/types/schedulableTask';
 import type { BlockedRecurringRule, BlockedException, RemovedCalendarEvent } from '~/types/schedule'
@@ -152,17 +154,7 @@ async function handleResolveRemoved() {
   }
 }
 
-const columnLabel: Record<PriorityKey, string> = { Low: '低', Medium: '中', High: '高' }
-const columnColor: Record<PriorityKey, 'success' | 'warning' | 'error'> = {
-  Low: 'success', Medium: 'warning', High: 'error',
-}
 
-const sourceIcon: Record<SchedulableTask['source'], string> = {
-  manual: 'i-lucide-list-todo',
-  github: 'mdi:github',
-  jira: 'mdi:jira',
-  moodle: 'custom:moodle',
-}
 
 type StepKey = 'removed' | 1 | 2 | 3
 const steps = computed<{ key: StepKey; label: string }[]>(() => [
@@ -274,12 +266,9 @@ function onExceptionEndInput(exception: BlockedException, event: Event) {
     </div>
 
     <div v-else-if="isSignedIn" class="p-4 max-w-3xl w-full mx-auto mt-4 lg:flex-1 lg:min-h-0 lg:flex lg:flex-col">
-      <div
-        v-if="pageState === 'missing'"
-        class="rounded-xl border border-default text-center text-sm text-gray-500 dark:text-gray-400 py-10"
-      >
-        Google Calendar 未連接或授權已失效，請前往 <strong>帳號設定</strong> 連接。
-      </div>
+      <NoticeBox v-if="pageState === 'missing'" icon="i-lucide-calendar-x">
+        Google Calendar 未連接或授權已失效。點右上角的頭像，在 <strong>金鑰</strong> 頁連接。
+      </NoticeBox>
 
       <div v-else-if="pageState === 'checking'" class="space-y-3">
         <USkeleton v-for="i in 3" :key="i" class="h-16" />
@@ -292,21 +281,21 @@ function onExceptionEndInput(exception: BlockedException, event: Event) {
               <div
                 class="w-7 h-7 rounded-full flex items-center justify-center text-sm font-semibold"
                 :class="i === currentStepIndex
-                  ? 'bg-primary text-white'
+                  ? 'bg-primary text-white font-semibold'
                   : i < currentStepIndex
-                    ? 'bg-primary/20 text-primary'
-                    : 'bg-gray-200 dark:bg-gray-700 text-gray-500'"
+                    ? 'bg-palette-3 text-highlighted'
+                    : 'bg-muted text-dimmed ring ring-default'"
               >
                 {{ i + 1 }}
               </div>
               <span
                 class="text-sm"
-                :class="i === currentStepIndex ? 'font-semibold text-gray-900 dark:text-white' : 'text-gray-500'"
+                :class="i === currentStepIndex ? 'font-semibold text-highlighted' : 'text-muted'"
               >
                 {{ s.label }}
               </span>
             </div>
-            <UIcon v-if="i < steps.length - 1" name="i-lucide-chevron-right" class="w-4 h-4 text-gray-400" />
+            <UIcon v-if="i < steps.length - 1" name="i-lucide-chevron-right" class="w-4 h-4 text-dimmed" />
           </template>
         </div>
 
@@ -330,14 +319,14 @@ function onExceptionEndInput(exception: BlockedException, event: Event) {
             <div v-if="resolveFailed" class="rounded-lg border border-error/40 bg-error/10 px-3 py-2 text-sm">
               處理失敗，請重試
             </div>
-            <p class="text-sm text-gray-500 dark:text-gray-400 text-center">
+            <p class="text-sm text-muted text-center">
               勾選要重新排程的任務；沒勾的任務會從系統刪除。
             </p>
 
             <label
               v-for="item in removedItems"
               :key="item.id"
-              class="flex items-start gap-3 rounded-lg border border-default bg-white dark:bg-gray-800 px-3 py-3"
+              class="flex items-start gap-3 rounded-lg border border-default bg-white px-3 py-3"
             >
               <input
                 type="checkbox"
@@ -348,19 +337,19 @@ function onExceptionEndInput(exception: BlockedException, event: Event) {
               >
               <div class="min-w-0 flex-1 space-y-0.5">
                 <div class="flex items-center gap-2">
-                  <UIcon :name="sourceIcon[item.source]" class="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
-                  <span class="text-sm font-medium truncate">{{ item.title }}</span>
+                  <UIcon :name="platformBrands[item.source]!.icon" class="w-3.5 h-3.5 flex-shrink-0" :style="{ color: platformBrands[item.source]!.background }" />
+                  <span class="text-sm font-medium line-clamp-2 break-words text-balance min-w-0">{{ item.title }}</span>
                 </div>
-                <p v-if="item.parent_id" class="text-xs text-gray-400 truncate">{{ stageLabel(item) }}</p>
-                <p class="text-xs text-gray-500 dark:text-gray-400">Google 日曆上的事件已被刪除</p>
-                <p v-if="item.source !== 'manual'" class="text-xs text-gray-500 dark:text-gray-400">外部平台的項目會重新排程</p>
+                <p v-if="item.parent_id" class="text-xs break-words">{{ stageLabel(item) }}</p>
+                <p class="text-xs text-muted">Google 日曆上的事件已被刪除</p>
+                <p v-if="item.source !== 'manual'" class="text-xs text-muted">外部平台的項目會重新排程</p>
                 <p v-if="laterStagesNote(item)" class="text-xs text-warning">{{ laterStagesNote(item) }}</p>
               </div>
             </label>
           </div>
 
           <div class="shrink-0 flex justify-end gap-3 mt-6">
-            <UButton type="button" variant="link" class="bg-gray-200 text-black hover:bg-gray-300" @click="enterWizardAfterRemovedStep">
+            <UButton type="button" color="neutral" variant="soft" @click="enterWizardAfterRemovedStep">
               取消
             </UButton>
             <UButton :loading="resolving" :disabled="resolving" @click="handleResolveRemoved">
@@ -372,25 +361,25 @@ function onExceptionEndInput(exception: BlockedException, event: Event) {
         <!-- Step 1 沒有可排程的任務：說明原因 -->
         <div v-else-if="step === 1 && !hasTasks" data-testid="wizard-empty" class="text-center space-y-3 py-8">
           <template v-if="loadFailed">
-            <p class="text-sm text-gray-700 dark:text-gray-300">暫時無法載入任務</p>
+            <p class="text-sm text-toned">暫時無法載入任務</p>
           </template>
           <template v-else-if="emptyState.total === 0">
-            <p class="text-sm text-gray-700 dark:text-gray-300">目前沒有任務</p>
+            <p class="text-sm text-toned">目前沒有任務</p>
           </template>
           <template v-else>
-            <p class="text-sm text-gray-700 dark:text-gray-300">目前沒有可以排程的任務。</p>
-            <ul class="text-sm text-gray-500 dark:text-gray-400 space-y-1">
+            <p class="text-sm text-toned">目前沒有可以排程的任務。</p>
+            <ul class="text-sm text-muted space-y-1">
               <li>已排進 Google 日曆的任務：{{ emptyState.scheduled }} 個</li>
               <li>已完成的任務：{{ emptyState.done }} 個</li>
             </ul>
-            <p class="text-sm text-gray-500 dark:text-gray-400">已逾期的任務可以在首頁的今日卡片重新排程。</p>
+            <p class="text-sm text-muted">已逾期的任務可以在首頁的今日卡片重新排程。</p>
           </template>
         </div>
 
         <!-- Step 1：三欄拖拉排序 -->
         <div v-else-if="step === 1" class="lg:flex-1 lg:min-h-0 lg:flex lg:flex-col">
           <div class="lg:flex-1 lg:min-h-0 lg:flex lg:flex-col">
-            <p class="shrink-0 text-sm text-gray-500 dark:text-gray-400 mb-4 text-center">
+            <p class="shrink-0 text-sm text-muted mb-4 text-center">
               把任務拖到對應的優先權欄位；同一欄內的上下順序也會影響排程的先後。
             </p>
 
@@ -398,35 +387,35 @@ function onExceptionEndInput(exception: BlockedException, event: Event) {
               <div
                 v-for="p in PRIORITIES"
                 :key="p"
-                class="rounded-xl border border-default bg-gray-50 dark:bg-gray-900 p-3 min-h-[200px] lg:overflow-y-auto"
+                class="rounded-xl border border-default bg-muted p-3 min-h-[200px] lg:overflow-y-auto"
                 @dragover.prevent
                 @drop.prevent="onDropOnColumnEnd(p)"
               >
                 <div class="flex items-center gap-2 mb-3">
-                  <UBadge :color="columnColor[p]" variant="soft" size="sm">{{ columnLabel[p] }}</UBadge>
-                  <span class="text-xs text-gray-400">({{ columns[p].length }})</span>
+                  <PriorityBadge :priority="p" />
+                  <span class="text-xs text-dimmed">({{ columns[p].length }})</span>
                 </div>
 
                 <div class="space-y-2">
                   <div
                     v-for="(task, index) in columns[p]"
                     :key="task.id"
-                    class="flex items-center gap-2 rounded-lg border border-default bg-white dark:bg-gray-800 px-3 py-2 cursor-move"
+                    class="flex items-center gap-2 rounded-lg border border-default bg-white px-3 py-2 cursor-move"
                     draggable="true"
                     @dragstart="onDragStart(p, index)"
                     @dragover.prevent
                     @drop.stop.prevent="onDropOnRow(p, index)"
                   >
-                    <UIcon name="i-lucide-grip-vertical" class="w-4 h-4 text-gray-400 flex-shrink-0" />
-                    <UIcon :name="sourceIcon[task.source]" class="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                    <UIcon name="i-lucide-grip-vertical" class="w-4 h-4 text-dimmed flex-shrink-0" />
+                    <UIcon :name="platformBrands[task.source]!.icon" class="w-3.5 h-3.5 flex-shrink-0" :style="{ color: platformBrands[task.source]!.background }" />
                     <div class="min-w-0 flex-1">
-                      <p class="text-sm truncate">{{ task.title }}</p>
-                      <p v-if="task.parent_id" class="text-xs text-gray-400 truncate">{{ stageLabel(task) }}</p>
+                      <p class="text-sm line-clamp-2 break-words text-balance min-w-0">{{ task.title }}</p>
+                      <p v-if="task.parent_id" class="text-xs break-words">{{ stageLabel(task) }}</p>
                     </div>
                   </div>
                 </div>
 
-                <div v-if="columns[p].length === 0" class="text-center text-xs text-gray-400 py-6">
+                <div v-if="columns[p].length === 0" class="text-center text-xs text-dimmed py-6">
                   拖任務到這裡
                 </div>
               </div>
@@ -443,15 +432,15 @@ function onExceptionEndInput(exception: BlockedException, event: Event) {
         <!-- Step 2：確認截止日期與所需時長、排程偏好設定 -->
         <div v-else-if="step === 2" class="space-y-3 lg:flex-1 lg:min-h-0 lg:flex lg:flex-col">
           <div class="space-y-3 lg:flex-1 lg:min-h-0 lg:overflow-y-auto">
-            <p class="text-sm text-gray-500 dark:text-gray-400 mb-2 text-center">
+            <p class="text-sm text-muted mb-2 text-center">
               這裡可以調整截止日期與所需時長；優先權跟順序已經鎖定，回上一步才能改。
             </p>
 
-            <div class="rounded-lg border border-default bg-gray-50 dark:bg-gray-900 p-4 space-y-4 mb-4">
-              <p class="text-sm font-semibold text-gray-700 dark:text-gray-300">排程偏好設定</p>
+            <div class="rounded-lg border border-default bg-muted p-4 space-y-4 mb-4">
+              <p class="text-sm font-semibold text-toned">排程偏好設定</p>
 
               <div class="flex flex-wrap gap-4">
-                <label class="text-xs text-gray-500 dark:text-gray-400 flex flex-col gap-1">
+                <label class="text-xs text-muted flex flex-col gap-1">
                   任務間緩衝時間（分鐘）
                   <input
                     v-model.number="preferences.buffer_minutes"
@@ -460,7 +449,7 @@ function onExceptionEndInput(exception: BlockedException, event: Event) {
                     class="border border-default rounded-md px-2 py-1 text-sm bg-transparent w-32"
                   >
                 </label>
-                <label class="text-xs text-gray-500 dark:text-gray-400 flex flex-col gap-1">
+                <label class="text-xs text-muted flex flex-col gap-1">
                   每天最多排多少分鐘（留空＝不限制）
                   <input
                     type="number"
@@ -474,10 +463,10 @@ function onExceptionEndInput(exception: BlockedException, event: Event) {
 
               <div>
                 <div class="flex items-center justify-between mb-2">
-                  <span class="text-xs font-semibold text-gray-600 dark:text-gray-400">每週固定不工作時段</span>
+                  <span class="text-xs font-semibold text-toned">每週固定不工作時段</span>
                   <UButton size="xs" variant="soft" @click="addBlockedRecurringRule">新增規律</UButton>
                 </div>
-                <p v-if="preferences.blocked_recurring.length === 0" class="text-xs text-gray-400">
+                <p v-if="preferences.blocked_recurring.length === 0" class="text-xs text-dimmed">
                   沒有設定，代表整週空檔都可以排
                 </p>
                 <div
@@ -492,19 +481,19 @@ function onExceptionEndInput(exception: BlockedException, event: Event) {
                       type="button"
                       class="w-6 h-6 rounded-full text-xs"
                       :class="rule.days_of_week.includes(day)
-                        ? 'bg-primary text-white'
-                        : 'bg-gray-200 dark:bg-gray-700 text-gray-500'"
+                        ? 'bg-primary text-white font-semibold'
+                        : 'bg-default text-highlighted ring ring-default'"
                       @click="toggleRuleDay(rule, day)"
                     >
                       {{ label }}
                     </button>
                   </div>
-                  <label class="text-xs text-gray-500 flex items-center gap-1">
+                  <label class="text-xs text-muted flex items-center gap-1">
                     <input type="checkbox" :checked="rule.all_day" @change="toggleAllDay(rule, ($event.target as HTMLInputElement).checked)">
                     整天
                   </label>
                   <input v-model="rule.start_time" type="time" :disabled="rule.all_day" class="border border-default rounded-md px-1 py-0.5 text-xs bg-transparent disabled:opacity-50">
-                  <span class="text-xs text-gray-400">～</span>
+                  <span class="text-xs text-dimmed">～</span>
                   <input v-model="rule.end_time" type="time" :disabled="rule.all_day" class="border border-default rounded-md px-1 py-0.5 text-xs bg-transparent disabled:opacity-50">
                   <UButton size="xs" variant="ghost" color="error" @click="removeBlockedRecurringRule(index)">移除</UButton>
                 </div>
@@ -512,10 +501,10 @@ function onExceptionEndInput(exception: BlockedException, event: Event) {
 
               <div>
                 <div class="flex items-center justify-between mb-2">
-                  <span class="text-xs font-semibold text-gray-600 dark:text-gray-400">額外不排的時段（過了就自動移除）</span>
+                  <span class="text-xs font-semibold text-toned">額外不排的時段（過了就自動移除）</span>
                   <UButton size="xs" variant="soft" @click="addBlockedException">新增例外時段</UButton>
                 </div>
-                <p v-if="preferences.blocked_exceptions.length === 0" class="text-xs text-gray-400">
+                <p v-if="preferences.blocked_exceptions.length === 0" class="text-xs text-dimmed">
                   沒有額外的例外時段
                 </p>
                 <div
@@ -529,7 +518,7 @@ function onExceptionEndInput(exception: BlockedException, event: Event) {
                     :value="toDatetimeLocal(exception.start)"
                     @change="onExceptionStartInput(exception, $event)"
                   >
-                  <span class="text-xs text-gray-400">～</span>
+                  <span class="text-xs text-dimmed">～</span>
                   <input
                     type="datetime-local"
                     class="border border-default rounded-md px-2 py-1 text-xs bg-transparent"
@@ -544,18 +533,16 @@ function onExceptionEndInput(exception: BlockedException, event: Event) {
             <div
               v-for="task in allTasksFlat"
               :key="task.id"
-              class="rounded-lg border border-default bg-white dark:bg-gray-800 px-3 py-3 space-y-2"
+              class="rounded-lg border border-default bg-white px-3 py-3 space-y-2"
             >
               <div class="flex items-center gap-2">
-                <UIcon :name="sourceIcon[task.source]" class="w-4 h-4 text-gray-400 flex-shrink-0" />
-                <UBadge :color="columnColor[task.priority as PriorityKey]" variant="soft" size="sm">
-                  {{ priorityLabel(task.priority) }}
-                </UBadge>
-                <span class="text-sm font-medium truncate">{{ task.title }}</span>
-                <span v-if="task.parent_id" class="text-xs text-gray-400 truncate">{{ stageLabel(task) }}</span>
+                <UIcon :name="platformBrands[task.source]!.icon" class="w-4 h-4 flex-shrink-0" :style="{ color: platformBrands[task.source]!.background }" />
+                <PriorityBadge :priority="task.priority" />
+                <span class="text-sm font-medium line-clamp-2 break-words text-balance min-w-0">{{ task.title }}</span>
+                <span v-if="task.parent_id" class="text-xs break-words">{{ stageLabel(task) }}</span>
               </div>
               <div class="flex flex-wrap gap-4">
-                <label class="text-xs text-gray-500 dark:text-gray-400 flex flex-col gap-1">
+                <label class="text-xs text-muted flex flex-col gap-1">
                   截止日期
                   <input
                     type="datetime-local"
@@ -564,7 +551,7 @@ function onExceptionEndInput(exception: BlockedException, event: Event) {
                     @change="onDueDateInput(task, $event)"
                   >
                 </label>
-                <label class="text-xs text-gray-500 dark:text-gray-400 flex flex-col gap-1">
+                <label class="text-xs text-muted flex flex-col gap-1">
                   所需時長（分鐘）
                   <input
                     type="number"
@@ -579,7 +566,7 @@ function onExceptionEndInput(exception: BlockedException, event: Event) {
           </div>
 
           <div class="shrink-0 flex justify-end gap-3 mt-4">
-            <UButton type="button" variant="link" class="bg-gray-200 text-black hover:bg-gray-300" @click="backToStep1">
+            <UButton type="button" color="neutral" variant="soft" @click="backToStep1">
               上一步
             </UButton>
             <UButton loading-auto :loading="saving" @click="handleFinish">

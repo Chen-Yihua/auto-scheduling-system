@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import ColorModeButton from './ColorModeButton.vue';
 import AccountSettings from './AccountSettings.vue';
 import { useUser } from '@clerk/vue';
 import { useUserSync } from '~/composables/useUserSync';
@@ -23,40 +22,38 @@ watch(user, (newUser) => {
 
 <template>
   <header
-    class="w-full flex flex-wrap justify-end items-center px-6 py-3 border-b shadow-sm bg-white dark:bg-gray-900 gap-4"
+    class="w-full flex flex-wrap justify-end items-center gap-x-6 gap-y-2 px-6 py-2.5 bg-palette-2 border-b border-palette-1/50"
   >
+    <div class="flex items-center gap-2.5 shrink-0" aria-hidden="true">
+      <span class="size-8 rounded-lg bg-default flex items-center justify-center shadow-sm">
+        <UIcon name="i-lucide-calendar-clock" class="size-4.5 text-steel-700" />
+      </span>
+      <span class="text-base font-bold tracking-wide">Auto Scheduling</span>
+    </div>
+
     <nav class="flex flex-wrap items-center gap-1 mr-auto">
       <NuxtLink
         v-for="item in navItems"
         :key="item.to"
         :to="item.to"
         :aria-current="isCurrent(item.to) ? 'page' : undefined"
-        class="px-3 py-1.5 rounded-md text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
-        :class="isCurrent(item.to) ? 'font-semibold !text-primary bg-gray-100 dark:bg-gray-800' : ''"
+        class="px-4 py-1.5 rounded-lg text-sm text-highlighted transition-colors"
+        :class="isCurrent(item.to) ? 'font-semibold bg-default shadow-sm' : 'hover:bg-default/50'"
       >
         {{ item.label }}
       </NuxtLink>
     </nav>
 
-    <p>
+    <p class="text-sm text-toned">
       歡迎！
       {{
         user?.fullName ? (user.lastName ?? '') + (user.firstName ?? '') : '訪客，請先登入'
       }}
     </p>
-    <ColorModeButton />
 
     <SignedOut>
-      <SignInButton
-        mode="modal"
-        after-sign-in-url="/"
-        :appearance="{
-          elements: {
-            button: 'bg-green-500 hover:bg-green-600 text-white rounded px-3 py-2',
-          },
-        }"
-      >
-        <UButton color="secondary" variant="soft" icon="i-lucide-user">登入</UButton>
+      <SignInButton mode="modal" after-sign-in-url="/">
+        <UButton icon="i-lucide-user">登入</UButton>
       </SignInButton>
     </SignedOut>
     <SignedIn>

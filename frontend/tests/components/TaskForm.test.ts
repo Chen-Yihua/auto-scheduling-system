@@ -94,6 +94,11 @@ const uiStubs: Record<string, boolean | Component> = {
   UButton: StubButton,
   UCard: StubCard,
   UBadge: StubBadge,
+  // 優先級、完成狀態、來源的文字畫在這些子元件裡，shallowMount 預設會把它們換成空殼
+  PriorityBadge: false,
+  TaskStatus: false,
+  SourceBadge: false,
+  NoticeBox: false,
   UPagination: StubPagination,
   USkeleton: true,
   UIcon: true,
@@ -345,7 +350,7 @@ describe('TaskForm.vue（任務管理頁的任務列表）', () => {
     const expandButton = wrapper.findAll('button').find((b) => b.text().includes('展開階段'))
     await expandButton!.trigger('click')
 
-    expect(rows(wrapper).map((r) => r.find('.flex-1').text())).toEqual(['期末報告', '階段任務1', '階段任務2', '階段任務3'])
+    expect(rows(wrapper).map((r) => r.find('[data-testid="task-title"]').text())).toEqual(['期末報告', '階段任務1', '階段任務2', '階段任務3'])
     expect(wrapper.text()).toContain('階段 2/3')
     const stage2 = rowOf(wrapper, '階段任務2')
     expect(cell(stage2, 'task-due')).toBe('11/25 12:00')
@@ -420,7 +425,7 @@ describe('TaskForm.vue（任務管理頁的任務列表）', () => {
     const wrapper = await render(fakeSchedulableTasks(1))
 
     expect(syncButton(wrapper).exists()).toBe(false)
-    expect(notLinkedHint(wrapper).text()).toBe('尚未連結外部平台，請前往 帳號設定 → 金鑰 新增')
+    expect(notLinkedHint(wrapper).text()).toBe('尚未綁定外部平台。點右上角的頭像，在 金鑰 頁加入 GitHub、Jira 或 Moodle，那些平台的任務也會列在這裡。')
     const html = wrapper.html()
     expect(html.indexOf('tasks-not-linked')).toBeLessThan(html.indexOf('任務0'))
   })
@@ -447,7 +452,7 @@ describe('TaskForm.vue（任務管理頁的任務列表）', () => {
 
   const manyTasks = (n: number) => fakeSchedulableTasks(n)
   const pagination = (wrapper: Wrapper) => wrapper.findComponent({ name: 'UPagination' })
-  const titles = (wrapper: Wrapper) => rows(wrapper).map((r) => r.find('.flex-1').text())
+  const titles = (wrapper: Wrapper) => rows(wrapper).map((r) => r.find('[data-testid="task-title"]').text())
   const goToPage = async (wrapper: Wrapper, page: number) => {
     pagination(wrapper).vm.$emit('update:page', page)
     await flushPromises()

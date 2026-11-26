@@ -23,7 +23,7 @@ const scrollToTop = () => window.scrollTo({ top: 0, behavior: 'smooth' });
 <template>
   <div>
     <AppHeader />
-    <div class="p-4 max-w-5xl mx-auto mt-4">
+    <div class="p-4 max-w-7xl mx-auto mt-4">
       <!-- 任務列表的「新增任務」「編輯」要用這個視窗；訪客不掛載，它掛載時會讀需要登入的資料 -->
       <TaskEditModal v-if="isSignedIn" />
       <TaskForm v-if="isSignedIn" />

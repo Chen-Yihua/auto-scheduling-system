@@ -40,7 +40,6 @@ watch(isSignedIn, (signedIn) => {
         v-else-if="isSignedIn === false"
         title="Jira 指派任務"
         icon="mdi:jira"
-        icon-class="text-blue-500"
         message="登入後即可查看 Jira 指派任務"
       />
     </div>

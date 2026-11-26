@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CardTitle from '~/components/CardTitle.vue';
 import type { DailyChallenge } from '~/types/leetcode';
 import { leetcodeDifficultyLabel } from '~/utils/labels';
 
@@ -71,22 +72,19 @@ const exampleContent = computed(() => {
 <template>
   <UCard>
     <template #header>
-      <div class="flex items-center gap-2">
-        <UIcon name="custom-leetcode" class="w-5 h-5" />
-        <span class="text-lg font-semibold text-gray-900 dark:text-white">LeetCode 每日一題</span>
-      </div>
+      <CardTitle icon="custom-leetcode" title="LeetCode 每日一題" />
     </template>
 
     <USkeleton v-if="!data && !error" class="h-64 rounded-lg" />
 
     <template v-else-if="error">
-      <p class="text-sm text-red-500 mb-3">{{ error.message }}</p>
+      <p class="text-sm text-error mb-3">{{ error.message }}</p>
       <UButton label="重試" color="error" variant="soft" @click="fetchData" />
     </template>
 
     <template v-else>
-      <div class="flex justify-between items-center w-full gap-2 mb-3">
-        <span class="text-sm font-semibold truncate">{{ data?.question.title }}</span>
+      <div class="mb-4 space-y-2">
+        <p class="text-base font-semibold text-highlighted">{{ data?.question.title }}</p>
         <div class="flex flex-wrap items-center gap-1">
           <UBadge :color="difficultyColor(data?.question.difficulty)" variant="soft">
             {{ leetcodeDifficultyLabel(data?.question.difficulty) }}

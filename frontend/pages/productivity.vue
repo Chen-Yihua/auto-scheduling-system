@@ -6,6 +6,9 @@ import AppHeader from '~/components/header/AppHeader.vue';
 import LoginRequiredCard from '~/components/LoginRequiredCard.vue';
 import WeeklyBarChart from '~/components/productivity/WeeklyBarChart.vue';
 import ProgressList from '~/components/productivity/ProgressList.vue';
+import CardTitle from '~/components/CardTitle.vue';
+import { platformBrands } from '~/utils/platformBrand';
+import { priorityColors } from '~/utils/priorityColor';
 import { formatDateTime, formatMinutes, formatPercent } from '~/utils/format';
 import { formatRelativeTime } from '~/utils/time';
 import { priorityLabel, sourceLabel } from '~/utils/labels';
@@ -45,7 +48,7 @@ watch(isSignedIn, (signedIn) => {
 }, { immediate: true })
 
 const sourceItems = computed(() =>
-  (summary.value?.by_source ?? []).map((s) => ({ key: s.source, label: sourceLabel(s.source), done: s.done, total: s.total })),
+  (summary.value?.by_source ?? []).map((s) => ({ key: s.source, label: sourceLabel(s.source), done: s.done, total: s.total, color: platformBrands[s.source]?.background })),
 )
 
 const priorityItems = computed(() =>
@@ -54,8 +57,38 @@ const priorityItems = computed(() =>
     label: p.priority ? priorityLabel(p.priority) : '未設定',
     done: p.done,
     total: p.total,
+    color: p.priority ? priorityColors[p.priority] : 'var(--color-ash-300)',
   })),
 )
+
+const kpis = computed(() => {
+  const s = summary.value
+  if (!s) return []
+  return [
+    {
+      id: 'completion', label: '完成率', icon: 'i-lucide-circle-check-big',
+      value: formatPercent(s.completion_rate), note: `已完成 ${s.done} / ${s.total}`,
+      tile: 'bg-steel-200 text-steel-700',
+    },
+    {
+      id: 'overdue', label: '逾期', icon: 'i-lucide-alarm-clock',
+      value: String(s.overdue), note: '未完成且已過截止日',
+      tile: 'bg-blush-200 text-blush-800',
+    },
+    {
+      id: 'remaining', label: '剩餘預估工時', icon: 'i-lucide-hourglass',
+      value: formatMinutes(s.remaining_minutes),
+      note: `已完成 ${formatMinutes(s.done_minutes)}${s.unestimated_remaining ? `，${s.unestimated_remaining} 個未估時` : ''}`,
+      tile: 'bg-sand-200 text-sand-800',
+    },
+    {
+      id: 'on-time', label: '準時完成率', icon: 'i-lucide-target',
+      value: formatPercent(s.on_time.rate),
+      note: `近 ${s.weekly.length} 週有截止日的 ${s.on_time.completed_with_due} 個中準時 ${s.on_time.on_time} 個`,
+      tile: 'bg-fern-200 text-fern-800',
+    },
+  ]
+})
 </script>
 
 <template>
@@ -71,57 +104,47 @@ const priorityItems = computed(() =>
 
       <template v-else-if="isSignedIn">
         <div class="flex flex-wrap items-baseline justify-between gap-2 mb-4">
-          <h1 class="text-xl font-semibold text-gray-900 dark:text-white">工作效率</h1>
-          <p v-if="summary" data-testid="generated-at" class="text-xs text-gray-500 dark:text-gray-400">
+          <h1 class="text-2xl font-bold text-highlighted">工作效率</h1>
+          <p v-if="summary" data-testid="generated-at" class="text-xs text-muted">
             統計時間：{{ formatDateTime(summary.generated_at) }}
           </p>
         </div>
 
-        <p v-if="platformSyncTimes.length" data-testid="platform-synced-at" class="text-xs text-gray-500 dark:text-gray-400 mb-4">
+        <p v-if="platformSyncTimes.length" data-testid="platform-synced-at" class="text-xs text-muted mb-4">
           外部平台上次同步：
           <span v-for="(p, i) in platformSyncTimes" :key="p.platform">{{ i ? '、' : '' }}{{ p.label }} {{ p.text }}</span>
         </p>
 
-        <p v-if="loading && !summary" class="text-sm text-gray-500 dark:text-gray-400">統計資料載入中，請稍候…</p>
+        <p v-if="loading && !summary" class="text-sm text-muted">統計資料載入中，請稍候…</p>
 
         <UCard v-else-if="error && !summary" data-testid="error">
-          <p class="text-center text-sm text-gray-500 dark:text-gray-400 py-6">
+          <p class="text-center text-sm text-muted py-6">
             統計資料載入失敗，系統會在下次自動更新時重試，請稍候
           </p>
         </UCard>
 
         <UCard v-else-if="summary && summary.total === 0" data-testid="empty">
-          <p class="text-center text-sm text-gray-500 dark:text-gray-400 py-6">
+          <p class="text-center text-sm text-muted py-6">
             目前沒有可統計的資料
           </p>
         </UCard>
 
         <div v-else-if="summary" class="space-y-6 lg:space-y-0 lg:grid lg:grid-cols-4 lg:gap-4 lg:flex-1">
           <div class="grid grid-cols-2 lg:flex lg:flex-col gap-4">
-            <UCard data-testid="kpi-completion">
-              <p class="text-sm text-gray-500 dark:text-gray-400">完成率</p>
-              <p class="text-3xl font-semibold text-gray-900 dark:text-white">{{ formatPercent(summary.completion_rate) }}</p>
-              <p class="text-xs text-gray-500 dark:text-gray-400">已完成 {{ summary.done }} / {{ summary.total }}</p>
-            </UCard>
-            <UCard data-testid="kpi-overdue">
-              <p class="text-sm text-gray-500 dark:text-gray-400">逾期</p>
-              <p class="text-3xl font-semibold text-gray-900 dark:text-white">{{ summary.overdue }}</p>
-              <p class="text-xs text-gray-500 dark:text-gray-400">未完成且已過截止日</p>
-            </UCard>
-            <UCard data-testid="kpi-remaining">
-              <p class="text-sm text-gray-500 dark:text-gray-400">剩餘預估工時</p>
-              <p class="text-3xl font-semibold text-gray-900 dark:text-white">{{ formatMinutes(summary.remaining_minutes) }}</p>
-              <p class="text-xs text-gray-500 dark:text-gray-400">
-                已完成 {{ formatMinutes(summary.done_minutes) }}
-                <template v-if="summary.unestimated_remaining">· {{ summary.unestimated_remaining }} 個未估時</template>
-              </p>
-            </UCard>
-            <UCard data-testid="kpi-on-time">
-              <p class="text-sm text-gray-500 dark:text-gray-400">準時完成率</p>
-              <p class="text-3xl font-semibold text-gray-900 dark:text-white">{{ formatPercent(summary.on_time.rate) }}</p>
-              <p class="text-xs text-gray-500 dark:text-gray-400">
-                近 {{ summary.weekly.length }} 週有截止日的 {{ summary.on_time.completed_with_due }} 個中準時 {{ summary.on_time.on_time }} 個
-              </p>
+            <UCard
+              v-for="k in kpis"
+              :key="k.id"
+              :data-testid="`kpi-${k.id}`"
+              :ui="{ body: 'p-4 sm:p-5' }"
+            >
+              <div class="flex items-center gap-2">
+                <span class="size-9 rounded-xl flex items-center justify-center shrink-0" :class="k.tile">
+                  <UIcon :name="k.icon" class="size-5" />
+                </span>
+                <p class="text-sm font-medium">{{ k.label }}</p>
+              </div>
+              <p class="mt-3 text-4xl font-bold tabular-nums">{{ k.value }}</p>
+              <p class="mt-1 text-xs">{{ k.note }}</p>
             </UCard>
           </div>
 
@@ -129,14 +152,14 @@ const priorityItems = computed(() =>
           <!-- 寬螢幕時圖表用 absolute 填滿剩下的高度：它不撐高卡片，卡片高度才由視窗決定 -->
           <UCard :ui="{ root: 'lg:flex-1 lg:flex lg:flex-col', body: 'lg:flex-1 lg:flex lg:flex-col' }">
             <template #header>
-              <span class="font-semibold text-gray-900 dark:text-white">近 {{ summary.weekly.length }} 週完成數</span>
+              <CardTitle :title="`近 ${summary.weekly.length} 週完成數`" icon="i-lucide-chart-column" />
             </template>
             <div class="lg:relative lg:flex-1 lg:min-h-[160px]">
               <div class="lg:absolute lg:inset-0">
                 <WeeklyBarChart :weeks="summary.weekly" />
               </div>
             </div>
-            <p v-if="summary.untracked_done" class="mt-3 text-xs text-gray-500 dark:text-gray-400">
+            <p v-if="summary.untracked_done" class="mt-3 text-xs text-muted">
               有 {{ summary.untracked_done }} 個任務在開始記錄完成時間前就已完成，沒有列入每週趨勢和準時完成率。
             </p>
           </UCard>
@@ -144,13 +167,13 @@ const priorityItems = computed(() =>
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4 lg:shrink-0">
             <UCard data-testid="by-source">
               <template #header>
-                <span class="font-semibold text-gray-900 dark:text-white">依來源</span>
+                <CardTitle title="依來源" icon="i-lucide-layers" />
               </template>
               <ProgressList :items="sourceItems" />
             </UCard>
             <UCard data-testid="by-priority">
               <template #header>
-                <span class="font-semibold text-gray-900 dark:text-white">依優先度</span>
+                <CardTitle title="依優先度" icon="i-lucide-flag" />
               </template>
               <ProgressList :items="priorityItems" />
             </UCard>

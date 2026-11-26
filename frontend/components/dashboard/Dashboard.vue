@@ -58,7 +58,8 @@ watch(googleConnectedCount, () => {
       </div>
 
       <div class="lg:relative">
-        <div class="space-y-6 lg:absolute lg:inset-0 lg:overflow-y-auto">
+        <!-- p-px：卡片外框畫在卡片外面，沒有留 1px 會被 overflow 切掉 -->
+        <div class="space-y-6 lg:absolute lg:inset-0 lg:overflow-y-auto lg:p-px">
           <News />
           <Leetcode />
         </div>

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import NoticeBox from '~/components/NoticeBox.vue';
+import CardTitle from '~/components/CardTitle.vue';
 import { computed } from 'vue';
 
 const props = defineProps<{
@@ -22,10 +24,7 @@ const calendarUrl = computed(() => {
 <template>
   <UCard :ui="{ root: 'lg:flex-1 lg:flex lg:flex-col', body: 'lg:flex-1 lg:min-h-0 lg:flex lg:flex-col' }">
     <template #header>
-      <div class="flex items-center gap-2">
-        <UIcon name="i-lucide-calendar" class="w-5 h-5" />
-        <span class="text-lg font-semibold text-gray-900 dark:text-white">Google 行事曆</span>
-      </div>
+      <CardTitle icon="i-lucide-calendar" title="Google 行事曆" />
     </template>
 
     <div v-if="connecting" class="flex justify-center items-center py-6">
@@ -39,7 +38,7 @@ const calendarUrl = computed(() => {
 
     <div
       v-else-if="unavailable"
-      class="text-center text-sm text-gray-500 dark:text-gray-400 py-6"
+      class="text-center text-sm text-muted py-6"
     >
       Google 行事曆暫時無法載入，請稍後再試
     </div>
@@ -54,11 +53,8 @@ const calendarUrl = computed(() => {
       />
     </div>
 
-    <div
-      v-else
-      class="text-center text-sm text-gray-500 dark:text-gray-400 py-6"
-    >
-      Google Calendar 未連接或授權已失效，請前往 <strong>帳號設定</strong> 連接。
-    </div>
+    <NoticeBox v-else icon="i-lucide-calendar-x">
+      Google Calendar 未連接或授權已失效。點右上角的頭像，在 <strong>金鑰</strong> 頁連接。
+    </NoticeBox>
   </UCard>
 </template>

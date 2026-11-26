@@ -1,2 +1,159 @@
 @import 'tailwindcss';
 @import '@nuxt/ui';
+
+/*
+ * 全站配色：白底、黑字，顏色只用在色塊（按鈕、標籤、底色），取自設計指定的 5 個顏色（palette-1～5）。
+ * 淺色色塊（palette 原色）上用黑字；主色、錯誤色的實心按鈕加深後配白字。
+ * static：Nuxt UI 在執行時才用 var(--color-xxx-500) 讀色階，沒有 static 的話 Tailwind 會把沒用到的變數刪掉。
+ */
+@theme static {
+  /* 字級：中文筆畫多，說明文字 14px、內文 16px 起跳，行高也比英文寬 */
+  --text-xs: 0.875rem;
+  --text-xs--line-height: 1.55;
+  --text-sm: 1rem;
+  --text-sm--line-height: 1.65;
+  --text-base: 1.0625rem;
+  --text-base--line-height: 1.7;
+  --text-lg: 1.25rem;
+  --text-lg--line-height: 1.5;
+  --text-xl: 1.5rem;
+  --text-xl--line-height: 1.4;
+  --text-2xl: 1.75rem;
+  --text-2xl--line-height: 1.35;
+  --text-3xl: 2.125rem;
+  --text-3xl--line-height: 1.25;
+
+  --color-palette-1: #7E9BAB;
+  --color-palette-2: #ABC3C8;
+  --color-palette-3: #D6E2DF;
+  --color-palette-4: #DCA8B0;
+  --color-palette-5: #75927D;
+
+  /* 主色：400 是 palette-1；500 加深，實心按鈕配白字才讀得清楚 */
+  --color-steel-50: #f5f7f8;
+  --color-steel-100: #e8edf0;
+  --color-steel-200: #d1dbe1;
+  --color-steel-300: #b4c5ce;
+  --color-steel-400: #7E9BAB;
+  --color-steel-500: #56717f;
+  --color-steel-600: #4a626e;
+  --color-steel-700: #3f535e;
+  --color-steel-800: #45555e;
+  --color-steel-900: #354148;
+  --color-steel-950: #232b30;
+
+  /* 次要色：palette-4 */
+  --color-blush-50: #fcf8f9;
+  --color-blush-100: #f9eff1;
+  --color-blush-200: #f2e0e3;
+  --color-blush-300: #ebcdd1;
+  --color-blush-400: #e3b9c0;
+  --color-blush-500: #DCA8B0;
+  --color-blush-600: #bb8f96;
+  --color-blush-700: #9a767b;
+  --color-blush-800: #795c61;
+  --color-blush-900: #5c474a;
+  --color-blush-950: #3e2f31;
+
+  /* 一般提示（info）：palette-2 */
+  --color-haze-50: #f8fafb;
+  --color-haze-100: #f0f4f5;
+  --color-haze-200: #e1e9eb;
+  --color-haze-300: #cedcdf;
+  --color-haze-400: #bccfd3;
+  --color-haze-500: #ABC3C8;
+  --color-haze-600: #91a6aa;
+  --color-haze-700: #78888c;
+  --color-haze-800: #5e6b6e;
+  --color-haze-900: #485254;
+  --color-haze-950: #303738;
+
+  /* 成功：palette-5 */
+  --color-fern-50: #f4f6f5;
+  --color-fern-100: #e6ebe8;
+  --color-fern-200: #cdd8d0;
+  --color-fern-300: #afc0b4;
+  --color-fern-400: #91a897;
+  --color-fern-500: #75927D;
+  --color-fern-600: #637c6a;
+  --color-fern-700: #526658;
+  --color-fern-800: #405045;
+  --color-fern-900: #313d34;
+  --color-fern-950: #212923;
+
+  /* 提醒（warning）：和 palette 同樣灰階度的沙黃 */
+  --color-sand-50: #fcf8f2;
+  --color-sand-100: #f8efe1;
+  --color-sand-200: #f1dfc4;
+  --color-sand-300: #e9cb9f;
+  --color-sand-400: #e1b77b;
+  --color-sand-500: #d9a55a;
+  --color-sand-600: #b88c4c;
+  --color-sand-700: #98743f;
+  --color-sand-800: #775b32;
+  --color-sand-900: #5b4526;
+  --color-sand-950: #3d2e19;
+
+  /* 錯誤：palette-4 加深成紅，錯誤訊息的字要讀得清楚 */
+  --color-cherry-50: #f9f0f2;
+  --color-cherry-100: #f2dee1;
+  --color-cherry-200: #e4bdc4;
+  --color-cherry-300: #d4949f;
+  --color-cherry-400: #c36c7b;
+  --color-cherry-500: #b4475a;
+  --color-cherry-600: #993c4c;
+  --color-cherry-700: #7e323f;
+  --color-cherry-800: #632732;
+  --color-cherry-900: #4c1e26;
+  --color-cherry-950: #321419;
+
+  /* 表面與框線：帶一點 palette-3 藍綠的灰；文字顏色另外在 :root 設成黑色 */
+  --color-ash-50: #f6f9f8;
+  --color-ash-100: #edf2f1;
+  --color-ash-200: #dde6e4;
+  --color-ash-300: #c4d1ce;
+  --color-ash-400: #6c7775;
+  --color-ash-500: #555f5d;
+  --color-ash-600: #3f4746;
+  --color-ash-700: #2c3231;
+  --color-ash-800: #1d2221;
+  --color-ash-900: #121514;
+  --color-ash-950: #0a0c0b;
+}
+
+/* 避免段落最後一行只剩一兩個字 */
+body {
+  text-wrap: pretty;
+}
+
+/* 不放進 @layer：Nuxt UI 的預設值在 @layer base，沒有 layer 的規則一定蓋得過它 */
+:root {
+  --ui-radius: 0.5rem;
+
+  /* 字一律黑色；只有 placeholder、停用這類「本來就該淡」的字用灰 */
+  --ui-text-highlighted: #000;
+  --ui-text: #000;
+  --ui-text-toned: #000;
+  --ui-text-muted: #000;
+  --ui-text-dimmed: var(--color-ash-400);
+  --ui-text-inverted: #fff;
+
+  --ui-bg-muted: var(--color-ash-50);
+  --ui-bg-elevated: var(--color-ash-100);
+  --ui-bg-accented: var(--color-palette-3);
+  --ui-bg-inverted: var(--color-ash-800);
+
+  --ui-border: var(--color-ash-200);
+  --ui-border-muted: var(--color-ash-100);
+  --ui-border-accented: var(--color-ash-300);
+  --ui-border-inverted: var(--color-ash-800);
+}
+
+/* 字一律黑色：Nuxt UI 的 soft、outline、連結等樣式會把字染成主色，palette 色對白底太淡讀不清楚。錯誤訊息保留紅字 */
+.text-primary,
+.text-secondary,
+.text-info,
+.text-success,
+.text-warning {
+  color: #000;
+}

@@ -22,3 +22,10 @@ frontend-coverage.txt
 
 # /feature、/issue 核准前的草稿（docs/decisions/0014-drafts-folder.md）
 /.drafts/
+
+# 讓 Claude Code 用 Playwright MCP 操作瀏覽器的本機設定：
+# .mcp.json 指向個人的登入狀態，.auth/ 裡是登入 cookie，.playwright-mcp/ 是截圖輸出，都不進版控
+/.mcp.json
+/frontend/.mcp.json
+/frontend/playwright/.auth/
+.playwright-mcp/

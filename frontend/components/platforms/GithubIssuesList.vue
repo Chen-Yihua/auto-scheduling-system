@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import NoticeBox from '~/components/NoticeBox.vue';
+import CardTitle from '~/components/CardTitle.vue';
 import { computed } from 'vue';
 import type { GitHubIssue } from '~/types/github';
 import { githubStateLabel } from '~/utils/labels';
@@ -35,10 +37,7 @@ const openIssue = (url: string) => {
 <template>
   <UCard>
     <template #header>
-      <div class="flex items-center gap-2">
-        <UIcon name="mdi:github" class="w-5 h-5" />
-        <span class="text-lg font-semibold text-gray-900 dark:text-white">GitHub 參與項目</span>
-      </div>
+      <CardTitle icon="mdi:github" title="GitHub 參與項目" />
     </template>
 
     <SyncStatus :synced-at="syncedAt ?? null" :on-sync="onSync" :syncing="syncing ?? false" />
@@ -57,24 +56,18 @@ const openIssue = (url: string) => {
 
     <div
       v-else-if="unavailable"
-      class="text-center text-sm text-gray-500 dark:text-gray-400 py-6"
+      class="text-center text-sm text-muted py-6"
     >
       暫時無法載入，請稍後再試
     </div>
 
-    <div
-      v-else-if="needsReauth"
-      class="text-center text-sm text-gray-500 dark:text-gray-400 py-6"
-    >
-      GitHub 憑證無法讀取，請到右上角頭像 → 金鑰重新連結
-    </div>
+    <NoticeBox v-else-if="needsReauth" icon="i-lucide-key-round" class="my-4">
+      GitHub 憑證無法讀取。點右上角的頭像，在 <strong>金鑰</strong> 頁重新連結。
+    </NoticeBox>
 
-    <div
-      v-else-if="notLinked"
-      class="text-center text-sm text-gray-500 dark:text-gray-400 py-6"
-    >
-      尚未綁定 GitHub 帳號，請先設定
-    </div>
+    <NoticeBox v-else-if="notLinked" icon="i-lucide-link" class="my-4">
+      尚未綁定 GitHub 帳號。點右上角的頭像，在 <strong>金鑰</strong> 頁加入。
+    </NoticeBox>
 
     <div v-else-if="issues.length" class="grid grid-cols-1 gap-4">
       <UCard
@@ -95,11 +88,11 @@ const openIssue = (url: string) => {
         </template>
 
         <div class="space-y-2">
-          <div class="font-medium truncate">
+          <div class="font-medium line-clamp-2 break-words text-balance min-w-0">
             {{ issue.title }}
           </div>
 
-          <div class="flex items-center gap-2 text-sm text-gray-600">
+          <div class="flex items-center gap-2 text-sm text-toned">
             <UAvatar v-if="issue.author?.avatar" :src="issue.author.avatar" size="2xs" />
             <span v-if="issue.author?.username">@{{ issue.author.username }}</span>
             <UBadge v-if="issue.comments" color="neutral" variant="soft" size="xs">
@@ -122,7 +115,7 @@ const openIssue = (url: string) => {
         </div>
 
         <template #footer>
-          <div class="text-xs text-gray-500">
+          <div class="text-xs text-muted">
             {{ githubStateLabel(issue.status) }} · 更新於 {{ new Date(issue.updated_at ?? issue.created_at).toLocaleDateString() }}
           </div>
         </template>
@@ -131,7 +124,7 @@ const openIssue = (url: string) => {
 
     <div
       v-else
-      class="text-center text-sm text-gray-500 dark:text-gray-400 py-6"
+      class="text-center text-sm text-muted py-6"
     >
       尚無資料
     </div>

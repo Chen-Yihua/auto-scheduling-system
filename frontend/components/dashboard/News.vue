@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CardTitle from '~/components/CardTitle.vue';
 import { computed, ref } from 'vue';
 
 const { data: stories, error, status } = await useLazyAsyncData('hackerNews', async () => {
@@ -34,17 +35,14 @@ const isCollapsed = ref(true)
 <template>
   <UCard>
     <template #header>
-      <div class="flex items-center gap-2">
-        <UIcon name="i-lucide-flame" class="w-5 h-5 text-orange-500" />
-        <span class="text-lg font-semibold text-gray-900 dark:text-white">Hacker News</span>
-      </div>
+      <CardTitle icon="i-lucide-flame" title="Hacker News" />
     </template>
 
     <USkeleton v-if="isLoading" class="h-64 rounded-lg" />
 
     <p
       v-else-if="error || !stories || stories.length === 0"
-      class="text-sm text-gray-500 dark:text-gray-400 text-center py-6"
+      class="text-sm text-muted text-center py-6"
     >
       暫時無法載入新聞，請稍後再試。
     </p>
@@ -54,9 +52,9 @@ const isCollapsed = ref(true)
         <li
           v-for="(story, idx) in stories.slice(0, 3)"
           :key="idx"
-          class="flex items-start gap-3 rounded-lg px-2 py-2 -mx-2 transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/60"
+          class="flex items-start gap-3 rounded-lg px-2 py-2 -mx-2 transition-colors hover:bg-muted"
         >
-          <span class="mt-0.5 shrink-0 text-xs font-semibold text-gray-400 dark:text-gray-500 w-4 text-right">
+          <span class="mt-0.5 shrink-0 text-xs font-semibold text-dimmed w-4 text-right">
             {{ idx + 1 }}
           </span>
           <div class="min-w-0">
@@ -64,11 +62,11 @@ const isCollapsed = ref(true)
               :href="story.url"
               target="_blank"
               rel="noopener"
-              class="block text-sm font-medium text-gray-900 dark:text-white hover:underline line-clamp-2"
+              class="block text-sm font-medium text-highlighted hover:underline line-clamp-2"
             >
               {{ story.title }}
             </a>
-            <div class="text-xs text-gray-400 dark:text-gray-500 mt-1">
+            <div class="text-xs text-dimmed mt-1">
               {{ story.publishedAt }}
             </div>
           </div>
@@ -93,9 +91,9 @@ const isCollapsed = ref(true)
             <li
               v-for="(story, idx) in stories.slice(3)"
               :key="idx"
-              class="flex items-start gap-3 rounded-lg px-2 py-2 -mx-2 transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/60"
+              class="flex items-start gap-3 rounded-lg px-2 py-2 -mx-2 transition-colors hover:bg-muted"
             >
-              <span class="mt-0.5 shrink-0 text-xs font-semibold text-gray-400 dark:text-gray-500 w-4 text-right">
+              <span class="mt-0.5 shrink-0 text-xs font-semibold text-dimmed w-4 text-right">
                 {{ idx + 4 }}
               </span>
               <div class="min-w-0">
@@ -103,11 +101,11 @@ const isCollapsed = ref(true)
                   :href="story.url"
                   target="_blank"
                   rel="noopener"
-                  class="block text-sm font-medium text-gray-900 dark:text-white hover:underline line-clamp-2"
+                  class="block text-sm font-medium text-highlighted hover:underline line-clamp-2"
                 >
                   {{ story.title }}
                 </a>
-                <div class="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                <div class="text-xs text-dimmed mt-1">
                   {{ story.publishedAt }}
                 </div>
               </div>

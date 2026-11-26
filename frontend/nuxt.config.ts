@@ -21,6 +21,10 @@ export default defineNuxtConfig({
       apiGoogleSecret: process.env.GOOGLE_CLIENT_SECRET,
     },
   },
+  // 全站固定白底，不提供深色模式
+  ui: { colorMode: false },
+  // Clerk 的登入視窗、帳號設定視窗用主色
+  clerk: { appearance: { variables: { colorPrimary: '#56717f' } } },
   icon: {
     customCollections: [{
       prefix: 'custom',

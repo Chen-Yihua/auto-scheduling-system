@@ -30,6 +30,8 @@ const columns = computed(() => {
     return {
       week,
       label: weekLabel(week.week_start),
+      // 最後一欄是本週，用深一點的顏色和前幾週分開
+      isLatest: index === props.weeks.length - 1,
       center: index * COLUMN_WIDTH + COLUMN_WIDTH / 2,
       height,
       y,
@@ -48,7 +50,7 @@ const columns = computed(() => {
       role="img"
       aria-label="近幾週每週完成的任務數"
     >
-      <line :x1="0" :x2="width" :y1="BASELINE" :y2="BASELINE" class="stroke-gray-200 dark:stroke-gray-700" stroke-width="1" />
+      <line :x1="0" :x2="width" :y1="BASELINE" :y2="BASELINE" class="stroke-ash-300" stroke-width="1" />
       <g v-for="col in columns" :key="col.week.week_start">
         <title>{{ col.label }} 那週：完成 {{ col.week.completed }} 個，預估 {{ formatMinutes(col.week.completed_minutes) }}</title>
         <!-- 整欄都是 hover 範圍，矮柱子也好指 -->
@@ -58,20 +60,20 @@ const columns = computed(() => {
           data-testid="bar"
           :data-height="col.height"
           :d="col.path"
-          class="fill-[#2a78d6] dark:fill-[#3987e5]"
+          :class="col.isLatest ? 'fill-palette-1' : 'fill-palette-2'"
         />
         <text
           data-testid="bar-value"
           :x="col.center"
           :y="col.y - 6"
           text-anchor="middle"
-          class="text-xs fill-gray-900 dark:fill-gray-100"
+          class="text-xs fill-black"
         >{{ col.week.completed }}</text>
         <text
           :x="col.center"
           :y="BASELINE + 14"
           text-anchor="middle"
-          class="text-[10px] fill-gray-500 dark:fill-gray-400"
+          class="text-xs fill-black"
         >{{ col.label }}</text>
       </g>
     </svg>

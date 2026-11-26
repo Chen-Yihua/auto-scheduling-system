@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import NoticeBox from '~/components/NoticeBox.vue';
+import CardTitle from '~/components/CardTitle.vue';
 import { computed } from 'vue';
 import type { JiraIssue } from '~/types/jira';
 import StaleDataBanner from './StaleDataBanner.vue';
@@ -40,10 +42,7 @@ const openJiraIssue = (key: string) => {
 <template>
   <UCard>
     <template #header>
-      <div class="flex items-center gap-2">
-        <UIcon name="mdi:jira" class="w-5 h-5 text-blue-500" />
-        <span class="text-lg font-semibold text-gray-900 dark:text-white">Jira 指派任務</span>
-      </div>
+      <CardTitle icon="mdi:jira" title="Jira 指派任務" />
     </template>
 
     <SyncStatus :synced-at="syncedAt ?? null" :on-sync="onSync" :syncing="syncing ?? false" />
@@ -62,24 +61,18 @@ const openJiraIssue = (key: string) => {
 
     <div
       v-else-if="unavailable"
-      class="text-center text-sm text-gray-500 dark:text-gray-400 py-6"
+      class="text-center text-sm text-muted py-6"
     >
       暫時無法載入，請稍後再試
     </div>
 
-    <div
-      v-else-if="needsReauth"
-      class="text-center text-sm text-gray-500 dark:text-gray-400 py-6"
-    >
-      Jira 憑證無法讀取，請到右上角頭像 → 金鑰重新連結
-    </div>
+    <NoticeBox v-else-if="needsReauth" icon="i-lucide-key-round" class="my-4">
+      Jira 憑證無法讀取。點右上角的頭像，在 <strong>金鑰</strong> 頁重新連結。
+    </NoticeBox>
 
-    <div
-      v-else-if="notLinked"
-      class="text-center text-sm text-gray-500 dark:text-gray-400 py-6"
-    >
-      尚未綁定 Jira 帳號，請先設定
-    </div>
+    <NoticeBox v-else-if="notLinked" icon="i-lucide-link" class="my-4">
+      尚未綁定 Jira 帳號。點右上角的頭像，在 <strong>金鑰</strong> 頁加入。
+    </NoticeBox>
 
     <div v-else-if="issues.length" class="grid grid-cols-1 gap-4">
       <UCard
@@ -101,18 +94,18 @@ const openJiraIssue = (key: string) => {
 
         <div class="flex items-center gap-2 mb-1">
           <img v-if="issue.iconUrl" :src="issue.iconUrl" alt="類型" class="w-5 h-5" >
-          <span class="text-sm text-gray-600">{{ issue.type }}</span>
+          <span class="text-sm text-toned">{{ issue.type }}</span>
         </div>
 
         <div class="font-medium mb-2">{{ issue.title }}</div>
 
         <div class="flex items-center gap-2">
           <UAvatar v-if="issue.avatar" :src="issue.avatar" size="xs" />
-          <span class="text-xs text-gray-500">{{ issue.assignee }}</span>
+          <span class="text-xs text-muted">{{ issue.assignee }}</span>
         </div>
 
         <template v-if="issue.updated_at" #footer>
-          <div class="text-xs text-gray-400">
+          <div class="text-xs text-dimmed">
             更新於 {{ new Date(issue.updated_at).toLocaleDateString() }}
           </div>
         </template>
@@ -121,7 +114,7 @@ const openJiraIssue = (key: string) => {
 
     <div
       v-else
-      class="text-center text-sm text-gray-500 dark:text-gray-400 py-6"
+      class="text-center text-sm text-muted py-6"
     >
       尚無資料
     </div>

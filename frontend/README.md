@@ -64,6 +64,8 @@ npm run coverage    # 單元測試 + 覆蓋率報表
     3. 第一次執行時，`mongodb-memory-server` 會下載 MongoDB 執行檔，不需要自己裝 Docker 或 MongoDB。
     4. 在 `.env` 放 Clerk 金鑰（見上面「環境變數」），而且要用開發用（`pk_test_` / `sk_test_`）的一對，不能用正式環境的。
     5. `npm run test:e2e`。
+  - **先開著伺服器，重跑更快**：每次 `npm run test:e2e` 都要 build 前端、啟動三個伺服器，多 1～2 分鐘。先在另一個終端機執行 `npm run e2e:serve`（用和 `test:e2e` 相同的設定啟動三個伺服器並保持開著，Ctrl+C 關掉），之後 `npm run test:e2e` 發現 port 3100、8001、27018 已經有伺服器就直接沿用，不 build、不啟動，結束時也不關。**改了前端或後端程式後，要停掉 `e2e:serve` 再重開**，否則測到的是舊的程式。只會沿用 E2E 自己的伺服器，不會接到 `npm run dev` 與開發用後端。CI 不沿用。
+  - **伺服器 log**：本機前端、後端的輸出寫在 `e2e-logs/frontend.log`、`e2e-logs/backend.log`（每次啟動時覆寫，不進版控），終端機只顯示測試進度與結果；MongoDB 的輸出不印也不存。沿用 `e2e:serve` 時，log 是 `e2e:serve` 啟動時寫的。
   - E2E 的資料庫是 `auto_scheduling_e2e`，setup 執行時清空；沒有 `E2E_CLERK_TEST_EMAIL` 時整個 setup 跳過，資料庫不清空；後端的 `REDIS_URL` 一律不設定，用記憶體。
   - **在 WSL1 沒有驗證過**；Linux、macOS、WSL2 可以。
   - 沒有 Clerk 金鑰時，不啟動任何伺服器，整個 E2E 只有一個標示跳過的測試，結束碼 0。
@@ -75,7 +77,7 @@ npm run coverage    # 單元測試 + 覆蓋率報表
 
     這個使用者必須存在於上面那組 Clerk 金鑰所屬的專案裡。沒有設定時，登入與登入後的測試會自動跳過（不會讓整個測試失敗）。CI 上這個變數和 Clerk 金鑰都存在 GitHub repo 的 Actions secrets 裡。
   - 登入狀態存在 `.auth-e2e/storageState.json`（不進版控）。
-  - 本機測試失敗時，`test-results/` 會留下 trace（用 `npx playwright show-trace <trace.zip>` 開）；CI 不產生 trace、截圖、影片與報告，也不印伺服器的輸出：repo 與 CI log 都是公開的。
+  - 本機測試失敗時，`test-results/<測試名稱>/` 會留下截圖（`.png`）、錄影（`.webm`）與 `trace.zip`，通過的測試不留。trace 裡有瀏覽器的 Console、Network 請求與每一步的畫面，用 `npx playwright show-trace test-results/<測試名稱>/trace.zip` 打開。CI 不產生 trace、截圖、影片與報告，也不印伺服器的輸出，MongoDB service container 的 log 也關掉：repo 與 CI log 都是公開的。
   - 機密只放在 GitHub secrets 與 `.env`。`tests/e2e/` 的程式自己印出的內容只有 `createDiagnosticLogger` 清理過的登入診斷。
 
 ## 專案結構說明

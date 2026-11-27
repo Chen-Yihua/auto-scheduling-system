@@ -35,8 +35,11 @@ export function buildConfig(env: Env) {
   const venvPython = resolve(process.cwd(), '../.venv/bin/python')
   const python = env.E2E_PYTHON ?? (existsSync(venvPython) ? venvPython : 'python')
 
-  // CI 的 log 是公開的，伺服器與子行程的輸出不印；本機照常印
-  const output = isCI ? ({ stdout: 'ignore', stderr: 'ignore' } as const) : ({ stdout: 'pipe', stderr: 'pipe' } as const)
+  // CI 的 log 是公開的，伺服器的輸出不印也不存。本機前端、後端的輸出用 shell 導到 e2e-logs/（每次啟動覆寫），終端機只留測試進度
+  const output = { stdout: 'ignore', stderr: 'ignore' } as const
+  const logDir = resolve(process.cwd(), 'e2e-logs')
+  const toLog = (command: string, name: string) =>
+    isCI ? command : `mkdir -p '${logDir}' && { ${command}; } > '${logDir}/${name}.log' 2>&1`
 
   const webServer: WebServer[] = [
     // CI 的 MongoDB 是 service container，不在這裡啟動
@@ -53,7 +56,7 @@ export function buildConfig(env: Env) {
           },
         ]),
     {
-      command: `${python} -m uvicorn main:app --host 127.0.0.1 --port ${backendPort}`,
+      command: toLog(`${python} -m uvicorn main:app --host 127.0.0.1 --port ${backendPort}`, 'backend'),
       cwd: '../backend',
       url: `${backendUrl}/docs`,
       timeout: 120_000,
@@ -78,7 +81,7 @@ export function buildConfig(env: Env) {
     },
     {
       // NUXT_E2E=1 時 build 放在 .nuxt-e2e、.output-e2e，不改寫開發者 npm run dev 在用的 .nuxt（nuxt.config.ts）
-      command: 'npx nuxt build && node .output-e2e/server/index.mjs',
+      command: toLog('npx nuxt build && node .output-e2e/server/index.mjs', 'frontend'),
       url: frontendUrl,
       timeout: 300_000,
       ...output,
@@ -92,6 +95,9 @@ export function buildConfig(env: Env) {
     },
   ]
 
+  // 本機沿用已開著的 E2E 伺服器（npm run e2e:serve）；CI 每次都是新的環境，不沿用
+  for (const server of webServer) server.reuseExistingServer = !isCI
+
   return defineConfig({
     testDir: 'tests/e2e',
     // 共用同一個資料庫與登入狀態，不平行
@@ -103,8 +109,8 @@ export function buildConfig(env: Env) {
     use: {
       baseURL: frontendUrl,
       trace: isCI ? 'off' : 'retain-on-failure',
-      screenshot: 'off',
-      video: 'off',
+      screenshot: isCI ? 'off' : 'only-on-failure',
+      video: isCI ? 'off' : 'retain-on-failure',
     },
     projects: [
       { name: 'setup', testMatch: /auth\.setup\.ts$/, use: { ...devices['Desktop Chrome'] } },

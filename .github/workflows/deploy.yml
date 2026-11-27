@@ -95,6 +95,8 @@ jobs:
         image: mongo:7
         ports:
           - 27018:27017
+        # 不讓 GitHub 在 job 結束時把 service container 的 log 印進公開的 CI log
+        options: --log-driver none
     env:
       NUXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NUXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
       NUXT_CLERK_SECRET_KEY: ${{ secrets.NUXT_CLERK_SECRET_KEY }}

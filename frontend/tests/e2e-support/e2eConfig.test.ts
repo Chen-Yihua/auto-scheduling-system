@@ -45,6 +45,42 @@ describe('buildConfig：CI 與本機', () => {
     expect(local[1]).toContain('uvicorn')
   })
 
+  it('e2e-local-run AC1：本機失敗時留下截圖、錄影、trace，通過的不留', () => {
+    const { use } = buildConfig(KEYS)
+
+    expect([use?.trace, use?.screenshot, use?.video]).toEqual(['retain-on-failure', 'only-on-failure', 'retain-on-failure'])
+  })
+
+  it('e2e-local-run AC3：本機前端、後端的輸出導到 e2e-logs/，MongoDB 與所有伺服器都不輸出到終端機', () => {
+    const servers = buildConfig(KEYS).webServer as { command: string; stdout?: string; stderr?: string }[]
+    const find = (text: string) => servers.find((server) => server.command.includes(text))!
+
+    expect(find('uvicorn').command).toMatch(/> '[^']*e2e-logs\/backend\.log' 2>&1$/)
+    expect(find('nuxt build').command).toMatch(/> '[^']*e2e-logs\/frontend\.log' 2>&1$/)
+    expect(find('startMongo').command).not.toContain('e2e-logs')
+    for (const server of servers) expect([server.stdout, server.stderr]).toEqual(['ignore', 'ignore'])
+  })
+
+  it('e2e-local-run AC3：CI 的指令不導向任何檔案', () => {
+    const servers = buildConfig({ ...KEYS, GITHUB_ACTIONS: 'true' }).webServer as { command: string }[]
+
+    for (const server of servers) expect(server.command).not.toContain('e2e-logs')
+  })
+
+  it('e2e-local-run AC7：本機沿用已開著的伺服器，CI 不沿用', () => {
+    const reuse = (env: Record<string, string>) =>
+      (buildConfig({ ...KEYS, ...env }).webServer as { reuseExistingServer?: boolean }[]).map((server) => server.reuseExistingServer)
+
+    expect(reuse({})).toEqual([true, true, true])
+    expect(reuse({ GITHUB_ACTIONS: 'true' })).toEqual([false, false])
+  })
+
+  it('e2e-local-run AC8：CI 的 MongoDB service container 不輸出 log', () => {
+    const workflow = readFileSync(resolve(process.cwd(), '../.github/workflows/deploy.yml'), 'utf-8')
+
+    expect(workflow).toContain('options: --log-driver none')
+  })
+
   it('e2e-playwright AC18：本機 trace 只在失敗時保留，HTML 報告不開伺服器等待', () => {
     const config = buildConfig(KEYS)
 

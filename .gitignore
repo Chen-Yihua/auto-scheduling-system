@@ -34,5 +34,6 @@ frontend-coverage.txt
 /frontend/.output-e2e/
 /frontend/.auth-e2e/
 /frontend/test-results/
+/frontend/e2e-logs/
 /frontend/playwright-report/
 .playwright-mcp/

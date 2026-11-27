@@ -1,5 +1,17 @@
+// E2E（playwright.config.ts 設 NUXT_E2E=1）的 build 放在獨立的資料夾與 vite 快取：
+// 開著 npm run dev 時，E2E 才不會改寫 dev server 在用的 .nuxt、.output 與 node_modules/.cache/vite
+const e2eIsolation =
+  process.env.NUXT_E2E === '1'
+    ? {
+        buildDir: '.nuxt-e2e',
+        nitro: { output: { dir: '.output-e2e' } },
+        vite: { cacheDir: 'node_modules/.cache/vite-e2e' },
+      }
+    : {};
+
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
+  ...e2eIsolation,
   compatibilityDate: '2024-11-01',
   devtools: { enabled: true },
   css: ['~/assets/css/tailwind.css'],

@@ -12,7 +12,7 @@
 | 資料庫 | MongoDB | — | 持久化資料 |
 | 快取 | Redis（選用） | — | 限流計數、短期快取、排程建議的快照（30 分鐘）；未設定 `REDIS_URL` 時改用記憶體，多個 instance 之間不共用 |
 | 身分驗證 | Clerk | — | 前端登入；後端以 JWKS 驗證每個請求的 JWT |
-| 定時觸發 | GitHub Actions（`.github/workflows/scheduled-sync.yml`） | — | 每天台灣時間 12:00 呼叫後端 `POST /internal/scheduled-sync`，同步所有外部平台帳號（[ADR 0013](decisions/0013-scheduled-sync-trigger.md)） |
+| 定時觸發 | GitHub Actions（`.github/workflows/scheduled-sync.yml`） | — | 每天台灣時間 12:00 呼叫後端 `POST /internal/scheduled-sync`，同步所有外部平台帳號（[ADR 0003](decisions/0003-scheduled-sync-trigger.md)） |
 
 Hacker News 不經過後端，由瀏覽器直接呼叫公開 API。
 
@@ -37,7 +37,7 @@ crud、services、platforms 丟 `core/errors.py` 的例外，由 `core/exception
 |---|---|---|
 | `users` | 使用者（由 Clerk webhook 與 `POST /users/` 建立）；選填的 `schedule_preferences` 存排程精靈上次填的偏好 | Clerk user id |
 | `linkedAccounts` | 外部平台帳號，憑證加密儲存；另存最近一次的同步結果（成功時間、失敗的 `error_code`）、同步用的寫入鎖與開始時間，以及每次連結產生的 `link_id` | `{clerk_id}_{platform}` |
-| `manual_tasks` | 手動建立的任務；主任務（`is_parent`，階段順序存在 `subtask_ids`，見 ADR 0004）和子任務（`parent_id`）也存在這裡 | uuid |
+| `manual_tasks` | 手動建立的任務；主任務（`is_parent`，階段順序存在 `subtask_ids`，見 ADR 0001）和子任務（`parent_id`）也存在這裡 | uuid |
 | `github_issues`、`jira_issues`、`moodle_assignments` | 外部平台項目的同步快取，加上使用者設定的排程欄位 | `(user_id, id)` |
 | `googleCalendarTokens` | Google OAuth token | Clerk user id |
 

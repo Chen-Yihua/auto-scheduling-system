@@ -20,7 +20,7 @@ frontend-coverage.txt
 
 /scripts
 
-# /feature、/issue 核准前的草稿（docs/decisions/0014-drafts-folder.md）
+# /feature、/issue 核准前的草稿（草稿資料夾，不進 git）
 /.drafts/
 
 # 讓 Claude Code 用 Playwright MCP 操作瀏覽器的本機設定：
@@ -28,4 +28,12 @@ frontend-coverage.txt
 /.mcp.json
 /frontend/.mcp.json
 /frontend/playwright/.auth/
+
+# E2E（frontend/playwright.config.ts）的 build、登入狀態、測試結果與報告
+/frontend/.nuxt-e2e/
+/frontend/.output-e2e/
+/frontend/.auth-e2e/
+/frontend/test-results/
+/frontend/e2e-logs/
+/frontend/playwright-report/
 .playwright-mcp/

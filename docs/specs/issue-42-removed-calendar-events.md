@@ -41,7 +41,7 @@
 - 排程時，後面的階段一定排在前一個階段之後（staged-tasks AC21；`scheduler.py:262-273,327-339`）。
 - 精靈載入任務清單用 `GET /schedule/tasks`（`frontend/composables/useSchedulableTasks.ts`），步驟定義在 `frontend/pages/schedule.vue:45-49`。
 - 頁面自動查詢的結果顯示在畫面上，不跳 toast；toast 只留給使用者的操作（[issue-104](issue-104-calendar-card-states.md)）。現有的重新連接提示 toast 是 `reauthToast`（`frontend/composables/useGoogleCalendarAuth.ts:23-29`）。
-- 錯誤狀態碼照 ADR 0011：授權失效 409 `REAUTH_REQUIRED`；Google 限流 503 `UPSTREAM_RATE_LIMITED`；Google 逾時 504 `UPSTREAM_TIMEOUT`；沒有主要行事曆 409 `NO_PRIMARY_CALENDAR`；Google 其他問題 502 `UPSTREAM_ERROR`；Google 回 400（系統送錯請求）500 `INTERNAL_ERROR`（`google_errors.py:36-66`、`google_calendar.py:104-106`、`backend/core/error_codes.py`）。
+- 錯誤狀態碼照 ADR 0002：授權失效 409 `REAUTH_REQUIRED`；Google 限流 503 `UPSTREAM_RATE_LIMITED`；Google 逾時 504 `UPSTREAM_TIMEOUT`；沒有主要行事曆 409 `NO_PRIMARY_CALENDAR`；Google 其他問題 502 `UPSTREAM_ERROR`；Google 回 400（系統送錯請求）500 `INTERNAL_ERROR`（`google_errors.py:36-66`、`google_calendar.py:104-106`、`backend/core/error_codes.py`）。
 - 修改任務（`PUT /manual-tasks/{id}`）、調整截止日與時長（`PATCH /schedule/tasks/fields`）、標記完成（`PATCH /schedule/tasks/done`）都先讀出整筆任務、改完再整筆寫回（`update_manual_task_by_id`，`backend/crud/manual_task.py:462-470`；呼叫端 `backend/routers/manual_task.py:278-293`、`schedulable_items.py:163-171,186-193`），寫回的內容包含讀取當時的 Google 日曆事件編號。
 
 ## 需求
@@ -87,7 +87,7 @@
 25. 不用資料庫交易。先刪 Google 事件、後清編號，所以中途失敗時只會留下「Google 上沒有事件、任務還有編號」的項目，下次查詢時會再列在這一步，預設勾選。
 26. 要求刪除外部項目時，後端拒絕這一項，外部項目不變。
 27. 單一項目的問題（編號已被換掉、不屬於自己或不存在、刪除階段時有其他請求在改同一個主任務）：這一項失敗，繼續處理下一項。
-28. Google 或系統的錯誤（Google 回 5xx、429、400、找不到主要行事曆、逾時、連不上、其他 Google 錯誤，或授權失效）：停止，還沒處理的項目都不處理。授權失效時回 409 `REAUTH_REQUIRED`，其他照 ADR 0011 的狀態碼。
+28. Google 或系統的錯誤（Google 回 5xx、429、400、找不到主要行事曆、逾時、連不上、其他 Google 錯誤，或授權失效）：停止，還沒處理的項目都不處理。授權失效時回 409 `REAUTH_REQUIRED`，其他照 ADR 0002 的狀態碼。
 29. 已處理成功的項目生效，不復原。
 
 **畫面上的結果**
@@ -100,7 +100,7 @@
 **進入精靈時查詢失敗**
 
 34. 查詢遇到授權失效（Google 回 401、權限不足，或已經沒有連接），後端回 409 `REAUTH_REQUIRED`；精靈上方顯示「Google Calendar 授權已失效」的提示，附「重新連接 Google Calendar」按鈕，不跳 toast；精靈從拖拉排序開始，已排入的項目維持原狀。
-35. 查詢遇到其他任何錯誤，精靈從拖拉排序開始，已排入的項目維持原狀、不列出，精靈上方顯示「暫時無法確認 Google 日曆上的事件，排程未更新」。後端的狀態碼照 ADR 0011：Google 限流 503 `UPSTREAM_RATE_LIMITED`、逾時 504 `UPSTREAM_TIMEOUT`、沒有主要行事曆 409 `NO_PRIMARY_CALENDAR`、其他 Google 問題 502 `UPSTREAM_ERROR`、Google 回 400 時 500 `INTERNAL_ERROR`。
+35. 查詢遇到其他任何錯誤，精靈從拖拉排序開始，已排入的項目維持原狀、不列出，精靈上方顯示「暫時無法確認 Google 日曆上的事件，排程未更新」。後端的狀態碼照 ADR 0002：Google 限流 503 `UPSTREAM_RATE_LIMITED`、逾時 504 `UPSTREAM_TIMEOUT`、沒有主要行事曆 409 `NO_PRIMARY_CALENDAR`、其他 Google 問題 502 `UPSTREAM_ERROR`、Google 回 400 時 500 `INTERNAL_ERROR`。
 
 **同時修改任務**
 
@@ -188,7 +188,7 @@
    - `GET /schedule/removed-events`：回傳事件已被刪除的項目（`SchedulableTaskOut` 清單），只查需求 6 的項目（AC3）。每一項另外帶上需求 13 的「會被一起移除的後面階段」（組合 id 與階段編號），給前端顯示與對話框使用。
    - `POST /schedule/removed-events/resolve`：body 是 `reschedule`、`delete` 兩份組合 id 清單，照需求 20～29 處理。
      - `delete`：重用 `backend/routers/manual_task.py` 的刪除流程（`_calendar_events_to_delete`、`delete_calendar_events`、`_delete_task_records`），不另寫一份。
-     - 回應列出每一項成功或失敗；失敗帶原因與 `error_code`。授權失效或需求 28 的錯誤時，照 ADR 0011 回錯誤狀態碼。
+     - 回應列出每一項成功或失敗；失敗帶原因與 `error_code`。授權失效或需求 28 的錯誤時，照 ADR 0002 回錯誤狀態碼。
 4. `backend/schemas/schedule.py`：新增 request／response 的 schema。
 5. 排程本身（`scheduler.py`）不用改：清掉編號的前一個階段與後面階段都回到待排，先後規則照 staged-tasks AC21 運作（AC29）。
 
@@ -217,7 +217,7 @@
 - 定時在背景查：要新增排程工作，目前 Cloud Run 帳單關閉，成本也較高。
 - 處理時只信前端送來的清單、不重新向 Google 確認：畫面停留期間事件可能被復原，會造成重複排入或誤刪（AC15）。
 - 重新排程的階段只加「要在下一個階段的事件開始前結束」的限制，或接受順序顛倒：開發者決定改成後面已排入的階段一起移除、整串重新排程（需求 23）。
-- 先在一個資料庫交易裡清除編號、提交後再刪 Google 事件：要使用 MongoDB 交易（ADR 0004 決定不用：正式環境要 replica set，測試的 mongomock 不支援），刪 Google 事件失敗時還會留下重複事件，要另外存待刪清單重試。先刪 Google、後清編號，中途失敗時由這次的偵測自動列出，不需要交易與重試機制（需求 25）。
+- 先在一個資料庫交易裡清除編號、提交後再刪 Google 事件：要使用 MongoDB 交易（ADR 0001 決定不用：正式環境要 replica set，測試的 mongomock 不支援），刪 Google 事件失敗時還會留下重複事件，要另外存待刪清單重試。先刪 Google、後清編號，中途失敗時由這次的偵測自動列出，不需要交易與重試機制（需求 25）。
 - 中途失敗時逐項回報「成功、已經不需要處理、失敗」並計算提示數字：開發者決定縮小範圍，只顯示「處理失敗，請重試」。
 - 把「已查到被刪除」存進資料庫：要新增欄位，也要處理它何時清除；每次重新查就不需要。
 

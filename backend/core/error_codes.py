@@ -1,7 +1,7 @@
 """
 error_code → 狀態碼的對照表，是程式裡唯一決定錯誤狀態碼的地方。
 
-內容和 ADR 0020（docs/decisions/0020-merge-api-error-codes.md）的「對照表」相同；新增錯誤原因時兩邊一起改。
+內容和 ADR 0005（docs/decisions/0005-merge-api-error-codes.md）的「對照表」相同；新增錯誤原因時兩邊一起改。
 """
 
 STATUS_BY_ERROR_CODE: dict[str, int] = {

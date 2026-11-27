@@ -41,7 +41,7 @@ def _with_parent_fields(parent: dict, subtasks: list[dict]) -> dict:
 
 def _ordered_subtasks(parent: dict, candidates: dict[str, dict]) -> list[dict]:
     """
-    依主任務 subtask_ids 的順序取出子任務，階段編號是在陣列裡的位置（ADR 0004）。
+    依主任務 subtask_ids 的順序取出子任務，階段編號是在陣列裡的位置（ADR 0001）。
     不在陣列裡的子任務（寫入一半失敗留下的）不算。
     """
     ordered = []
@@ -211,7 +211,7 @@ async def insert_subtask(
     在 position（從 1 開始）插入子任務（文件用 _id）。convert=True 時同時把一般任務轉成主任務。
 
     先寫入子任務，再用一次主任務的更新放進 subtask_ids；數量上限、插入位置、可以轉換的條件都寫在
-    那次更新的 filter 裡，同時送出的請求也不會超過上限或產生空號（ADR 0004）。條件不成立時刪掉剛寫入的
+    那次更新的 filter 裡，同時送出的請求也不會超過上限或產生空號（ADR 0001）。條件不成立時刪掉剛寫入的
     子任務並丟 400。同一個 Idempotency-Key 已經用過時什麼都不改，回傳 False。
     """
     doc = {**subtask, "user_id": user_id, "parent_id": parent_id}
@@ -273,7 +273,7 @@ async def delete_subtask(subtask: dict) -> bool:
     參數：
     - subtask：要刪的子任務，至少要有 id、parent_id、user_id。
 
-    「清單裡有它、而且至少 2 個」寫在同一次更新的 filter 裡（ADR 0004），同時送出的刪除也不會刪到一個都不剩。
+    「清單裡有它、而且至少 2 個」寫在同一次更新的 filter 裡（ADR 0001），同時送出的刪除也不會刪到一個都不剩。
     條件不成立（它是唯一的子任務，或已經不在清單裡）時什麼都不改，回傳 False；成功回傳 True。
     """
     result = await database.get_db().manual_tasks.update_one(

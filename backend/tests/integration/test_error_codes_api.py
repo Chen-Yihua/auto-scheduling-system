@@ -1,4 +1,4 @@
-# 走 HTTP 確認 router 與 crud 裡需要專屬 error_code 的錯誤，狀態碼照 ADR 0011 的對照表
+# 走 HTTP 確認 router 與 crud 裡需要專屬 error_code 的錯誤，狀態碼照 ADR 0002 的對照表
 import hashlib
 import hmac
 import json

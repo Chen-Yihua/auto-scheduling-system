@@ -1,13 +1,13 @@
 # e2e 診斷 log 沒有清掉網址的 query string
 
-- 狀態：已核准（2026-11-07 改版，見修改紀錄）
+- 狀態：部分被 [e2e-playwright](e2e-playwright.md) 取代（AC2）
 - issue：[#46](https://github.com/Chen-Yihua/auto-scheduling-system/issues/46)
 - PR：[#49](https://github.com/Chen-Yihua/auto-scheduling-system/pull/49)
 
 ## 背景
 開發者開 PR 或合併到 `main` 後，`frontend-e2e-test` 的 Clerk 登入遇到錯誤時，測試把登入期間的診斷（導覽、console error、pageerror、轉址）和重試標記印進 CI log（#28、PR #45）；測試失敗時，vitest 也會印出往上丟的錯誤訊息、stack 與 `cause`。repo 與 CI log 都是公開的，網址的 query 與 hash 可能帶 token（例如 Clerk dev 的 `__clerk_db_jwt`、OAuth 的 `code`）。
 
-PR #49 第 1 版只用正規表示式處理 `scheme://` 與 `/` 開頭的網址。實作審查第 1 輪（`docs/reviews/implementation/issue-46-sanitize-relative-url-query.md`）找出還會漏的格式：路徑含括號、`./`、沒寫 scheme 的 `host:port/路徑`。另外查到兩條輸出路徑沒經過清理：登入後逾時的 `clerkState` 錯誤訊息直接 `console.error`（`frontend/tests/e2e/dashboard.e2e.ts:48-63`），以及往上丟給 vitest 的錯誤（`frontend/tests/e2e/support/signInWithRetry.ts:61`、`frontend/tests/e2e/dashboard.e2e.ts:128`）。
+PR #49 第 1 版只用正規表示式處理 `scheme://` 與 `/` 開頭的網址。實作審查第 1 輪找出還會漏的格式：路徑含括號、`./`、沒寫 scheme 的 `host:port/路徑`。另外查到兩條輸出路徑沒經過清理：登入後逾時的 `clerkState` 錯誤訊息直接 `console.error`（`frontend/tests/e2e/dashboard.e2e.ts:48-63`），以及往上丟給 vitest 的錯誤（`frontend/tests/e2e/support/signInWithRetry.ts:61`、`frontend/tests/e2e/dashboard.e2e.ts:128`）。
 
 目前 e2e 只開首頁，首頁的 API 呼叫都沒有帶 query，還沒有實際外洩。
 

@@ -1,6 +1,6 @@
 // E2E 登入的重試與診斷：登入期間的整頁導覽會讓 clerk.signIn 失敗（#28），重試並記錄導覽來源。
-// 印出的內容與往上丟的錯誤會進公開的 CI log：一律經過 createDiagnosticLogger 輸出、sanitizeError 清理（#46）。
-import type { Page } from 'playwright-core'
+// 診斷內容會進公開的 CI log：一律經過 createDiagnosticLogger 輸出、sanitizeForLog 清理（#46）。
+import type { Page } from '@playwright/test'
 
 const NAVIGATION_ERROR = 'Execution context was destroyed'
 export const RETRY_MARKER = '[e2e][signin-retry]'
@@ -86,28 +86,6 @@ export function sanitizeForLog(text: string, secrets: string[]): string {
   return result
     .replace(/[\w.+-]+(@|%40)[\w-]+(\.[\w-]+)+/g, '[email]')
     .replace(/eyJ[\w-]+\.[\w-]+\.[\w-]*/g, '[token]')
-}
-
-// vitest 會把往上丟的錯誤連同 stack、cause 印進 CI log
-export function sanitizeError(error: unknown, secrets: string[], seen = new Set<unknown>()): Error {
-  if (!(error instanceof Error)) return new Error(sanitizeForLog(String(error), secrets))
-  if (seen.has(error)) return error
-  seen.add(error)
-  error.message = sanitizeForLog(error.message, secrets)
-  if (error.stack) error.stack = sanitizeForLog(error.stack, secrets)
-  if (error.cause !== undefined) error.cause = sanitizeError(error.cause, secrets, seen)
-  return error
-}
-
-// e2e 的測試函式都要包這層：測試函式丟出的錯誤會連同 stack、cause 印進公開的 CI log
-export function withSanitizedErrors(secrets: string[], test: () => Promise<void>) {
-  return async () => {
-    try {
-      await test()
-    } catch (error) {
-      throw sanitizeError(error, secrets)
-    }
-  }
 }
 
 type LogWriter = Pick<Console, 'info' | 'warn' | 'error'>

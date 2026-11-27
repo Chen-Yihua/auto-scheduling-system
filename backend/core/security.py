@@ -1,7 +1,7 @@
 """
 用 Clerk 的 JWKS 驗證 Authorization header 的 JWT。
 
-失敗分兩步（ADR 0011）：向 Clerk 取得 signing keys 失敗是外部服務的問題（502／504），
+失敗分兩步（ADR 0002）：向 Clerk 取得 signing keys 失敗是外部服務的問題（502／504），
 token 本身無效是 401；兩步以外的例外是程式的 bug，照未處理的例外回 500。
 """
 import http.client

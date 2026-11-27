@@ -1,0 +1,8 @@
+# E2E（playwright.config.ts）產生的資料夾。
+# dev server 的檔案監看看到 . 開頭的新資料夾時，@nuxt/icon 會丟出 Invalid module 錯誤，讓 dev server 一直重啟。
+# 不用 nuxt.config.ts 的 ignore：目前的 Nuxt 把陣列的索引（0、1…）當成規則，自訂的規則不會生效。
+.nuxt-e2e
+.output-e2e
+.auth-e2e
+test-results
+playwright-report

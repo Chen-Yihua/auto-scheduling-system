@@ -85,7 +85,7 @@ async def _send_discord(url: str, message: dict) -> None:
 
 
 def _invalid_signature() -> AppError:
-    # 沒設定密鑰也回 401（ADR 0011「例外」）：回 500 會讓外部知道伺服器漏了設定
+    # 沒設定密鑰也回 401（ADR 0002「例外」）：回 500 會讓外部知道伺服器漏了設定
     return AppError("Invalid webhook signature", error_code="UNAUTHENTICATED")
 
 

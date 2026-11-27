@@ -120,7 +120,7 @@ async def test_rejects_bad_authorization_without_syncing(monkeypatch, headers):
     res = await _post(headers)
 
     assert res.status_code == 401
-    assert res.json()["error_code"] == "INVALID_SCHEDULER_TOKEN"
+    assert res.json()["error_code"] == "UNAUTHENTICATED"
     assert calls == []
 
 

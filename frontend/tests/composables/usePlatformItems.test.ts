@@ -161,7 +161,7 @@ describe('usePlatformItems：依 error_code 判斷與最近一次已知的結果
   })
 
   it.each([
-    ['UPSTREAM_RATE_LIMITED', 401, '請求太頻繁，請稍後再試'],
+    ['RATE_LIMITED', 401, '請求太頻繁，請稍後再試'],
     ['UPSTREAM_ERROR', 401, 'GitHub 資料暫時無法取得'],
     ['UPSTREAM_TIMEOUT', 502, 'GitHub 資料暫時無法取得'],
     ['INTERNAL_ERROR', 401, 'GitHub 資料暫時無法取得'],

@@ -32,6 +32,7 @@
 | 編號 | 標題 | 狀態 |
 |---|---|---|
 | [0001](0001-subtask-order-on-parent.md) | 子任務的階段順序存在主任務上 | 已採用 |
-| [0002](0002-api-error-status-codes.md) | API 錯誤回應：狀態碼表示類別，error_code 表示原因 | 已採用 |
+| [0002](0002-api-error-status-codes.md) | API 錯誤回應：狀態碼表示類別，error_code 表示原因 | 部分被 [0005](0005-merge-api-error-codes.md) 取代 |
 | [0003](0003-scheduled-sync-trigger.md) | 外部平台定時同步由 GitHub Actions 觸發 | 已採用 |
 | [0004](0004-path-filtered-ci.md) | CI 依改到的檔案決定要跑的測試與部署 | 已採用 |
+| [0005](0005-merge-api-error-codes.md) | 對外 error_code 只分會改變處理方式的原因，外部服務錯誤用共用規則轉換 | 已採用 |

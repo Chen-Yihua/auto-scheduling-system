@@ -233,7 +233,7 @@ describe('useGoogleCalendar composable', () => {
   }
 
   it.each([
-    ['Google 403 限流', { response: { status: 400 }, data: { error_code: 'UPSTREAM_RATE_LIMITED', detail: 'Google 請求太頻繁，請稍後再試' } }],
+    ['Google 403 限流', { response: { status: 400 }, data: { error_code: 'RATE_LIMITED', detail: 'Google 請求太頻繁，請稍後再試' } }],
     ['伺服器限流', { response: { status: 429 }, data: { error_code: 'RATE_LIMITED', detail: '請求太頻繁，請稍後再試' } }],
     ['Google 其他 4xx', { response: { status: 400 }, data: { error_code: 'UPSTREAM_ERROR', detail: '取得行事曆列表失敗' } }],
     ['Google 5xx', { response: { status: 502 }, data: { error_code: 'UPSTREAM_ERROR', detail: 'Google 暫時無法處理請求' } }],
@@ -458,7 +458,7 @@ describe('useGoogleCalendar composable', () => {
 
     it('AC28：抓行事曆清單遇到暫時性錯誤 → unknown', async () => {
       fetchSpy.mockResolvedValueOnce({ connected: true })
-      fetchSpy.mockRejectedValueOnce({ response: { status: 503 }, data: { error_code: 'UPSTREAM_RATE_LIMITED' } })
+      fetchSpy.mockRejectedValueOnce({ response: { status: 429 }, data: { error_code: 'RATE_LIMITED' } })
       expect(await useGoogleCalendar().fetchGoogleCalendars()).toBe('unknown')
     })
   })

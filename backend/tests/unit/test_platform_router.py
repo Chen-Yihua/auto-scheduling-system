@@ -98,7 +98,7 @@ async def test_reauth_failure_without_old_data(monkeypatch, platform):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("error_code", ["UPSTREAM_RATE_LIMITED", "INTERNAL_ERROR", "UPSTREAM_ERROR"])
+@pytest.mark.parametrize("error_code", ["RATE_LIMITED", "INTERNAL_ERROR", "UPSTREAM_ERROR"])
 async def test_non_retryable_errors_other_than_reauth_keep_their_error_code(monkeypatch, error_code):
     """AC28：不重試的限流、400、404 沒有舊資料時 error_code 照原因，detail 不說授權已失效、不帶平台原文。"""
     await link_github()
@@ -116,7 +116,7 @@ async def test_non_retryable_errors_other_than_reauth_keep_their_error_code(monk
 @pytest.mark.asyncio
 @pytest.mark.parametrize("error, error_code", [
     (UpstreamError("503 Service Unavailable"), "UPSTREAM_ERROR"),
-    (UpstreamError("429", error_code="UPSTREAM_RATE_LIMITED"), "UPSTREAM_RATE_LIMITED"),
+    (UpstreamError("429", error_code="RATE_LIMITED"), "RATE_LIMITED"),
     (httpx.ConnectError("連不上"), "UPSTREAM_ERROR"),
     (httpx.ReadTimeout("逾時"), "UPSTREAM_TIMEOUT"),
     (InvalidResponseError("not json"), "UPSTREAM_ERROR"),

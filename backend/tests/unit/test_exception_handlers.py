@@ -10,7 +10,6 @@ from starlette.requests import Request
 
 from core.error_codes import STATUS_BY_ERROR_CODE, status_for_error_code
 from core.errors import (
-    AccessDeniedError,
     AppError,
     ConfigurationError,
     ConflictError,
@@ -30,11 +29,7 @@ from core.exception_handlers import (
 ADR_0011_TABLE = {
     "INVALID_REQUEST": 400,
     "INVALID_CREDENTIALS": 400,
-    "INVALID_PLATFORM_DOMAIN": 400,
-    "INVALID_AUTHORIZATION_CODE": 400,
     "UNAUTHENTICATED": 401,
-    "INVALID_WEBHOOK_SIGNATURE": 401,
-    "INVALID_SCHEDULER_TOKEN": 401,
     "NOT_FOUND": 404,
     "METHOD_NOT_ALLOWED": 405,
     "NOT_LINKED": 409,
@@ -43,12 +38,10 @@ ADR_0011_TABLE = {
     "SUGGESTION_EXPIRED": 409,
     "IDEMPOTENCY_KEY_REUSED": 409,
     "REQUEST_IN_PROGRESS": 409,
-    "NO_PRIMARY_CALENDAR": 409,
     "VALIDATION_ERROR": 422,
     "RATE_LIMITED": 429,
     "INTERNAL_ERROR": 500,
     "UPSTREAM_ERROR": 502,
-    "UPSTREAM_RATE_LIMITED": 503,
     "SERVICE_UNAVAILABLE": 503,
     "UPSTREAM_TIMEOUT": 504,
 }
@@ -77,7 +70,6 @@ def test_unknown_error_code_has_no_status():
 @pytest.mark.parametrize("error_cls, error_code, status", [
     (InvalidRequestError, "INVALID_REQUEST", 400),
     (ReauthRequiredError, "REAUTH_REQUIRED", 409),
-    (AccessDeniedError, "INVALID_CREDENTIALS", 400),
     (NotFoundError, "NOT_FOUND", 404),
     (ConflictError, "ALREADY_EXISTS", 409),
     (ConfigurationError, "INTERNAL_ERROR", 500),
@@ -105,7 +97,7 @@ async def test_app_error_status_follows_error_code_not_class(error_code, status)
 
 def test_app_error_has_no_status_code_parameter_or_attribute():
     """AC2：AppError 與子類別沒有指定狀態碼的參數或屬性。"""
-    for cls in (AppError, InvalidRequestError, ReauthRequiredError, AccessDeniedError, NotFoundError,
+    for cls in (AppError, InvalidRequestError, ReauthRequiredError, NotFoundError,
                 ConflictError, ConfigurationError, ExternalServiceError):
         assert "status_code" not in inspect.signature(cls).parameters
         assert not hasattr(cls, "default_status_code")
@@ -115,11 +107,11 @@ def test_app_error_has_no_status_code_parameter_or_attribute():
 @pytest.mark.asyncio
 async def test_app_error_headers_are_sent():
     """AC5：AppError 帶的 header（例如 Retry-After）會放進回應。"""
-    exc = ExternalServiceError("限流", error_code="UPSTREAM_RATE_LIMITED", headers={"Retry-After": "30"})
+    exc = ExternalServiceError("限流", error_code="RATE_LIMITED", headers={"Retry-After": "30"})
 
     response = await app_error_handler(_request(), exc)
 
-    assert response.status_code == 503
+    assert response.status_code == 429
     assert response.headers["Retry-After"] == "30"
 
 

@@ -24,8 +24,8 @@ if not CLERK_WEBHOOK_SIGNING_SECRET:
 
 
 def _invalid_signature() -> AppError:
-    # 沒設定密鑰也用這個 code（對照表 401，ADR 0002「例外」）：回 500 會讓外部知道伺服器漏了設定
-    return AppError("Invalid webhook signature", error_code="INVALID_WEBHOOK_SIGNATURE")
+    # 沒設定密鑰也回 401（ADR 0002「例外」）：回 500 會讓外部知道伺服器漏了設定
+    return AppError("Invalid webhook signature", error_code="UNAUTHENTICATED")
 
 
 def _verify_clerk_webhook_signature(raw_body: bytes, headers: dict) -> None:

@@ -91,23 +91,6 @@ async def test_get_free_slots_refreshes_token_on_401(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_get_free_slots_raises_404_when_no_primary_calendar(monkeypatch):
-    """行事曆清單裡沒有 primary → 404。"""
-    async def mock_find_one(query):
-        return {"_id": "uid123", "access_token": encrypt_secret("valid-token")}
-
-    async def mock_fetch_calendar_list(token):
-        return [{"id": "some-other-cal", "primary": False}]
-
-    monkeypatch.setattr(google_tokens.database.db.googleCalendarTokens, "find_one", mock_find_one)
-    monkeypatch.setattr(calendar_service, "fetch_google_calendar_list", mock_fetch_calendar_list)
-
-    with pytest.raises(NotFoundError):
-        await calendar_service.get_free_slots_for_user("uid123")
-
-
-
-@pytest.mark.asyncio
 async def test_get_free_slots_raises_400_when_not_connected(monkeypatch):
     """尚未連接 Google Calendar → 400，和憑證失效的 401 區分。"""
     async def mock_find_one(query):
@@ -203,10 +186,10 @@ async def test_get_free_slots_different_users_have_independent_cache(monkeypatch
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("google_status, expected", [
-    (500, ExternalServiceError), (429, ExternalServiceError), (403, InvalidRequestError),
+    (500, "UPSTREAM_ERROR"), (429, "RATE_LIMITED"), (403, "UPSTREAM_ERROR"),
 ])
 async def test_get_free_slots_maps_google_calendar_list_errors(monkeypatch, google_status, expected):
-    """取得行事曆清單時 Google 回 5xx 或 429 → 502（對方的問題）；其他 4xx → 400。"""
+    """取得行事曆清單時 Google 回 5xx、看不出原因的 403 → UPSTREAM_ERROR；429 → RATE_LIMITED。"""
     async def mock_find_one(query):
         return {"_id": "uid123", "access_token": encrypt_secret("valid-token")}
 
@@ -218,8 +201,9 @@ async def test_get_free_slots_maps_google_calendar_list_errors(monkeypatch, goog
     monkeypatch.setattr(google_tokens.database.db.googleCalendarTokens, "find_one", mock_find_one)
     monkeypatch.setattr(calendar_service, "fetch_google_calendar_list", mock_fetch_calendar_list)
 
-    with pytest.raises(expected):
+    with pytest.raises(AppError) as exc_info:
         await calendar_service.get_free_slots_for_user("uid123")
+    assert exc_info.value.error_code == expected
 
 
 @pytest.mark.asyncio
@@ -239,8 +223,9 @@ async def test_get_free_slots_raises_502_when_freebusy_returns_server_error(monk
     monkeypatch.setattr(calendar_service, "fetch_google_calendar_list", mock_fetch_calendar_list)
     monkeypatch.setattr(calendar_service, "fetch_freebusy", mock_fetch_freebusy)
 
-    with pytest.raises(ExternalServiceError):
+    with pytest.raises(AppError) as exc_info:
         await calendar_service.get_free_slots_for_user("uid123")
+    assert exc_info.value.error_code == "UPSTREAM_ERROR"
 
 
 
@@ -351,12 +336,12 @@ async def test_get_free_slots_requires_reauth_when_calendar_list_still_401_after
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("retry_error, expected", [
-    (_http_error(500), ExternalServiceError),
-    (_http_error(503), ExternalServiceError),
-    (_http_error(429), ExternalServiceError),
-    (httpx.ConnectError("Google 掛了"), ExternalServiceError),
-    (httpx.ReadTimeout("逾時"), ExternalServiceError),
-    (_http_error(403), AppError),
+    (_http_error(500), "UPSTREAM_ERROR"),
+    (_http_error(503), "UPSTREAM_ERROR"),
+    (_http_error(429), "RATE_LIMITED"),
+    (httpx.ConnectError("Google 掛了"), "UPSTREAM_ERROR"),
+    (httpx.ReadTimeout("逾時"), "UPSTREAM_TIMEOUT"),
+    (_http_error(403), "UPSTREAM_ERROR"),
 ], ids=["500", "503", "429", "connect-error", "read-timeout", "403"])
 async def test_get_free_slots_maps_retry_errors_after_token_refresh(monkeypatch, retry_error, expected):
     """換新 token 後重試行事曆列表：5xx、429、連不上的處理和第一次請求一樣；
@@ -379,12 +364,11 @@ async def test_get_free_slots_maps_retry_errors_after_token_refresh(monkeypatch,
     monkeypatch.setattr(calendar_service, "fetch_google_calendar_list", mock_fetch_calendar_list)
     monkeypatch.setattr(calendar_service, "refresh_google_calendar_token", mock_refresh)
 
-    with pytest.raises(expected) as exc_info:
+    with pytest.raises(AppError) as exc_info:
         await calendar_service.get_free_slots_for_user("uid123")
 
     assert calls == ["expired-token", "new-token"]
-    if isinstance(retry_error, httpx.HTTPStatusError) and retry_error.response.status_code == 403:
-        assert exc_info.value.error_code == "UPSTREAM_ERROR"
+    assert exc_info.value.error_code == expected
 
 
 # ========== list_calendars_for_user ==========
@@ -694,7 +678,7 @@ def _connected(monkeypatch, calendar_list=None):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("retry_error, error_code", [
-    (_google_status_error(403, "rateLimitExceeded"), "UPSTREAM_RATE_LIMITED"),
+    (_google_status_error(403, "rateLimitExceeded"), "RATE_LIMITED"),
     (_google_status_error(403, "insufficientPermissions"), "REAUTH_REQUIRED"),
     (_google_status_error(400), "INTERNAL_ERROR"),
     (_google_status_error(404), "UPSTREAM_ERROR"),
@@ -721,21 +705,21 @@ async def test_calendar_list_4xx_after_refresh_has_error_code(monkeypatch, retry
 
 
 @pytest.mark.asyncio
-async def test_no_primary_calendar_has_its_own_error_code(monkeypatch):
-    """沒有 primary calendar → NO_PRIMARY_CALENDAR（409）。"""
+async def test_no_primary_calendar_is_upstream_error(monkeypatch):
+    """沒有 primary calendar → 502 UPSTREAM_ERROR：Google 的回應缺少必要內容。"""
     _connected(monkeypatch, calendar_list=[{"id": "other"}])
 
     with pytest.raises(AppError) as exc_info:
         await calendar_service.get_free_slots_for_user("uid123")
 
-    assert exc_info.value.error_code == "NO_PRIMARY_CALENDAR"
-    assert status_for_error_code(exc_info.value.error_code) == 409
+    assert exc_info.value.error_code == "UPSTREAM_ERROR"
+    assert status_for_error_code(exc_info.value.error_code) == 502
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("error, status_code, error_code", [
-    (_google_status_error(429), 503, "UPSTREAM_RATE_LIMITED"),
-    (_google_status_error(403, "quotaExceeded"), 503, "UPSTREAM_RATE_LIMITED"),
+    (_google_status_error(429), 429, "RATE_LIMITED"),
+    (_google_status_error(403, "quotaExceeded"), 429, "RATE_LIMITED"),
     (_google_status_error(500), 502, "UPSTREAM_ERROR"),
     (httpx.ReadTimeout("slow"), 504, "UPSTREAM_TIMEOUT"),
 ], ids=["429", "403-quota", "5xx", "timeout"])
@@ -826,7 +810,7 @@ async def test_issue42_ac24_not_connected_requires_reauth(monkeypatch):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("error, status_code, error_code", [
-    (_google_status_error(429), 503, "UPSTREAM_RATE_LIMITED"),
+    (_google_status_error(429), 429, "RATE_LIMITED"),
     (httpx.ReadTimeout("slow"), 504, "UPSTREAM_TIMEOUT"),
     (_google_status_error(500), 502, "UPSTREAM_ERROR"),
     (httpx.ConnectError("連不上"), 502, "UPSTREAM_ERROR"),
@@ -844,12 +828,12 @@ async def test_issue42_ac25_event_lookup_errors_follow_adr_0011(google_events, e
 
 
 @pytest.mark.asyncio
-async def test_issue42_ac25_no_primary_calendar_is_409(monkeypatch):
-    """AC25：找不到主要行事曆 → 409 NO_PRIMARY_CALENDAR。"""
+async def test_issue42_ac25_no_primary_calendar_is_upstream_error(monkeypatch):
+    """AC25：找不到主要行事曆 → 502 UPSTREAM_ERROR。"""
     _connected(monkeypatch, calendar_list=[{"id": "other"}])
 
     with pytest.raises(AppError) as exc_info:
         await calendar_service.find_removed_calendar_events("uid123", ["ev-1"])
 
-    assert exc_info.value.error_code == "NO_PRIMARY_CALENDAR"
-    assert status_for_error_code(exc_info.value.error_code) == 409
+    assert exc_info.value.error_code == "UPSTREAM_ERROR"
+    assert status_for_error_code(exc_info.value.error_code) == 502

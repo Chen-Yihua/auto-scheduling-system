@@ -3,13 +3,13 @@ import logging
 from datetime import datetime
 
 import httpx
-from core.errors import AppError, ExternalServiceError, InvalidRequestError, NotFoundError, ReauthRequiredError
+from core.errors import AppError, ExternalServiceError, InvalidRequestError, ReauthRequiredError, request_error_code
 
 from core.cache import cache_get, cache_set
 from core.crypto import SecretDecryptError
 from core.datetimes import to_utc_datetime
 from crud.google_tokens import get_google_calendar_token, is_google_calendar_connected
-from services.google_errors import DETAIL_BY_ERROR_CODE, google_error_code, rate_limit_headers, request_error_code
+from services.google_errors import google_detail, google_error_code, rate_limit_headers
 from services.google_oauth import GOOGLE_REAUTH_DETAIL, refresh_google_calendar_token
 from crud.schedulable_items import set_calendar_event_id_for_composite
 from services.google_calendar_client import (
@@ -39,16 +39,14 @@ def _google_error(e: httpx.HTTPStatusError, detail: str) -> AppError:
     logger.warning("Google Calendar API 回應錯誤: %s %s", status, e.response.text)
     error_code = google_error_code(e.response)
     headers = rate_limit_headers(e.response)
-    if status >= 500 or status == 429:
-        return ExternalServiceError(DETAIL_BY_ERROR_CODE[error_code], error_code=error_code, headers=headers)
-    message = detail if error_code == "UPSTREAM_ERROR" else DETAIL_BY_ERROR_CODE[error_code]
-    return InvalidRequestError(message, error_code=error_code, headers=headers)
+    message = detail if error_code == "UPSTREAM_ERROR" and 400 <= status < 500 else google_detail(error_code)
+    return AppError(message, error_code=error_code, headers=headers)
 
 
 def _unreachable(e: httpx.RequestError, log_message: str, detail: str | None = None) -> ExternalServiceError:
     logger.error("%s: %s", log_message, e)
-    error_code, default_detail = request_error_code(e)
-    return ExternalServiceError(detail or default_detail, error_code=error_code)
+    error_code = request_error_code(e)
+    return ExternalServiceError(detail or google_detail(error_code), error_code=error_code)
 
 
 async def _fetch_calendar_list_after_refresh(access_token: str) -> list[dict]:
@@ -103,7 +101,8 @@ async def _get_access_token_and_primary_calendar_id(clerk_id: str) -> tuple[str,
 
     primary = next((c for c in calendars if c.get("primary")), None)
     if not primary:
-        raise NotFoundError("找不到 Google 的主要行事曆（primary calendar）", error_code="NO_PRIMARY_CALENDAR")
+        logger.warning("Google 行事曆列表沒有 primary calendar clerk_id=%s", clerk_id)
+        raise ExternalServiceError("找不到 Google 的主要行事曆（primary calendar）")
 
     return access_token, primary["id"]
 
@@ -144,11 +143,12 @@ def _write_failure(e: httpx.HTTPStatusError | httpx.RequestError) -> tuple[str, 
     401 直接要求重新連接：寫入迴圈開始前剛驗證或換過 token，再換也沒用。
     """
     if isinstance(e, httpx.RequestError):
-        return request_error_code(e)
+        error_code = request_error_code(e)
+        return error_code, google_detail(error_code)
     if e.response.status_code == 401:
         return "REAUTH_REQUIRED", GOOGLE_REAUTH_DETAIL
     error_code = google_error_code(e.response)
-    return error_code, DETAIL_BY_ERROR_CODE[error_code]
+    return error_code, google_detail(error_code)
 
 
 async def create_calendar_events_for_scheduled_tasks(clerk_id: str, scheduled: list[dict]) -> dict:

@@ -15,8 +15,8 @@ const backendError = (status: number, errorCode: string, detail = '後端說明'
 });
 
 describe('getFriendlyErrorTitle', () => {
-  it.each(['RATE_LIMITED', 'UPSTREAM_RATE_LIMITED'])('AC12：%s 回傳限流訊息，不論狀態碼', (code) => {
-    expect(getFriendlyErrorTitle(backendError(400, code), 'XXX 抓取失敗')).toBe('請求太頻繁，請稍後再試')
+  it('AC12：RATE_LIMITED 回傳限流訊息，不論狀態碼', () => {
+    expect(getFriendlyErrorTitle(backendError(400, 'RATE_LIMITED'), 'XXX 抓取失敗')).toBe('請求太頻繁，請稍後再試')
   })
 
   it('AC12：沒有 error_code 的 429（例如 Cloud Run 容量爆掉）也回傳限流訊息', () => {
@@ -36,13 +36,13 @@ describe('依 error_code 判斷原因，不看狀態碼', () => {
   it('AC12：REAUTH_REQUIRED 才要重新連結；沒有 error_code 的 401 不算', () => {
     expect(isAuthError(backendError(401, 'REAUTH_REQUIRED'))).toBe(true)
     expect(isAuthError(backendError(500, 'REAUTH_REQUIRED'))).toBe(true)
-    expect(isAuthError(backendError(401, 'UPSTREAM_RATE_LIMITED'))).toBe(false)
+    expect(isAuthError(backendError(401, 'RATE_LIMITED'))).toBe(false)
     expect(isAuthError({ response: { status: 401 } })).toBe(false)
   })
 
   it('AC1、AC12：NOT_LINKED 才是尚未連結；Google 限流的 400 不算（#59）', () => {
     expect(isNotLinkedError(backendError(400, 'NOT_LINKED'))).toBe(true)
-    expect(isNotLinkedError(backendError(400, 'UPSTREAM_RATE_LIMITED'))).toBe(false)
+    expect(isNotLinkedError(backendError(400, 'RATE_LIMITED'))).toBe(false)
     expect(isNotLinkedError({ response: { status: 400 } })).toBe(false)
   })
 
@@ -65,7 +65,7 @@ describe('describeError', () => {
   it('AC12：沒有 error_code（Cloud Run、網路錯誤）或限流 → 只用原本的說明', () => {
     expect(describeError({ response: { status: 500 }, data: { detail: '不是本後端的' } }, '原本的說明')).toBe('原本的說明')
     expect(describeError(new Error('network'), '原本的說明')).toBe('原本的說明')
-    expect(describeError(backendError(400, 'UPSTREAM_RATE_LIMITED'), '原本的說明')).toBe('原本的說明')
+    expect(describeError(backendError(400, 'RATE_LIMITED'), '原本的說明')).toBe('原本的說明')
   })
 
   it('422 的 detail 是陣列，不附加', () => {

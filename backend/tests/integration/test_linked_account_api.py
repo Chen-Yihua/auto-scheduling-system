@@ -205,16 +205,16 @@ LINK_CASES = [
     pytest.param(github_platform, GITHUB_PAYLOAD, response(401), 400, "INVALID_CREDENTIALS", id="github-401"),
     pytest.param(jira_platform, JIRA_PAYLOAD, response(401), 400, "INVALID_CREDENTIALS", id="jira-401"),
     pytest.param(github_platform, GITHUB_PAYLOAD, response(403), 400, "INVALID_CREDENTIALS", id="github-403-no-rate-limit"),
-    pytest.param(jira_platform, JIRA_PAYLOAD, response(404), 400, "INVALID_PLATFORM_DOMAIN", id="jira-404"),
-    pytest.param(jira_platform, JIRA_PAYLOAD, _dns_error(), 400, "INVALID_PLATFORM_DOMAIN", id="jira-dns-not-found"),
+    pytest.param(jira_platform, JIRA_PAYLOAD, response(404), 400, "INVALID_CREDENTIALS", id="jira-404"),
+    pytest.param(jira_platform, JIRA_PAYLOAD, _dns_error(), 400, "INVALID_CREDENTIALS", id="jira-dns-not-found"),
     pytest.param(jira_platform, JIRA_PAYLOAD, httpx.ConnectError("connection refused"), 502, "UPSTREAM_ERROR", id="jira-connect-error"),
     pytest.param(github_platform, GITHUB_PAYLOAD, httpx.ConnectError("connection refused"), 502, "UPSTREAM_ERROR", id="github-connect-error"),
     pytest.param(github_platform, GITHUB_PAYLOAD, httpx.ReadTimeout("timed out"), 504, "UPSTREAM_TIMEOUT", id="github-timeout"),
     pytest.param(github_platform, GITHUB_PAYLOAD, response(503), 502, "UPSTREAM_ERROR", id="github-5xx"),
     pytest.param(jira_platform, JIRA_PAYLOAD, response(500), 502, "UPSTREAM_ERROR", id="jira-5xx"),
-    pytest.param(github_platform, GITHUB_PAYLOAD, response(429), 503, "UPSTREAM_RATE_LIMITED", id="github-429"),
-    pytest.param(jira_platform, JIRA_PAYLOAD, response(429), 503, "UPSTREAM_RATE_LIMITED", id="jira-429"),
-    pytest.param(github_platform, GITHUB_PAYLOAD, response(403, {"x-ratelimit-remaining": "0"}), 503, "UPSTREAM_RATE_LIMITED", id="github-403-rate-limit"),
+    pytest.param(github_platform, GITHUB_PAYLOAD, response(429), 429, "RATE_LIMITED", id="github-429"),
+    pytest.param(jira_platform, JIRA_PAYLOAD, response(429), 429, "RATE_LIMITED", id="jira-429"),
+    pytest.param(github_platform, GITHUB_PAYLOAD, response(403, {"x-ratelimit-remaining": "0"}), 429, "RATE_LIMITED", id="github-403-rate-limit"),
     pytest.param(github_platform, GITHUB_PAYLOAD, response(400), 500, "INTERNAL_ERROR", id="github-400"),
     pytest.param(jira_platform, JIRA_PAYLOAD, response(400), 500, "INTERNAL_ERROR", id="jira-400"),
     pytest.param(github_platform, GITHUB_PAYLOAD, response(404), 502, "UPSTREAM_ERROR", id="github-404"),
@@ -438,12 +438,12 @@ async def test_list_returns_500_when_encryption_key_missing(monkeypatch, logged_
     pytest.param(github_platform, GITHUB_PAYLOAD, response(429, {"Retry-After": "Wed, 21 Oct 2026 07:28:00 GMT"}), None, id="github-429-http-date"),
 ])
 async def test_link_account_rate_limited_forwards_retry_after_seconds(monkeypatch, logged_in_user, no_linked_accounts, module, payload, outcome, retry_after, clean_platform_data):
-    """AC5：連結帳號時平台限流 → 503 UPSTREAM_RATE_LIMITED；帶秒數的 Retry-After 原樣帶上，沒帶或日期格式不帶。"""
+    """AC5：連結帳號時平台限流 → 429 RATE_LIMITED；帶秒數的 Retry-After 原樣帶上，沒帶或日期格式不帶。"""
     use_fake_http(monkeypatch, module, outcome)
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         res = await ac.post("/users/me/linked-accounts/", json=payload)
 
-    assert res.status_code == 503
-    assert res.json()["error_code"] == "UPSTREAM_RATE_LIMITED"
+    assert res.status_code == 429
+    assert res.json()["error_code"] == "RATE_LIMITED"
     assert res.headers.get("Retry-After") == retry_after

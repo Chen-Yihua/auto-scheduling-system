@@ -19,11 +19,9 @@ export function getErrorCode(error: unknown): string | undefined {
   return typeof code === 'string' ? code : undefined;
 }
 
-const RATE_LIMITED_CODES = new Set(['RATE_LIMITED', 'UPSTREAM_RATE_LIMITED']);
-
 export function isRateLimitedError(error: unknown): boolean {
   const code = getErrorCode(error);
-  if (code) return RATE_LIMITED_CODES.has(code);
+  if (code) return code === 'RATE_LIMITED';
   return getErrorStatus(error) === 429;
 }
 
@@ -62,7 +60,7 @@ export function getErrorDetail(error: unknown): string | undefined {
 export function describeError(error: unknown, description?: string): string | undefined {
   const code = getErrorCode(error);
   const detail = getErrorDetail(error);
-  if (!code || RATE_LIMITED_CODES.has(code) || !detail) return description;
+  if (!code || code === 'RATE_LIMITED' || !detail) return description;
   return description ? `${description}\n${detail}` : detail;
 }
 

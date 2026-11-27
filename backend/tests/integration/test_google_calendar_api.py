@@ -168,11 +168,11 @@ def _connected_with_calendar_list_error(monkeypatch, error):
 
 # (Google 的錯誤, 狀態碼, error_code)
 GOOGLE_LIST_CASES = [
-    pytest.param(_google_error(403, "rateLimitExceeded"), 503, "UPSTREAM_RATE_LIMITED", id="403-rateLimitExceeded"),
-    pytest.param(_google_error(403, "userRateLimitExceeded"), 503, "UPSTREAM_RATE_LIMITED", id="403-userRateLimitExceeded"),
-    pytest.param(_google_error(403, "quotaExceeded"), 503, "UPSTREAM_RATE_LIMITED", id="403-quotaExceeded"),
-    pytest.param(_google_error(403, "dailyLimitExceeded"), 503, "UPSTREAM_RATE_LIMITED", id="403-dailyLimitExceeded"),
-    pytest.param(_google_error(429, "rateLimitExceeded"), 503, "UPSTREAM_RATE_LIMITED", id="429"),
+    pytest.param(_google_error(403, "rateLimitExceeded"), 429, "RATE_LIMITED", id="403-rateLimitExceeded"),
+    pytest.param(_google_error(403, "userRateLimitExceeded"), 429, "RATE_LIMITED", id="403-userRateLimitExceeded"),
+    pytest.param(_google_error(403, "quotaExceeded"), 429, "RATE_LIMITED", id="403-quotaExceeded"),
+    pytest.param(_google_error(403, "dailyLimitExceeded"), 429, "RATE_LIMITED", id="403-dailyLimitExceeded"),
+    pytest.param(_google_error(429, "rateLimitExceeded"), 429, "RATE_LIMITED", id="429"),
     pytest.param(_google_error(403, "insufficientPermissions"), 409, "REAUTH_REQUIRED", id="403-insufficientPermissions"),
     pytest.param(_google_error(403, "forbidden"), 409, "REAUTH_REQUIRED", id="403-forbidden"),
     pytest.param(_google_error(403), 502, "UPSTREAM_ERROR", id="403-unknown-reason"),
@@ -265,21 +265,21 @@ def _google_rate_limited(status_code: int, reason: str | None, retry_after: str 
     pytest.param(_google_rate_limited(429, "rateLimitExceeded", "Wed, 21 Oct 2026 07:28:00 GMT"), None, id="429-http-date"),
 ])
 async def test_get_calendars_rate_limited_forwards_retry_after_seconds(monkeypatch, logged_in_user, error, retry_after):
-    """AC5：Google 限流 → 503 UPSTREAM_RATE_LIMITED；帶秒數的 Retry-After 原樣帶上，沒帶或日期格式不帶。"""
+    """AC5：Google 限流 → 429 RATE_LIMITED；帶秒數的 Retry-After 原樣帶上，沒帶或日期格式不帶。"""
     _connected_with_calendar_list_error(monkeypatch, error)
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         res = await ac.get("/oauth/calendars")
 
-    assert res.status_code == 503
-    assert res.json()["error_code"] == "UPSTREAM_RATE_LIMITED"
+    assert res.status_code == 429
+    assert res.json()["error_code"] == "RATE_LIMITED"
     assert res.headers.get("Retry-After") == retry_after
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("retry_after", ["45", None])
 async def test_token_refresh_rate_limited_forwards_retry_after_seconds(monkeypatch, logged_in_user, retry_after):
-    """AC5：換新 token 時 Google 限流 → 503 UPSTREAM_RATE_LIMITED，帶秒數的 Retry-After 原樣帶上。"""
+    """AC5：換新 token 時 Google 限流 → 429 RATE_LIMITED，帶秒數的 Retry-After 原樣帶上。"""
     _connected_with_calendar_list_error(monkeypatch, _unauthorized_error())
     headers = {"Retry-After": retry_after} if retry_after else {}
     real_client = httpx.AsyncClient
@@ -289,15 +289,15 @@ async def test_token_refresh_rate_limited_forwards_retry_after_seconds(monkeypat
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         res = await ac.get("/oauth/calendars")
 
-    assert res.status_code == 503
-    assert res.json()["error_code"] == "UPSTREAM_RATE_LIMITED"
+    assert res.status_code == 429
+    assert res.json()["error_code"] == "RATE_LIMITED"
     assert res.headers.get("Retry-After") == retry_after
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("retry_after", ["90", None])
 async def test_oauth_callback_rate_limited_forwards_retry_after_seconds(monkeypatch, logged_in_user, retry_after):
-    """AC5：OAuth 換 token 時 Google 限流 → 503 UPSTREAM_RATE_LIMITED，帶秒數的 Retry-After 原樣帶上。"""
+    """AC5：OAuth 換 token 時 Google 限流 → 429 RATE_LIMITED，帶秒數的 Retry-After 原樣帶上。"""
     headers = {"Retry-After": retry_after} if retry_after else {}
     real_client = httpx.AsyncClient
     transport = httpx.MockTransport(lambda request: httpx.Response(429, json={"error": "rate_limited"}, headers=headers))
@@ -306,6 +306,6 @@ async def test_oauth_callback_rate_limited_forwards_retry_after_seconds(monkeypa
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         res = await ac.post("/oauth/callback", json={"code": "auth-code"})
 
-    assert res.status_code == 503
-    assert res.json()["error_code"] == "UPSTREAM_RATE_LIMITED"
+    assert res.status_code == 429
+    assert res.json()["error_code"] == "RATE_LIMITED"
     assert res.headers.get("Retry-After") == retry_after

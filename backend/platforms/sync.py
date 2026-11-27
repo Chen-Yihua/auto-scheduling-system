@@ -6,6 +6,8 @@ from typing import Awaitable, Callable, Optional
 
 import httpx
 
+from core.errors import request_error_code
+
 logger = logging.getLogger(__name__)
 
 
@@ -89,8 +91,8 @@ def fetch_error_code(exc: Exception) -> str:
     """抓取失敗的原因（ADR 0002 的 error_code），記成同步結果，也決定沒有舊資料時回哪種錯誤。"""
     if isinstance(exc, (NonRetryableError, UpstreamError)):
         return exc.error_code
-    if isinstance(exc, httpx.TimeoutException):
-        return "UPSTREAM_TIMEOUT"
+    if isinstance(exc, httpx.RequestError):
+        return request_error_code(exc)
     if isinstance(exc, (httpx.HTTPError, InvalidResponseError)):
         return "UPSTREAM_ERROR"
     return "INTERNAL_ERROR"

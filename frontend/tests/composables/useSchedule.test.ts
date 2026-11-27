@@ -321,7 +321,7 @@ describe('useSchedule composable', () => {
       fetchSpy.mockResolvedValueOnce({
         confirmed: [],
         failed: [
-          { task_id: 't1', title: '任務一', reason: 'Google 請求太頻繁，請稍後再試', error_code: 'UPSTREAM_RATE_LIMITED' },
+          { task_id: 't1', title: '任務一', reason: 'Google 請求太頻繁，請稍後再試', error_code: 'RATE_LIMITED' },
           { task_id: 't2', title: '任務二', reason: '任務已經完成', error_code: null },
         ],
       })
@@ -348,8 +348,8 @@ describe('useSchedule composable', () => {
   })
 
   describe('依 error_code 判斷（#77）', () => {
-    it('AC1、AC12：產生建議時收到 Google 限流（UPSTREAM_RATE_LIMITED，狀態碼 400）→ 不顯示尚未連接，顯示請求太頻繁', async () => {
-      fetchSpy.mockRejectedValueOnce({ response: { status: 400 }, data: { error_code: 'UPSTREAM_RATE_LIMITED', detail: 'Google 請求太頻繁，請稍後再試' } })
+    it('AC1、AC12：產生建議時收到 Google 限流（RATE_LIMITED，狀態碼 400）→ 不顯示尚未連接，顯示請求太頻繁', async () => {
+      fetchSpy.mockRejectedValueOnce({ response: { status: 400 }, data: { error_code: 'RATE_LIMITED', detail: 'Google 請求太頻繁，請稍後再試' } })
 
       const ctx = useSchedule()
       await ctx.fetchScheduleSuggestion()

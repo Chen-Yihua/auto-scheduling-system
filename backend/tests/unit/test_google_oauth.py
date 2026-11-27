@@ -276,14 +276,14 @@ async def test_refresh_google_calendar_token_requires_reauth_without_deleting_wh
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("status_code, text, http_status, error_code", [
-    (429, '{"error": "rate_limit_exceeded"}', 503, "UPSTREAM_RATE_LIMITED"),
+    (429, '{"error": "rate_limit_exceeded"}', 429, "RATE_LIMITED"),
     (503, "Service Unavailable", 502, "UPSTREAM_ERROR"),
     (401, '{"error": "invalid_client"}', 500, "INTERNAL_ERROR"),
     (400, '{"error": "invalid_grant"}', 409, "REAUTH_REQUIRED"),
     (200, "{}", 502, "UPSTREAM_ERROR"),
 ], ids=["429", "5xx", "invalid_client", "invalid_grant", "no-access-token"])
 async def test_refresh_error_codes(monkeypatch, status_code, text, http_status, error_code):
-    """需求 4：換新 token 時 429 是 UPSTREAM_RATE_LIMITED、5xx 與拿不到 access token 是 UPSTREAM_ERROR、
+    """需求 4：換新 token 時 429 是 RATE_LIMITED、5xx 與拿不到 access token 是 UPSTREAM_ERROR、
     invalid_client 是 INTERNAL_ERROR；狀態碼照 error_code 查表。"""
     from core.error_codes import status_for_error_code
     from core.errors import AppError

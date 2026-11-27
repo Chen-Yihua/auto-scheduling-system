@@ -94,11 +94,11 @@ OLD_GITHUB_ITEM = github_platform.transform_github_item({
 
 # (GitHub 的回應, 嘗試次數, 沒有舊資料時的狀態碼, error_code, 有舊資料時是否設 X-Auth-Error)
 GITHUB_FETCH_CASES = [
-    pytest.param(response(403, {"x-ratelimit-remaining": "0"}), 1, 503, "UPSTREAM_RATE_LIMITED", False, id="403-remaining-0"),
-    pytest.param(response(403, {"retry-after": "30"}), 1, 503, "UPSTREAM_RATE_LIMITED", False, id="403-retry-after"),
+    pytest.param(response(403, {"x-ratelimit-remaining": "0"}), 1, 429, "RATE_LIMITED", False, id="403-remaining-0"),
+    pytest.param(response(403, {"retry-after": "30"}), 1, 429, "RATE_LIMITED", False, id="403-retry-after"),
     pytest.param(response(403, json_body={"message": f"You have exceeded a secondary rate limit {UPSTREAM_SECRET_TEXT}"}),
-                 1, 503, "UPSTREAM_RATE_LIMITED", False, id="403-secondary-rate-limit"),
-    pytest.param(response(429), 2, 503, "UPSTREAM_RATE_LIMITED", False, id="429"),
+                 1, 429, "RATE_LIMITED", False, id="403-secondary-rate-limit"),
+    pytest.param(response(429), 2, 429, "RATE_LIMITED", False, id="429"),
     pytest.param(response(401), 1, 409, "REAUTH_REQUIRED", True, id="401"),
     pytest.param(response(403, {"x-ratelimit-remaining": "10"}), 1, 409, "REAUTH_REQUIRED", True, id="403-no-rate-limit"),
     pytest.param(response(400), 1, 500, "INTERNAL_ERROR", False, id="400"),
@@ -180,7 +180,7 @@ async def test_github_fetch_when_credentials_cannot_be_decrypted(monkeypatch, lo
     pytest.param(response(403, {"x-ratelimit-remaining": "0", "x-ratelimit-reset": "1999999999"}), None, id="403-reset-not-converted"),
 ])
 async def test_github_fetch_rate_limited_forwards_retry_after_seconds(monkeypatch, logged_in_user, outcome, retry_after, clean_platform_data):
-    """AC28：POST 時 GitHub 限流 → 503 UPSTREAM_RATE_LIMITED；GitHub 帶秒數的 Retry-After 時原樣帶上，沒帶、日期格式不帶，也不從 x-ratelimit-reset 換算。"""
+    """AC28：POST 時 GitHub 限流 → 429 RATE_LIMITED；GitHub 帶秒數的 Retry-After 時原樣帶上，沒帶、日期格式不帶，也不從 x-ratelimit-reset 換算。"""
     await link_account("github", {"apiKey": "gh-token"})
     await reset_items(database.db.github_issues, None)
     skip_retry_delay(monkeypatch)
@@ -189,6 +189,6 @@ async def test_github_fetch_rate_limited_forwards_retry_after_seconds(monkeypatc
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         res = await ac.post("/github/sync")
 
-    assert res.status_code == 503
-    assert res.json()["error_code"] == "UPSTREAM_RATE_LIMITED"
+    assert res.status_code == 429
+    assert res.json()["error_code"] == "RATE_LIMITED"
     assert res.headers.get("Retry-After") == retry_after

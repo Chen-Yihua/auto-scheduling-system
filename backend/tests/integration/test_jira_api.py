@@ -79,7 +79,7 @@ from tests.integration.platform_http_fakes import (  # noqa: F401  clean_platfor
 OLD_JIRA_ITEM = jira_platform.transform_jira_item({"id": "10001", "key": "P-1", "fields": {"summary": "舊資料"}})
 
 JIRA_FETCH_CASES = [
-    pytest.param(response(429), 2, 503, "UPSTREAM_RATE_LIMITED", False, id="429"),
+    pytest.param(response(429), 2, 429, "RATE_LIMITED", False, id="429"),
     pytest.param(response(401), 1, 409, "REAUTH_REQUIRED", True, id="401"),
     pytest.param(response(403), 1, 409, "REAUTH_REQUIRED", True, id="403"),
     pytest.param(response(404), 1, 409, "REAUTH_REQUIRED", True, id="404"),
@@ -151,7 +151,7 @@ async def test_jira_fetch_error_with_cached_data(monkeypatch, logged_in_user, ou
     pytest.param(response(429, {"Retry-After": "Wed, 21 Oct 2026 07:28:00 GMT"}), None, id="http-date"),
 ])
 async def test_jira_fetch_rate_limited_forwards_retry_after_seconds(monkeypatch, logged_in_user, outcome, retry_after, clean_platform_data):
-    """AC28：POST 時 Jira 抓項目限流 → 503 UPSTREAM_RATE_LIMITED；帶秒數的 Retry-After 原樣帶上，沒帶或日期格式不帶。"""
+    """AC28：POST 時 Jira 抓項目限流 → 429 RATE_LIMITED；帶秒數的 Retry-After 原樣帶上，沒帶或日期格式不帶。"""
     await link_account("jira", {"apiKey": "jira-key", "domain": "team.atlassian.net"})
     await reset_items(database.db.jira_issues, None)
     skip_retry_delay(monkeypatch)
@@ -160,6 +160,6 @@ async def test_jira_fetch_rate_limited_forwards_retry_after_seconds(monkeypatch,
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         res = await ac.post("/jira/sync")
 
-    assert res.status_code == 503
-    assert res.json()["error_code"] == "UPSTREAM_RATE_LIMITED"
+    assert res.status_code == 429
+    assert res.json()["error_code"] == "RATE_LIMITED"
     assert res.headers.get("Retry-After") == retry_after

@@ -41,7 +41,7 @@ describe('decideRetry：需求 7 的重送規則（AC9）', () => {
 
   it.each([
     ['429 RATE_LIMITED', { status: 429, errorCode: 'RATE_LIMITED' }],
-    ['503 UPSTREAM_RATE_LIMITED', { status: 503, errorCode: 'UPSTREAM_RATE_LIMITED', retryAfter: '1' }],
+    ['429 RATE_LIMITED 帶 Retry-After', { status: 429, errorCode: 'RATE_LIMITED', retryAfter: '1' }],
     ['沒有 error_code 的 429', { status: 429 }],
   ])('限流（%s）→ 不重送', (_, overrides) => {
     expect(decideRetry(input(overrides))).toEqual({ retry: false })
@@ -154,7 +154,7 @@ describe('串接到 $fetch.create（AC9）', () => {
   })
 
   it.each([
-    ['限流 UPSTREAM_RATE_LIMITED', { status: 503, body: { detail: 'x', error_code: 'UPSTREAM_RATE_LIMITED' } }],
+    ['限流 RATE_LIMITED', { status: 429, body: { detail: 'x', error_code: 'RATE_LIMITED' } }],
     ['永久性錯誤 UPSTREAM_ERROR', { status: 502, body: { detail: 'x', error_code: 'UPSTREAM_ERROR' } }],
     ['沒有 error_code 的 500', { status: 500, body: 'Internal Server Error' }],
     ['409 REAUTH_REQUIRED', { status: 409, body: { detail: 'x', error_code: 'REAUTH_REQUIRED' } }],

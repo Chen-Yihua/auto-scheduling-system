@@ -1,5 +1,5 @@
 import pytest
-from core.errors import ReauthRequiredError
+from core.errors import AppError
 import crud.linked_account as linked_mod
 import platforms.github as github_platform
 import platforms.moodle as moodle_platform
@@ -45,7 +45,7 @@ async def test_create_moodle_account_encrypts_password(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_create_moodle_account_rejects_wrong_credentials(monkeypatch):
-    """Moodle 帳密驗證失敗 → 401，而且完全不能寫進資料庫。"""
+    """Moodle 帳密驗證失敗 → INVALID_CREDENTIALS，而且完全不能寫進資料庫。"""
     from platforms.sync import NonRetryableError
 
     stored = {}
@@ -58,8 +58,9 @@ async def test_create_moodle_account_rejects_wrong_credentials(monkeypatch):
 
     account = LinkedAccountCreate(platform="moodle", status="", username="stu123", password="wrong-password")
 
-    with pytest.raises(ReauthRequiredError):
+    with pytest.raises(AppError) as exc_info:
         await create_linked_account("uid123", account)
+    assert exc_info.value.error_code == "INVALID_CREDENTIALS"
 
     assert stored == {}  # 驗證失敗，完全不該寫進 DB
 

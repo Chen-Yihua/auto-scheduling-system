@@ -28,7 +28,7 @@ backend/
 │   ├── crypto.py            # 第三方帳密加解密/遮罩
 │   ├── cache.py             # 通用 TTL 快取（Redis，沒設定就退回記憶體）
 │   ├── rate_limit.py        # 流量限制（slowapi），key 用 Authorization header 雜湊
-│   ├── error_codes.py       # error_code → 狀態碼的對照表（ADR 0002），唯一決定錯誤狀態碼的地方
+│   ├── error_codes.py       # error_code → 狀態碼的對照表（ADR 0005），唯一決定錯誤狀態碼的地方
 │   ├── exception_handlers.py # 集中處理錯誤：所有例外轉成 {detail, error_code}，狀態碼查 error_codes.py
 │   └── logging_config.py    # logging 設定
 ├── schemas/                 # Pydantic 資料結構（輸入/輸出，每個資源分開定義）
@@ -68,8 +68,8 @@ backend/
 ### 錯誤處理
 
 - 所有層（routers、crud、services、platforms）都丟 `core/errors.py` 的例外，不用 `HTTPException`，由 `core/exception_handlers.py` 轉成 `{"detail", "error_code"}` 的回應。
-- 丟例外時只選 `error_code`，照 [ADR 0002](../docs/decisions/0002-api-error-status-codes.md) 選原因：類別的預設 `error_code` 不是實際原因時，建構時用 `error_code=` 指定。狀態碼一律由 `core/error_codes.py` 的對照表決定，丟例外的地方不指定；新增原因時同時更新對照表與 ADR 0002，對照表沒有的 `error_code` 會被當成 500 `INTERNAL_ERROR`。`detail` 只能是固定的文字或使用者自己送出、非機密的值，第三方回應原文只記 log。
-- 外部服務限流時用 `core/errors.py` 的 `retry_after_header` 帶出對方的 `Retry-After`（`headers=`）。
+- 丟例外時只選 `error_code`，照 [ADR 0005](../docs/decisions/0005-merge-api-error-codes.md) 的對照表選原因：類別的預設 `error_code` 不是實際原因時，建構時用 `error_code=` 指定。狀態碼一律由 `core/error_codes.py` 的對照表決定，丟例外的地方不指定；新增原因時同時更新對照表與 ADR 0005，對照表沒有的 `error_code` 會被當成 500 `INTERNAL_ERROR`。`detail` 只能是固定的文字或使用者自己送出、非機密的值，第三方回應原文只記 log。
+- 外部服務的錯誤用 `core/errors.py` 的 `upstream_error_code`（錯誤回應）、`request_error_code`（連不上、逾時）決定 `error_code`，`upstream_detail` 產生說明；各平台只判斷是不是限流、是不是憑證被拒，不為單一平台新增 `error_code`。限流時用 `retry_after_header` 帶出對方的 `Retry-After`（`headers=`）。
 - 資料庫錯誤、Redis 錯誤和未預期的例外不用自己 `try/except`，由全域 handler 處理：資料庫連不上與 Redis 故障回 503，其他資料庫錯誤與未預期的例外回 500。
 - 重送原則：只有暫時性錯誤（沒有回應、逾時、依賴暫時不能用）才重送，重送多少次都不會成功的錯誤（4xx、程式錯誤）不重送；遵守限流，不在限流時重送，對方給了 `Retry-After` 就至少等那麼久。同步呼叫（前端呼叫本後端）每次總共最多 3 次；之後新增非同步工作時，每個工作總共最多 5 次。後端呼叫外部平台的重試另見 `platforms/sync.py`。
 

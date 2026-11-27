@@ -341,7 +341,7 @@ describe('useLinkedAccount', () => {
 
   it.each([
     ['INVALID_CREDENTIALS', 401, 'GitHub token 無效，請確認後重新輸入'],
-    ['INVALID_PLATFORM_DOMAIN', 403, '找不到這個 Jira 網域，請確認網域是否正確'],
+    ['INVALID_CREDENTIALS', 400, '找不到這個 Jira 網域，請確認網域是否正確'],
     ['UPSTREAM_ERROR', 403, 'GitHub 暫時無法處理請求，請稍後再試'],
   ])('AC8：連結失敗（%s）→ 顯示儲存失敗並附上後端的 detail', async (code, status, detail) => {
     const { keys, openEdit, saveKey } = (await load())()

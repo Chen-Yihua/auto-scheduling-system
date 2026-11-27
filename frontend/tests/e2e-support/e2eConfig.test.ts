@@ -1,4 +1,5 @@
 // Playwright 設定在 CI 與本機、有無 Clerk 金鑰時的差異
+import { spawnSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, it, expect } from 'vitest'
@@ -35,7 +36,7 @@ describe('buildConfig：CI 與本機', () => {
     expect(buildConfig({ ...KEYS, GITHUB_ACTIONS: 'true' }).reporter).toEqual([['list'], ['github']])
   })
 
-  it('e2e-playwright AC8：CI 不啟動 MongoDB（用 service container），本機啟動且排在後端之前', () => {
+  it('e2e-playwright AC8：CI 不啟動 MongoDB（deploy.yml 的步驟啟動），本機啟動且排在後端之前', () => {
     const commands = (env: Record<string, string>) =>
       (buildConfig({ ...KEYS, ...env }).webServer as { command: string }[]).map((server) => server.command)
 
@@ -51,23 +52,51 @@ describe('buildConfig：CI 與本機', () => {
     expect([use?.trace, use?.screenshot, use?.video]).toEqual(['retain-on-failure', 'only-on-failure', 'retain-on-failure'])
   })
 
-  it('e2e-local-run AC3：本機前端、後端的輸出導到 e2e-logs/，MongoDB 與所有伺服器都不輸出到終端機', () => {
-    const servers = buildConfig(KEYS).webServer as { command: string; stdout?: string; stderr?: string }[]
+  it('e2e-local-run AC3：本機三個伺服器的指令都用 > 覆寫導到 e2e-logs/<名稱>.log，不是 >>', () => {
+    const servers = buildConfig(KEYS).webServer as { command: string }[]
     const find = (text: string) => servers.find((server) => server.command.includes(text))!
 
-    expect(find('uvicorn').command).toMatch(/> '[^']*e2e-logs\/backend\.log' 2>&1$/)
-    expect(find('nuxt build').command).toMatch(/> '[^']*e2e-logs\/frontend\.log' 2>&1$/)
-    expect(find('startMongo').command).not.toContain('e2e-logs')
-    for (const server of servers) expect([server.stdout, server.stderr]).toEqual(['ignore', 'ignore'])
+    for (const [text, name] of [['startMongo', 'mongo'], ['uvicorn', 'backend'], ['nuxt build', 'frontend']] as const) {
+      const command = find(text).command
+      expect(command).toMatch(new RegExp(`[^>]> '[^']*e2e-logs/${name}\\.log' 2>&1`))
+      expect(command).not.toContain('>>')
+    }
   })
 
-  it('e2e-local-run AC3：CI 的指令不導向任何檔案', () => {
-    const servers = buildConfig({ ...KEYS, GITHUB_ACTIONS: 'true' }).webServer as { command: string }[]
-
-    for (const server of servers) expect(server.command).not.toContain('e2e-logs')
+  it('e2e-local-run AC3、AC4：本機 stdout 是 ignore、stderr 是 pipe（指令失敗時才有內容）；CI 的指令不導向任何檔案', () => {
+    for (const server of buildConfig(KEYS).webServer as { stdout?: string; stderr?: string }[]) {
+      expect([server.stdout, server.stderr]).toEqual(['ignore', 'pipe'])
+    }
+    for (const server of buildConfig({ ...KEYS, GITHUB_ACTIONS: 'true' }).webServer as { command: string }[]) {
+      expect(server.command).not.toContain('e2e-logs')
+    }
   })
 
-  it('e2e-local-run AC7：本機沿用已開著的伺服器，CI 不沿用', () => {
+  it('e2e-local-run AC5：指令以非 0 結束時，stderr 印出 log 內容並保留原本的結束碼；成功時什麼都不印', () => {
+    const backend = (env: Record<string, string>) =>
+      (buildConfig({ ...KEYS, ...env }).webServer as { command: string; cwd?: string }[]).find((server) => server.command.includes('uvicorn'))!
+    const run = (command: string) => spawnSync('sh', ['-c', command], { encoding: 'utf-8' })
+
+    const failed = run(backend({ E2E_PYTHON: '/nonexistent-python' }).command)
+    expect(failed.status).toBe(127)
+    expect(failed.stderr).toContain('/nonexistent-python')
+
+    const ok = run(backend({ E2E_PYTHON: 'true' }).command)
+    expect([ok.status, ok.stdout, ok.stderr]).toEqual([0, '', ''])
+  })
+
+  it('e2e-local-run AC9：收到 SIGTERM 時，指令等內部的程式結束後才結束', () => {
+    const { command } = (buildConfig(KEYS).webServer as { command: string }[]).find((server) => server.command.includes('startMongo'))!
+    // 用會慢慢收尾的程式取代 startMongo：收到 SIGTERM 後等 1 秒才結束
+    const slow = command.replace(/node tests\/e2e\/support\/startMongo\.mjs \d+/, `sh -c "trap 'sleep 1; exit 0' TERM; sleep 30 & wait"`)
+    const started = Date.now()
+    const result = spawnSync('sh', ['-c', `${slow} & p=$!; sleep 1; kill -TERM $p; wait $p`], { encoding: 'utf-8' })
+
+    expect(result.status).toBe(0)
+    expect(Date.now() - started).toBeGreaterThanOrEqual(1900)
+  })
+
+  it('e2e-local-run AC13：本機沿用已開著的伺服器，CI 不沿用', () => {
     const reuse = (env: Record<string, string>) =>
       (buildConfig({ ...KEYS, ...env }).webServer as { reuseExistingServer?: boolean }[]).map((server) => server.reuseExistingServer)
 
@@ -75,10 +104,12 @@ describe('buildConfig：CI 與本機', () => {
     expect(reuse({ GITHUB_ACTIONS: 'true' })).toEqual([false, false])
   })
 
-  it('e2e-local-run AC8：CI 的 MongoDB service container 不輸出 log', () => {
+  it('e2e-local-run AC14：frontend-e2e-test 不用 service container，改用 docker run --log-driver none 啟動 MongoDB', () => {
     const workflow = readFileSync(resolve(process.cwd(), '../.github/workflows/deploy.yml'), 'utf-8')
+    const job = workflow.slice(workflow.indexOf('  frontend-e2e-test:'), workflow.indexOf('  deploy-backend:'))
 
-    expect(workflow).toContain('options: --log-driver none')
+    expect(job).not.toMatch(/^\s+services:/m)
+    expect(job).toContain('docker run -d --log-driver none -p 27018:27017 mongo:7')
   })
 
   it('e2e-playwright AC18：本機 trace 只在失敗時保留，HTML 報告不開伺服器等待', () => {
@@ -124,7 +155,7 @@ describe('buildConfig：沒有 Clerk 金鑰', () => {
     ['沒有公開金鑰', { NUXT_CLERK_SECRET_KEY: 'sk_test_x' }],
     ['沒有私密金鑰', { NUXT_PUBLIC_CLERK_PUBLISHABLE_KEY: KEYS.NUXT_PUBLIC_CLERK_PUBLISHABLE_KEY }],
     ['金鑰是空字串', { NUXT_PUBLIC_CLERK_PUBLISHABLE_KEY: '', NUXT_CLERK_SECRET_KEY: '' }],
-  ])('e2e-playwright AC6：%s → 不啟動任何伺服器，只收集標示跳過的那個測試', (_name, env) => {
+  ])('e2e-playwright AC6、e2e-local-run AC10：%s → 不啟動任何伺服器，只收集標示跳過的那個測試', (_name, env) => {
     const config = buildConfig(env)
 
     expect(config.webServer).toBeUndefined()

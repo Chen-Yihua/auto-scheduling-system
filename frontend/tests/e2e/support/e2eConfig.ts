@@ -35,19 +35,28 @@ export function buildConfig(env: Env) {
   const venvPython = resolve(process.cwd(), '../.venv/bin/python')
   const python = env.E2E_PYTHON ?? (existsSync(venvPython) ? venvPython : 'python')
 
-  // CI 的 log 是公開的，伺服器的輸出不印也不存。本機前端、後端的輸出用 shell 導到 e2e-logs/（每次啟動覆寫），終端機只留測試進度
-  const output = { stdout: 'ignore', stderr: 'ignore' } as const
+  // CI 的 log 是公開的，伺服器的輸出不印也不存。
+  // 本機把輸出導到 e2e-logs/（每次啟動覆寫）；指令以非 0 結束時把 log 印到 stderr，
+  // 所以終端機平常只有測試進度，伺服器啟動失敗或中途掛掉時才看得到原因。
   const logDir = resolve(process.cwd(), 'e2e-logs')
+  const logFile = (name: string) => `'${logDir}/${name}.log'`
+  // 指令放背景、用 trap 轉送 SIGTERM 再等它結束：Playwright 結束時送 SIGTERM，
+  // 不轉送的話 shell 先結束，Playwright 就不再等 startMongo.mjs 清理完
   const toLog = (command: string, name: string) =>
-    isCI ? command : `mkdir -p '${logDir}' && { ${command}; } > '${logDir}/${name}.log' 2>&1`
+    isCI
+      ? command
+      : `mkdir -p '${logDir}' && { { ${command}; } > ${logFile(name)} 2>&1 & p=$!; trap 'kill -TERM $p' TERM INT; ` +
+        `wait $p; c=$?; while kill -0 $p 2>/dev/null; do wait $p; c=$?; done; ` +
+        `if [ $c -ne 0 ]; then cat ${logFile(name)} >&2; fi; exit $c; }`
+  const output = isCI ? ({ stdout: 'ignore', stderr: 'ignore' } as const) : ({ stdout: 'ignore', stderr: 'pipe' } as const)
 
   const webServer: WebServer[] = [
-    // CI 的 MongoDB 是 service container，不在這裡啟動
+    // CI 的 MongoDB 由 deploy.yml 的步驟用 docker run 啟動，不在這裡啟動
     ...(isCI
       ? []
       : [
           {
-            command: `node tests/e2e/support/startMongo.mjs ${mongoPort}`,
+            command: toLog(`node tests/e2e/support/startMongo.mjs ${mongoPort}`, 'mongo'),
             port: mongoPort,
             timeout: 180_000,
             // 預設結束時送 SIGKILL，startMongo.mjs 的 SIGTERM 處理器不會執行，記憶體資料庫與暫存資料夾不會清掉
@@ -95,7 +104,7 @@ export function buildConfig(env: Env) {
     },
   ]
 
-  // 本機沿用已開著的 E2E 伺服器（npm run e2e:serve）；CI 每次都是新的環境，不沿用
+  // 本機沿用已開著的 E2E 伺服器（npm run test:e2e:ui 開著時）；CI 每次都是新的環境，不沿用
   for (const server of webServer) server.reuseExistingServer = !isCI
 
   return defineConfig({

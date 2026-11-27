@@ -10,7 +10,7 @@
     "postinstall": "nuxt prepare",
     "test": "vitest run",
     "test:e2e": "playwright test",
-    "e2e:serve": "playwright test -c e2e-serve.config.ts",
+    "test:e2e:ui": "playwright test --ui-port=9400",
     "lint": "eslint . --ext .ts,.vue",
     "prepare:ci": "nuxt prepare",
     "format": "prettier --write .",

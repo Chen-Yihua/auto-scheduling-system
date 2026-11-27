@@ -4,7 +4,7 @@
 - 等級：高風險（後端新增 `GOOGLE_API_BASE_URL`，決定 Google OAuth 的 refresh token 與 client secret 送到哪裡：改變「憑證只送到 Google」這項保證的條件）
 - 規格審查：有（高風險一定做；這份內容在拆開前已和 [e2e-playwright](e2e-playwright.md) 一起審過 3 輪）
 - 前提：[e2e-playwright](e2e-playwright.md) 與 [e2e-local-run](e2e-local-run.md) 的 PR 合併後才開始實作
-- PR：（開 PR 後填）
+- PR：[#192](https://github.com/Chen-Yihua/auto-scheduling-system/pull/192)
 
 ## 簡短說明
 在 [e2e-playwright](e2e-playwright.md) 搭好的 E2E 環境上，補上兩條使用者流程：任務管理頁的新增、修改、刪除，以及排程頁的排程建議。排程要用到 Google 日曆，所以後端新增一個只給 E2E 用的環境變數，讓 E2E 把 Google 的請求導向假的伺服器。

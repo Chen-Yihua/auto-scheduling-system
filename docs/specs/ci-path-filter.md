@@ -35,7 +35,7 @@
 11. `deploy-backend` 的部署條件改成「推到 `main`、`backend` 是 true、`backend-test` 通過」，但這個條件維持註解掉，`if: false` 保留不動；之後開啟後端時，只要刪掉 `if: false` 並取消註解。
 12. 3 個測試 job 的名稱不改，必要的 status check 才對得上。
 13. 根目錄 `README.md` 第 20 行改成說明「依改到的檔案決定跑哪些測試與部署」。
-14. 新增 ADR 0016，並在 `docs/decisions/README.md` 的清單加一列。
+14. 新增 ADR 0004，並在 `docs/decisions/README.md` 的清單加一列。
 15. `CLAUDE.md`「開發流程」第一段的「`backend-test`、`frontend-test`、`frontend-e2e-test` 都要通過」補成「都要通過（PR 沒改到後端或前端時，對應的測試會顯示 skipped，GitHub 也算通過）」；規則不變。
 16. 在 `changes` 執行中手動取消 workflow 時，測試 job 可能被記成 skipped 而算通過；這個風險接受、不另外處理（只有維護者能取消，取消後看得到 check 的狀態，重跑即可）。
 17. 實作時在這個 PR 實際取消一次 workflow，驗證 GitHub 怎麼記錄測試 job，結果寫在 PR 描述（實作計畫步驟 9）。
@@ -88,7 +88,7 @@
 - `.github/workflows/deploy.yml`
 - `README.md`（第 20 行）
 - `CLAUDE.md`（「開發流程」第一段）
-- `docs/decisions/0016-path-filtered-ci.md`（新增，內容見 ADR 草稿）
+- `docs/decisions/0004-path-filtered-ci.md`（新增，內容見 ADR 草稿）
 - `docs/decisions/README.md`（清單加一列）
 
 ### 步驟

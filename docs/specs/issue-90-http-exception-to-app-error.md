@@ -9,7 +9,7 @@
 
 來源 issue：https://github.com/Chen-Yihua/auto-scheduling-system/issues/90
 
-[ADR 0011](../decisions/0011-api-error-status-codes.md) 定下錯誤回應的設計：狀態碼表示類別，`error_code` 表示原因，狀態碼由 `backend/core/error_codes.py` 的對照表決定。[docs/specs/issue-62-status-codes.md](issue-62-status-codes.md) 分三個階段修改，這是第三階段（P12）。第一階段是 [issue-77](issue-77-error-codes.md)，第二階段是 [issue-82](issue-82-status-codes-phase2.md)。
+[ADR 0002](../decisions/0002-api-error-status-codes.md) 定下錯誤回應的設計：狀態碼表示類別，`error_code` 表示原因，狀態碼由 `backend/core/error_codes.py` 的對照表決定。[docs/specs/issue-62-status-codes.md](issue-62-status-codes.md) 分三個階段修改，這是第三階段（P12）。第一階段是 [issue-77](issue-77-error-codes.md)，第二階段是 [issue-82](issue-82-status-codes-phase2.md)。
 
 `fastapi.HTTPException` 只能帶 `status_code`、`detail`、`headers`，沒有 `error_code`。丟 `HTTPException` 的地方要自己決定狀態碼，`error_code` 則由 `backend/core/exception_handlers.py` 的 `http_exception_handler` 依狀態碼反推（`_ERROR_CODE_BY_HTTP_STATUS` 在 `:50-59`，handler 在 `:62-66`），表達不了比類別更精確的原因，也繞過了對照表。`core/errors.py` 的 `AppError` 則是丟的地方只選 `error_code`，狀態碼查對照表。
 
@@ -51,7 +51,7 @@
 - 不加自動檢查（測試或 lint）防止之後又寫 `raise HTTPException`，靠需求 5 的文件與審查。
 - 不改其他 `detail` 的文字（例如英文改中文），除了需求 3。
 - 不改 `_ERROR_CODE_BY_HTTP_STATUS` 的內容與 `http_exception_handler` 的行為。
-- 不改 ADR 0011 與前端。
+- 不改 ADR 0002 與前端。
 
 ## 驗收條件
 

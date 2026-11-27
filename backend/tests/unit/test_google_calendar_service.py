@@ -833,7 +833,7 @@ async def test_issue42_ac24_not_connected_requires_reauth(monkeypatch):
     (_google_status_error(400), 500, "INTERNAL_ERROR"),
 ], ids=["429", "timeout", "5xx", "unreachable", "400"])
 async def test_issue42_ac25_event_lookup_errors_follow_adr_0011(google_events, error, status_code, error_code):
-    """AC25：查事件時的其他 Google 錯誤照 ADR 0011 給 error_code 與狀態碼。"""
+    """AC25：查事件時的其他 Google 錯誤照 ADR 0002 給 error_code 與狀態碼。"""
     google_events["events"] = {"ev-1": error}
 
     with pytest.raises(AppError) as exc_info:

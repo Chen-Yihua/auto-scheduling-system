@@ -9,7 +9,7 @@
 
 來源 issue：https://github.com/Chen-Yihua/auto-scheduling-system/issues/82
 
-[ADR 0011](../decisions/0011-api-error-status-codes.md) 定下錯誤回應的設計：狀態碼表示類別，`error_code` 表示原因。[docs/specs/issue-62-status-codes.md](issue-62-status-codes.md) 分三階段修改；第一階段（[docs/specs/issue-77-error-codes.md](issue-77-error-codes.md)，PR #79）依原因加了 `error_code`，前端改成依 `error_code` 判斷，但狀態碼維持舊值（ADR 0011「過渡期間」）。這是第二階段：狀態碼照對照表。
+[ADR 0002](../decisions/0002-api-error-status-codes.md) 定下錯誤回應的設計：狀態碼表示類別，`error_code` 表示原因。[docs/specs/issue-62-status-codes.md](issue-62-status-codes.md) 分三階段修改；第一階段（[docs/specs/issue-77-error-codes.md](issue-77-error-codes.md)，PR #79）依原因加了 `error_code`，前端改成依 `error_code` 判斷，但狀態碼維持舊值（ADR 0002「過渡期間」）。這是第二階段：狀態碼照對照表。
 
 目前同一個 `error_code` 搭配不同的狀態碼，例如 `UPSTREAM_RATE_LIMITED` 是 400、401、403 或 502，`INVALID_REQUEST` 是 400、404 或 500，`REAUTH_REQUIRED` 是 401 或 500；外部服務限流、逾時與 Redis 故障被算成 4xx、502 或 500，監控分不出「該修程式」和「等對方恢復」。
 
@@ -29,10 +29,10 @@
 ## 需求
 
 1. **狀態碼依 `error_code` 查對照表**：
-   - 新增後端的對照表（`error_code` → 狀態碼），內容和 ADR 0011 的對照表相同，是程式裡唯一決定錯誤狀態碼的地方。
+   - 新增後端的對照表（`error_code` → 狀態碼），內容和 ADR 0002 的對照表相同，是程式裡唯一決定錯誤狀態碼的地方。
    - `AppError` 不再有 `status_code`：拿掉建構參數與各子類別的 `default_status_code`；子類別只保留預設的 `error_code`。丟例外的地方只決定 `error_code`。
    - 所有錯誤 handler（`AppError`、`HTTPException`、422、429、資料庫、Redis、未處理的例外）都用對照表決定狀態碼。`HTTPException` 先照目前依狀態碼補 `error_code`（`exception_handlers.py:31-40`），再依 `error_code` 查表；原本的 header 照樣保留。
-   - webhook 沒設定簽章密鑰時用 `INVALID_WEBHOOK_SIGNATURE`，對照表的值就是 401，符合 ADR 0011「例外」；程式註解寫明這一點。ADR 0011 要求的 error log：兩個 webhook 的密鑰（`CLERK_WEBHOOK_SIGNING_SECRET`、`GITHUB_WEBHOOK_SECRET`）在啟動時就讀得到，所以沒設定時在啟動時記一次 error log；請求時不再重複記 error（避免每個請求都記一筆）。log 只寫哪一個設定缺少，不含密鑰值、簽章與請求內容。
+   - webhook 沒設定簽章密鑰時用 `INVALID_WEBHOOK_SIGNATURE`，對照表的值就是 401，符合 ADR 0002「例外」；程式註解寫明這一點。ADR 0002 要求的 error log：兩個 webhook 的密鑰（`CLERK_WEBHOOK_SIGNING_SECRET`、`GITHUB_WEBHOOK_SECRET`）在啟動時就讀得到，所以沒設定時在啟動時記一次 error log；請求時不再重複記 error（避免每個請求都記一筆）。log 只寫哪一個設定缺少，不含密鑰值、簽章與請求內容。
 2. **對照表沒有的 `error_code`**：對外一律回 500、`error_code` 是 `INTERNAL_ERROR`、`detail` 是固定的「伺服器發生未預期的錯誤，請稍後再試」，不回傳原始的 `error_code` 與 `detail`。log 記 error，內容包括原始的 `error_code`、例外（含 stack trace）、HTTP 方法與路徑，以及 request 識別資訊（`X-Cloud-Trace-Context` header，有的話）。
 3. **本系統登入失敗**：驗證分成兩步。兩步的界線看「呼叫的是哪一個步驟」，不看例外類別（同一個 `PyJWKClientError` 在兩步都可能出現）；每一步只接自己預期的例外，不用一個大範圍的 `except Exception` 包住整個流程：
    1. **取得 signing keys**（向 Clerk 抓 JWKS 與解析回應，包括 `kid` 找不到時的重新抓取）。PyJWT 2.14.0 實際丟出的例外（實測）：
@@ -80,7 +80,7 @@
    - **讀不到狀態碼的回應**：上面的表以前端讀得到狀態碼為前提。前後端不同來源時，Cloud Run 平台自己回的回應（例如它的 429、沒有 `error_code` 的 500）不經過後端的 `CORSMiddleware`，沒有 `Access-Control-Allow-Origin`，瀏覽器只給前端網路錯誤，前端分不出它和「沒有收到回應」，所以照暫時性錯誤重送；上限、間隔與可以重送的方法仍然適用。這是已知限制，這次不處理。
    - 後端呼叫外部平台的重試（`backend/platforms/sync.py` 最多 2 次）不變。
    - 非同步工作的重送上限是 5 次：目前系統沒有非同步工作，這次不實作，寫進 `backend/README.md`「錯誤處理」當作之後新增非同步工作時的規則。
-8. **文件**：`docs/api.md` 開頭的「沒帶會被擋下」改成 401；「錯誤回應」一節拿掉過渡期間的說明，改成狀態碼照 ADR 0011 的對照表；各 endpoint 說明欄的狀態碼改成新的值。`backend/README.md`「錯誤處理」寫明丟例外時只選 `error_code`，狀態碼由對照表決定，並寫上重送原則（需求 7：暫時性錯誤才重送、同步呼叫上限 3 次、非同步工作上限 5 次、遵守限流）；`:70` 的「由全域 handler 回 503 或 500」照 Redis 改成 503 一起更新。
+8. **文件**：`docs/api.md` 開頭的「沒帶會被擋下」改成 401；「錯誤回應」一節拿掉過渡期間的說明，改成狀態碼照 ADR 0002 的對照表；各 endpoint 說明欄的狀態碼改成新的值。`backend/README.md`「錯誤處理」寫明丟例外時只選 `error_code`，狀態碼由對照表決定，並寫上重送原則（需求 7：暫時性錯誤才重送、同步呼叫上限 3 次、非同步工作上限 5 次、遵守限流）；`:70` 的「由全域 handler 回 503 或 500」照 Redis 改成 503 一起更新。
 9. PR 描述要 `Closes #82`。
 
 ## 不做
@@ -88,7 +88,7 @@
 - 不把 router 的 `HTTPException` 改成 `AppError`：第三階段（這個 PR 合併後才開 issue）。
 - 不新增 request ID 機制：只記 Cloud Run 已經帶的 `X-Cloud-Trace-Context`。
 - 不改後端呼叫外部平台的重試行為（`backend/platforms/sync.py` 維持最多 2 次）與哪些錯誤算可重試；前端的重送規則照需求 7 改。
-- 不改 ADR 0011：對照表與分類原則不變；「過渡期間」一節是當時的紀錄，照 `docs/decisions/README.md` 不改寫。
+- 不改 ADR 0002：對照表與分類原則不變；「過渡期間」一節是當時的紀錄，照 `docs/decisions/README.md` 不改寫。
 - 不處理 `PyJWKClient` 的同步請求會卡住 event loop 的問題（和狀態碼無關）。
 
 ## 假設
@@ -101,7 +101,7 @@
 
 | # | 條件 | 類型 |
 |---|---|---|
-| AC1 | 每個本後端產生的錯誤回應，狀態碼都是 ADR 0011 對照表中該 `error_code` 的值；後端的對照表和 ADR 0011 的對照表一致 | 不變條件 |
+| AC1 | 每個本後端產生的錯誤回應，狀態碼都是 ADR 0002 對照表中該 `error_code` 的值；後端的對照表和 ADR 0002 的對照表一致 | 不變條件 |
 | AC2 | `AppError` 與子類別沒有指定狀態碼的參數或屬性；丟例外的地方只決定 `error_code` | 不變條件 |
 | AC3 | 對照表沒有的 `error_code`：回 500、`INTERNAL_ERROR`、固定的 `detail`，回應不含原始的 `error_code` 與 `detail`；log 有原始的 `error_code`、例外、方法與路徑、`X-Cloud-Trace-Context`（有的話） | 不變條件 |
 | AC4 | 沒帶 JWT、scheme 不是 Bearer、token 格式錯誤、簽章無效、過期、`kid` 找不到對應的 key：401 `UNAUTHENTICATED`；抓 Clerk JWKS 連不上或連線中斷、回應不是 JSON 或沒有 key：502 `UPSTREAM_ERROR`；逾時：504 `UPSTREAM_TIMEOUT`；JWKS 的 `keys` 裡有元素不是 object，或 key 的欄位型別錯誤：502 `UPSTREAM_ERROR`；驗證流程中其他非預期的例外：500 `INTERNAL_ERROR`；`detail` 不含例外內容，log 有例外資訊 | 不變條件 |
@@ -128,7 +128,7 @@
 
 **後端**
 
-- `backend/core/error_codes.py`（新增）：`error_code` → 狀態碼的對照表，註解指向 ADR 0011；查表函式在找不到時回 `None`。
+- `backend/core/error_codes.py`（新增）：`error_code` → 狀態碼的對照表，註解指向 ADR 0002；查表函式在找不到時回 `None`。
 - `backend/core/errors.py`：拿掉 `status_code` 參數與 `default_status_code`；`AppError` 可以帶 `headers`（用在 `Retry-After`）。
 - `backend/core/exception_handlers.py`：`error_response` 改成依 `error_code` 查表決定狀態碼；查不到時照需求 2 回 500 並記 log；`HTTPException` 先依狀態碼補 `error_code` 再查表，保留 header；資料庫、Redis、422、未處理的例外都經過同一個函式。限流的 handler（`backend/core/rate_limit.py`）也改用它。
 - `backend/main.py`：`CORSMiddleware` 加 `expose_headers=["Retry-After"]`（需求 7）。
@@ -164,7 +164,7 @@
 
 | AC | 測試 |
 |---|---|
-| AC1 | unit：對照表和 ADR 0011 對照表的每一列相同（測試裡列出預期的對照）；integration：`test_error_codes_api.py`、`test_error_responses_api.py` 每種 `error_code` 的狀態碼 |
+| AC1 | unit：對照表和 ADR 0002 對照表的每一列相同（測試裡列出預期的對照）；integration：`test_error_codes_api.py`、`test_error_responses_api.py` 每種 `error_code` 的狀態碼 |
 | AC2 | pyright：`AppError(..., status_code=...)` 不再能寫；unit：`test_exception_handlers.py` 的子類別預設 |
 | AC3 | unit：handler 收到對照表沒有的 `error_code`，回應是 500 `INTERNAL_ERROR` 與固定 `detail`，log 有原始 `error_code` 與 trace header |
 | AC4 | unit：`test_security.py` 用實際的例外形式模擬：沒帶、scheme 錯、token 格式錯、簽章無效、過期；`kid` 找不到（cooldown 內不重新抓，401）與 cooldown 過後重新抓失敗（502／504）；連線時逾時（`URLError(reason=TimeoutError)`，`TimeoutError` 在 `__context__`）、讀回應時逾時（`PyJWKClientConnectionError` → `TimeoutError`）、連線被拒、HTTP 503、`RemoteDisconnected`、`IncompleteRead`、`JSONDecodeError`、`PyJWKSetError`、`keys` 元素不是 object（`AttributeError`，502）、key 的 `n`／`e` 不是字串（`TypeError`，502）；在 `get_signing_keys()` 以外丟的 `AttributeError`（非預期例外）回 500；上次成功抓取後 30 秒內帶任意 `kid` 的 token 不會再抓 JWKS（Clerk 正常、剛抓取成功的情況）；至少一條用真的 `PyJWKClient`、只模擬 `urllib` 這一層（`urllib.request.build_opener` 或 `OpenerDirector.open`，`fetch_data` 不用 `urlopen`，只 patch `urlopen` 會真的連到 Clerk），不整個 mock 掉 `jwks_client`；每個測試自己建立子類別的 instance，不共用模組層級的 `clerk_auth`（JWKS 快取與 `_last_successful_fetch` 會在測試之間互相影響）；測試用的 RSA 金鑰以 `cryptography` 產生 |

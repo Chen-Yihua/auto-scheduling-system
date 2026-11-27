@@ -507,7 +507,7 @@ async def test_ac10_inserting_shifts_later_stages_by_one():
         stages = await manual_task_crud.get_subtasks("ac10-p", "alice")
         assert [(s["title"], s["stage"]) for s in stages] == [("階段1", 1), ("插入的", 2), ("階段2", 3), ("階段3", 4)]
         assert stages[1]["parent_id"] == "ac10-p"
-        # ADR 0004：階段編號是在主任務 subtask_ids 裡的位置，不存在子任務上
+        # ADR 0001：階段編號是在主任務 subtask_ids 裡的位置，不存在子任務上
         assert (await manual_task_crud.database.db.manual_tasks.find_one({"_id": "ac10-p"}))["subtask_ids"][1] == "ac10-new"
         assert await manual_task_crud.database.db.manual_tasks.count_documents({"_id": {"$regex": "^ac10-"}, "stage": {"$exists": True}}) == 0
     finally:
@@ -597,7 +597,7 @@ def test_issue32_ac2_inserted_stage_is_compared_with_all_existing_later_stages()
     assert adjusted == [{"index": 1, "from_priority": "Low", "to_priority": "Medium", "compared_index": 2}]
 
 
-# ---------- 階段任務：插入、刪除、轉換的原子性（AC39，ADR 0004）----------
+# ---------- 階段任務：插入、刪除、轉換的原子性（AC39，ADR 0001）----------
 
 async def _visible_titles(parent_id):
     return [s["title"] for s in await manual_task_crud.get_subtasks(parent_id, "alice")]

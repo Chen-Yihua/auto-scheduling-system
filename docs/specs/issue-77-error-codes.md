@@ -9,7 +9,7 @@
 
 來源 issue：https://github.com/Chen-Yihua/auto-scheduling-system/issues/77
 
-[ADR 0011](../decisions/0011-api-error-status-codes.md) 定下錯誤回應的設計：狀態碼表示類別，`error_code` 表示原因，前端依 `error_code` 判斷畫面。[docs/specs/issue-62-status-codes.md](issue-62-status-codes.md) 盤點了全站的狀態碼，分三階段修改；這是第一階段：依實際原因加 `error_code`，前端改看 `error_code`，狀態碼先不變（例外見需求 6）。
+[ADR 0002](../decisions/0002-api-error-status-codes.md) 定下錯誤回應的設計：狀態碼表示類別，`error_code` 表示原因，前端依 `error_code` 判斷畫面。[docs/specs/issue-62-status-codes.md](issue-62-status-codes.md) 盤點了全站的狀態碼，分三階段修改；這是第一階段：依實際原因加 `error_code`，前端改看 `error_code`，狀態碼先不變（例外見需求 6）。
 
 使用者現在會遇到：
 
@@ -29,8 +29,8 @@
 
 ## 需求
 
-1. **回應格式**：本後端產生的錯誤回應都是 `{"detail", "error_code"}`，`error_code` 依 ADR 0011 對照表的**原因**決定；狀態碼維持目前的值（ADR 0011「過渡期間」）。涵蓋 `AppError`、router 的 `HTTPException`、422、429、500、503、未知路由的 404 與不支援的方法 405。
-2. **`AppError` 帶 `error_code`**：每個子類別有預設的 `error_code` 與預設的狀態碼（預設狀態碼就是目前 `_STATUS_BY_ERROR` 的值），丟的時候可以分別另外指定 `error_code` 與狀態碼（例如 `ExternalServiceError` 預設 `UPSTREAM_ERROR`／502，逾時指定 `UPSTREAM_TIMEOUT`）。只指定 `error_code` 時狀態碼不變；要讓某個原因維持目前、但和類別預設不同的狀態碼（例如 PATCH 解密失敗帶 `REAUTH_REQUIRED` 但維持 500），就明確指定狀態碼。handler 一律用「建構時指定的值，沒有就用類別預設」。`detail` 只能是固定的文字或使用者自己送出、非機密的值（例如平台名稱、缺少的欄位名稱、時區），不能用例外訊息（`str(exc)`）或第三方回應的內容組成：`NonRetryableError`、`UpstreamError` 的訊息帶有使用者名稱與第三方回應原文（`backend/platforms/moodle.py:55`、`:178`；`backend/platforms/github.py:56`），只能記在 log。router 裡需要專屬 `error_code` 的錯誤這一階段改丟 `AppError`：排程建議過期（`SUGGESTION_EXPIRED`）、使用者已註冊（`ALREADY_EXISTS`）、webhook 簽章錯誤（`INVALID_WEBHOOK_SIGNATURE`）、OAuth 換 token（需求 4）、外部平台抓項目（`NOT_LINKED`、`REAUTH_REQUIRED` 等，需求 5）。其他 `HTTPException` 不改，由新的 handler 依狀態碼補預設的 `error_code`（400 `INVALID_REQUEST`、401 `UNAUTHENTICATED`、404 `NOT_FOUND`、405 `METHOD_NOT_ALLOWED`、409 `ALREADY_EXISTS`、500 `INTERNAL_ERROR`、502 `UPSTREAM_ERROR`）；Clerk 驗證 library 回的 403 補 `UNAUTHENTICATED`（ADR 0011「過渡期間」的例外：分不出抓 JWKS 失敗與 token 無效）。沒列到的狀態碼：4xx 給 `INVALID_REQUEST`，5xx 給 `INTERNAL_ERROR`。handler 保留 `HTTPException` 原本的 header（例如 405 的 `Allow`、401 的 `WWW-Authenticate`），`detail` 照原樣回傳：目前所有 `HTTPException` 的 `detail` 都是固定的文字（`backend/routers/*.py`、`backend/platforms/router.py` 的 `*_detail`、`fastapi_clerk_auth` 的 "Forbidden"），handler 不另外加入例外內容。`AccessDeniedError` 的預設 `error_code` 是 `INVALID_CREDENTIALS`、預設狀態碼維持 403：它只用在連結 GitHub、Jira 時驗證 token 的非 200 回應（`backend/platforms/github.py:102`、`backend/platforms/jira.py:109`），表示外部平台拒絕這次驗證用的 token，不是 Google 專用；這兩處的情況仍依需求 4 明確指定 `error_code`，預設值用在之後新的使用情況。
+1. **回應格式**：本後端產生的錯誤回應都是 `{"detail", "error_code"}`，`error_code` 依 ADR 0002 對照表的**原因**決定；狀態碼維持目前的值（ADR 0002「過渡期間」）。涵蓋 `AppError`、router 的 `HTTPException`、422、429、500、503、未知路由的 404 與不支援的方法 405。
+2. **`AppError` 帶 `error_code`**：每個子類別有預設的 `error_code` 與預設的狀態碼（預設狀態碼就是目前 `_STATUS_BY_ERROR` 的值），丟的時候可以分別另外指定 `error_code` 與狀態碼（例如 `ExternalServiceError` 預設 `UPSTREAM_ERROR`／502，逾時指定 `UPSTREAM_TIMEOUT`）。只指定 `error_code` 時狀態碼不變；要讓某個原因維持目前、但和類別預設不同的狀態碼（例如 PATCH 解密失敗帶 `REAUTH_REQUIRED` 但維持 500），就明確指定狀態碼。handler 一律用「建構時指定的值，沒有就用類別預設」。`detail` 只能是固定的文字或使用者自己送出、非機密的值（例如平台名稱、缺少的欄位名稱、時區），不能用例外訊息（`str(exc)`）或第三方回應的內容組成：`NonRetryableError`、`UpstreamError` 的訊息帶有使用者名稱與第三方回應原文（`backend/platforms/moodle.py:55`、`:178`；`backend/platforms/github.py:56`），只能記在 log。router 裡需要專屬 `error_code` 的錯誤這一階段改丟 `AppError`：排程建議過期（`SUGGESTION_EXPIRED`）、使用者已註冊（`ALREADY_EXISTS`）、webhook 簽章錯誤（`INVALID_WEBHOOK_SIGNATURE`）、OAuth 換 token（需求 4）、外部平台抓項目（`NOT_LINKED`、`REAUTH_REQUIRED` 等，需求 5）。其他 `HTTPException` 不改，由新的 handler 依狀態碼補預設的 `error_code`（400 `INVALID_REQUEST`、401 `UNAUTHENTICATED`、404 `NOT_FOUND`、405 `METHOD_NOT_ALLOWED`、409 `ALREADY_EXISTS`、500 `INTERNAL_ERROR`、502 `UPSTREAM_ERROR`）；Clerk 驗證 library 回的 403 補 `UNAUTHENTICATED`（ADR 0002「過渡期間」的例外：分不出抓 JWKS 失敗與 token 無效）。沒列到的狀態碼：4xx 給 `INVALID_REQUEST`，5xx 給 `INTERNAL_ERROR`。handler 保留 `HTTPException` 原本的 header（例如 405 的 `Allow`、401 的 `WWW-Authenticate`），`detail` 照原樣回傳：目前所有 `HTTPException` 的 `detail` 都是固定的文字（`backend/routers/*.py`、`backend/platforms/router.py` 的 `*_detail`、`fastapi_clerk_auth` 的 "Forbidden"），handler 不另外加入例外內容。`AccessDeniedError` 的預設 `error_code` 是 `INVALID_CREDENTIALS`、預設狀態碼維持 403：它只用在連結 GitHub、Jira 時驗證 token 的非 200 回應（`backend/platforms/github.py:102`、`backend/platforms/jira.py:109`），表示外部平台拒絕這次驗證用的 token，不是 Google 專用；這兩處的情況仍依需求 4 明確指定 `error_code`，預設值用在之後新的使用情況。
 3. **422**：回應帶 `error_code: "VALIDATION_ERROR"`，`detail` 是驗證錯誤的清單，每一項不帶 `input` 與 `ctx`。
 4. **依原因分類**（狀態碼維持目前的值）：
 
@@ -67,7 +67,7 @@
    | 排程的外部來源 id 格式錯誤（`backend/crud/schedulable_items.py:30-38`、`:140-144`） | `INVALID_REQUEST`（狀態碼維持 500） |
    | GitHub webhook 的 payload 不是 JSON 或缺欄位（`backend/routers/pr_review_webhook.py:75`、`:81-84`） | `INVALID_REQUEST`（狀態碼維持 500） |
    | 新增子任務時 Idempotency-Key 用在別的請求／同一個請求還在處理中 | `IDEMPOTENCY_KEY_REUSED`／`REQUEST_IN_PROGRESS` |
-   | 其他 `AppError`、資料庫與未處理的例外 | 照 ADR 0011 對照表（例如 `InvalidRequestError` 預設 `INVALID_REQUEST`、資料庫連不上 `SERVICE_UNAVAILABLE`、未處理的例外 `INTERNAL_ERROR`） |
+   | 其他 `AppError`、資料庫與未處理的例外 | 照 ADR 0002 對照表（例如 `InvalidRequestError` 預設 `INVALID_REQUEST`、資料庫連不上 `SERVICE_UNAVAILABLE`、未處理的例外 `INTERNAL_ERROR`） |
 
    Google 與 GitHub 回報限流、權限的 reason、header 與訊息依官方文件，實作時用測試固定下來。
 
@@ -94,7 +94,7 @@
    | 同步途中資料庫出錯 | — | 500 | 連不上 `SERVICE_UNAVAILABLE`，其他 `INTERNAL_ERROR` | — |
 
    「重試」「沒有舊資料時的狀態碼」兩欄都是目前的行為（`platforms/github.py:20`、`:55-58`；`platforms/jira.py:18`、`:56-60`；`platforms/moodle.py:51-55`、`:176-178`；`platforms/sync.py:45-52`）；這一階段只改 `error_code` 與 `X-Auth-Error`。
-6. **帳號列表**：任何一個帳號的憑證解不開時，`GET /users/me/linked-accounts/` 照常回 200。`LinkedAccountOut` 加布林欄位 `needs_reauth`（解得開的帳號是 `false`）；解不開的帳號 `needs_reauth: true`，不回傳憑證欄位（`apiKey`、`password`）；記 warning，不刪憑證。這是這一階段唯一改狀態碼的地方（ADR 0011「過渡期間」的例外）。`frontend/types/linkedAccount.ts` 同步加欄位；前端把 `needs_reauth` 的帳號當成已連結：`AccountSettings.vue` 的帳號卡片顯示「憑證無法讀取，請重新連結」與刪除按鈕；儲存時走 PATCH（不是 POST），並要求填完整的憑證（GitHub 的 apiKey；Jira 的 apiKey；Moodle 的帳號與密碼），PATCH 有帶新憑證時不會解舊的密文，後端不用改；外部平台頁顯示要重新連結，不顯示「尚未綁定」。
+6. **帳號列表**：任何一個帳號的憑證解不開時，`GET /users/me/linked-accounts/` 照常回 200。`LinkedAccountOut` 加布林欄位 `needs_reauth`（解得開的帳號是 `false`）；解不開的帳號 `needs_reauth: true`，不回傳憑證欄位（`apiKey`、`password`）；記 warning，不刪憑證。這是這一階段唯一改狀態碼的地方（ADR 0002「過渡期間」的例外）。`frontend/types/linkedAccount.ts` 同步加欄位；前端把 `needs_reauth` 的帳號當成已連結：`AccountSettings.vue` 的帳號卡片顯示「憑證無法讀取，請重新連結」與刪除按鈕；儲存時走 PATCH（不是 POST），並要求填完整的憑證（GitHub 的 apiKey；Jira 的 apiKey；Moodle 的帳號與密碼），PATCH 有帶新憑證時不會解舊的密文，後端不用改；外部平台頁顯示要重新連結，不顯示「尚未綁定」。
 7. **前端**：錯誤判斷都看 `error_code`：
    - `NOT_LINKED`：只在有「尚未連接」狀態的畫面設定那個狀態（排程建議頁、Google 行事曆卡片、外部平台列表的「尚未綁定」）；其他畫面（例如確認排程）當成一般錯誤，照下面「其他 `error_code`」顯示。
    - Google 行事曆卡片（`useGoogleCalendar`、`GoogleCalendarEmbed.vue`）：
@@ -115,18 +115,18 @@
    - 沒有 `error_code` 的回應（Cloud Run、網路錯誤）：429 當成限流，其他顯示通用錯誤。
    - `useUserSync` 的文字改成依 `UNAUTHENTICATED`（登入驗證失敗）、`SERVICE_UNAVAILABLE`（資料庫暫時無法使用）判斷；沒有 `error_code` 時照目前依狀態碼（上一點通用退回的例外）。
    - `console.error` 只記 status 與 `error_code`，不印整個錯誤物件：錯誤物件帶著送出的 request body 與 Authorization header（`useLinkedAccount.ts:220` 等）。
-8. **文件**：`docs/api.md` 開頭加一段說明錯誤回應的格式（`detail`、`error_code`，對照表見 ADR 0011），各 endpoint 的狀態碼不改；`backend/README.md`「錯誤處理」加上「丟例外前照 ADR 0011 選 `error_code`」並指向 ADR 0011。
-9. PR 描述要 `Closes #77` 與 `Closes #59`，並寫明 #59 建議的驗收條件中「Google 用 403 回報限流時回 502」被 ADR 0011 取代：限流歸 503 `UPSTREAM_RATE_LIMITED`，狀態碼在第二階段改，這個 PR 帶 `UPSTREAM_RATE_LIMITED`、狀態碼維持 400。
+8. **文件**：`docs/api.md` 開頭加一段說明錯誤回應的格式（`detail`、`error_code`，對照表見 ADR 0002），各 endpoint 的狀態碼不改；`backend/README.md`「錯誤處理」加上「丟例外前照 ADR 0002 選 `error_code`」並指向 ADR 0002。
+9. PR 描述要 `Closes #77` 與 `Closes #59`，並寫明 #59 建議的驗收條件中「Google 用 403 回報限流時回 502」被 ADR 0002 取代：限流歸 503 `UPSTREAM_RATE_LIMITED`，狀態碼在第二階段改，這個 PR 帶 `UPSTREAM_RATE_LIMITED`、狀態碼維持 400。
 
 ## 不做
 
-- 不改狀態碼（帳號列表除外）：過渡期間 `error_code` 和狀態碼不完全符合 ADR 0011 對照表，第二階段依對照表統一。第二階段要處理的事項：改狀態碼、轉送 `Retry-After`、區分 Clerk JWKS 失敗、確認排程 `failed` 項目加 `error_code`、排程外部 id 不存在回 404（以下各點）。
+- 不改狀態碼（帳號列表除外）：過渡期間 `error_code` 和狀態碼不完全符合 ADR 0002 對照表，第二階段依對照表統一。第二階段要處理的事項：改狀態碼、轉送 `Retry-After`、區分 Clerk JWKS 失敗、確認排程 `failed` 項目加 `error_code`、排程外部 id 不存在回 404（以下各點）。
 - 不改重試次數與哪些錯誤重試。
 - 不把所有 router 的 `HTTPException` 改成 `AppError`：只改需求 2 列的，其餘在第三階段。
 - 不區分抓 Clerk JWKS 失敗與 token 無效：在第二階段。
 - 不改確認排程的 `failed` 項目格式（第二階段加 `error_code`）。
 - 不改排程外部 id 不存在時靜默回 200 的行為（第二階段）。
-- 不轉送外部服務的 `Retry-After`（ADR 0011 對照表 `UPSTREAM_RATE_LIMITED`）：第二階段改成 503 時一起做。
+- 不轉送外部服務的 `Retry-After`（ADR 0002 對照表 `UPSTREAM_RATE_LIMITED`）：第二階段改成 503 時一起做。
 - 不處理共用資料庫時不同環境可能互相覆寫憑證的問題（假設 4，觸發條件待確認，#78）。
 - 不持久化 Google 行事曆清單：「保留上次清單」只限前端目前頁面執行期間的狀態，重新整理頁面後不保留；不新增 localStorage、sessionStorage 或後端持久化。
 
@@ -134,7 +134,7 @@
 
 1. （有依據、待測試驗證；以 AC1、AC5、AC6 的測試固定判斷規則）Google 與 GitHub 回報限流的方式依官方文件：Google Calendar API 用 403 或 429 加 reason `rateLimitExceeded`、`userRateLimitExceeded`，用量上限是 `quotaExceeded`（`dailyLimitExceeded` 是舊文件的 reason，現行文件查不到，保險起見一併算限流）；GitHub 主要限流帶 `x-ratelimit-remaining: 0`，secondary rate limit 回 403 或 429，錯誤訊息寫明是 secondary rate limit，可能帶 `retry-after`，也可能兩個 header 都沒有。
 2. （有依據、待測試驗證；以 AC7 的 `test_moodle_platform.py` 固定判斷規則，實際的學校頁面行為上線後才能驗證）國立政治大學 SSO 帳密錯誤時，送出後網址停在 `i.nccu.edu.tw/Login.aspx`；導向別處或逾時不是帳密錯誤。之後發現誤判，再改成讀登入頁的錯誤訊息。
-3. Cloud Run 自己回的回應與網路錯誤沒有 `error_code`（ADR 0011）。
+3. Cloud Run 自己回的回應與網路錯誤沒有 `error_code`（ADR 0002）。
 4. **待確認的風險：共用資料庫時重新連結可能覆寫另一個環境的憑證**。觸發條件還沒以實際環境設定確認，所以這一項**不是**已接受的風險，也不是安全或正確的設計；這是這次開發之前就有的問題，追蹤在 #78。
    - 觸發條件：(a) 正式與開發環境共用同一個資料庫，(b) 各自用不同的 Fernet 金鑰（`backend/core/crypto.py`），(c) 同一個人在兩個環境是同一個 Clerk 使用者 id，而且都連結了同一個平台（帳號 id 是 `<clerk_id>_<platform>`，`backend/crud/linked_account.py:29`）。(a)、(b) 依程式註解（`backend/services/google_calendar.py:68`）；(c) **待確認**：開發者表示兩個環境用同一個 Clerk instance，但還沒以實際環境設定（兩邊的 `CLERK_ISSUER`）確認，確認列在 #78。
    - 條件成立時的影響：在其中一個環境連結或更新帳號（包括照這個 PR 新增的「憑證無法讀取，請重新連結」提示操作），會用那個環境的金鑰覆寫密文（`backend/crud/linked_account.py:77`），另一個環境的那個帳號之後變成 `needs_reauth`。只影響同時在兩個環境使用的帳號，不會讓別人讀到憑證。
@@ -145,7 +145,7 @@
 | # | 條件 | 類型 |
 |---|---|---|
 | AC1 | 已連接 Google 時：(1) Google 回限流（403 限流 reason 或 429）、其他 4xx 或 5xx：排程建議頁與 Google 行事曆卡片不顯示「尚未連接」，帳號設定維持「已連接」；最近一次已知的結果是載入成功時照常嵌入，沒有已知結果時卡片顯示「Google 行事曆暫時無法載入，請稍後再試」；限流時顯示「請求太頻繁，請稍後再試」。(2) 權限不足或換新 token 後仍 401（`REAUTH_REQUIRED`）：卡片顯示「授權已失效」並提示重新連結，帳號設定的按鈕是「重新連接 Google Calendar」，不顯示「尚未連接」（#59） | 使用者行為 |
-| AC2 | 本後端產生的每個錯誤回應都有 `error_code`，值依需求 4、5 與 ADR 0011 對照表的原因；未知路由 404 是 `NOT_FOUND`、不支援的方法 405 是 `METHOD_NOT_ALLOWED`；沒帶或無效的 JWT（403）是 `UNAUTHENTICATED` | 不變條件 |
+| AC2 | 本後端產生的每個錯誤回應都有 `error_code`，值依需求 4、5 與 ADR 0002 對照表的原因；未知路由 404 是 `NOT_FOUND`、不支援的方法 405 是 `METHOD_NOT_ALLOWED`；沒帶或無效的 JWT（403）是 `UNAUTHENTICATED` | 不變條件 |
 | AC3 | 除了帳號列表，每個 endpoint 在每種錯誤情況回的狀態碼和改之前相同 | 不變條件 |
 | AC4 | 422 回應帶 `VALIDATION_ERROR`，`detail` 的每一項沒有 `input`、`ctx`；連結帳號時少送欄位，回應裡沒有送出的 apiKey、password | 不變條件 |
 | AC5 | 抓 GitHub 項目時 GitHub 用 403 回報限流：沒有舊資料時狀態碼仍是 401、`error_code` 是 `UPSTREAM_RATE_LIMITED`，畫面不要求重新連結；有舊資料時不設 `X-Auth-Error`；兩種情況都不重試 | 使用者行為 |
@@ -157,8 +157,8 @@
 | AC11 | Google OAuth 換 token：`invalid_grant` 是 `INVALID_AUTHORIZATION_CODE`，`detail` 是授權碼無效；Google 5xx、429 是 `UPSTREAM_ERROR`／`UPSTREAM_RATE_LIMITED`，`detail` 不說授權碼無效；OAuth 回呼畫面的錯誤訊息顯示後端的 `detail` | 使用者行為 |
 | AC12 | 前端依需求 7 判斷：`NOT_LINKED` 在有「尚未連接」狀態的畫面設定該狀態、在其他畫面（例如確認排程）顯示錯誤；`REAUTH_REQUIRED` 提示重新連結；`SUGGESTION_EXPIRED` 請重新產生；`ALREADY_EXISTS` 顯示已綁定或當成已註冊；兩種限流顯示稍後再試；其他顯示原本的標題與說明並附加 `detail`；沒有 `error_code` 時 429 顯示限流、其他顯示通用錯誤（`useUserSync` 例外：照目前依狀態碼） | 使用者行為 |
 | AC13 | 錯誤回應不帶憑證、token 與第三方回應的原文：改過的 `detail` 都是固定的文字；新增的 422 handler 不把 request body 寫進 log | 不變條件 |
-| AC14 | `docs/api.md` 開頭有錯誤回應格式的說明並指向 ADR 0011，各 endpoint 的狀態碼沒改；`backend/README.md`「錯誤處理」指向 ADR 0011 | 不變條件 |
-| AC15 | PR 描述有 `Closes #77`、`Closes #59`，並寫明 #59 中被 ADR 0011 取代的驗收條件 | 使用者行為 |
+| AC14 | `docs/api.md` 開頭有錯誤回應格式的說明並指向 ADR 0002，各 endpoint 的狀態碼沒改；`backend/README.md`「錯誤處理」指向 ADR 0002 | 不變條件 |
+| AC15 | PR 描述有 `Closes #77`、`Closes #59`，並寫明 #59 中被 ADR 0002 取代的驗收條件 | 使用者行為 |
 | AC16 | 需求 4、5 每一列的 `detail` 都和該列的 `error_code` 一致；不是 `REAUTH_REQUIRED`、`INVALID_CREDENTIALS` 的列，`detail` 不出現「授權已失效」「帳號或密碼錯誤」「token 無效」「權限不足」；連結時沒有限流特徵的 403 的 `detail` 說明 token 權限不足；改到的 `detail` 是中文 | 使用者行為 |
 | AC17 | 前端的 `console.error` 不印出錯誤物件，只記 status 與 `error_code`；連結帳號失敗時 console 裡沒有送出的 apiKey、password 與 JWT | 不變條件 |
 | AC18 | 只有 `decrypt_secret` 的 `ValueError` 會變成 `REAUTH_REQUIRED` 或 `needs_reauth`；伺服器沒設加密金鑰等其他例外回 500 `INTERNAL_ERROR`，帳號不被標成要重新連結 | 不變條件 |
@@ -182,7 +182,7 @@
 
 **後端**
 
-- `backend/core/errors.py`：`AppError` 加 `error_code` 與狀態碼（類別預設，建構時可分別指定）；各子類別的預設 `error_code` 照 ADR 0011 對照表（`AccessDeniedError` 是 `INVALID_CREDENTIALS`）、預設狀態碼照目前 `_STATUS_BY_ERROR`。
+- `backend/core/errors.py`：`AppError` 加 `error_code` 與狀態碼（類別預設，建構時可分別指定）；各子類別的預設 `error_code` 照 ADR 0002 對照表（`AccessDeniedError` 是 `INVALID_CREDENTIALS`）、預設狀態碼照目前 `_STATUS_BY_ERROR`。
 - `backend/core/exception_handlers.py`：`app_error_handler` 回 `error_code`；資料庫與未處理的例外帶 `SERVICE_UNAVAILABLE`、`INTERNAL_ERROR`；新增 `HTTPException`（Starlette）handler 依狀態碼補預設 `error_code`（含未知路由 404、405 與 Clerk 的 403）；新增 `RequestValidationError` handler，拿掉每一項的 `input`、`ctx`，不記 request body。`backend/main.py` 註冊。
 - `backend/services/google_calendar.py`、`backend/services/google_oauth.py`、`backend/routers/google_calendar.py`：依需求 4 分類 Google 的錯誤（讀回應的 `error.errors[].reason`），狀態碼維持目前的值。
 - `backend/platforms/github.py`、`jira.py`、`moodle.py`、`sync.py`、`router.py`：依需求 5 分開「重試」與「`X-Auth-Error`／`error_code`」。做法是讓平台丟出的例外帶上 `error_code` 與「是否算憑證失效」，`sync_platform_items` 的重試仍只看「是否可重試」，`auth_error` 改看「是否算憑證失效」；router 沒有舊資料時的狀態碼照目前依例外類別決定。連結帳號的驗證（`fetch_*_userinfo`、Moodle `_verify`）依需求 4。

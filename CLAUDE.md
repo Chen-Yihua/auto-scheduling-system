@@ -41,7 +41,7 @@ cd frontend && npm run lint && npm run typecheck && npm run test
 | 開 issue（`gh issue create`） | [docs/issues.md](docs/issues.md)（情境與技術背景兩層） |
 | 開發新功能（`/feature`） | [docs/specs/README.md](docs/specs/README.md)（規格格式） |
 | 了解整體架構、做架構層級的決定 | [docs/architecture.md](docs/architecture.md)、[docs/decisions/](docs/decisions/) |
-| 整理、刪除或標記取代 `docs/` 的文件 | [docs/README.md](docs/README.md)「生命週期」（ADR 只標記取代，不刪除；規格、審查紀錄沒有持續參考價值時才刪除） |
+| 整理、刪除 `docs/` 的文件 | [docs/README.md](docs/README.md)「生命週期」 |
 
 ## 漏洞
 
@@ -85,7 +85,7 @@ cd frontend && npm run lint && npm run typecheck && npm run test
 5. 幾個條件有先後順序時，寫成編號清單，照順序判斷。每一條寫明符合後停止，還是繼續看下一條；每一條的做法都相同時，在清單前寫一次就好。不寫成「原則＋例外＋例外的例外」。
 6. 改 skill、agent 時，照 Anthropic〈[Skill authoring best practices](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices)〉：只寫 Claude 不知道的事，只有容易出錯、出錯難挽回的操作寫固定步驟；照 `anthropics/skills` 的〈[skill-creator](https://github.com/anthropics/skills/blob/main/skills/skill-creator/SKILL.md)〉：說明重要指示背後的原因。這個 repo 不另外建立改 skill 時的情境驗證（Anthropic 建議的「Build evaluations first」）：改完的 skill、agent 直接在之後的實際開發中使用，發現規則遺漏、誤判或流程退化時，依具體案例修正。
 
-流程用語的意思見 `docs/README.md`「術語表」。
+流程用語的意思見 `docs/README.md`「流程用語」。
 
 ## 問題處理順序
 

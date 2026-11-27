@@ -5,49 +5,29 @@
 | [architecture.md](architecture.md) | 系統由哪些部分組成、資料怎麼流動 | 新增服務、資料庫 collection、外部平台，或改變模組分層 |
 | [architecture.drawio](architecture.drawio) | 系統架構圖（用 draw.io 開啟） | 同上 |
 | [api.md](api.md) | 後端 API 一覽 | 新增、刪除 endpoint，或改了路徑、登入需求、限流 |
-| [decisions/](decisions/) | 架構決策紀錄（ADR）：為什麼這樣做、放棄了什麼 | 做了之後的人會想問「為什麼不用 X」的決定 |
-| [specs/](specs/) | 規格：核准當時的需求、假設、驗收條件與修改紀錄 | `/feature`、`/issue` 的每個變更一份（文字修正除外；快速路徑的短版規格在 PR 描述，不放這裡）；核准後驗收條件的修改記在「修改紀錄」 |
-| `glossary.md`（第一個術語合併時才建立） | 術語表：產品領域、使用者看得到的概念用哪個名稱、指的是什麼（格式見本文件「術語表」） | 文字修正以外的開發確定了新術語或修改了定義時，由 `feature-implementer` 照交付清單合併 |
-| [issues.md](issues.md) | GitHub issue 的寫法：情境與技術背景兩層 | issue 的欄位或寫法改變時 |
-| [reviews/](reviews/) | 規格審查與實作審查的分類、報告格式與「處理」的寫法；改用 PR 留言前的審查紀錄檔。每一輪的審查結果貼在 PR 留言 | 分類、報告格式或「處理」的寫法改變時；既有紀錄檔不更新 |
-| [experiments/](experiments/) | 開發流程的實驗：目的、指標與紀錄 | 開始新的流程實驗，或實驗結束整理結果時 |
+| [glossary.md](glossary.md) | 術語表：使用者看得到的概念叫什麼、指的是什麼 | 開發中確定了新術語或改了定義 |
+| [issues.md](issues.md) | GitHub issue 的寫法 | issue 的寫法改變時 |
+| [decisions/](decisions/) | 架構決策紀錄（ADR）：為什麼這樣做、放棄了什麼 | 做了之後的人會想問「為什麼不用 X」的架構決定 |
+| [specs/](specs/) | 規格：核准時的需求與驗收條件 | `/feature`、`/issue` 的每個變更一份（文字修正與快速路徑除外） |
+| [reviews/](reviews/) | 規格審查與實作審查的標籤、報告格式 | 審查的格式改變時 |
 
-欄位層級的 request / response 格式以後端的 `backend/schemas/` 和 FastAPI 自動產生的 `/docs` 為準，這裡不重複列。
+欄位層級的 request / response 格式以 `backend/schemas/` 和 FastAPI 自動產生的 `/docs` 為準，這裡不重複列。
 
 ## 生命週期
 
 | 類型 | 文件 | 規則 |
 |---|---|---|
-| 歷史紀錄：ADR | `decisions/` | 不刪除，也不因為過時就改寫內容。被取代時只改狀態並連結新的 ADR，照 [decisions/README.md](decisions/README.md)。記錄的是當時的決定，不是目前的系統 |
-| 歷史紀錄：規格與審查紀錄 | `specs/`、`reviews/specification/`、`reviews/implementation/`、`reviews/*-round<N>.md` | 不因為過時就改寫內容；被取代時照 [specs/README.md](specs/README.md)「規格和目前系統的關係」只改狀態。之後的審查結果在 PR 留言，不再新增紀錄檔。沒有持續參考價值時可以刪除：保留下來的程式、測試（包括用 AC 編號對應規格的測試）、文件、ADR 與 open issue 都沒有引用它。刪除在 PR 描述列出檔案與理由，由開發者決定；刪掉的內容從 git 歷史找 |
-| 持續更新（目前狀態） | `api.md`、`architecture.md`、`architecture.drawio`、`issues.md`、`glossary.md` | 和程式碼、流程保持一致，改動時在同一個 PR 更新（時機見上表）。不記歷史，歷史看 git、規格與 ADR |
-| 暫存（不 commit） | 草稿資料夾（`.drafts/`；`<功能>-` 開頭的暫存檔，種類與檔名見 `.claude/skills/feature/references/resume.md` 的暫存檔表） | 只放當下的開發需要的內容，不會進 git。核准後由誰把哪個暫存檔存成正式文件見 `implement-and-review`「Commit 責任」，審查結果怎麼貼成 PR 留言見同一個檔案「審查留言」；回報前的確認與刪除見 `/feature`「清理暫存」 |
-| 選擇性保存（實驗） | `experiments/` | README 寫實驗目的、指標與結論，TEMPLATE 是紀錄格式，`records/` 保留有參考價值的紀錄。流程的版本用紀錄裡的「流程版本」（commit）對應，不另外備份每一版的 skill。既有紀錄不自動刪除，也不為了符合新規則修改；要刪除時先寫出它沒有參考價值的理由，由開發者決定 |
-
-暫存的取消與暫停（`/feature`「取消」、`feature/references/resume.md`）：
-
-- **取消**：核准前取消時這次確定的術語怎麼處理，見 `/feature`「取消」。
-- **暫停與接續**：暫停、接續，以及草稿資料夾裡這次的暫存檔遺失時以暫存檔為單位的恢復，見 `feature/references/resume.md`。
+| 目前狀態 | `api.md`、`architecture.md`、`architecture.drawio`、`glossary.md`、`issues.md` | 和程式碼保持一致，在同一個 PR 更新 |
+| 核准時的紀錄 | `specs/`、`decisions/` | 合併後不跟著程式更新，目前的行為以程式碼和上一列的文件為準。被新的規格或 ADR 推翻時，只改「狀態」那一行。沒有程式、測試、文件或 open issue 引用時可以刪除，在 PR 描述列出檔案與理由，由開發者決定 |
+| 暫存（不進 git） | 草稿資料夾 `.drafts/` | 只放這次開發用的暫存檔，清單見 `.claude/skills/feature/references/resume.md` |
 
 ## 術語表
 
-`docs/glossary.md` 記錄這個專案的產品用詞：使用者看得到的概念用哪個名稱、指的是什麼。
+`docs/glossary.md` 只收產品用詞：使用者看得到的概念用哪個名稱、指的是什麼（例如「主任務」「子任務」）。不寫實作細節；行為與驗收條件寫在規格。什麼時候算術語確定，見 `.claude/skills/clarify-requirements/SKILL.md`「術語」。
 
-- 位置：`docs/glossary.md`。第一個術語合併時由 `feature-implementer` 建立，不預先填寫。
-- 只收產品領域、使用者看得到的概念（例如「主任務」「子任務」「階段任務」）。
-- 流程用語（skill、agent 與 `docs/` 的流程文件用到的詞）收在本節最後的「流程用語」小節，不寫進 `docs/glossary.md`。
-- 不寫實作細節，不當規格用：行為與驗收條件寫在規格。
-- 什麼時候算術語確定、核准前後怎麼寫與交付，見 `.claude/skills/clarify-requirements/SKILL.md`「術語」。
-
-格式（繁體中文）：檔頭是標題與一兩句說明；每個術語一段：粗體名稱、1–2 句定義（寫它是什麼，不寫它做什麼）、`_避免_：` 列出同一個概念不採用的說法；術語自然形成群組時用小標題分組。
+格式：每個術語一段，粗體名稱、1–2 句定義（寫它是什麼，不寫它做什麼）、`_避免_：` 列出同一個概念不採用的說法。術語自然形成群組時用小標題分組。
 
 ```markdown
-# 術語表
-
-這個專案的產品用詞：使用者看得到的概念用哪個名稱、指的是什麼。
-
-## <群組名稱（自然形成群組時才加）>
-
 **<術語>**：
 <1–2 句定義：它是什麼>
 _避免_：<不採用的說法>、<不採用的說法>
@@ -55,60 +35,44 @@ _避免_：<不採用的說法>、<不採用的說法>
 
 ### 流程用語
 
-skill（主 session 照著做的流程說明，在 `.claude/skills/`）、agent（主 session 派去做單一工作的另一個 Claude，在 `.claude/agents/`）與 `docs/` 底下的 README 用到的詞。格式和上面的術語表相同。
+skill（`.claude/skills/`，主 session 照著做的流程）、agent（`.claude/agents/`，主 session 派去做單一工作的另一個 Claude）與 `docs/` 的說明文件用到的詞：
 
-**等級**（一般／高風險／文字修正）：
-依變更碰到什麼分成的三種處理深度，各自對應規格要寫多細、要審查幾次。
+**主 session**：
+和開發者對話、指派其他 agent 的那個 Claude。
+
+**等級**（高風險／一般／文字修正）：
+依變更碰到什麼分成的三種處理深度，決定規格寫多細、審查做幾次。
 
 **快速路徑**：
-一般等級裡，需求清楚、沒有要開發者決定的事、不碰高風險範圍的改動走的較短流程：短版規格寫在 PR 描述，不做規格審查。
-_避免_：輕量
+一般等級裡需求清楚、沒有要開發者決定的事的改動：短版規格寫在 PR 描述，不做規格審查。
 
-**阻擋／不阻擋**：
-阻擋：這個問題要先處理完（或由開發者決定另開 issue）才能往下走；規格審查是指核准前，實作審查是指交給開發者決定合併前。不阻擋：不用先處理。
+**草稿資料夾**：
+repo 根目錄的 `.drafts/`，放核准前的草稿與開發中的暫存檔，不進 git。
 
-**發現**：
-審查找到的一個問題或建議。
+**決策樹**：
+把要問開發者的問題，依「哪一題要先回答」排出的順序。
 
 **已確認／待問**：
 已確認：開發者已經回答的決定。待問：還沒問的問題。
 
 **交付清單**：
-交給 `feature-implementer` 的檔案與要做的事。
+交給 `feature-implementer` 放進 repo 的規格、ADR、術語表，以及各自在草稿資料夾的來源。
 
-**主 session**：
-和開發者對話、指派其他 agent 的那個 Claude。
+**發現**：
+審查找到的一個問題或建議。
 
-**草稿資料夾**：
-repo 根目錄的 `.drafts/`，放核准前的草稿與開發中的暫存檔，不會進 git。
-_避免_：scratchpad
+**阻擋／不阻擋**：
+阻擋：要先處理完（或開發者決定另開 issue）才能往下走；規格審查是指核准前，實作審查是指交給開發者決定合併前。不阻擋：不用先處理。
 
 **已接受的風險**：
-確定不處理、之後審查也不再提出的風險。
-
-**決策樹**：
-把問題依「哪一題要先回答」排出的順序。
+確定不處理、之後的審查也不再提出的風險。
 
 **不變條件**：
 只看畫面驗不出來，但一定要守住的系統狀態。
 
 **advisory**：
-GitHub 上不公開的漏洞報告。
+GitHub 上不公開的漏洞報告（private security advisory）。
 
 ## 備註
 
-- 術語表的格式改寫自 [mattpocock/skills](https://github.com/mattpocock/skills) 的 `domain-modeling`（`GLOSSARY-FORMAT`，commit `4ae2317`，MIT 授權）。
-- 讀舊的規格、審查紀錄、ADR 與實驗紀錄時，審查問題的英文舊名稱用下表對照（現在改用標籤加阻擋，見 `reviews/README.md`「分類」）：
-
-| 英文舊名稱 | 意思 |
-|---|---|
-| Factual Error | 規格對現有系統的描述和程式不符 |
-| Specification Defect | 規格內容互相矛盾或沒有依據 |
-| Missing Acceptance Criteria（Missing AC） | 規格沒寫某個情境該怎麼做 |
-| Implementation Defect | 程式沒照規格做 |
-| Test Gap | 測試抓不到錯的程式 |
-| Improvement Suggestion | 沒有錯，但可以更好 |
-| Critical | 會壞資料、有安全問題，或主要功能不能用 |
-| Major | 一般操作就會遇到的錯 |
-| Minor | 影響小的問題 |
-| Info | 不影響功能，只供參考 |
+術語表的格式改寫自 [mattpocock/skills](https://github.com/mattpocock/skills) 的 `domain-modeling`（`GLOSSARY-FORMAT`，commit `4ae2317`，MIT 授權）。

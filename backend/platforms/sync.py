@@ -13,7 +13,7 @@ class NonRetryableError(Exception):
     """
     重試也沒用的失敗，不重試直接退回舊資料；沒有舊資料時 router 依 error_code 回錯誤。
 
-    重試和原因分開判斷：error_code 是原因（ADR 0011），只有 REAUTH_REQUIRED 算憑證失效
+    重試和原因分開判斷：error_code 是原因（ADR 0002），只有 REAUTH_REQUIRED 算憑證失效
     （有舊資料時設 X-Auth-Error）。message 可能帶第三方回應原文，只記 log；detail 會回給前端。
     headers 是要轉送給呼叫者的 header（例如限流的 Retry-After）。
     """
@@ -86,7 +86,7 @@ async def fetch_with_retry(
 
 
 def fetch_error_code(exc: Exception) -> str:
-    """抓取失敗的原因（ADR 0011 的 error_code），記成同步結果，也決定沒有舊資料時回哪種錯誤。"""
+    """抓取失敗的原因（ADR 0002 的 error_code），記成同步結果，也決定沒有舊資料時回哪種錯誤。"""
     if isinstance(exc, (NonRetryableError, UpstreamError)):
         return exc.error_code
     if isinstance(exc, httpx.TimeoutException):

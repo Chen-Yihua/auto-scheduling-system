@@ -20,7 +20,7 @@ frontend-coverage.txt
 
 /scripts
 
-# /feature、/issue 核准前的草稿（docs/decisions/0014-drafts-folder.md）
+# /feature、/issue 核准前的草稿（草稿資料夾，不進 git）
 /.drafts/
 
 # 讓 Claude Code 用 Playwright MCP 操作瀏覽器的本機設定：

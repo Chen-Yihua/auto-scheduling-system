@@ -74,22 +74,28 @@ jobs:
 
   # 跟 frontend-test 分開一個 job：這裡會真的 build 一次 Nuxt app、灌一次瀏覽器、
   # 開一個真的（headless）瀏覽器去操作頁面，比一般的 vitest 單元測試慢很多。
-  # 登入後的情境需要一組真的 Clerk 測試帳密（E2E_CLERK_TEST_EMAIL/PASSWORD）；
-  # fork 出去的 PR 拿不到 repo 的 secrets，這種情況下那個測試會自動 skip，
-  # 不影響這個 job 本身通過。
+  # 前端與後端由 Playwright 在 job 裡啟動（playwright.config.ts），MongoDB 用下面的 service container；
+  # 不連 Cloud Run。後端也會影響這個 job，所以前端或後端有改動時都執行。
+  # 沒有 Clerk 金鑰時（fork 出去的 PR 拿不到 repo 的 secrets）整個 E2E 只執行一個標示跳過的測試，job 照樣通過；
+  # 有金鑰但沒有 E2E_CLERK_TEST_EMAIL 時，登入與登入後的測試跳過，訪客測試照常執行。
+  # 這個 job 不上傳 trace、截圖、影片與報告：repo 與 CI log 都是公開的。
   frontend-e2e-test:
     needs: changes
     # 不用預設的 success()：changes 失敗時測試會被跳過，跳過又算通過，等於沒跑測試就能合併
-    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.frontend == 'true') }}
-    # 釘 24.04：ubuntu-latest 已換成 26.04，Playwright 1.52 不支援，裝不了瀏覽器
-    runs-on: ubuntu-24.04
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.frontend == 'true' || needs.changes.outputs.backend == 'true') }}
+    runs-on: ubuntu-latest
     # 不設上限時卡住要等 GitHub 預設的 6 小時才會停；正常整個 job 約 10 分鐘
     timeout-minutes: 30
     defaults:
       run:
         working-directory: frontend
+    # 用 27018：跟 playwright.config.ts 的 E2E_MONGO_PORT 一致
+    services:
+      mongodb:
+        image: mongo:7
+        ports:
+          - 27018:27017
     env:
-      NUXT_PUBLIC_API_BASE_URL: ${{ secrets.NUXT_PUBLIC_API_BASE_URL }}
       NUXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NUXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
       NUXT_CLERK_SECRET_KEY: ${{ secrets.NUXT_CLERK_SECRET_KEY }}
       E2E_CLERK_TEST_EMAIL: ${{ secrets.E2E_CLERK_TEST_EMAIL }}
@@ -102,16 +108,17 @@ jobs:
           cache: npm
           # setup-node 不吃 working-directory，lock 檔不在 repo 根目錄要明確指定
           cache-dependency-path: frontend/package-lock.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements.txt
+        working-directory: backend
       - run: npm ci
       - run: npm run prepare:ci
-      # 用 `npx playwright`（devDependency 裡釘死的版本，跟 playwright-core 對齊）
-      # 而不是讓 npx 去抓 npm 上最新版的 playwright CLI——版本一旦對不上
-      # playwright-core 實際在用的版本，抓下來的瀏覽器 revision 資料夾會跟
-      # 執行時去找的路徑對不起來，導致 "Executable doesn't exist"。
-      # chromium-headless-shell 也要明確裝，@nuxt/test-utils 在 headless
-      # 模式下預設會找這個變體，不會因為裝了 chromium 就自動連它一起裝。
+      # 用 `npx playwright`（devDependency 裡的版本）而不是讓 npx 去抓 npm 上最新版的 playwright CLI，
+      # 版本對不上時，抓下來的瀏覽器 revision 資料夾會跟執行時去找的路徑對不起來，導致 "Executable doesn't exist"。
       # 正常 6～9 分鐘；卡住時不會自己失敗，曾卡過 2 小時以上
-      - run: npx playwright install --with-deps chromium chromium-headless-shell
+      - run: npx playwright install --with-deps chromium
         timeout-minutes: 20
       - run: npm run test:e2e
 

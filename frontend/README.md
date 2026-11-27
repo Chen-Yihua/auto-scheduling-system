@@ -44,7 +44,7 @@ npm run dev
 
 其他常用指令：`npm run lint`（ESLint）、`npm run format`（Prettier）、`npm run build`（正式建置）。
 
-> ⚠️ **開著 `npm run dev` 的時候，不要跑 `npm run build` 或 `npm run test:e2e`**：它們都會改寫 `.nuxt` 資料夾，開發伺服器會因此壞掉（錯誤訊息像 `Package import specifier "#internal/nuxt/paths" is not defined`）。壞掉時停掉開發伺服器，刪掉 `.nuxt` 和 `.output`，重新 `npm run dev` 即可。
+> ⚠️ **開著 `npm run dev` 的時候，不要跑 `npm run build`**：它會改寫 `.nuxt` 資料夾，開發伺服器會因此壞掉（錯誤訊息像 `Package import specifier "#internal/nuxt/paths" is not defined`）。壞掉時停掉開發伺服器，刪掉 `.nuxt` 和 `.output`，重新 `npm run dev` 即可。`npm run test:e2e` 的 build 放在 `.nuxt-e2e`、`.output-e2e`，開著 `npm run dev` 也能跑。
 
 ## 測試
 
@@ -54,21 +54,29 @@ npm run test:e2e    # 真實瀏覽器 E2E 測試（Playwright），CI 上獨立�
 npm run coverage    # 單元測試 + 覆蓋率報表
 ```
 
-兩種測試環境不一樣，分開設定檔（`vitest.config.ts` / `vitest.e2e.config.ts`），不能混著跑：
+兩種測試環境不一樣，分開執行（`vitest.config.ts` / `playwright.config.ts`），不能混著跑：
 
-- **單元/元件測試**（`tests/components/`、`tests/composables/`、`tests/utils/`、`tests/pages/`、`tests/server/`）：jsdom 環境，Nuxt 的 auto-import（`useAuth`、`useToast` 等）用 `tests/__mocks__/` 和 `vi.stubGlobal` 手動模擬，不會真的打 API 或開瀏覽器。
-- **E2E 測試**（`tests/e2e/*.e2e.ts`）：用 `@nuxt/test-utils/e2e` 真的 build + 啟動一次 Nuxt app，再用 Playwright 開一個真的 headless 瀏覽器操作頁面。
-  - **需要先安裝瀏覽器**：`npx playwright install chromium chromium-headless-shell`
-  - **需要 Clerk 金鑰**（放在 `.env`，見上面「環境變數」），而且要用開發用（`pk_test_` / `sk_test_`）的一對，不能用正式環境的。
-  - **在 WSL1 跑不起來**（測試工具用來確認伺服器啟動的埠號偵測，跟 WSL1 不相容）；Linux、macOS、WSL2 可以。
-  - 訪客未登入的情境不需要額外設定。登入後的情境需要一個真的 Clerk 測試使用者，用環境變數提供它的 **email**（不需要密碼，測試會請 Clerk 發一次性的登入 ticket）：
+- **單元/元件測試**（`tests/components/`、`tests/composables/`、`tests/utils/`、`tests/pages/`、`tests/server/`、`tests/e2e-support/`）：jsdom 環境，Nuxt 的 auto-import（`useAuth`、`useToast` 等）用 `tests/__mocks__/` 和 `vi.stubGlobal` 手動模擬，不會真的打 API 或開瀏覽器。
+- **E2E 測試**（`tests/e2e/`）：用 `@playwright/test` 執行。Playwright 自己 build 並啟動前端（port 3100）、後端（port 8001）與 MongoDB（port 27018），再開一個真的 headless 瀏覽器操作頁面；不連開發用的後端、資料庫、Redis，也不連 Cloud Run，所以開著 `npm run dev` 也能跑。
+  - **本機執行步驟**：
+    1. `npm install`，再 `npx playwright install chromium` 安裝瀏覽器。
+    2. 後端依賴已安裝（repo 根目錄的 `.venv`，見 [backend/README.md](../backend/README.md)）；後端用 `.venv/bin/python`，沒有 `.venv` 時用 `python`，也可以用環境變數 `E2E_PYTHON` 指定。
+    3. 第一次執行時，`mongodb-memory-server` 會下載 MongoDB 執行檔，不需要自己裝 Docker 或 MongoDB。
+    4. 在 `.env` 放 Clerk 金鑰（見上面「環境變數」），而且要用開發用（`pk_test_` / `sk_test_`）的一對，不能用正式環境的。
+    5. `npm run test:e2e`。
+  - E2E 的資料庫是 `auto_scheduling_e2e`，setup 執行時清空；沒有 `E2E_CLERK_TEST_EMAIL` 時整個 setup 跳過，資料庫不清空；後端的 `REDIS_URL` 一律不設定，用記憶體。
+  - **在 WSL1 沒有驗證過**；Linux、macOS、WSL2 可以。
+  - 沒有 Clerk 金鑰時，不啟動任何伺服器，整個 E2E 只有一個標示跳過的測試，結束碼 0。
+  - 訪客未登入的情境只需要 Clerk 金鑰。登入後的情境需要一個真的 Clerk 測試使用者，用環境變數提供它的 **email**（不需要密碼，測試會請 Clerk 發一次性的登入 ticket）：
 
     ```env
     E2E_CLERK_TEST_EMAIL=
     ```
 
-    這個使用者必須存在於上面那組 Clerk 金鑰所屬的專案裡。沒有設定時，登入後的測試會自動跳過（不會讓整個測試失敗）。CI 上這個變數和 Clerk 金鑰都存在 GitHub repo 的 Actions secrets 裡。
-  - 印進 CI log 的錯誤與 `console` 輸出由 `tests/e2e/support/sanitizingReporter.ts` 清理，改 `vitest.e2e.config.ts` 的 `reporters` 時要保留它排第一個。
+    這個使用者必須存在於上面那組 Clerk 金鑰所屬的專案裡。沒有設定時，登入與登入後的測試會自動跳過（不會讓整個測試失敗）。CI 上這個變數和 Clerk 金鑰都存在 GitHub repo 的 Actions secrets 裡。
+  - 登入狀態存在 `.auth-e2e/storageState.json`（不進版控）。
+  - 本機測試失敗時，`test-results/` 會留下 trace（用 `npx playwright show-trace <trace.zip>` 開）；CI 不產生 trace、截圖、影片與報告，也不印伺服器的輸出：repo 與 CI log 都是公開的。
+  - 機密只放在 GitHub secrets 與 `.env`。`tests/e2e/` 的程式自己印出的內容只有 `createDiagnosticLogger` 清理過的登入診斷。
 
 ## 專案結構說明
 
@@ -105,7 +113,7 @@ npm run coverage    # 單元測試 + 覆蓋率報表
 ├── public/                    # 靜態資源（favicon、robots.txt）
 ├── nuxt.config.ts             # Nuxt 設定檔（包含 module、runtimeConfig 設定）
 ├── vitest.config.ts           # 單元/元件測試設定
-├── vitest.e2e.config.ts       # E2E 測試設定（獨立於上面那個，環境不同）
+├── playwright.config.ts       # E2E 測試設定（Playwright，伺服器、專案、reporter）
 ├── eslint.config.mjs          # ESLint 設定
 └── tsconfig.json              # TypeScript 設定
 ```

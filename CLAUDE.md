@@ -97,7 +97,7 @@ cd frontend && npm run lint && npm run typecheck && npm run test
 
 開發者通常同時開著自己的 `npm run dev`，以及正在編輯同一批檔案的 VS Code。
 
-- dev server 可能開著時，不要跑 `npm run build`、`nuxi build`、`npm run test:e2e`，也不要刪 `.nuxt` / `.output`：它們會改寫 `.nuxt`，弄壞 dev server。`eslint`、`npm run typecheck`、`vitest` 可以跑。
+- dev server 可能開著時，不要跑 `npm run build`、`nuxi build`，也不要刪 `.nuxt` / `.output`：它們會改寫 `.nuxt`，弄壞 dev server。`eslint`、`npm run typecheck`、`vitest` 可以跑。
 - 要起臨時 dev server 前，先用 `ps` 確認有沒有 `nuxt dev` 在跑；有的話不要再起一個共用同一個 `.nuxt` 的。
 - 停掉臨時 server 時只砍自己起的那個 PID，不要用 `pkill` 或對 `nuxi`、`node` 這類通用名稱 grep 再 kill。
 - 改了開發者在編輯器開著的檔案，之後要從磁碟重讀，確認修改沒被編輯器存檔蓋掉，並提醒開發者重新載入 buffer。

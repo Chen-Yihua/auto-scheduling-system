@@ -4,11 +4,10 @@ import {
   signInWithRetry,
   createSignInDiagnostics,
   createDiagnosticLogger,
-  sanitizeError,
   sanitizeForLog,
   toSafeNavigationUrl,
-  withSanitizedErrors,
 } from '../e2e/support/signInWithRetry'
+import { e2eSecrets } from '../e2e/support/e2eSecrets'
 
 const EMAIL = 'e2e-user@example.com'
 const NAVIGATION_ERROR = new Error(
@@ -32,13 +31,6 @@ function setup(
       secrets: [EMAIL],
     })
   return { lines, waitForReady, isSignedIn, onError, run }
-}
-
-function expectOriginalMessageWithEmailRedacted(error: unknown, original: string) {
-  expect(error).toBeInstanceOf(Error)
-  expect((error as Error).message).toBe(original.split(EMAIL).join('[redacted]'))
-  expect((error as Error).message).toContain('[redacted]')
-  expect((error as Error).message).not.toContain(EMAIL)
 }
 
 describe('signInWithRetry', () => {
@@ -107,32 +99,30 @@ describe('signInWithRetry', () => {
     expect(markers[1]).toContain('2/2')
   })
 
-  it('AC2：連續 3 次都遇到導覽（重試 2 次仍失敗）→ 測試失敗，錯誤訊息保留原本的內容，經外層清理後 email 遮成 [redacted]', async () => {
+  it('AC2：連續 3 次都遇到導覽（重試 2 次仍失敗）→ 照原本的錯誤失敗', async () => {
     const navigationError = new Error(NAVIGATION_ERROR.message)
     const signIn = vi.fn().mockRejectedValue(navigationError)
     const { lines, onError, run } = setup(signIn)
 
-    const error = await withSanitizedErrors([EMAIL], run)().catch((error: unknown) => error)
+    const error = await run().catch((error: unknown) => error)
 
     expect(error).toBe(navigationError)
-    expectOriginalMessageWithEmailRedacted(error, NAVIGATION_ERROR.message)
 
     expect(signIn).toHaveBeenCalledTimes(3)
     expect(onError).toHaveBeenCalledTimes(3)
     expect(lines.filter((line) => line.startsWith('[e2e][signin-retry]'))).toHaveLength(2)
   })
 
-  it('AC1、AC2：重新載入後的等待一直遇到導覽，重試 2 次用完 → 測試失敗，錯誤訊息保留原本的內容，經外層清理後 email 遮成 [redacted]', async () => {
+  it('AC1、AC2：重新載入後的等待一直遇到導覽，重試 2 次用完 → 照原本的錯誤失敗', async () => {
     const navigationError = new Error(NAVIGATION_ERROR.message)
     const signIn = vi.fn().mockRejectedValueOnce(new Error(NAVIGATION_ERROR.message))
     const waitForReady = vi.fn().mockRejectedValue(navigationError)
     const isSignedIn = vi.fn(async () => true)
     const { lines, onError, run } = setup(signIn, isSignedIn, waitForReady)
 
-    const error = await withSanitizedErrors([EMAIL], run)().catch((error: unknown) => error)
+    const error = await run().catch((error: unknown) => error)
 
     expect(error).toBe(navigationError)
-    expectOriginalMessageWithEmailRedacted(error, NAVIGATION_ERROR.message)
 
     expect(signIn).toHaveBeenCalledTimes(1)
     expect(waitForReady).toHaveBeenCalledTimes(2)
@@ -141,7 +131,7 @@ describe('signInWithRetry', () => {
     expect(lines.filter((line) => line.startsWith('[e2e][signin-retry]'))).toHaveLength(2)
   })
 
-  it('AC2：重新載入後的等待或登入狀態檢查遇到其他錯誤 → 不重試，照原本的錯誤失敗，經外層清理後 email 遮成 [redacted]', async () => {
+  it('AC2：重新載入後的等待或登入狀態檢查遇到其他錯誤 → 不重試，照原本的錯誤失敗', async () => {
     for (const failingStep of ['waitForReady', 'isSignedIn'] as const) {
       const otherMessage = `Timeout 30000ms exceeded while signing in ${EMAIL}.`
       const otherError = new Error(otherMessage)
@@ -151,10 +141,9 @@ describe('signInWithRetry', () => {
       const isSignedIn = failingStep === 'isSignedIn' ? vi.fn().mockRejectedValue(otherError) : vi.fn(async () => true)
       const { lines, onError, run } = setup(signIn, isSignedIn, waitForReady)
 
-      const error = await withSanitizedErrors([EMAIL], run)().catch((error: unknown) => error)
+      const error = await run().catch((error: unknown) => error)
 
       expect(error, failingStep).toBe(otherError)
-      expectOriginalMessageWithEmailRedacted(error, otherMessage)
 
       expect(signIn, failingStep).toHaveBeenCalledTimes(1)
       expect(waitForReady, failingStep).toHaveBeenCalledTimes(1)
@@ -166,16 +155,15 @@ describe('signInWithRetry', () => {
     }
   })
 
-  it('AC2：其他登入錯誤（例如找不到使用者）不重試，照原本的錯誤失敗，經外層清理後 email 遮成 [redacted]', async () => {
+  it('AC2：其他登入錯誤（例如找不到使用者）不重試，照原本的錯誤失敗', async () => {
     const otherMessage = `Failed to sign in with email ${EMAIL}: No user found with email: ${EMAIL}`
     const otherError = new Error(otherMessage)
     const signIn = vi.fn().mockRejectedValue(otherError)
     const { lines, waitForReady, onError, run } = setup(signIn)
 
-    const error = await withSanitizedErrors([EMAIL], run)().catch((error: unknown) => error)
+    const error = await run().catch((error: unknown) => error)
 
     expect(error).toBe(otherError)
-    expectOriginalMessageWithEmailRedacted(error, otherMessage)
 
     expect(signIn).toHaveBeenCalledTimes(1)
     expect(onError).toHaveBeenCalledTimes(1)
@@ -351,52 +339,15 @@ describe('createDiagnosticLogger（#46）', () => {
   })
 })
 
-describe('withSanitizedErrors（#46）', () => {
-  it('#46 AC2：包住的函式丟出帶 query 與 email 的錯誤時，reject 出來的是清理過的同一個錯誤', async () => {
-    const error = new TypeError(`GET https://h/a?t=1 ${EMAIL}`)
-
-    const rejected = await withSanitizedErrors([EMAIL], async () => {
-      throw error
-    })().catch((reason: unknown) => reason)
-
-    expect(rejected).toBe(error)
-    expect(error.message).toBe('GET h/a [redacted]')
-    expect(error.stack).not.toContain('t=1')
-    expect(error.stack).not.toContain(EMAIL)
-  })
-})
-
-describe('sanitizeError（#46）', () => {
-  it('#46 AC2：清理 message、stack 與兩層 cause，回傳同一個物件、類型不變', () => {
-    const inner = new Error(`inner /v1/c?t=3 ${EMAIL}`)
-    const middle = new Error('middle https://h/b?t=2', { cause: inner })
-    const error = new TypeError(`outer /v1/a?t=1 ${EMAIL}`, { cause: middle })
-    error.stack = `TypeError: outer /v1/a?t=1 ${EMAIL}\n    at f (http://127.0.0.1:3000/_nuxt/a.js?v=9:1:2)`
-
-    const result = sanitizeError(error, [EMAIL])
-
-    expect(result).toBe(error)
-    expect(result).toBeInstanceOf(TypeError)
-    expect(result.message).toBe('outer /v1/a [redacted]')
-    expect(result.stack).toBe('TypeError: outer /v1/a [redacted]\n    at f (127.0.0.1:3000/_nuxt/a.js)')
-    expect(middle.message).toBe('middle h/b')
-    expect(middle.cause).toBe(inner)
-    expect(inner.message).toBe('inner /v1/c [redacted]')
-  })
-
-  it('#46 AC2：cause 是字串時也清理', () => {
-    const error = new Error('outer', { cause: `GET /v1/a?t=1 ${EMAIL}` })
-
-    sanitizeError(error, [EMAIL])
-
-    const cause = error.cause instanceof Error ? error.cause.message : String(error.cause)
-    expect(cause).toBe('GET /v1/a [redacted]')
-  })
-
-  it('#46 AC2：不是 Error 的值轉成字串清理後包成 Error', () => {
-    const result = sanitizeError(`failed /v1/a?t=1 ${EMAIL}`, [EMAIL])
-
-    expect(result).toBeInstanceOf(Error)
-    expect(result.message).toBe('failed /v1/a [redacted]')
+describe('e2eSecrets', () => {
+  it('#50 AC16：清理清單取自三個環境變數，沒設定或是空字串的不放進清單', () => {
+    expect(
+      e2eSecrets({
+        E2E_CLERK_TEST_EMAIL: 'a@example.com',
+        NUXT_CLERK_SECRET_KEY: 'sk_test_x',
+        E2E_CLERK_TEST_PASSWORD: 'p',
+      }),
+    ).toEqual(['a@example.com', 'sk_test_x', 'p'])
+    expect(e2eSecrets({ E2E_CLERK_TEST_EMAIL: 'a@example.com', NUXT_CLERK_SECRET_KEY: '' })).toEqual(['a@example.com'])
   })
 })

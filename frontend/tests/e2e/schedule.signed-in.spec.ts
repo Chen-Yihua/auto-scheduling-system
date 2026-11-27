@@ -78,7 +78,8 @@ test('排程頁照步驟走完，顯示任務排在什麼時間，而且沒有�
 
   await test.step('AC12：流程 b 開始後，假的 Google 沒有收到新增事件的請求', async () => {
     const since = (await readFakeGoogleRequests()).slice(requestsBefore)
-    expect(since.some((r) => r.path.endsWith('/freeBusy')), '有向假的 Google 查空檔').toBe(true)
+    // 不看 freeBusy：後端把空檔結果暫存 60 秒，UI 模式短時間內重跑時不會再打；calendarList 沒有暫存，排程頁打開時每次都打
+    expect(since.some((r) => r.path === '/calendar/v3/users/me/calendarList'), '有向假的 Google 讀行事曆列表').toBe(true)
     expect(since.filter((r) => r.method === 'POST' && r.path.endsWith('/events'))).toEqual([])
   })
 })

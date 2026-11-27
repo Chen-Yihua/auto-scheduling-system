@@ -31,6 +31,8 @@ export function seedGoogleToken(env: Env, clerkId: string): void {
   const { command, args, options } = buildSeedCommand(env, clerkId)
   const result = spawnSync(command, args, options)
   if (result.status !== 0) {
-    throw new Error(`寫入假的 Google 連線資料失敗（結束碼 ${result.status}）`)
+    // 子行程沒啟動成功時 status 是 null，原因（例如 ENOENT）在 error.code
+    const reason = (result.error as NodeJS.ErrnoException | undefined)?.code
+    throw new Error(`寫入假的 Google 連線資料失敗（結束碼 ${result.status}${reason ? `，${reason}` : ''}）`)
   }
 }

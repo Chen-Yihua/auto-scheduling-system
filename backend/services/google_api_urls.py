@@ -6,7 +6,7 @@ GOOGLE_OAUTH_API = "https://oauth2.googleapis.com"
 
 
 def _base_url(default: str) -> str:
-    # 每次呼叫才讀環境變數：只給 E2E 指向假的 Google 伺服器；正式環境不設定，沒設定就連真的 Google
+    # 只給 E2E 指向假的 Google 伺服器，正式環境不設定。每次呼叫才讀：unit 測試用 monkeypatch 在 import 之後才設定它
     override = os.getenv("GOOGLE_API_BASE_URL")
     return override.rstrip("/") if override else default
 

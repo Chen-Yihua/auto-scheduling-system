@@ -44,4 +44,10 @@ def test_AC4_沒有明確傳入_MONGO_URI_時結束且不寫入(monkeypatch):
     monkeypatch.delenv("MONGO_URI", raising=False)
     monkeypatch.setenv("SECRET_ENCRYPTION_KEY", Fernet.generate_key().decode())
 
+    async def boom(*a, **k):
+        raise AssertionError("不應該連線或寫入")
+
+    monkeypatch.setattr(database, "open_database", boom)
+    monkeypatch.setattr(google_tokens, "save_google_calendar_token", boom)
+
     assert module.main(["script", "user_1"]) == 1

@@ -1,6 +1,6 @@
 // E2E 用的假 Google 日曆伺服器：回應後端用到的 calendarList、FreeBusy、事件的新增／讀取／刪除、OAuth token，
 // 並記錄收到的請求，測試從 GET /__e2e/requests 讀回。後端用 GOOGLE_API_BASE_URL 指向它。
-// 不用 console 輸出：伺服器的輸出一律由 playwright.config 導到 e2e-logs/google.log。
+// 不呼叫 console：E2E 的程式只有 createDiagnosticLogger 可以呼叫（e2e-playwright AC15），啟動訊息改寫 stdout。
 import { createServer } from 'node:http'
 
 const port = Number(process.argv[2])

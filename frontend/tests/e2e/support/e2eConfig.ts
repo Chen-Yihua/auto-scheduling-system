@@ -47,6 +47,8 @@ export function buildConfig(env: Env) {
             command: `node tests/e2e/support/startMongo.mjs ${mongoPort}`,
             port: mongoPort,
             timeout: 180_000,
+            // 預設結束時送 SIGKILL，startMongo.mjs 的 SIGTERM 處理器不會執行，記憶體資料庫與暫存資料夾不會清掉
+            gracefulShutdown: { signal: 'SIGTERM', timeout: 10_000 } as const,
             ...output,
           },
         ]),

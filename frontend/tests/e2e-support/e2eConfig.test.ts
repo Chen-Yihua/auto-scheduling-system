@@ -31,11 +31,11 @@ describe('buildConfig：CI 與本機', () => {
     expect(workflow).not.toContain('upload-artifact')
   })
 
-  it('e2e-playwright 需求 18：GITHUB_ACTIONS=true 時 reporter 只有 list 與 github', () => {
+  it('e2e-playwright 完成前檢查 2：GITHUB_ACTIONS=true 時 reporter 只有 list 與 github', () => {
     expect(buildConfig({ ...KEYS, GITHUB_ACTIONS: 'true' }).reporter).toEqual([['list'], ['github']])
   })
 
-  it('e2e-playwright 需求 12：CI 不啟動 MongoDB（用 service container），本機啟動且排在後端之前', () => {
+  it('e2e-playwright AC8：CI 不啟動 MongoDB（用 service container），本機啟動且排在後端之前', () => {
     const commands = (env: Record<string, string>) =>
       (buildConfig({ ...KEYS, ...env }).webServer as { command: string }[]).map((server) => server.command)
 
@@ -54,7 +54,7 @@ describe('buildConfig：CI 與本機', () => {
 })
 
 describe('buildConfig：E2E 的環境', () => {
-  it('e2e-playwright AC8、AC10、AC11：伺服器不用開發環境的 port，後端只連 auto_scheduling_e2e、不連 Redis', () => {
+  it('e2e-playwright AC8、AC10：伺服器不用開發環境的 port，後端只連 auto_scheduling_e2e、不連 Redis', () => {
     const servers = buildConfig(KEYS).webServer as { command: string; port?: number; url?: string; env?: Record<string, string> }[]
     const backend = servers.find((server) => server.command.includes('uvicorn'))!
     const frontend = servers.find((server) => server.command.includes('nuxt build'))!
@@ -73,7 +73,7 @@ describe('buildConfig：E2E 的環境', () => {
     expect(frontend.env).toMatchObject({ NUXT_E2E: '1', NUXT_PUBLIC_API_BASE_URL: 'http://127.0.0.1:8001' })
   })
 
-  it('e2e-playwright AC4：登入後的專案依賴 setup，使用存下的登入狀態；訪客專案不依賴', () => {
+  it('e2e-playwright AC3：登入後的專案依賴 setup，使用存下的登入狀態；訪客專案不依賴', () => {
     const projects = buildConfig(KEYS).projects!
     const byName = Object.fromEntries(projects.map((project) => [project.name, project]))
 
@@ -93,6 +93,10 @@ describe('buildConfig：沒有 Clerk 金鑰', () => {
 
     expect(config.webServer).toBeUndefined()
     expect(config.projects).toHaveLength(1)
+    const testMatch = config.projects![0]!.testMatch as RegExp
+    expect(testMatch.test('noClerkKeys.ts')).toBe(true)
+    expect(testMatch.test('dashboard.guest.spec.ts')).toBe(false)
+    expect(testMatch.test('auth.setup.ts')).toBe(false)
     expect(NO_CLERK_KEYS_TITLE).toBe('沒有 Clerk 金鑰，跳過 E2E')
   })
 })

@@ -61,7 +61,7 @@ E2E 現在只驗證到「訪客畫面」與「登入成功」；前端打的後�
 10. E2E 的後端與 setup project 都只連獨立的資料庫 `auto_scheduling_e2e`，不碰開發用的資料庫。
 11. E2E 的後端不連 Redis，快取與 rate limit 用記憶體，不碰開發用的 Redis。
 12. MongoDB 在後端之前啟動：CI 用 GitHub Actions 的 service container（job 旁邊另外開的容器），本機由 Playwright 啟動，開發者不用自己先開 MongoDB。
-13. 每次執行 E2E，setup project 清空 `auto_scheduling_e2e` 的所有文件，保留後端建立的索引。
+13. setup project 執行時，清空 `auto_scheduling_e2e` 的所有文件，保留後端建立的索引。
 14. E2E 的後端不呼叫真的 Gemini：`GEMINI_API_KEY` 設成固定的假值，讓後端能啟動。
 15. setup project 建立測試使用者的 `users` 文件，跟一般使用者登入後的狀態一樣。
 
@@ -82,6 +82,7 @@ E2E 現在只驗證到「訪客畫面」與「登入成功」；前端打的後�
 ## 不做
 - 不處理：連開發者開著的 dev server 跑 E2E。dev server 打的是開發用後端與資料庫，測試資料會寫進開發資料。
 - 不處理：遮掉不是 repo 的程式主動印出的、執行時才產生的值：`@clerk/testing` 的警告、Playwright 錯誤訊息與 call log 裡的 testing token、dev browser token、session JWT、cookie。這些屬於開發環境的測試帳號，影響範圍與外流後的處理方式見背景「為什麼改成一般做法」。
+- 不處理：CI 結束時 GitHub 自動印出的 MongoDB service container log。裡面只有 E2E 資料庫的測試資料（例如連線紀錄、建立索引，以及超過 100 ms 的查詢內容），沒有真實使用者的資料。
 - 不處理：沒有 Clerk 金鑰時（fork 出去的 PR）跑任何 E2E。前端沒有公開金鑰時每個頁面都報錯，給假金鑰的行為沒有驗證過。
 - 不處理：任務管理與排程的使用者流程、假的 Google 日曆。在 `e2e-user-flows`（之後的 PR）。
 
@@ -135,7 +136,7 @@ E2E 現在只驗證到「訪客畫面」與「登入成功」；前端打的後�
 
 ### 3. setup project（`tests/e2e/auth.setup.ts`）
 - 清空 `auto_scheduling_e2e`：先確認連到的資料庫名稱是 `auto_scheduling_e2e`，不是就丟出錯誤、不刪任何文件（AC11）；再刪除每個 collection 的所有文件，保留索引（需求 13）。
-- 沒有 `E2E_CLERK_TEST_EMAIL` 時，登入相關的步驟標示跳過。
+- 沒有 `E2E_CLERK_TEST_EMAIL` 時，整個 setup project（包括清空資料庫）標示跳過。
 - 用 `clerk.signIn` 與 `signInWithRetry` 登入，診斷照現在的方式；存 `storageState`。
 - 用登入後的 token 呼叫 `POST /users/`，201 或 409 都視為已建立（標題列的 `ensureUserRecord` 可能已經建好）。
 
@@ -190,6 +191,7 @@ E2E 現在只驗證到「訪客畫面」與「登入成功」；前端打的後�
 ## 修改紀錄
 | 日期 | 修改 | 原因 | 確認者 |
 |---|---|---|---|
+| 2026-11-27 | 需求 13、實作計畫第 3 步改寫；「不做」新增 MongoDB service container log | 實作審查第 1 輪 #2：沒有 `E2E_CLERK_TEST_EMAIL` 時整個 setup（包括清空資料庫）跳過，原寫法和需求 6 第 2 條、AC7 不一致；#1：開發者決定接受 CI 印出 MongoDB log。沒有改 AC；檢查過 AC7、AC13、AC16 不用改 | 開發者 |
 
 ## 請你決定
 無

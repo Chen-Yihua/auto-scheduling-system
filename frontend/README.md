@@ -64,7 +64,7 @@ npm run coverage    # 單元測試 + 覆蓋率報表
     3. 第一次執行時，`mongodb-memory-server` 會下載 MongoDB 執行檔，不需要自己裝 Docker 或 MongoDB。
     4. 在 `.env` 放 Clerk 金鑰（見上面「環境變數」），而且要用開發用（`pk_test_` / `sk_test_`）的一對，不能用正式環境的。
     5. `npm run test:e2e`。
-  - E2E 的資料庫是 `auto_scheduling_e2e`，每次執行會清空；後端的 `REDIS_URL` 一律不設定，用記憶體。
+  - E2E 的資料庫是 `auto_scheduling_e2e`，setup 執行時清空；沒有 `E2E_CLERK_TEST_EMAIL` 時整個 setup 跳過，資料庫不清空；後端的 `REDIS_URL` 一律不設定，用記憶體。
   - **在 WSL1 沒有驗證過**；Linux、macOS、WSL2 可以。
   - 沒有 Clerk 金鑰時，不啟動任何伺服器，整個 E2E 只有一個標示跳過的測試，結束碼 0。
   - 訪客未登入的情境只需要 Clerk 金鑰。登入後的情境需要一個真的 Clerk 測試使用者，用環境變數提供它的 **email**（不需要密碼，測試會請 Clerk 發一次性的登入 ticket）：

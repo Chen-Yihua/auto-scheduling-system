@@ -1,4 +1,5 @@
 // setup project：清空 E2E 資料庫、登入一次、存下登入狀態給登入後的測試用，並建立測試使用者的 users 文件。
+// 沒有 E2E_CLERK_TEST_EMAIL 時整個 setup 跳過，資料庫也不清空。
 // 登入後的測試自己不登入，所以登入重試與診斷只在這裡。
 import { mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'

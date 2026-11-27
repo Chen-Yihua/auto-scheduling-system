@@ -4,7 +4,7 @@ import { MongoMemoryServer } from 'mongodb-memory-server'
 const port = Number(process.argv[2])
 const server = await MongoMemoryServer.create({ instance: { port, ip: '127.0.0.1' } })
 
-// Playwright 結束 webServer 時送 SIGTERM
+// e2eConfig.ts 的 gracefulShutdown 讓 Playwright 結束 webServer 時送 SIGTERM
 for (const signal of ['SIGINT', 'SIGTERM']) {
   process.on(signal, async () => {
     await server.stop()

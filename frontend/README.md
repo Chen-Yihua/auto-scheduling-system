@@ -64,12 +64,16 @@ npm run coverage    # 單元測試 + 覆蓋率報表
     3. 第一次執行時，`mongodb-memory-server` 會下載 MongoDB 執行檔，不需要自己裝 Docker 或 MongoDB。
     4. 在 `.env` 放 Clerk 金鑰（見上面「環境變數」），而且要用開發用（`pk_test_` / `sk_test_`）的一對，不能用正式環境的。
     5. `npm run test:e2e`。
-  - **UI 模式（反覆重跑更快）**：`npm run test:e2e:ui` 用 Playwright 的 UI 模式在瀏覽器打開（網址印在終端機，預設 `http://localhost:9400`）。UI 開著期間伺服器一直開著，在 UI 裡重跑測試不重新 build、不重新啟動伺服器；`npm run test:e2e` 發現 port 3100、8001、27018 已經有伺服器也會沿用。不會接到 `npm run dev` 與開發用後端。CI 不沿用。
-    1. 第一次打開時，在 UI 的 Projects 設定勾選 `setup`、`guest`、`signed-in` 三個。
-    2. 只勾 `signed-in` 時，`setup` 不會先跑，登入狀態可能是舊的或不存在。
-    3. 改了前端或後端程式後，在執行 `npm run test:e2e:ui` 的終端機按 Ctrl+C，再重新執行。
-    4. 只關瀏覽器分頁不會關伺服器；伺服器還用舊程式開著，`npm run test:e2e` 也會沿用它們。
-    5. 打開 UI、重新整理 UI 分頁，或 UI 開著時在另一個終端機執行 `npm run test:e2e`，都會清空 `test-results/`。要先看完上一次失敗的紀錄。
+  - **UI 模式**（Playwright 官方的圖形介面，開著期間可以反覆重跑測試）：`npm run test:e2e:ui`。
+    1. 指令會在瀏覽器打開 UI，網址印在終端機（`http://localhost:9400`）。
+    2. UI 開著期間伺服器一直開著，在 UI 裡重跑測試不重新 build、不重新啟動伺服器。
+    3. `npm run test:e2e` 發現 port 3100、8001、27018 已經有伺服器，也會沿用。
+    4. 只會沿用 E2E 自己的伺服器，不會接到 `npm run dev` 與開發用後端；CI 不沿用。
+    5. 第一次打開時，在 UI 的 Projects 設定勾選 `setup`、`guest`、`signed-in` 三個。
+    6. 只勾 `signed-in` 時，`setup` 不會先跑，登入狀態可能是舊的或不存在。
+    7. 改了前端或後端程式後，在執行 `npm run test:e2e:ui` 的終端機按 Ctrl+C，再重新執行。
+    8. 只關瀏覽器分頁不會關伺服器；伺服器還用舊程式開著，`npm run test:e2e` 也會沿用它們。
+    9. 打開 UI、重新整理 UI 分頁，或 UI 開著時在另一個終端機執行 `npm run test:e2e`，都會清空 `test-results/`，要先看完上一次失敗的紀錄。
   - **伺服器 log**：本機 MongoDB、後端、前端的輸出分別寫在 `e2e-logs/mongo.log`、`e2e-logs/backend.log`、`e2e-logs/frontend.log`（每次啟動時覆寫，不進版控）。
     1. `npm run test:e2e` 平常只顯示測試進度與結果。
     2. 某個伺服器的指令以非 0 結束碼結束時（例如啟動失敗），終端機會印出它的 log；UI 模式顯示在 UI 的 Output 面板。
@@ -86,7 +90,11 @@ npm run coverage    # 單元測試 + 覆蓋率報表
 
     這個使用者必須存在於上面那組 Clerk 金鑰所屬的專案裡。沒有設定時，登入與登入後的測試會自動跳過（不會讓整個測試失敗）。CI 上這個變數和 Clerk 金鑰都存在 GitHub repo 的 Actions secrets 裡。
   - 登入狀態存在 `.auth-e2e/storageState.json`（不進版控）。
-  - 本機測試失敗時，`test-results/<測試名稱>/` 會留下截圖（`.png`）、錄影（`.webm`）與 `trace.zip`，通過的測試不留。UI 模式一律錄 trace。trace 裡有瀏覽器的 Console、Network 請求與每一步的畫面，用 `npx playwright show-trace test-results/<測試名稱>/trace.zip` 打開。CI 不產生 trace、截圖、影片與報告，也不印伺服器的輸出（MongoDB 用 `docker run --log-driver none` 啟動）：repo 與 CI log 都是公開的。
+  - 本機測試失敗時，`test-results/<測試名稱>/` 會留下截圖（`.png`）、錄影（`.webm`）與 `trace.zip`，通過的測試不留。
+    1. UI 模式一律錄 trace。
+    2. trace 裡有瀏覽器的 Console、Network 請求與每一步的畫面。
+    3. 用 `npx playwright show-trace test-results/<測試名稱>/trace.zip` 打開 trace。
+  - CI 不產生 trace、截圖、影片與報告，也不印伺服器的輸出（MongoDB 用 `docker run --log-driver none` 啟動）：repo 與 CI log 都是公開的。
   - 機密只放在 GitHub secrets 與 `.env`。`tests/e2e/` 的程式自己印出的內容只有 `createDiagnosticLogger` 清理過的登入診斷。
 
 ## 專案結構說明

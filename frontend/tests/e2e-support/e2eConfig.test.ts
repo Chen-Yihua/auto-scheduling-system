@@ -1,11 +1,15 @@
 // Playwright 設定在 CI 與本機、有無 Clerk 金鑰時的差異
 import { spawnSync } from 'node:child_process'
-import { readFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { resolve } from 'node:path'
 import { describe, it, expect } from 'vitest'
 import { buildConfig, NO_CLERK_KEYS_TITLE } from '../e2e/support/e2eConfig'
 
 // pk_test_ 後面是 base64 的 "example.clerk.accounts.dev$"
+// 執行真的指令的測試，把 log 資料夾換到暫存位置，不動開發者的 e2e-logs/
+const withTempLogDir = (command: string) => command.replaceAll(resolve(process.cwd(), 'e2e-logs'), mkdtempSync(resolve(tmpdir(), 'e2e-logs-')))
+
 const KEYS = { NUXT_PUBLIC_CLERK_PUBLISHABLE_KEY: 'pk_test_ZXhhbXBsZS5jbGVyay5hY2NvdW50cy5kZXYk', NUXT_CLERK_SECRET_KEY: 'sk_test_x' }
 
 describe('buildConfig：CI 與本機', () => {
@@ -75,7 +79,7 @@ describe('buildConfig：CI 與本機', () => {
   it('e2e-local-run AC5：指令以非 0 結束時，stderr 印出 log 內容並保留原本的結束碼；成功時什麼都不印', () => {
     const backend = (env: Record<string, string>) =>
       (buildConfig({ ...KEYS, ...env }).webServer as { command: string; cwd?: string }[]).find((server) => server.command.includes('uvicorn'))!
-    const run = (command: string) => spawnSync('sh', ['-c', command], { encoding: 'utf-8' })
+    const run = (command: string) => spawnSync('sh', ['-c', withTempLogDir(command)], { encoding: 'utf-8' })
 
     const failed = run(backend({ E2E_PYTHON: '/nonexistent-python' }).command)
     expect(failed.status).toBe(127)
@@ -88,7 +92,7 @@ describe('buildConfig：CI 與本機', () => {
   it('e2e-local-run AC9：收到 SIGTERM 時，指令等內部的程式結束後才結束', () => {
     const { command } = (buildConfig(KEYS).webServer as { command: string }[]).find((server) => server.command.includes('startMongo'))!
     // 用會慢慢收尾的程式取代 startMongo：收到 SIGTERM 後等 1 秒才結束
-    const slow = command.replace(/node tests\/e2e\/support\/startMongo\.mjs \d+/, `sh -c "trap 'sleep 1; exit 0' TERM; sleep 30 & wait"`)
+    const slow = withTempLogDir(command).replace(/node tests\/e2e\/support\/startMongo\.mjs \d+/, `sh -c "trap 'sleep 1; exit 0' TERM; while :; do sleep 0.1; done"`)
     const started = Date.now()
     const result = spawnSync('sh', ['-c', `${slow} & p=$!; sleep 1; kill -TERM $p; wait $p`], { encoding: 'utf-8' })
 
@@ -109,7 +113,7 @@ describe('buildConfig：CI 與本機', () => {
     const job = workflow.slice(workflow.indexOf('  frontend-e2e-test:'), workflow.indexOf('  deploy-backend:'))
 
     expect(job).not.toMatch(/^\s+services:/m)
-    expect(job).toContain('docker run -d --log-driver none -p 27018:27017 mongo:7')
+    expect(job).toContain('docker run -d --name e2e-mongo --log-driver none -p 27018:27017 mongo:7')
   })
 
   it('e2e-playwright AC18：本機 trace 只在失敗時保留，HTML 報告不開伺服器等待', () => {

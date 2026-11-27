@@ -40,8 +40,8 @@ export function buildConfig(env: Env) {
   // 所以終端機平常只有測試進度，伺服器啟動失敗或中途掛掉時才看得到原因。
   const logDir = resolve(process.cwd(), 'e2e-logs')
   const logFile = (name: string) => `'${logDir}/${name}.log'`
-  // 指令放背景、用 trap 轉送 SIGTERM 再等它結束：Playwright 結束時送 SIGTERM，
-  // 不轉送的話 shell 先結束，Playwright 就不再等 startMongo.mjs 清理完
+  // 指令放背景、用 trap 接住 SIGTERM 並等指令結束：shell 不先結束，Playwright 才會等 startMongo.mjs 清理完。
+  // Playwright 對整個行程群組送 SIGTERM，指令本來就收得到；trap 裡的 kill 是給只對 shell 送訊號的情況
   const toLog = (command: string, name: string) =>
     isCI
       ? command

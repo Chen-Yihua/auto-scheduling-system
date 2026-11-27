@@ -118,8 +118,8 @@ jobs:
       # 加 --log-driver none 又會印出讀不到 log 的錯誤。27018 跟 e2eEnv.ts 的 mongoPort 一致
       - name: 啟動 MongoDB
         run: |
-          docker run -d --log-driver none -p 27018:27017 mongo:7
-          timeout 60 bash -c 'until (echo > /dev/tcp/127.0.0.1/27018) 2>/dev/null; do sleep 1; done'
+          docker run -d --name e2e-mongo --log-driver none -p 27018:27017 mongo:7 > /dev/null
+          timeout 60 bash -c 'until docker exec e2e-mongo mongosh --quiet --eval "db.runCommand({ping:1})" > /dev/null 2>&1; do sleep 1; done'
       - run: npm run test:e2e
 
   deploy-backend:

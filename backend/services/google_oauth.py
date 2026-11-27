@@ -9,6 +9,7 @@ from pymongo.errors import PyMongoError
 
 from core.crypto import SecretDecryptError
 from crud.google_tokens import delete_google_calendar_token, get_google_refresh_token, update_google_calendar_token
+from services import google_api_urls
 from services.google_calendar_client import GOOGLE_HTTP_TIMEOUT
 from services.google_errors import google_detail, is_rate_limited, rate_limit_headers
 
@@ -16,7 +17,6 @@ logger = logging.getLogger(__name__)
 
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
-GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 GOOGLE_REAUTH_DETAIL = "Google 授權已失效，請重新連接 Google Calendar"
 UPSTREAM_DETAIL = google_detail("UPSTREAM_ERROR")
 
@@ -60,7 +60,7 @@ async def refresh_google_calendar_token(clerk_id: str) -> str:
     }
     try:
         async with httpx.AsyncClient(timeout=GOOGLE_HTTP_TIMEOUT) as client:
-            res = await client.post(GOOGLE_TOKEN_URL, data=payload)
+            res = await client.post(google_api_urls.token_url(), data=payload)
             logger.debug("Google token refresh response status=%s", res.status_code)
             if res.status_code != 200:
                 logger.warning("Google token refresh failed: %s", res.text)

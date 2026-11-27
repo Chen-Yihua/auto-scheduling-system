@@ -1,4 +1,4 @@
-// setup project：清空 E2E 資料庫、登入一次、存下登入狀態給登入後的測試用，並建立測試使用者的 users 文件。
+// setup project：清空 E2E 資料庫、登入一次、存下登入狀態給登入後的測試用，並建立測試使用者的 users 文件與假的 Google 日曆連線資料。
 // 沒有 E2E_CLERK_TEST_EMAIL 時整個 setup 跳過，資料庫也不清空。
 // 登入後的測試自己不登入，所以登入重試與診斷只在這裡。
 import { mkdirSync } from 'node:fs'
@@ -9,6 +9,7 @@ import { MongoClient } from 'mongodb'
 import { E2E_DB_NAME, STORAGE_STATE_PATH, e2eEndpoints } from './support/e2eEnv'
 import { e2eSecrets } from './support/e2eSecrets'
 import { readDatabaseState, resetDatabase } from './support/resetDatabase'
+import { seedGoogleToken } from './support/seedGoogleToken'
 import {
   attachSignInDiagnostics,
   createDiagnosticLogger,
@@ -164,5 +165,11 @@ setup('清空資料庫、登入並建立測試使用者', async ({ page, request
     expect([201, 409], 'POST /users/ 的狀態碼').toContain(created.status())
     const me = await request.get(`${backendUrl}/users/me`, { headers })
     expect(me.status(), 'GET /users/me 的狀態碼').toBe(200)
+  })
+
+  await setup.step('放一筆假的 Google 日曆連線資料', async () => {
+    const clerkId = await page.evaluate(() => (window as unknown as { Clerk?: { user?: { id: string } } }).Clerk?.user?.id)
+    expect(clerkId, '登入後的 Clerk 使用者 id').toBeTruthy()
+    seedGoogleToken(process.env, clerkId!)
   })
 })

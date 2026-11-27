@@ -8,6 +8,17 @@ import { E2E_DB_NAME, STORAGE_STATE_PATH, e2eEndpoints } from './e2eEnv'
 type Env = Record<string, string | undefined>
 type WebServer = Extract<NonNullable<PlaywrightTestConfig['webServer']>, { command: string }>
 
+// 固定的測試用金鑰（Fernet：32 bytes 的 url-safe base64），只加密 E2E 資料庫裡的假 token，不是機密。
+// 不每次產生：沿用已開著的後端時（UI 模式），另一次執行的 setup 才會和後端用同一把
+export const E2E_SECRET_ENCRYPTION_KEY = 'ZTJlLWZpeGVkLXRlc3Qta2V5LW5vdC1hLXNlY3JldF8='
+
+// 後端與 setup 寫入假資料的 Python 腳本用同一個直譯器
+export function resolvePython(env: Env): string {
+  // 從 frontend 資料夾執行（npm run test:e2e），repo 根目錄的 .venv 在上一層
+  const venvPython = resolve(process.cwd(), '../.venv/bin/python')
+  return env.E2E_PYTHON ?? (existsSync(venvPython) ? venvPython : 'python')
+}
+
 export const NO_CLERK_KEYS_TITLE = '沒有 Clerk 金鑰，跳過 E2E'
 
 // 公開金鑰 pk_test_<base64> 解開是 Clerk 專案的網域，後端的 issuer 與 JWKS 網址都從它來
@@ -29,11 +40,9 @@ export function buildConfig(env: Env) {
     })
   }
 
-  const { frontendPort, backendPort, mongoPort, frontendUrl, backendUrl, mongoUri } = e2eEndpoints(env)
+  const { frontendPort, backendPort, mongoPort, googlePort, frontendUrl, backendUrl, mongoUri, googleUrl } = e2eEndpoints(env)
   const domain = clerkDomain(publishableKey)
-  // 從 frontend 資料夾執行（npm run test:e2e），repo 根目錄的 .venv 在上一層
-  const venvPython = resolve(process.cwd(), '../.venv/bin/python')
-  const python = env.E2E_PYTHON ?? (existsSync(venvPython) ? venvPython : 'python')
+  const python = resolvePython(env)
 
   // CI 的 log 是公開的，伺服器的輸出不印也不存。
   // 本機把輸出導到 e2e-logs/（每次啟動覆寫）；指令以非 0 結束時把 log 印到 stderr，
@@ -65,6 +74,14 @@ export function buildConfig(env: Env) {
           },
         ]),
     {
+      // 假的 Google 日曆：後端的 GOOGLE_API_BASE_URL 指向它，所以要排在後端之前
+      command: toLog(`node tests/e2e/support/fakeGoogle.mjs ${googlePort}`, 'google'),
+      url: `${googleUrl}/__e2e/requests`,
+      timeout: 30_000,
+      gracefulShutdown: { signal: 'SIGTERM', timeout: 5_000 } as const,
+      ...output,
+    },
+    {
       command: toLog(`${python} -m uvicorn main:app --host 127.0.0.1 --port ${backendPort}`, 'backend'),
       cwd: '../backend',
       url: `${backendUrl}/docs`,
@@ -78,7 +95,8 @@ export function buildConfig(env: Env) {
         CLERK_ISSUER: `https://${domain}`,
         CLERK_JWKS_URL: `https://${domain}/.well-known/jwks.json`,
         GEMINI_API_KEY: 'e2e-fake-gemini-key',
-        SECRET_ENCRYPTION_KEY: env.E2E_SECRET_ENCRYPTION_KEY ?? '',
+        SECRET_ENCRYPTION_KEY: E2E_SECRET_ENCRYPTION_KEY,
+        GOOGLE_API_BASE_URL: googleUrl,
         GOOGLE_CLIENT_ID: 'e2e-fake-google-client-id',
         GOOGLE_CLIENT_SECRET: 'e2e-fake-google-client-secret',
         GOOGLE_REDIRECT_URI: `${frontendUrl}/e2e-fake-google-redirect`,
@@ -109,8 +127,9 @@ export function buildConfig(env: Env) {
 
   return defineConfig({
     testDir: 'tests/e2e',
-    // 共用同一個資料庫與登入狀態，不平行
+    // 共用同一個資料庫與同一個 Clerk 測試使用者，測試依序執行
     workers: 1,
+    fullyParallel: false,
     forbidOnly: isCI,
     timeout: 60_000,
     expect: { timeout: 15_000 },

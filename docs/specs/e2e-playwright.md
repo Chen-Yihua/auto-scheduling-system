@@ -1,6 +1,6 @@
 # E2E 改用 @playwright/test，並由測試自己啟動前端、後端與 MongoDB
 
-- 狀態：部分被 [e2e-local-run](e2e-local-run.md) 取代（需求 12 的 CI 部分、需求 19 的本機部分、需求 21 與 AC18 的「本機成功時沒有 trace」只適用 `npm run test:e2e`、實作計畫的「不設 `reuseExistingServer`」與 CI 用 service container 兩處、「不做」的 MongoDB log）
+- 狀態：部分被 [e2e-local-run](e2e-local-run.md) 取代（需求 12 的 CI 部分、需求 19 的本機部分、需求 21 與 AC18 的「本機成功時沒有 trace」只適用 `npm run test:e2e`、實作計畫的「不設 `reuseExistingServer`」與 CI 用 service container 兩處、「不做」的 MongoDB log）、部分被 [e2e-user-flows](e2e-user-flows.md) 取代（實作計畫「每次執行產生的值」中的 `SECRET_ENCRYPTION_KEY`：改成固定的測試用金鑰）
 - 等級：高風險（改的是「token、cookie 不出現在公開的 CI log」這項保證：拿掉 issue-50 的清理用 reporter（把測試結果印到終端機的元件），改成一般做法）
 - 規格審查：有（高風險一定做；審查時規格還沒拆開，任務與排程流程拆到 `e2e-user-flows`（之後的 PR））
 - PR：[#189](https://github.com/Chen-Yihua/auto-scheduling-system/pull/189)

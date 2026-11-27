@@ -6,6 +6,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from crud.google_tokens import save_google_calendar_token, is_google_calendar_connected
 from core.errors import AppError, ExternalServiceError, request_error_code
+from services import google_api_urls
 from services.google_calendar import list_calendars_for_user
 from services.google_errors import google_detail, is_rate_limited, rate_limit_headers
 from services.google_oauth import google_oauth_error, google_token_payload
@@ -48,7 +49,6 @@ async def oauth_callback(
     clerk_user: dict = Depends(get_current_clerk_user)
 ):
     code = payload.code
-    token_url = "https://oauth2.googleapis.com/token"
     token_payload = {
         "code": code,
         "client_id": GOOGLE_CLIENT_ID,
@@ -60,7 +60,7 @@ async def oauth_callback(
     # 不用 except Exception，以免蓋掉後面更具體的錯誤（例如 DB 的 503）
     try:
         async with httpx.AsyncClient(timeout=GOOGLE_HTTP_TIMEOUT) as client:
-            res = await client.post(token_url, data=token_payload)
+            res = await client.post(google_api_urls.token_url(), data=token_payload)
             res.raise_for_status()
     except httpx.RequestError as e:
         logger.error("連線 Google Token Endpoint 失敗: %s", e)

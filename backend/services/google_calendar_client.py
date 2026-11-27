@@ -1,12 +1,13 @@
 from datetime import datetime, timedelta, timezone
 from core.datetimes import to_utc_datetime
+from services import google_api_urls
 import httpx
 
 # httpx 預設 5 秒（含 DNS 查詢），DNS 偶爾較慢時第一次呼叫會逾時，所以放寬
 GOOGLE_HTTP_TIMEOUT = httpx.Timeout(15.0)
 
 async def fetch_google_calendar_list(access_token: str) -> list:
-    url = "https://www.googleapis.com/calendar/v3/users/me/calendarList"
+    url = google_api_urls.calendar_list_url()
     headers = {"Authorization": f"Bearer {access_token}"}
     async with httpx.AsyncClient(timeout=GOOGLE_HTTP_TIMEOUT) as client:
         res = await client.get(url, headers=headers)
@@ -17,7 +18,7 @@ async def fetch_freebusy(access_token: str, calendar_id: str) -> dict:
     """取得該行事曆未來 7 天的忙碌時段。"""
     now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     next_week = (datetime.now(timezone.utc) + timedelta(days=7)).isoformat().replace("+00:00", "Z")
-    url = "https://www.googleapis.com/calendar/v3/freeBusy"
+    url = google_api_urls.freebusy_url()
     headers = {"Authorization": f"Bearer {access_token}"}
     body = {
         "timeMin": now,
@@ -33,7 +34,7 @@ async def fetch_freebusy(access_token: str, calendar_id: str) -> dict:
 
 async def create_calendar_event(access_token: str, calendar_id: str, summary: str, start: str, end: str) -> dict:
     """在指定行事曆建立事件。start/end 是 ISO 8601 UTC 字串，例如 "2026-09-10T09:00:00Z"。"""
-    url = f"https://www.googleapis.com/calendar/v3/calendars/{calendar_id}/events"
+    url = google_api_urls.events_url(calendar_id)
     headers = {"Authorization": f"Bearer {access_token}"}
     body = {
         "summary": summary,
@@ -47,7 +48,7 @@ async def create_calendar_event(access_token: str, calendar_id: str, summary: st
 
 
 async def get_calendar_event(access_token: str, calendar_id: str, event_id: str) -> dict:
-    url = f"https://www.googleapis.com/calendar/v3/calendars/{calendar_id}/events/{event_id}"
+    url = google_api_urls.event_url(calendar_id, event_id)
     headers = {"Authorization": f"Bearer {access_token}"}
     async with httpx.AsyncClient(timeout=GOOGLE_HTTP_TIMEOUT) as client:
         res = await client.get(url, headers=headers)
@@ -56,7 +57,7 @@ async def get_calendar_event(access_token: str, calendar_id: str, event_id: str)
 
 
 async def delete_calendar_event(access_token: str, calendar_id: str, event_id: str) -> None:
-    url = f"https://www.googleapis.com/calendar/v3/calendars/{calendar_id}/events/{event_id}"
+    url = google_api_urls.event_url(calendar_id, event_id)
     headers = {"Authorization": f"Bearer {access_token}"}
     async with httpx.AsyncClient(timeout=GOOGLE_HTTP_TIMEOUT) as client:
         res = await client.delete(url, headers=headers)

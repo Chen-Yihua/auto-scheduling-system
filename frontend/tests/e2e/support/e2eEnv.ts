@@ -15,13 +15,17 @@ export function e2eEndpoints(env: Env) {
   const frontendPort = port(env, 'E2E_FRONTEND_PORT', 3100)
   const backendPort = port(env, 'E2E_BACKEND_PORT', 8001)
   const mongoPort = port(env, 'E2E_MONGO_PORT', 27018)
+  const googlePort = port(env, 'E2E_GOOGLE_PORT', 8002)
   return {
     frontendPort,
     backendPort,
     mongoPort,
+    googlePort,
     // 用 127.0.0.1 不用 localhost：localhost 可能解析成 IPv6，伺服器只聽 IPv4 時連不上
     frontendUrl: `http://127.0.0.1:${frontendPort}`,
     backendUrl: `http://127.0.0.1:${backendPort}`,
     mongoUri: `mongodb://127.0.0.1:${mongoPort}`,
+    // 假的 Google 日曆伺服器（tests/e2e/support/fakeGoogle.mjs）
+    googleUrl: `http://127.0.0.1:${googlePort}`,
   }
 }

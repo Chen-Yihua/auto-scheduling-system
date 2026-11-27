@@ -4,7 +4,8 @@ import { mkdtempSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { resolve } from 'node:path'
 import { describe, it, expect } from 'vitest'
-import { buildConfig, NO_CLERK_KEYS_TITLE } from '../e2e/support/e2eConfig'
+import { buildConfig, E2E_SECRET_ENCRYPTION_KEY, NO_CLERK_KEYS_TITLE } from '../e2e/support/e2eConfig'
+import { buildSeedCommand, seedGoogleToken } from '../e2e/support/seedGoogleToken'
 
 // pk_test_ 後面是 base64 的 "example.clerk.accounts.dev$"
 // 執行真的指令的測試，把 log 資料夾換到暫存位置，不動開發者的 e2e-logs/
@@ -47,7 +48,7 @@ describe('buildConfig：CI 與本機', () => {
     expect(commands({ GITHUB_ACTIONS: 'true' }).some((command) => command.includes('startMongo'))).toBe(false)
     const local = commands({})
     expect(local[0]).toContain('startMongo')
-    expect(local[1]).toContain('uvicorn')
+    expect(local.findIndex((command) => command.includes('uvicorn'))).toBeGreaterThan(0)
   })
 
   it('e2e-local-run AC1：本機失敗時留下截圖、錄影、trace，通過的不留', () => {
@@ -104,8 +105,8 @@ describe('buildConfig：CI 與本機', () => {
     const reuse = (env: Record<string, string>) =>
       (buildConfig({ ...KEYS, ...env }).webServer as { reuseExistingServer?: boolean }[]).map((server) => server.reuseExistingServer)
 
-    expect(reuse({})).toEqual([true, true, true])
-    expect(reuse({ GITHUB_ACTIONS: 'true' })).toEqual([false, false])
+    expect(reuse({})).toEqual([true, true, true, true])
+    expect(reuse({ GITHUB_ACTIONS: 'true' })).toEqual([false, false, false])
   })
 
   it('e2e-local-run AC14：frontend-e2e-test 不用 service container，改用 docker run --log-driver none 啟動 MongoDB', () => {
@@ -151,6 +152,72 @@ describe('buildConfig：E2E 的環境', () => {
     expect(byName['signed-in']!.dependencies).toEqual(['setup'])
     expect(byName['signed-in']!.use?.storageState).toBe('.auth-e2e/storageState.json')
     expect(byName.guest!.dependencies).toBeUndefined()
+  })
+})
+
+describe('buildConfig：e2e-user-flows', () => {
+  const servers = () => buildConfig(KEYS).webServer as { command: string; url?: string; env?: Record<string, string> }[]
+
+  it('AC5：登入後的測試依序執行（workers 1、不平行）', () => {
+    const config = buildConfig(KEYS)
+
+    expect([config.workers, config.fullyParallel]).toEqual([1, false])
+  })
+
+  it('AC1 的 E2E 設定：假的 Google 伺服器在後端之前啟動，後端的 GOOGLE_API_BASE_URL 指向它', () => {
+    const all = servers()
+    const google = all.findIndex((server) => server.command.includes('fakeGoogle.mjs'))
+    const backend = all.findIndex((server) => server.command.includes('uvicorn'))
+
+    expect(google).toBeGreaterThanOrEqual(0)
+    expect(google).toBeLessThan(backend)
+    expect(all[google]!.command).toContain('8002')
+    expect(all[backend]!.env).toMatchObject({ GOOGLE_API_BASE_URL: 'http://127.0.0.1:8002' })
+  })
+
+  it('假的 Google 伺服器的輸出和另外 3 個伺服器一樣：本機存成 e2e-logs/google.log 覆寫，CI 不導向檔案', () => {
+    const find = (config: typeof servers) => config().find((server) => server.command.includes('fakeGoogle.mjs'))!
+
+    expect(find(servers).command).toMatch(/[^>]> '[^']*e2e-logs\/google\.log' 2>&1/)
+    const ci = (buildConfig({ ...KEYS, GITHUB_ACTIONS: 'true' }).webServer as { command: string }[]).find((server) =>
+      server.command.includes('fakeGoogle.mjs'),
+    )!
+    expect(ci.command).not.toContain('e2e-logs')
+  })
+
+  it('後端的 SECRET_ENCRYPTION_KEY 是固定的測試用金鑰，不隨每次執行變動，也不讀環境變數', () => {
+    const backend = (env: Record<string, string>) =>
+      (buildConfig({ ...KEYS, ...env }).webServer as { command: string; env?: Record<string, string> }[]).find((server) =>
+        server.command.includes('uvicorn'),
+      )!.env!.SECRET_ENCRYPTION_KEY
+
+    expect(backend({})).toBe(E2E_SECRET_ENCRYPTION_KEY)
+    expect(backend({ E2E_SECRET_ENCRYPTION_KEY: 'other' })).toBe(E2E_SECRET_ENCRYPTION_KEY)
+    // Fernet 金鑰：url-safe base64、解開是 32 bytes
+    expect(Buffer.from(E2E_SECRET_ENCRYPTION_KEY, 'base64url')).toHaveLength(32)
+  })
+})
+
+describe('buildSeedCommand：寫入假的 Google 連線資料', () => {
+  it('AC4：只傳 E2E 的 MONGO_URI、MONGO_DB 與固定金鑰，不繼承其他環境變數', () => {
+    const { args, options } = buildSeedCommand({ PATH: '/bin', MONGO_URI: 'mongodb://dev', MONGO_DB: 'auto_scheduling_db', GEMINI_API_KEY: 'x' }, 'user_1')
+
+    expect(args).toEqual(['scripts/e2e_seed_google_token.py', 'user_1'])
+    expect(options.env).toEqual({
+      PATH: '/bin',
+      MONGO_URI: 'mongodb://127.0.0.1:27018',
+      MONGO_DB: 'auto_scheduling_e2e',
+      SECRET_ENCRYPTION_KEY: E2E_SECRET_ENCRYPTION_KEY,
+    })
+  })
+
+  it('CI 上子行程的 stdout、stderr 是 ignore；本機是 inherit', () => {
+    expect(buildSeedCommand({ GITHUB_ACTIONS: 'true' }, 'u').options.stdio).toBe('ignore')
+    expect(buildSeedCommand({}, 'u').options.stdio).toBe('inherit')
+  })
+
+  it('失敗時只丟出結束碼，不帶子行程的輸出', () => {
+    expect(() => seedGoogleToken({ E2E_PYTHON: 'false', PATH: '/usr/bin:/bin' }, 'u')).toThrow('寫入假的 Google 連線資料失敗（結束碼 1）')
   })
 })
 

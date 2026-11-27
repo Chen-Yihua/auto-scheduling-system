@@ -62,7 +62,11 @@
   詳見 [`backend/tests/README.md`](backend/tests/README.md)。
 - **前端**：
   - 元件與 composable 測試在 jsdom 中執行，Nuxt 的 auto-import 以 mock 取代。
-  - 另有獨立的 **E2E 測試**：Playwright 自己 build 並啟動前端、後端與 MongoDB（不連 Cloud Run），再以真實的 headless 瀏覽器操作。涵蓋未登入的畫面；若 CI 有設定 Clerk 測試使用者，也會涵蓋真實的登入流程（以該使用者 email 對應的一次性 Clerk 登入 ticket 登入）。
+  - 另有獨立的 **E2E 測試**：Playwright 自己 build 並啟動前端、後端、MongoDB 與假的 Google 日曆伺服器（不連 Cloud Run，也不連真的 Google），再以真實的 headless 瀏覽器操作。
+    - 涵蓋未登入的畫面。
+    - 若 CI 有設定 Clerk 測試使用者，也會涵蓋真實的登入流程（以該使用者 email 對應的一次性 Clerk 登入 ticket 登入）。
+    - 登入後涵蓋任務管理頁的新增、修改、刪除任務。
+    - 登入後涵蓋排程頁的排程建議。
 
 在本機執行：
 

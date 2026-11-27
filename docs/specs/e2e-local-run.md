@@ -1,6 +1,6 @@
 # E2E 本機的除錯資料、伺服器 log 與 UI 模式，CI 不印 MongoDB log
 
-- 狀態：已核准
+- 狀態：部分被 [e2e-user-flows](e2e-user-flows.md) 取代（「不做」的「沿用伺服器時，測試行程與後端拿到的 `E2E_SECRET_ENCRYPTION_KEY` 不同」一項：改用固定的測試用金鑰）
 - 等級：一般（只改 E2E 的本機設定、CI 啟動 MongoDB 的方式與文件；CI 不上傳任何檔案，機密的保護沒有變弱）
 - 規格審查：有
 - PR：[#190](https://github.com/Chen-Yihua/auto-scheduling-system/pull/190)

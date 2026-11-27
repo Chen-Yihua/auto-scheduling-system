@@ -35,16 +35,28 @@ export function buildConfig(env: Env) {
   const venvPython = resolve(process.cwd(), '../.venv/bin/python')
   const python = env.E2E_PYTHON ?? (existsSync(venvPython) ? venvPython : 'python')
 
-  // CI 的 log 是公開的，伺服器與子行程的輸出不印；本機照常印
-  const output = isCI ? ({ stdout: 'ignore', stderr: 'ignore' } as const) : ({ stdout: 'pipe', stderr: 'pipe' } as const)
+  // CI 的 log 是公開的，伺服器的輸出不印也不存。
+  // 本機把輸出導到 e2e-logs/（每次啟動覆寫）；指令以非 0 結束時把 log 印到 stderr，
+  // 所以終端機平常只有測試進度，伺服器啟動失敗或中途掛掉時才看得到原因。
+  const logDir = resolve(process.cwd(), 'e2e-logs')
+  const logFile = (name: string) => `'${logDir}/${name}.log'`
+  // 指令放背景、用 trap 接住 SIGTERM 並等指令結束：shell 不先結束，Playwright 才會等 startMongo.mjs 清理完。
+  // Playwright 對整個行程群組送 SIGTERM，指令本來就收得到；trap 裡的 kill 是給只對 shell 送訊號的情況
+  const toLog = (command: string, name: string) =>
+    isCI
+      ? command
+      : `mkdir -p '${logDir}' && { { ${command}; } > ${logFile(name)} 2>&1 & p=$!; trap 'kill -TERM $p' TERM INT; ` +
+        `wait $p; c=$?; while kill -0 $p 2>/dev/null; do wait $p; c=$?; done; ` +
+        `if [ $c -ne 0 ]; then cat ${logFile(name)} >&2; fi; exit $c; }`
+  const output = isCI ? ({ stdout: 'ignore', stderr: 'ignore' } as const) : ({ stdout: 'ignore', stderr: 'pipe' } as const)
 
   const webServer: WebServer[] = [
-    // CI 的 MongoDB 是 service container，不在這裡啟動
+    // CI 的 MongoDB 由 deploy.yml 的步驟用 docker run 啟動，不在這裡啟動
     ...(isCI
       ? []
       : [
           {
-            command: `node tests/e2e/support/startMongo.mjs ${mongoPort}`,
+            command: toLog(`node tests/e2e/support/startMongo.mjs ${mongoPort}`, 'mongo'),
             port: mongoPort,
             timeout: 180_000,
             // 預設結束時送 SIGKILL，startMongo.mjs 的 SIGTERM 處理器不會執行，記憶體資料庫與暫存資料夾不會清掉
@@ -53,7 +65,7 @@ export function buildConfig(env: Env) {
           },
         ]),
     {
-      command: `${python} -m uvicorn main:app --host 127.0.0.1 --port ${backendPort}`,
+      command: toLog(`${python} -m uvicorn main:app --host 127.0.0.1 --port ${backendPort}`, 'backend'),
       cwd: '../backend',
       url: `${backendUrl}/docs`,
       timeout: 120_000,
@@ -78,7 +90,7 @@ export function buildConfig(env: Env) {
     },
     {
       // NUXT_E2E=1 時 build 放在 .nuxt-e2e、.output-e2e，不改寫開發者 npm run dev 在用的 .nuxt（nuxt.config.ts）
-      command: 'npx nuxt build && node .output-e2e/server/index.mjs',
+      command: toLog('npx nuxt build && node .output-e2e/server/index.mjs', 'frontend'),
       url: frontendUrl,
       timeout: 300_000,
       ...output,
@@ -92,6 +104,9 @@ export function buildConfig(env: Env) {
     },
   ]
 
+  // 本機沿用已開著的 E2E 伺服器（npm run test:e2e:ui 開著時）；CI 每次都是新的環境，不沿用
+  for (const server of webServer) server.reuseExistingServer = !isCI
+
   return defineConfig({
     testDir: 'tests/e2e',
     // 共用同一個資料庫與登入狀態，不平行
@@ -103,8 +118,8 @@ export function buildConfig(env: Env) {
     use: {
       baseURL: frontendUrl,
       trace: isCI ? 'off' : 'retain-on-failure',
-      screenshot: 'off',
-      video: 'off',
+      screenshot: isCI ? 'off' : 'only-on-failure',
+      video: isCI ? 'off' : 'retain-on-failure',
     },
     projects: [
       { name: 'setup', testMatch: /auth\.setup\.ts$/, use: { ...devices['Desktop Chrome'] } },

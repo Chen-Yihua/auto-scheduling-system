@@ -74,7 +74,7 @@ jobs:
 
   # 跟 frontend-test 分開一個 job：這裡會真的 build 一次 Nuxt app、灌一次瀏覽器、
   # 開一個真的（headless）瀏覽器去操作頁面，比一般的 vitest 單元測試慢很多。
-  # 前端與後端由 Playwright 在 job 裡啟動（playwright.config.ts），MongoDB 用下面的 service container；
+  # 前端與後端由 Playwright 在 job 裡啟動（playwright.config.ts），MongoDB 用下面的 docker run 步驟啟動；
   # 不連 Cloud Run。後端也會影響這個 job，所以前端或後端有改動時都執行。
   # 沒有 Clerk 金鑰時（fork 出去的 PR 拿不到 repo 的 secrets）整個 E2E 只執行一個標示跳過的測試，job 照樣通過；
   # 有金鑰但沒有 E2E_CLERK_TEST_EMAIL 時，登入與登入後的測試跳過，訪客測試照常執行。
@@ -89,12 +89,6 @@ jobs:
     defaults:
       run:
         working-directory: frontend
-    # 用 27018：跟 playwright.config.ts 的 E2E_MONGO_PORT 一致
-    services:
-      mongodb:
-        image: mongo:7
-        ports:
-          - 27018:27017
     env:
       NUXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NUXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
       NUXT_CLERK_SECRET_KEY: ${{ secrets.NUXT_CLERK_SECRET_KEY }}
@@ -120,6 +114,12 @@ jobs:
       # 正常 6～9 分鐘；卡住時不會自己失敗，曾卡過 2 小時以上
       - run: npx playwright install --with-deps chromium
         timeout-minutes: 20
+      # 不用 services：job 結束時 GitHub 會把 service container 的 log 印進公開的 CI log，
+      # 加 --log-driver none 又會印出讀不到 log 的錯誤。27018 跟 e2eEnv.ts 的 mongoPort 一致
+      - name: 啟動 MongoDB
+        run: |
+          docker run -d --name e2e-mongo --log-driver none -p 27018:27017 mongo:7 > /dev/null
+          timeout 60 bash -c 'until docker exec e2e-mongo mongosh --quiet --eval "db.runCommand({ping:1})" > /dev/null 2>&1; do sleep 1; done'
       - run: npm run test:e2e
 
   deploy-backend:

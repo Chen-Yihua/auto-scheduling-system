@@ -268,7 +268,7 @@ async def test_webhook_rejects_missing_signature(monkeypatch):
     with pytest.raises(AppError) as exc_info:
         await webhook_router.github_webhook(request, x_hub_signature_256=None, x_github_event="pull_request")
 
-    assert exc_info.value.error_code == "INVALID_WEBHOOK_SIGNATURE"
+    assert exc_info.value.error_code == "UNAUTHENTICATED"
 
 
 @pytest.mark.asyncio
@@ -283,7 +283,7 @@ async def test_webhook_rejects_wrong_signature(monkeypatch):
             request, x_hub_signature_256=wrong_signature, x_github_event="pull_request"
         )
 
-    assert exc_info.value.error_code == "INVALID_WEBHOOK_SIGNATURE"
+    assert exc_info.value.error_code == "UNAUTHENTICATED"
 
 
 @pytest.mark.asyncio
@@ -295,7 +295,7 @@ async def test_webhook_rejects_everything_when_secret_not_configured(monkeypatch
     with pytest.raises(AppError) as exc_info:
         await webhook_router.github_webhook(request, x_hub_signature_256=None, x_github_event="pull_request")
 
-    assert exc_info.value.error_code == "INVALID_WEBHOOK_SIGNATURE"
+    assert exc_info.value.error_code == "UNAUTHENTICATED"
 
 
 @pytest.mark.asyncio
@@ -446,7 +446,7 @@ def test_configured_secret_logs_no_error_at_startup(reload_webhook_router, caplo
 
 @pytest.mark.asyncio
 async def test_request_without_configured_secret_does_not_log_error(monkeypatch, caplog):
-    """AC7：沒設定密鑰時請求回 INVALID_WEBHOOK_SIGNATURE，不在每個請求重複記 error，也不記簽章或 request body。"""
+    """AC7：沒設定密鑰時請求回 UNAUTHENTICATED，不在每個請求重複記 error，也不記簽章或 request body。"""
     import logging
 
     monkeypatch.setattr(webhook_router, "GITHUB_WEBHOOK_SECRET", None)
@@ -458,7 +458,7 @@ async def test_request_without_configured_secret_does_not_log_error(monkeypatch,
         with pytest.raises(AppError) as exc_info:
             await webhook_router.github_webhook(request, x_hub_signature_256="sha256=secret-signature", x_github_event="pull_request")
 
-    assert exc_info.value.error_code == "INVALID_WEBHOOK_SIGNATURE"
+    assert exc_info.value.error_code == "UNAUTHENTICATED"
     assert not [r for r in caplog.records if r.levelno >= logging.ERROR]
     assert "secret-signature" not in caplog.text
     assert "secret-request-body-value" not in caplog.text

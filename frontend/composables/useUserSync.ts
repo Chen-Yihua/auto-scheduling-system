@@ -14,7 +14,7 @@ type ClerkUserLike = {
 function describeCreateFailure(status?: number, errorCode?: string): string {
   if (status === undefined) return '無法連線到伺服器，請確認網路後重新整理頁面';
   if (errorCode) {
-    if (errorCode === 'RATE_LIMITED' || errorCode === 'UPSTREAM_RATE_LIMITED') return '請求太頻繁，請稍後再重新整理頁面'
+    if (errorCode === 'RATE_LIMITED') return '請求太頻繁，請稍後再重新整理頁面'
     if (errorCode === 'UNAUTHENTICATED') return '登入狀態驗證失敗，請重新登入後再試'
     if (errorCode === 'SERVICE_UNAVAILABLE') return '資料庫暫時無法使用，請稍後再重新整理頁面'
     return '伺服器發生錯誤，請稍後再重新整理頁面'

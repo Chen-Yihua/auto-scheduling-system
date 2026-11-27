@@ -5,7 +5,7 @@ import time
 
 from urllib.parse import urlparse
 
-from core.errors import ExternalServiceError, ReauthRequiredError
+from core.errors import AppError, ReauthRequiredError, upstream_detail
 from fastapi.concurrency import run_in_threadpool
 from selenium import webdriver
 from selenium.common.exceptions import TimeoutException, WebDriverException
@@ -203,15 +203,15 @@ class MoodlePlatform(PlatformAdapter):
             await run_in_threadpool(verify_moodle_login, username, password)
         except NonRetryableError as e:
             if e.auth_error:
-                raise ReauthRequiredError("Moodle 帳號或密碼錯誤", error_code="INVALID_CREDENTIALS")
+                raise AppError("Moodle 帳號或密碼錯誤", error_code="INVALID_CREDENTIALS")
             logger.warning("Moodle 驗證時登入後導向非預期的頁面: %s", e)
-            raise ReauthRequiredError("Moodle 登入後導向非預期的頁面，請稍後再試", error_code="UPSTREAM_ERROR")
+            raise AppError(upstream_detail("Moodle", "UPSTREAM_ERROR"), error_code="UPSTREAM_ERROR")
         except TimeoutException as e:
             logger.error("Moodle 驗證逾時: %s", e)
-            raise ExternalServiceError("Moodle 回應逾時，請稍後再試", error_code="UPSTREAM_TIMEOUT")
+            raise AppError(upstream_detail("Moodle", "UPSTREAM_TIMEOUT"), error_code="UPSTREAM_TIMEOUT")
         except WebDriverException as e:
             logger.error("Moodle 驗證發生非預期錯誤: %s", e)
-            raise ExternalServiceError("Moodle 服務暫時無法使用，請稍後再試")
+            raise AppError(upstream_detail("Moodle", "UPSTREAM_ERROR"), error_code="UPSTREAM_ERROR")
 
     async def verify_new_account(self, account):
         await self._verify(account["username"], account["password"])

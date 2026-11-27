@@ -479,11 +479,11 @@ def _status_error(status_code: int, reason: str | None = None) -> httpx.HTTPStat
     (_status_error(401), "REAUTH_REQUIRED", "Google 授權已失效，請重新連接 Google Calendar"),
     (_status_error(403, "insufficientPermissions"), "REAUTH_REQUIRED", "Google 授權的權限不足，請重新連接 Google Calendar"),
     (_status_error(400), "INTERNAL_ERROR", "伺服器處理 Google 請求時發生錯誤，請稍後再試"),
-    (_status_error(429), "UPSTREAM_RATE_LIMITED", "Google 請求太頻繁，請稍後再試"),
-    (_status_error(403, "rateLimitExceeded"), "UPSTREAM_RATE_LIMITED", "Google 請求太頻繁，請稍後再試"),
+    (_status_error(429), "RATE_LIMITED", "Google 請求太頻繁，請稍後再試"),
+    (_status_error(403, "rateLimitExceeded"), "RATE_LIMITED", "Google 請求太頻繁，請稍後再試"),
     (_status_error(503), "UPSTREAM_ERROR", "Google 暫時無法處理請求，請稍後再試"),
     (httpx.ReadTimeout("timeout"), "UPSTREAM_TIMEOUT", "Google 回應逾時，請稍後再試"),
-    (httpx.ConnectError("refused"), "UPSTREAM_ERROR", "無法連線至 Google，請稍後再試"),
+    (httpx.ConnectError("refused"), "UPSTREAM_ERROR", "Google 暫時無法處理請求，請稍後再試"),
 ], ids=["401", "403-permission", "400", "429", "403-rate-limit", "503", "timeout", "unreachable"])
 @pytest.mark.asyncio
 async def test_confirm_google_write_failure_carries_error_code_and_matching_reason(
@@ -651,10 +651,10 @@ async def test_issue42_resolve_returns_succeeded_and_failed(logged_in_user):
 
 
 @pytest.mark.asyncio
-async def test_issue42_resolve_google_rate_limited_is_503(monkeypatch, logged_in_user):
-    """POST /schedule/removed-events/resolve 處理中 Google 限流 → 503 UPSTREAM_RATE_LIMITED。"""
+async def test_issue42_resolve_google_rate_limited_is_429(monkeypatch, logged_in_user):
+    """POST /schedule/removed-events/resolve 處理中 Google 限流 → 429 RATE_LIMITED。"""
     async def mock_find_removed(user_id, event_ids):
-        raise ExternalServiceError("Google 請求太頻繁，請稍後再試", error_code="UPSTREAM_RATE_LIMITED")
+        raise ExternalServiceError("Google 請求太頻繁，請稍後再試", error_code="RATE_LIMITED")
 
     monkeypatch.setattr(schedule_router, "find_removed_calendar_events", mock_find_removed)
     await db.manual_tasks.insert_one({
@@ -665,8 +665,8 @@ async def test_issue42_resolve_google_rate_limited_is_503(monkeypatch, logged_in
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             res = await ac.post("/schedule/removed-events/resolve", json={"reschedule": ["manual:issue42-api"]})
 
-        assert res.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
-        assert res.json()["error_code"] == "UPSTREAM_RATE_LIMITED"
+        assert res.status_code == status.HTTP_429_TOO_MANY_REQUESTS
+        assert res.json()["error_code"] == "RATE_LIMITED"
     finally:
         await db.manual_tasks.delete_many({"_id": "issue42-api"})
 

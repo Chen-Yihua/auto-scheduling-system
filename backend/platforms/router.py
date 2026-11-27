@@ -12,14 +12,14 @@ import httpx
 from fastapi import APIRouter, Depends, Request, Response
 from pymongo.errors import ConnectionFailure
 
-from core.errors import AppError, ExternalServiceError, InvalidRequestError, ReauthRequiredError
+from core.errors import AppError, ExternalServiceError, InvalidRequestError, ReauthRequiredError, upstream_detail
 from core.rate_limit import limiter
 from core.security import get_current_clerk_user
 from crud.linked_account import find_linked_account
 from platforms import PLATFORMS
 from platforms.account_sync import SyncOutcome, SyncResult, sync_account
 from platforms.base import PlatformAdapter
-from platforms.sync import InvalidResponseError, NonRetryableError, UpstreamError, read_items
+from platforms.sync import InvalidResponseError, NonRetryableError, UpstreamError, fetch_error_code, read_items
 
 logger = logging.getLogger(__name__)
 
@@ -27,10 +27,8 @@ logger = logging.getLogger(__name__)
 def _fetch_error_detail(platform: PlatformAdapter, error_code: str) -> str:
     if error_code == "REAUTH_REQUIRED":
         return platform.auth_failed_detail
-    if error_code == "UPSTREAM_RATE_LIMITED":
-        return f"{platform.display_name} 請求太頻繁，請稍後再試"
-    if error_code == "UPSTREAM_TIMEOUT":
-        return f"{platform.display_name} 回應逾時，請稍後再試"
+    if error_code in ("RATE_LIMITED", "UPSTREAM_TIMEOUT"):
+        return upstream_detail(platform.display_name, error_code)
     return platform.fetch_failed_detail
 
 
@@ -52,7 +50,7 @@ def _fetch_failure_error(platform: PlatformAdapter, user_id: str, exc: Optional[
         return ExternalServiceError(_fetch_error_detail(platform, exc.error_code), error_code=exc.error_code, headers=exc.headers)
     if isinstance(exc, httpx.HTTPError):
         logger.warning("%s unavailable for user_id=%s", platform.name, user_id, exc_info=exc)
-        error_code = "UPSTREAM_TIMEOUT" if isinstance(exc, httpx.TimeoutException) else "UPSTREAM_ERROR"
+        error_code = fetch_error_code(exc)
         return ExternalServiceError(_fetch_error_detail(platform, error_code), error_code=error_code)
     if isinstance(exc, InvalidResponseError):
         logger.warning("%s returned an unparsable response for user_id=%s", platform.name, user_id, exc_info=exc)

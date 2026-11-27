@@ -280,7 +280,7 @@ def _jira_client(status_code, headers=None, body=None, content=None):
     (403, False, "REAUTH_REQUIRED"),
     (404, False, "REAUTH_REQUIRED"),
     (400, False, "INTERNAL_ERROR"),
-    (429, True, "UPSTREAM_RATE_LIMITED"),
+    (429, True, "RATE_LIMITED"),
     (500, True, "UPSTREAM_ERROR"),
     (409, True, "UPSTREAM_ERROR"),
     (301, True, "UPSTREAM_ERROR"),

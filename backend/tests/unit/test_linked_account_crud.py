@@ -1,5 +1,5 @@
 import pytest
-from core.errors import AccessDeniedError, ConflictError, ExternalServiceError, InvalidRequestError, NotFoundError, ReauthRequiredError
+from core.errors import AppError, ConflictError, ExternalServiceError, InvalidRequestError, NotFoundError, ReauthRequiredError
 import crud.linked_account as linked_mod
 from core.crypto import encrypt_secret
 import platforms.github as github_platform
@@ -86,7 +86,7 @@ async def test_create_moodle_missing_password():
 
 @pytest.mark.asyncio
 async def test_create_moodle_wrong_password_rejected(monkeypatch):
-    """Moodle 帳密驗證失敗（NonRetryableError）→ 401。"""
+    """Moodle 帳密驗證失敗（NonRetryableError）→ INVALID_CREDENTIALS。"""
     # 原函式是同步的（透過 run_in_threadpool 呼叫），mock 也要是同步的
     def mock_verify_fails(username, password):
         raise NonRetryableError(f"Moodle 登入失敗，使用者：{username}")
@@ -94,8 +94,9 @@ async def test_create_moodle_wrong_password_rejected(monkeypatch):
     monkeypatch.setattr(moodle_platform, "verify_moodle_login", mock_verify_fails)
 
     account = LinkedAccountCreate(platform="moodle", username="stu001", password="wrong", status="")
-    with pytest.raises(ReauthRequiredError):
+    with pytest.raises(AppError) as exc_info:
         await create_linked_account("uid123", account)
+    assert exc_info.value.error_code == "INVALID_CREDENTIALS"
 
 
 @pytest.mark.asyncio
@@ -171,7 +172,7 @@ async def test_create_moodle_account_success(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_create_moodle_webdriver_exception_raises_502(monkeypatch):
-    """Selenium 出錯（不是帳密錯誤）→ 502，和帳密錯誤的 401 區分。"""
+    """Selenium 出錯（不是帳密錯誤）→ UPSTREAM_ERROR，和帳密錯誤的 INVALID_CREDENTIALS 區分。"""
     from selenium.common.exceptions import WebDriverException
 
     def mock_verify_raises(username, password):
@@ -180,8 +181,9 @@ async def test_create_moodle_webdriver_exception_raises_502(monkeypatch):
     monkeypatch.setattr(moodle_platform, "verify_moodle_login", mock_verify_raises)
 
     account = LinkedAccountCreate(platform="moodle", username="stu001", password="pw123", status="")
-    with pytest.raises(ExternalServiceError):
+    with pytest.raises(AppError) as exc_info:
         await create_linked_account("uid123", account)
+    assert exc_info.value.error_code == "UPSTREAM_ERROR"
 
 
 # ========== 查詢 Linked Accounts ==========
@@ -462,7 +464,7 @@ async def test_update_moodle_username_only_reverifies_with_existing_password(mon
 
 @pytest.mark.asyncio
 async def test_update_moodle_wrong_password_raises_401(monkeypatch):
-    """更新 Moodle 密碼但驗證失敗 → 401。"""
+    """更新 Moodle 密碼但驗證失敗 → INVALID_CREDENTIALS。"""
     async def mock_find_one(filter):
         return {"username": "stu001"}
 
@@ -472,10 +474,11 @@ async def test_update_moodle_wrong_password_raises_401(monkeypatch):
     monkeypatch.setattr(linked_mod.database.db.linkedAccounts, "find_one", mock_find_one)
     monkeypatch.setattr(moodle_platform, "verify_moodle_login", mock_verify_fails)
 
-    with pytest.raises(ReauthRequiredError):
+    with pytest.raises(AppError) as exc_info:
         await update_linked_account_by_clerk_id(
             "uid123", "moodle", {"password": "wrong"}
         )
+    assert exc_info.value.error_code == "INVALID_CREDENTIALS"
 
 
 # ========== 刪除 Linked Account ==========
@@ -522,7 +525,7 @@ async def test_fetch_github_userinfo_success(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_fetch_github_userinfo_unauthorized(monkeypatch):
-    """GitHub 回 401（token 無效）→ 401。"""
+    """GitHub 回 401（token 無效）→ INVALID_CREDENTIALS。"""
     class MockClient:
         async def __aenter__(self): return self
         async def __aexit__(self, *a): pass
@@ -530,13 +533,14 @@ async def test_fetch_github_userinfo_unauthorized(monkeypatch):
             return httpx.Response(status_code=401)
 
     monkeypatch.setattr(httpx, "AsyncClient", lambda *a, **kw: MockClient())
-    with pytest.raises(ReauthRequiredError):
+    with pytest.raises(AppError) as exc_info:
         await fetch_github_userinfo("bad_token")
+    assert exc_info.value.error_code == "INVALID_CREDENTIALS"
 
 
 @pytest.mark.asyncio
 async def test_fetch_github_userinfo_connection_error_raises_502(monkeypatch):
-    """連不上 GitHub → 502。"""
+    """連不上 GitHub → UPSTREAM_ERROR。"""
     class MockClient:
         async def __aenter__(self): return self
         async def __aexit__(self, *a): pass
@@ -544,8 +548,9 @@ async def test_fetch_github_userinfo_connection_error_raises_502(monkeypatch):
             raise httpx.ConnectError("GitHub 掛了")
 
     monkeypatch.setattr(httpx, "AsyncClient", lambda *a, **kw: MockClient())
-    with pytest.raises(ExternalServiceError):
+    with pytest.raises(AppError) as exc_info:
         await fetch_github_userinfo("token123")
+    assert exc_info.value.error_code == "UPSTREAM_ERROR"
 
 
 @pytest.mark.asyncio
@@ -558,7 +563,7 @@ async def test_fetch_github_userinfo_other_error_status_raises_403(monkeypatch):
             return httpx.Response(status_code=404)  # 不是 401，但也不是 200
 
     monkeypatch.setattr(httpx, "AsyncClient", lambda *a, **kw: MockClient())
-    with pytest.raises(AccessDeniedError):
+    with pytest.raises(AppError):
         await fetch_github_userinfo("token123")
 
 
@@ -581,7 +586,7 @@ async def test_fetch_jira_userinfo_success(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_fetch_jira_userinfo_unauthorized(monkeypatch):
-    """Jira 回 401（API key 無效）→ 401。"""
+    """Jira 回 401（API key 無效）→ INVALID_CREDENTIALS。"""
     class MockClient:
         async def __aenter__(self): return self
         async def __aexit__(self, *a): pass
@@ -589,13 +594,14 @@ async def test_fetch_jira_userinfo_unauthorized(monkeypatch):
             return httpx.Response(status_code=401)
 
     monkeypatch.setattr(httpx, "AsyncClient", lambda *a, **kw: MockClient())
-    with pytest.raises(ReauthRequiredError):
+    with pytest.raises(AppError) as exc_info:
         await fetch_jira_userinfo("bad_key", "example.atlassian.net")
+    assert exc_info.value.error_code == "INVALID_CREDENTIALS"
 
 
 @pytest.mark.asyncio
 async def test_fetch_jira_userinfo_connection_error_raises_502(monkeypatch):
-    """連不上 Jira → 502。"""
+    """連不上 Jira → UPSTREAM_ERROR。"""
     class MockClient:
         async def __aenter__(self): return self
         async def __aexit__(self, *a): pass
@@ -603,8 +609,9 @@ async def test_fetch_jira_userinfo_connection_error_raises_502(monkeypatch):
             raise httpx.ConnectError("Jira 掛了")
 
     monkeypatch.setattr(httpx, "AsyncClient", lambda *a, **kw: MockClient())
-    with pytest.raises(ExternalServiceError):
+    with pytest.raises(AppError) as exc_info:
         await fetch_jira_userinfo("base64key", "example.atlassian.net")
+    assert exc_info.value.error_code == "UPSTREAM_ERROR"
 
 
 @pytest.mark.asyncio
@@ -617,5 +624,5 @@ async def test_fetch_jira_userinfo_other_error_status_raises_403(monkeypatch):
             return httpx.Response(status_code=404)
 
     monkeypatch.setattr(httpx, "AsyncClient", lambda *a, **kw: MockClient())
-    with pytest.raises(AccessDeniedError):
+    with pytest.raises(AppError):
         await fetch_jira_userinfo("base64key", "example.atlassian.net")

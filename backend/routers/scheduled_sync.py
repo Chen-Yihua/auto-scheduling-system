@@ -35,8 +35,8 @@ _SKIPPED = {
 
 
 def _invalid_token() -> AppError:
-    # 沒設定密鑰也用這個 code（對照表 401，ADR 0011「例外」）：回 500 會讓外部知道伺服器漏了設定
-    return AppError("Invalid scheduler token", error_code="INVALID_SCHEDULER_TOKEN")
+    # 沒設定密鑰也回 401（ADR 0011「例外」）：回 500 會讓外部知道伺服器漏了設定
+    return AppError("Invalid scheduler token", error_code="UNAUTHENTICATED")
 
 
 def _verify_token(authorization: str | None) -> None:

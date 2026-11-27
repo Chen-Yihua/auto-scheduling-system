@@ -49,26 +49,26 @@ async def test_update_user_without_fields_is_invalid_request(logged_in_user):
 
 @pytest.mark.asyncio
 async def test_clerk_webhook_bad_signature_is_invalid_webhook_signature(monkeypatch):
-    """AC6：Clerk webhook 簽章錯誤 → 401 INVALID_WEBHOOK_SIGNATURE。"""
+    """AC6：Clerk webhook 簽章錯誤 → 401 UNAUTHENTICATED。"""
     monkeypatch.setattr(user_router, "CLERK_WEBHOOK_SIGNING_SECRET", "whsec_dGVzdHNlY3JldA==")
 
     res = await _request("POST", "/users/webhook/clerk", content=b"{}",
                          headers={"svix-id": "x", "svix-timestamp": "1", "svix-signature": "v1,bad"})
 
     assert res.status_code == 401
-    assert res.json()["error_code"] == "INVALID_WEBHOOK_SIGNATURE"
+    assert res.json()["error_code"] == "UNAUTHENTICATED"
 
 
 @pytest.mark.asyncio
 async def test_clerk_webhook_without_configured_secret_is_401(monkeypatch):
-    """AC6：沒設定 Clerk webhook 密鑰 → 401 INVALID_WEBHOOK_SIGNATURE（不回 500，不讓外部知道漏了設定）。"""
+    """AC6：沒設定 Clerk webhook 密鑰 → 401 UNAUTHENTICATED（不回 500，不讓外部知道漏了設定）。"""
     monkeypatch.setattr(user_router, "CLERK_WEBHOOK_SIGNING_SECRET", None)
 
     res = await _request("POST", "/users/webhook/clerk", content=b"{}",
                          headers={"svix-id": "x", "svix-timestamp": "1", "svix-signature": "v1,bad"})
 
     assert res.status_code == 401
-    assert res.json() == {"detail": "Invalid webhook signature", "error_code": "INVALID_WEBHOOK_SIGNATURE"}
+    assert res.json() == {"detail": "Invalid webhook signature", "error_code": "UNAUTHENTICATED"}
 
 
 # ---------- 排程 ----------
@@ -109,24 +109,24 @@ def _signed(body: bytes) -> dict:
 
 @pytest.mark.asyncio
 async def test_pr_webhook_bad_signature_is_invalid_webhook_signature(monkeypatch):
-    """AC6：GitHub webhook 簽章錯誤 → 401 INVALID_WEBHOOK_SIGNATURE。"""
+    """AC6：GitHub webhook 簽章錯誤 → 401 UNAUTHENTICATED。"""
     monkeypatch.setattr(webhook_router, "GITHUB_WEBHOOK_SECRET", SECRET)
 
     res = await _request("POST", "/webhook", content=b"{}", headers={"X-Hub-Signature-256": "sha256=bad"})
 
     assert res.status_code == 401
-    assert res.json()["error_code"] == "INVALID_WEBHOOK_SIGNATURE"
+    assert res.json()["error_code"] == "UNAUTHENTICATED"
 
 
 @pytest.mark.asyncio
 async def test_pr_webhook_without_configured_secret_is_401(monkeypatch):
-    """AC6：沒設定 GitHub webhook 密鑰 → 401 INVALID_WEBHOOK_SIGNATURE。"""
+    """AC6：沒設定 GitHub webhook 密鑰 → 401 UNAUTHENTICATED。"""
     monkeypatch.setattr(webhook_router, "GITHUB_WEBHOOK_SECRET", None)
 
     res = await _request("POST", "/webhook", content=b"{}", headers=_signed(b"{}"))
 
     assert res.status_code == 401
-    assert res.json()["error_code"] == "INVALID_WEBHOOK_SIGNATURE"
+    assert res.json()["error_code"] == "UNAUTHENTICATED"
 
 
 @pytest.mark.asyncio

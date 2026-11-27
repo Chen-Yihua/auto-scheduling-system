@@ -317,10 +317,10 @@ def _client_returning(response_factory):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("status_code, headers, body, retryable, error_code", [
-    (403, {"x-ratelimit-remaining": "0"}, {"message": "API rate limit exceeded"}, False, "UPSTREAM_RATE_LIMITED"),
-    (403, {"retry-after": "60"}, {"message": "slow down"}, False, "UPSTREAM_RATE_LIMITED"),
-    (403, {}, {"message": "You have exceeded a secondary rate limit. Please wait."}, False, "UPSTREAM_RATE_LIMITED"),
-    (429, {}, {"message": "too many"}, True, "UPSTREAM_RATE_LIMITED"),
+    (403, {"x-ratelimit-remaining": "0"}, {"message": "API rate limit exceeded"}, False, "RATE_LIMITED"),
+    (403, {"retry-after": "60"}, {"message": "slow down"}, False, "RATE_LIMITED"),
+    (403, {}, {"message": "You have exceeded a secondary rate limit. Please wait."}, False, "RATE_LIMITED"),
+    (429, {}, {"message": "too many"}, True, "RATE_LIMITED"),
     (401, {}, {"message": "Bad credentials"}, False, "REAUTH_REQUIRED"),
     (403, {"x-ratelimit-remaining": "42"}, {"message": "Resource not accessible by personal access token"}, False, "REAUTH_REQUIRED"),
     (400, {}, {"message": "bad"}, False, "INTERNAL_ERROR"),

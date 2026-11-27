@@ -6,7 +6,7 @@ import httpx
 import json
 
 import routers.google_calendar as google_calendar_router
-from services.google_errors import UPSTREAM_DETAIL
+from services.google_oauth import UPSTREAM_DETAIL
 
 mock_user = {"sub": "uid123"}
 
@@ -212,18 +212,18 @@ def _token_endpoint(monkeypatch, handler):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("status_code, body, http_status, error_code", [
-    (400, {"error": "invalid_grant", "error_description": GOOGLE_RAW_TEXT}, 400, "INVALID_AUTHORIZATION_CODE"),
+    (400, {"error": "invalid_grant", "error_description": GOOGLE_RAW_TEXT}, 400, "INVALID_REQUEST"),
     (401, {"error": "invalid_client"}, 500, "INTERNAL_ERROR"),
     (400, {"error": "invalid_request"}, 500, "INTERNAL_ERROR"),
     (400, {"error": "unauthorized_client"}, 500, "INTERNAL_ERROR"),
     (400, {"error": "redirect_uri_mismatch"}, 500, "INTERNAL_ERROR"),
     (400, {"error": "something_new"}, 502, "UPSTREAM_ERROR"),
     (503, {"error": "backend_error", "error_description": GOOGLE_RAW_TEXT}, 502, "UPSTREAM_ERROR"),
-    (429, {"error": "rate_limit_exceeded"}, 503, "UPSTREAM_RATE_LIMITED"),
+    (429, {"error": "rate_limit_exceeded"}, 429, "RATE_LIMITED"),
 ], ids=["invalid_grant", "invalid_client", "invalid_request", "unauthorized_client", "redirect_uri_mismatch",
         "other-error-code", "5xx", "429"])
 async def test_oauth_callback_error_codes(monkeypatch, status_code, body, http_status, error_code):
-    """只有 invalid_grant 是 INVALID_AUTHORIZATION_CODE 並說授權碼無效；Google 暫時故障、限流不說授權碼無效；
+    """只有 invalid_grant 是 INVALID_REQUEST 並說授權碼無效；Google 暫時故障、限流不說授權碼無效；
     狀態碼照 error_code 查表；detail 不帶 Google 回應原文。"""
     _token_endpoint(monkeypatch, lambda request: httpx.Response(status_code, json=body))
 
@@ -234,7 +234,7 @@ async def test_oauth_callback_error_codes(monkeypatch, status_code, body, http_s
     assert exc_info.value.error_code == error_code
     assert status_for_error_code(exc_info.value.error_code) == http_status
     assert GOOGLE_RAW_TEXT not in exc_info.value.detail
-    assert ("授權碼無效" in exc_info.value.detail) is (error_code == "INVALID_AUTHORIZATION_CODE")
+    assert ("授權碼無效" in exc_info.value.detail) is (error_code == "INVALID_REQUEST")
 
 
 @pytest.mark.asyncio
